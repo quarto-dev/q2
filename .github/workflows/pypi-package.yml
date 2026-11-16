@@ -1,0 +1,46 @@
+name: PyPI package tests
+
+# Unit and offline end-to-end tests for the quarto2 PyPI package
+# (packaging/pypi/, bd-2p7dwmqe). Stdlib only; no network. `cargo xtask
+# verify` runs the same command (PYPI_TEST_ARGS in crates/xtask/src/verify.rs).
+# Publishing lives in publish-pypi.yml.
+
+on:
+  pull_request:
+    paths:
+      - 'packaging/pypi/**'
+      - '.github/workflows/pypi-package.yml'
+      - '.github/workflows/publish-pypi.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packaging/pypi/**'
+      - '.github/workflows/pypi-package.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ['3.x']
+        include:
+          # The package declares Requires-Python >=3.9; keep the floor honest.
+          # Pinned to 24.04: setup-python ships no 3.9 build for Ubuntu 26.04
+          # (ubuntu-latest), since 3.9 reached end of life before that image.
+          - os: ubuntu-24.04
+            python: '3.9'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -I -m unittest discover -s packaging/pypi/tests

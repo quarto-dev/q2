@@ -60,7 +60,8 @@ declare module 'wasm-quarto-hub-client' {
   export function lsp_get_token_legend(): string;
 
   // QMD parsing and AST conversion functions
-  export function parse_qmd_content(content: string): string;
+  /** Returns the response object itself, not a JSON string; `ast` inside it is a JSON string. */
+  export function parse_qmd_content(content: string): AstResponse;
   export function ast_to_qmd(ast_json: string): string;
   /**
    * Incrementally write a modified AST back to QMD, preserving unchanged

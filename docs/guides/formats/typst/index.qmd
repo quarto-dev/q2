@@ -126,6 +126,39 @@ numbered natively by Typst's own compiler, not by Quarto — the same
 expected, and the numbers Typst prints always match the numbers your
 `@ref`s resolve to.
 
+## Citations
+
+By default, Typst output formats citations with Typst's own
+bibliography rather than with citeproc. Each citation reaches Typst as
+`@key`, and Typst looks it up in the files listed under `bibliography:`,
+which must be BibLaTeX (`.bib`) or Hayagriva (`.yml`) files. A `csl:`
+style, if given, sets Typst's bibliography style.
+
+Typst's bibliography does not read entries written in the document's
+front matter under `references:`. Citing one of those entries is an
+error ([`Q-21-5`](../../../errors/typst/Q-21-5.qmd)), and an entry
+defined both there and in a `bibliography:` file uses the file's
+version, with a warning ([`Q-21-6`](../../../errors/typst/Q-21-6.qmd)).
+To use `references:` entries, either move them into a bibliography file
+or set `citeproc: true`:
+
+``` yaml
+---
+format: typst
+citeproc: true
+references:
+  - id: smith2020
+    type: webpage
+    title: A page
+---
+```
+
+With `citeproc: true`, citeproc formats the citations and the
+bibliography for Typst just as it does for HTML, reading both
+`references:` and `bibliography:`. Typst books format citations with
+citeproc already, except with `citation-location: margin`, where
+margin citations use Typst's own bibliography as above.
+
 ## Margin notes
 
 Content placed in a `column-margin` div (or referenced via margin

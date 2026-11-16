@@ -160,13 +160,26 @@ pub fn navbar_to_html(
     // here later (bd-fod3 / bd-ld-toggle-into-tools-hpae7m9r). Markup
     // mirrors Q1's `navdarktoggle.ejs`: the `.alternate` class (synced
     // by the color-mode runtime) drives the on/off icon via CSS.
+    //
+    // It is a `<button role="switch">`, not Q1's former `<a href="">`
+    // (quarto-cli #14739, bd-kwgtllvn): a link role made Space inert and
+    // the state never reached assistive tech. The runtime keeps
+    // `aria-checked` in sync; it starts `false` like Q1's template. Both
+    // `title` (hover tooltip) and `aria-label` carry the label, as in Q1.
     if navbar.dark_mode_toggle {
-        html.push_str("      <div class=\"quarto-navbar-tools\">\n");
-        html.push_str(
-            "        <a href=\"\" class=\"quarto-color-scheme-toggle quarto-navigation-tool px-1\" \
-             onclick=\"window.quartoToggleColorScheme(); return false;\" \
-             title=\"Toggle dark mode\"><i class=\"bi\"></i></a>\n",
+        let label = escape_attr(
+            navbar
+                .dark_toggle_label
+                .as_deref()
+                .unwrap_or(DEFAULT_TOGGLE_DARK_MODE_LABEL),
         );
+        html.push_str("      <div class=\"quarto-navbar-tools\">\n");
+        html.push_str(&format!(
+            "        <button type=\"button\" role=\"switch\" aria-checked=\"false\" \
+             class=\"quarto-color-scheme-toggle quarto-navigation-tool px-1\" \
+             onclick=\"window.quartoToggleColorScheme(); return false;\" \
+             title=\"{label}\" aria-label=\"{label}\"><i class=\"bi\"></i></button>\n",
+        ));
         html.push_str("      </div>\n");
     }
     html.push_str("    </div>\n");
@@ -546,6 +559,10 @@ pub struct SidebarRenderOptions<'a> {
     /// table pass [`DEFAULT_TOGGLE_SECTION_LABEL`].
     pub toggle_section_label: &'a str,
 }
+
+/// English `toggle-dark-mode` term (`resources/language/_language.yml`),
+/// the fallback for [`Navbar::dark_toggle_label`].
+pub const DEFAULT_TOGGLE_DARK_MODE_LABEL: &str = "Toggle dark mode";
 
 /// English `toggle-section` term (`resources/language/_language.yml`),
 /// the fallback for [`SidebarRenderOptions::toggle_section_label`].
@@ -1445,7 +1462,7 @@ fn push_attr_html(
     attr: &quarto_pandoc_types::attr::Attr,
     suppress_title_kv: bool,
 ) {
-    let (id, classes, kvs) = attr;
+    let (id, classes, kvs) = &**attr;
     if !id.is_empty() {
         out.push_str(" id=\"");
         out.push_str(&escape_attr(id));
@@ -1706,16 +1723,16 @@ mod tests {
         use quarto_pandoc_types::config_value::ConfigValueKind;
         use quarto_pandoc_types::inline::Image;
 
-        let image = Inline::Image(Image {
+        let image = Inline::Image(Box::new(Image {
             attr: Default::default(),
             content: vec![str_inline("cap")],
             target: ("images/logo.svg".to_string(), String::new()),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
         let cv = ConfigValue {
-            value: ConfigValueKind::PandocBlocks(vec![Block::Figure(Figure {
+            value: ConfigValueKind::PandocBlocks(vec![Block::Figure(Box::new(Figure {
                 attr: Default::default(),
                 caption: Caption {
                     short: None,
@@ -1731,7 +1748,7 @@ mod tests {
                 })],
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            })]),
+            }))]),
             source_info: SourceInfo::for_test(),
             merge_op: Default::default(),
         };
@@ -1754,6 +1771,7 @@ mod tests {
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
         )
+            .into()
     }
 
     fn link_inline(
@@ -1764,14 +1782,14 @@ mod tests {
     ) -> Inline {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         use quarto_pandoc_types::inline::Link;
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr,
             content: vec![str_inline(text)],
             target: (url.to_string(), target_title.to_string()),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     /// A link's id/class/kv attributes reach the emitted `<a>`
@@ -1817,20 +1835,20 @@ mod tests {
     fn attributed_span_keeps_wrapper_attrless_span_unwrapped() {
         use quarto_pandoc_types::attr::AttrSourceInfo;
         use quarto_pandoc_types::inline::Span;
-        let attributed = inlines_to_html(&[Inline::Span(Span {
+        let attributed = inlines_to_html(&[Inline::Span(Box::new(Span {
             attr: test_attr("spid", &["scls"], &[]),
             content: vec![str_inline("sp")],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })]);
+        }))]);
         assert_eq!(attributed, "<span id=\"spid\" class=\"scls\">sp</span>");
 
-        let attrless = inlines_to_html(&[Inline::Span(Span {
+        let attrless = inlines_to_html(&[Inline::Span(Box::new(Span {
             attr: Default::default(),
             content: vec![str_inline("plain")],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })]);
+        }))]);
         assert_eq!(attrless, "plain");
     }
 
@@ -1840,12 +1858,12 @@ mod tests {
         use quarto_pandoc_types::attr::AttrSourceInfo;
         use quarto_pandoc_types::inline::Code;
         let code = |attr| {
-            Inline::Code(Code {
+            Inline::Code(Box::new(Code {
                 attr,
                 text: "x".to_string(),
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            })
+            }))
         };
         assert_eq!(
             inlines_to_html(&[code(test_attr("", &["numberLines"], &[]))]),
@@ -2225,6 +2243,68 @@ mod tests {
         let collapse_pos = html.find("navbar-collapse").unwrap();
         assert!(box_pos > collapse_pos, "box follows the menu; got: {html}");
         assert!(html.contains("title=\"Buscar\""));
+    }
+
+    // --- Color-scheme toggle (bd-kwgtllvn, Q1 #14739) ----------------
+
+    /// The navbar dark-mode toggle is a switch, not a link: `<a
+    /// href="">` had a link role (Space did nothing) and conveyed its
+    /// state only through an icon swap. `aria-checked` starts `false`;
+    /// the color-mode runtime syncs it on load and on every toggle.
+    #[test]
+    fn navbar_dark_toggle_is_a_labelled_switch() {
+        let navbar = Navbar {
+            dark_mode_toggle: true,
+            dark_toggle_label: Some("Basculer le mode sombre".to_string()),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "./");
+        assert!(
+            html.contains(
+                "<button type=\"button\" role=\"switch\" aria-checked=\"false\" \
+                 class=\"quarto-color-scheme-toggle quarto-navigation-tool px-1\" \
+                 onclick=\"window.quartoToggleColorScheme(); return false;\" \
+                 title=\"Basculer le mode sombre\" aria-label=\"Basculer le mode sombre\">\
+                 <i class=\"bi\"></i></button>"
+            ),
+            "toggle must be a localized switch button; got: {html}"
+        );
+        assert!(
+            !html.contains("<a href=\"\" class=\"quarto-color-scheme-toggle"),
+            "toggle must not be a link; got: {html}"
+        );
+    }
+
+    /// Without a resolved term (standalone renders) the label falls back
+    /// to the English default, and a localized label is attribute-escaped.
+    #[test]
+    fn navbar_dark_toggle_label_defaults_and_escapes() {
+        let html = navbar_to_html(
+            &Navbar {
+                dark_mode_toggle: true,
+                ..Navbar::with_defaults()
+            },
+            None,
+            "./",
+        );
+        assert!(
+            html.contains("title=\"Toggle dark mode\" aria-label=\"Toggle dark mode\""),
+            "English fallback expected; got: {html}"
+        );
+
+        let html = navbar_to_html(
+            &Navbar {
+                dark_mode_toggle: true,
+                dark_toggle_label: Some("Mode \"sombre\"".to_string()),
+                ..Navbar::with_defaults()
+            },
+            None,
+            "./",
+        );
+        assert!(
+            html.contains("aria-label=\"Mode &quot;sombre&quot;\""),
+            "label must be attribute-escaped; got: {html}"
+        );
     }
 
     #[test]
@@ -2688,11 +2768,11 @@ mod tests {
     fn footer_item_with_own_anchor_does_not_nest_anchors() {
         use quarto_pandoc_types::inline::RawInline;
         let raw = |t: &str| {
-            Inline::RawInline(RawInline {
+            Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: t.to_string(),
                 source_info: SourceInfo::for_test(),
-            })
+            }))
         };
         let text = ConfigValue::new_inlines(
             vec![
@@ -2751,23 +2831,23 @@ mod tests {
     fn inlines_to_html_link_and_code() {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         let inlines = vec![
-            Inline::Link(quarto_pandoc_types::inline::Link {
-                attr: (String::new(), vec![], Default::default()),
+            Inline::Link(Box::new(quarto_pandoc_types::inline::Link {
+                attr: (String::new(), vec![], Default::default()).into(),
                 content: vec![str_inline("site")],
                 target: ("https://example.com".to_string(), String::new()),
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),
-            }),
+            })),
             Inline::Space(quarto_pandoc_types::inline::Space {
                 source_info: SourceInfo::for_test(),
             }),
-            Inline::Code(quarto_pandoc_types::inline::Code {
-                attr: (String::new(), vec![], Default::default()),
+            Inline::Code(Box::new(quarto_pandoc_types::inline::Code {
+                attr: (String::new(), vec![], Default::default()).into(),
                 text: "x & y".to_string(),
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
         ];
         let out = inlines_to_html(&inlines);
         assert!(out.contains("<a href=\"https://example.com\">site</a>"));
@@ -2788,14 +2868,16 @@ mod tests {
         attr.0 = "brand-img".to_string();
         attr.1.push("footer-logo".to_string());
         attr.2.insert("width".to_string(), "32".to_string());
-        let inlines = vec![Inline::Image(quarto_pandoc_types::inline::Image {
-            attr,
-            content: vec![str_inline("Posit logo")],
-            target: ("../../images/logo.svg".to_string(), "The title".to_string()),
-            source_info: SourceInfo::for_test(),
-            attr_source: AttrSourceInfo::empty(),
-            target_source: TargetSourceInfo::empty(),
-        })];
+        let inlines = vec![Inline::Image(Box::new(
+            quarto_pandoc_types::inline::Image {
+                attr,
+                content: vec![str_inline("Posit logo")],
+                target: ("../../images/logo.svg".to_string(), "The title".to_string()),
+                source_info: SourceInfo::for_test(),
+                attr_source: AttrSourceInfo::empty(),
+                target_source: TargetSourceInfo::empty(),
+            },
+        ))];
         let out = inlines_to_html(&inlines);
         assert_eq!(
             out,
@@ -2810,14 +2892,16 @@ mod tests {
     #[test]
     fn inlines_to_html_image_minimal_and_escaped() {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
-        let inlines = vec![Inline::Image(quarto_pandoc_types::inline::Image {
-            attr: Default::default(),
-            content: vec![str_inline("a & b")],
-            target: ("x\"y.svg".to_string(), String::new()),
-            source_info: SourceInfo::for_test(),
-            attr_source: AttrSourceInfo::empty(),
-            target_source: TargetSourceInfo::empty(),
-        })];
+        let inlines = vec![Inline::Image(Box::new(
+            quarto_pandoc_types::inline::Image {
+                attr: Default::default(),
+                content: vec![str_inline("a & b")],
+                target: ("x\"y.svg".to_string(), String::new()),
+                source_info: SourceInfo::for_test(),
+                attr_source: AttrSourceInfo::empty(),
+                target_source: TargetSourceInfo::empty(),
+            },
+        ))];
         let out = inlines_to_html(&inlines);
         assert_eq!(out, "<img src=\"x&quot;y.svg\" alt=\"a &amp; b\">");
     }

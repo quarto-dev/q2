@@ -16,7 +16,9 @@ use anyhow::{Context, Result};
 use quarto_core::project::discovery::PROJECT_CONFIG_FILENAMES;
 use quarto_preview::{
     EnginePolicy, PreviewConfig,
-    config::{read_engine_policy_from_project, resolve_project_resource_html},
+    config::{
+        engine_policy_with_overlay, read_engine_policy_from_project, resolve_project_resource_html,
+    },
 };
 use tempfile::TempDir;
 use tracing::info;
@@ -64,6 +66,9 @@ pub struct PreviewArgs {
     pub metadata: Vec<String>,
     /// `--profile` values, as `q2 render --profile` (F8).
     pub profile: Vec<String>,
+    /// `--hub-url` and `--project` (bd-yq3awhmw): mirror that project from
+    /// an existing sync server instead of serving a local directory.
+    pub upstream: Option<(String, String)>,
 }
 
 /// `--to`, `-M` and `--profile` belong to the read-only viewer: the editor
@@ -147,16 +152,70 @@ fn resolve_render_flags(
     Ok(flags)
 }
 
+/// The host's record source list for `q2 preview`: `-M 'execute: {record-sources: ...}'`, else
+/// the preview default (`cache,q2,engine`). A document's own `execute: record-sources` is read
+/// per document later; under `--share` this list is the ceiling it may not widen. Called before
+/// anything is printed or bound, so a bad entry fails at the start.
+fn resolve_record_sources(
+    metadata: Option<&serde_json::Value>,
+    project_root: Option<&Path>,
+    profile: &[String],
+) -> Result<quarto_core::record::RecordSources> {
+    use quarto_core::record::{CommandSources, host_record_sources};
+    let cwd = std::env::current_dir().context("reading the working directory")?;
+    let base = project_root.unwrap_or(&cwd);
+    let resolved = host_record_sources(
+        metadata,
+        base,
+        base,
+        &quarto_preview::render_flags::native_runtime_for(profile),
+        &CommandSources::PREVIEW,
+    )
+    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    for note in &resolved.notes {
+        eprintln!("info: {}", note.text);
+    }
+    Ok(resolved.sources)
+}
+
+/// Warn when `engine` is listed under `preview.engine: off`: the engine will not run (the
+/// guard itself lives in the preview crate).
+/// `preview.engine: auto` runs a document's code on every save. Under `--share` a guest with
+/// edit access changes the document, so their edits would run on the host.
+fn warn_auto_under_share(share: bool, policy: EnginePolicy) {
+    if share && policy == EnginePolicy::Auto {
+        tracing::warn!("`preview.engine` is `auto` under `--share`: guest edits run host code");
+        eprintln!(
+            "warning: `preview.engine` is `auto` and this preview is shared: a guest's edits \
+             to a document will run its code on this machine"
+        );
+    }
+}
+
+fn warn_engine_under_off(list: &quarto_core::record::RecordSources, policy: EnginePolicy) {
+    if policy == EnginePolicy::Off && list.contains_engine() {
+        tracing::warn!(
+            "`engine` is in `execute: record-sources` but `preview.engine` is `off`: the engine will not run"
+        );
+        eprintln!(
+            "warning: `engine` is in `execute: record-sources` but `preview.engine` is `off`; \
+             the engine will not run"
+        );
+    }
+}
+
 pub fn execute(args: PreviewArgs) -> Result<()> {
     // Multi-threaded runtime for the same reasons quarto hub uses
     // one: samod, websockets, file watching, periodic sync.
     let runtime = tokio::runtime::Runtime::new()?;
-    // bd-hxhnnlzs: hold a kernel scope for the server's lifetime so
-    // re-renders reuse warm kernels. It drops after `block_on` returns
-    // (the hub server resolves SIGINT/SIGTERM/Ctrl-C into a graceful
-    // return), outside the runtime — so kernels get the polite
-    // `shutdown_request` path before the kill backstop.
-    let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
+    // bd-hxhnnlzs: hold a kernel scope for the server's lifetime. It is a
+    // retaining scope (bd-i7yz08uh): each previewed document keeps its own
+    // warm kernel, with its state, for its next re-render, as Quarto 1's
+    // keepalive daemon does. It drops after `block_on` returns (the hub
+    // server resolves SIGINT/SIGTERM/Ctrl-C into a graceful return),
+    // outside the runtime — so kernels get the polite `shutdown_request`
+    // path before the kill backstop.
+    let _kernel_scope = quarto_core::engine::jupyter::kernel_scope_retaining();
     runtime.block_on(run(args))
 }
 
@@ -210,7 +269,21 @@ async fn run(args: PreviewArgs) -> Result<()> {
     // unless we can confidently identify a specific page to seed in
     // the SPA — typically: user gave a file inside a _quarto.yml
     // project, OR the project root has an `index.qmd`.
-    let (project_root, initial_page, single_file) = if args.no_project {
+    // bd-yq3awhmw: `--hub-url` runs the hub standalone and mirrors the
+    // remote project; clap has already rejected a path and --no-project.
+    let upstream = args
+        .upstream
+        .as_ref()
+        .map(
+            |(url, project)| -> Result<quarto_hub::upstream::UpstreamConfig> {
+                Ok(quarto_hub::upstream::UpstreamConfig {
+                    url: url.clone(),
+                    index_doc_id: parse_project_ref(project)?,
+                })
+            },
+        )
+        .transpose()?;
+    let (project_root, initial_page, single_file) = if args.no_project || upstream.is_some() {
         if args.path.is_some() {
             anyhow::bail!("--no-project and a positional path are mutually exclusive");
         }
@@ -238,6 +311,12 @@ async fn run(args: PreviewArgs) -> Result<()> {
         &args.profile,
         project_root.as_deref(),
         single_file.as_deref(),
+    )?;
+
+    let record_sources = resolve_record_sources(
+        render_flags.metadata.as_ref(),
+        project_root.as_deref(),
+        &render_flags.profile,
     )?;
 
     // Each invocation gets a fresh `TempDir` by default — when this
@@ -301,6 +380,9 @@ async fn run(args: PreviewArgs) -> Result<()> {
             info!(%url, "starting q2 preview server");
             println!();
             println!("  q2 preview");
+            if let Some(up) = &upstream {
+                println!("  {}", mirror_note(up, args.allow_edit));
+            }
             println!("  → {url}");
             println!();
 
@@ -317,7 +399,9 @@ async fn run(args: PreviewArgs) -> Result<()> {
             info!("starting q2 preview server (editor UI)");
             println!();
             println!("  q2 preview — editor UI");
-            if let Some(note) = quarto_preview::editor_ephemeral_note(args.allow_edit) {
+            if let Some(up) = &upstream {
+                println!("  {}", mirror_note(up, args.allow_edit));
+            } else if let Some(note) = quarto_preview::editor_ephemeral_note(args.allow_edit) {
                 println!("  {note}");
             }
         }
@@ -330,11 +414,17 @@ async fn run(args: PreviewArgs) -> Result<()> {
     // Every native site goes through the factory, so `--profile` reaches
     // them all (F8-D6).
     let session_runtime = quarto_preview::render_flags::native_runtime_for(&render_flags.profile);
-    let engine_policy = match project_root.as_deref() {
+    let project_policy = match project_root.as_deref() {
         Some(root) => read_engine_policy_from_project(root, &session_runtime, None),
         None => EnginePolicy::Manual,
     };
+    // `-M 'preview: {engine: auto}'` wins over `_quarto.yml`, and is the only way a standalone
+    // document (no `_quarto.yml`) gets anything but `manual`. An unknown value fails here.
+    let engine_policy = engine_policy_with_overlay(project_policy, render_flags.metadata.as_ref())
+        .map_err(|e| anyhow::anyhow!(e))?;
+    warn_auto_under_share(args.share, engine_policy);
     info!(?engine_policy, "resolved preview engine policy");
+    warn_engine_under_off(&record_sources, engine_policy);
 
     // bd-kjrpya2d (part 2): resolve the `.html` files made visible by
     // `project.resources:` so the hub carries them into the VFS source
@@ -362,6 +452,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
         // passthrough engine via the integration-test surface.
         engine_registry: None,
         engine_policy,
+        record_sources,
         resource_html_files,
         // Phase C.7: derive the capture cache dir from `data_dir`
         // (per-session; tracked as a follow-up for per-project reuse).
@@ -370,6 +461,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
         share: args.share,
         ui: args.ui,
         render: render_flags,
+        upstream,
     };
 
     // Host-side Ctrl-C acknowledgment, symmetric with the guest's line
@@ -1141,6 +1233,40 @@ fn editor_share_route(index_doc_id: &str, file: &str, project_name: &str) -> Str
     )
 }
 
+/// bd-yq3awhmw: the startup line for a `--hub-url` session. Without
+/// `--allow-edit` the mirror gives the browser read-only access, so edits
+/// stay in the browser; with it they go to the remote project.
+fn mirror_note(upstream: &quarto_hub::upstream::UpstreamConfig, allow_edit: bool) -> String {
+    let edits = if allow_edit {
+        "edits are written to that project"
+    } else {
+        "read-only; pass --allow-edit to write edits to that project"
+    };
+    format!(
+        "mirroring project {} from {} ({edits})",
+        upstream.index_doc_id, upstream.url
+    )
+}
+
+/// bd-yq3awhmw: the index document id named by `--project`: a bare id, an
+/// `automerge:` URL, or a hub share URL (`…/#/share/<id>?…`, the shape
+/// `editor_share_route` emits and hub-client's `buildShareableUrl` copies).
+/// Returns the bare id.
+fn parse_project_ref(project: &str) -> Result<String> {
+    let project = project.trim();
+    let id = match project.split_once("#/share/") {
+        Some((_, rest)) => rest.split(['?', '/']).next().unwrap_or_default(),
+        None => project.strip_prefix("automerge:").unwrap_or(project),
+    };
+    if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric()) {
+        anyhow::bail!(
+            "--project expects a project index document id or a hub share URL \
+             (…/#/share/<id>?…), got `{project}`"
+        );
+    }
+    Ok(id.to_string())
+}
+
 /// bd-7htq16rx: build the `--join` guest's boot URL — the same share
 /// route the host prints, but against the guest's local proxy origin.
 /// The params arrive from the host's `/api/preview/config` through the
@@ -1183,6 +1309,78 @@ pub(crate) fn pick_editor_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// bd-yq3awhmw: `--project` takes a bare id, an `automerge:` URL, or a
+    /// hub share URL, and always yields the bare id.
+    #[test]
+    fn parse_project_ref_accepts_ids_and_share_urls() {
+        let id = "2xKqHg7Wn3Ub8mRtYp4Lc9VdJfE1";
+        assert_eq!(parse_project_ref(id).unwrap(), id);
+        assert_eq!(parse_project_ref(&format!("automerge:{id}")).unwrap(), id);
+        assert_eq!(
+            parse_project_ref(&format!(
+                "https://quarto-hub.com/#/share/{id}?server=%2Fws&file=index.qmd&name=x"
+            ))
+            .unwrap(),
+            id
+        );
+        // The share route the preview itself prints round-trips.
+        let route = editor_share_route(&format!("automerge:{id}"), "a.qmd", "p");
+        assert_eq!(
+            parse_project_ref(&format!("http://127.0.0.1:1{route}")).unwrap(),
+            id
+        );
+    }
+
+    #[test]
+    fn parse_project_ref_rejects_garbage() {
+        for bad in [
+            "",
+            "automerge:",
+            "https://x/#/share/?server=y",
+            "a b",
+            "../etc",
+        ] {
+            assert!(
+                parse_project_ref(bad).is_err(),
+                "{bad:?} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn record_sources_default_to_cache_q2_engine() {
+        let got = resolve_record_sources(None, None, &[]).unwrap();
+        assert_eq!(got, quarto_core::record::RecordSources::preview_default());
+    }
+
+    #[test]
+    fn record_sources_come_from_the_metadata_flag() {
+        use quarto_core::record::RecordSource as S;
+        let m = serde_json::json!({"execute": {"record-sources": "positron,engine"}});
+        let got = resolve_record_sources(Some(&m), None, &[]).unwrap();
+        assert_eq!(got.as_slice(), [S::Positron, S::Engine]);
+    }
+
+    #[test]
+    fn record_sources_missing_directory_is_a_startup_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let m = serde_json::json!({"execute": {"record-sources": "./nope,engine"}});
+        let err = resolve_record_sources(Some(&m), Some(&root), &[]).unwrap_err();
+        assert!(err.to_string().contains("does not exist"), "{err}");
+    }
+
+    #[test]
+    fn record_sources_with_engine_under_off_still_resolve() {
+        let m = serde_json::json!({"execute": {"record-sources": "cache,engine"}});
+        let got = resolve_record_sources(Some(&m), None, &[]).unwrap();
+        warn_engine_under_off(&got, EnginePolicy::Off);
+        assert!(
+            got.contains_engine(),
+            "the list is kept as given; the guard refuses to run"
+        );
+    }
 
     #[test]
     fn validate_explicit_port_ok_for_zero() {

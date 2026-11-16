@@ -1,0 +1,15 @@
+---
+title: Julia error
+engine: julia
+execute:
+  record: true
+  error: true
+---
+
+```{julia}
+1 + 1
+```
+
+```{julia}
+error("boom")
+```

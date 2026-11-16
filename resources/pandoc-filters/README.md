@@ -80,7 +80,7 @@ the `pandoc` invocation shape), with tests in
 
 These files are copied from:
 - quarto-cli tag: `v1.11.6`
-- pandoc version: `3.12.1`
+- pandoc version: `3.13`
 
 To update: Check the original repository at that tag for any changes.
 

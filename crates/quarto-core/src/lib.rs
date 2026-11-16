@@ -79,6 +79,8 @@ pub mod pandoc_filters;
 pub mod pandoc_formats;
 pub mod pandoc_request;
 pub mod pipeline;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod positron_cache;
 pub mod presenter;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod preview_out;
@@ -97,6 +99,7 @@ pub mod template;
 pub mod theme_diagnostic;
 pub mod transform;
 pub mod transforms;
+pub mod typst_citations;
 pub mod typst_google_fonts;
 
 // Re-export commonly used types

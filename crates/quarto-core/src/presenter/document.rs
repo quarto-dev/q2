@@ -24,20 +24,16 @@
 use std::path::PathBuf;
 
 use quarto_pandoc_types::ConfigValue;
-use quarto_source_map::{By, SourceInfo};
+use serde_json::Value;
 
-use super::cell::render_cell_with;
-use super::expansion::{render_expanded_unit, split_expansions};
+use super::cell_step::{engine_entry_for, present_cell_step};
 use super::figures::FigureSink;
 use super::inline::{
     InlineOutcome, InlineTarget, classify_inline_result, escape_yaml_double, front_matter_key_at,
     render_inline,
 };
-use super::knitr_inputs::{knitr_header_options, original_chunk, present_knitr_cell};
-use super::options::CellOptions;
 use super::output::CellResult;
-use super::visibility::{CellVisibility, cell_config, resolve_cell_options};
-use crate::cell_options::partition_cell_options;
+use super::page_dependencies::{PageDependencies, page_dependencies, without_outputs};
 use crate::engine::units::{InlineUnit, Unit};
 use crate::record::EngineEntry;
 use crate::record::{
@@ -55,6 +51,9 @@ pub struct PresentResult {
     pub files_written: Vec<PathBuf>,
     /// What the driver could not present and left in place, for the caller to report.
     pub notes: Vec<PresentNote>,
+    /// The page dependencies derived from the record (OPR-7i): head text for the engines whose
+    /// entry carries a dependency-data label. Derived at present time and never stored.
+    pub header_includes: Vec<String>,
 }
 
 /// A unit the driver left in place although a record cell matched it.
@@ -66,6 +65,14 @@ pub enum PresentNote {
         /// Index into the `units` the driver was given.
         unit: usize,
     },
+    /// An engine\'s `quarto_attrs` entry the attribute grammar refuses (a bad id, class, key or
+    /// value) was skipped; the rest of the cell is presented (OPR-7f).
+    EngineAttrsRejected {
+        /// Index into the `units` the driver was given.
+        unit: usize,
+        /// Why the entry was refused.
+        reason: String,
+    },
     /// A cell's image output could not be used (a malformed payload or a failed write),
     /// so the figure is missing from the page (`Q-18-11`).
     ImageUnusable {
@@ -75,6 +82,12 @@ pub enum PresentNote {
         mime: String,
         /// Why it could not be used.
         reason: String,
+    },
+    /// A cell shows an ipywidgets view (`application/vnd.jupyter.widget-view+json`) but no
+    /// widget state is captured, so the page shows its text representation (`Q-18-16`).
+    WidgetViewUnsupported {
+        /// Index into the `units` the driver was given.
+        unit: usize,
     },
     /// A fallback unit (finished `text/x-quarto-markdown`) stored for another output
     /// format than the one being presented (or for none): the unit stays as written,
@@ -105,12 +118,227 @@ pub enum PresentError {
     },
 }
 
+/// One text edit to the document: replace `start..end` with `text`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Edit {
+    /// The byte range of the unit in the document text.
+    pub start: usize,
+    pub end: usize,
+    /// What replaces it.
+    pub text: String,
+    /// A fenced cell: [`apply_edits`] puts a blank line before it when the text before it does not
+    /// end with one (a cell\'s `::: {.cell}` div cannot interrupt a paragraph).
+    pub block: bool,
+    /// An inline unit in the front matter. Render applies it; the splice ignores it.
+    pub front_matter: bool,
+}
+
+/// Why a matched unit was left as written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SkipReason {
+    /// Stored markdown (finished `text/x-quarto-markdown`) for another output format than the one
+    /// being presented, or for none.
+    MarkdownFormatMismatch {
+        stored: Option<String>,
+        wanted: String,
+    },
+    /// An inline unit with no text value the target can use (an error, an image only, nothing).
+    NoUsableValue,
+    /// An inline unit whose value is empty: the source stays, as Quarto 1 leaves it.
+    EmptyValue,
+}
+
+/// What presenting one matched unit decided.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnitOutcome {
+    Replace(Edit),
+    Skip(SkipReason),
+    Error(PresentError),
+}
+
+/// One matched unit\'s outcome, with the image failures its figures raised.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnitReport {
+    /// Index into the units.
+    pub unit: usize,
+    pub outcome: UnitOutcome,
+    pub image_failures: Vec<super::figures::FigureFailure>,
+    /// One reason per engine `quarto_attrs` entry the grammar refused (OPR-7f).
+    pub attr_rejections: Vec<String>,
+    /// A fenced cell has an ipywidgets view output (OPR-7i), whatever the engine.
+    pub widget_view: bool,
+}
+
+/// What [`present_units`] reads, besides the matched pairs.
+pub struct PresentInput<'a> {
+    /// The text the units were located in.
+    pub text: &'a str,
+    pub units: &'a [Unit],
+    /// The author text of each unit (without container prefix and indent).
+    pub author_texts: &'a crate::record::AuthorTexts,
+    /// The document\'s merged `execute:` scope.
+    pub scope: Option<&'a ConfigValue>,
+    /// The output format\'s mime preference for inline values.
+    pub target: InlineTarget,
+    /// The full format name stored markdown must have been produced for.
+    pub format: &'a str,
+    /// The record\'s engine entries; each cell\'s own is looked up by its `quarto_engine`.
+    pub engines: &'a [EngineEntry],
+    /// The page dependencies of the whole record, computed once by the caller from all of its
+    /// cells (OPR-7i): the hoisted outputs are left out of the body.
+    pub page_deps: &'a PageDependencies,
+}
+
+/// Present every already-matched `(unit index, cell)` pair, in document order, and return one
+/// report per pair. Nothing here decides what a skip or an error means: render fails on an error
+/// and notes skips; the splice keeps the source on both.
+pub fn present_units(
+    input: &PresentInput<'_>,
+    matched: &[(usize, &RecordCell)],
+    fig: &mut dyn FigureSink,
+) -> Vec<UnitReport> {
+    let units = input.units;
+    let text = input.text;
+    let mut order: Vec<&(usize, &RecordCell)> = matched.iter().collect();
+    order.sort_by_key(|(ui, _)| units[*ui].start());
+    let mut reports = Vec::with_capacity(order.len());
+    for &&(ui, cell) in &order {
+        let report = |outcome| UnitReport {
+            unit: ui,
+            outcome,
+            image_failures: Vec::new(),
+            attr_rejections: Vec::new(),
+            widget_view: false,
+        };
+        // A fallback unit holds finished markdown: splice it in, never present it.
+        if let Some((markdown, stored)) = stored_markdown(cell) {
+            if stored.as_deref() != Some(input.format) {
+                reports.push(report(UnitOutcome::Skip(
+                    SkipReason::MarkdownFormatMismatch {
+                        stored,
+                        wanted: input.format.to_string(),
+                    },
+                )));
+                continue;
+            }
+            let (start, end, placed) = placed_replacement(cell, &units[ui], text, &markdown);
+            let block = matches!(units[ui], Unit::Cell(_));
+            if block {
+                // A fallback cell keeps its figure number, as a presented one does.
+                fig.begin_cell();
+            }
+            reports.push(report(UnitOutcome::Replace(Edit {
+                start,
+                end,
+                text: placed,
+                block,
+                front_matter: false,
+            })));
+            continue;
+        }
+        match &units[ui] {
+            Unit::Cell(u) => {
+                let widget_view = has_widget_view(cell);
+                // The hoisted outputs are in the head: the body presents the cell without them.
+                let without;
+                let cell = match input.page_deps.hoisted.get(&cell.id) {
+                    Some(hoisted) => {
+                        without = without_outputs(cell, hoisted);
+                        &without
+                    }
+                    None => cell,
+                };
+                let author = input.author_texts.0[ui].text.as_str();
+                // Every presented cell, visible or not, keeps its figure number.
+                fig.begin_cell();
+                let presented = present_cell_step(
+                    &u.lang,
+                    &u.attr_tail,
+                    author,
+                    cell,
+                    engine_entry_for(input.engines, cell),
+                    input.scope,
+                    fig,
+                    input.target,
+                );
+                let image_failures = fig.take_failures();
+                let mut attr_rejections = Vec::new();
+                let outcome = match presented {
+                    Err(message) => {
+                        UnitOutcome::Error(PresentError::InvalidCellOptions { unit: ui, message })
+                    }
+                    Ok((rendered, rejected)) => {
+                        attr_rejections = rejected;
+                        // `replacement` carries the container prefix and indent onto every line;
+                        // the rendered text keeps its own trailing newlines, as it always did.
+                        // A header `indent` option is deliberately not applied here (KNR-3 slice
+                        // 7, D8; KNR-6 kept it inert). If it is ever needed, prefix every line of
+                        // `rendered` with the option\'s resolved value before calling
+                        // `replacement`. See the plan
+                        // `claude-notes/plans/2026-10-30-knr-06-flip-and-consumers.md`, "If
+                        // `indent` is ever needed".
+                        let trailing = &rendered[rendered.trim_end_matches('\n').len()..];
+                        let (start, end, placed) = replacement(&units[ui], text, &rendered);
+                        UnitOutcome::Replace(Edit {
+                            start,
+                            end,
+                            text: format!("{}{trailing}", placed.trim_end_matches('\n')),
+                            block: true,
+                            front_matter: false,
+                        })
+                    }
+                };
+                reports.push(UnitReport {
+                    unit: ui,
+                    outcome,
+                    image_failures,
+                    attr_rejections,
+                    widget_view,
+                });
+            }
+            Unit::Inline(u) => {
+                let result = CellResult::from_nbformat(&cell.outputs, cell.execution_count);
+                reports.push(report(inline_outcome(ui, u, &result, text, input.target)));
+            }
+        }
+    }
+    reports
+}
+
+/// Apply `edits` (non-overlapping, in any order) to `text`. Returns the new text and, for each
+/// edit in document order, the byte range its replacement occupies in it (a blank line added
+/// before a block edit is outside its range). The edits are returned sorted: `ranges[i]` belongs to
+/// `sorted[i]`.
+pub fn apply_edits(
+    text: &str,
+    edits: Vec<Edit>,
+) -> (String, Vec<Edit>, Vec<std::ops::Range<usize>>) {
+    let mut sorted = edits;
+    sorted.sort_by_key(|e| e.start);
+    let mut out = String::with_capacity(text.len());
+    let mut ranges = Vec::with_capacity(sorted.len());
+    let mut last_end = 0;
+    for edit in &sorted {
+        out.push_str(&text[last_end..edit.start]);
+        if edit.block && out.ends_with('\n') && !out.ends_with("\n\n") {
+            out.push('\n');
+        }
+        let start = out.len();
+        out.push_str(&edit.text);
+        ranges.push(start..out.len());
+        last_end = edit.end;
+    }
+    out.push_str(&text[last_end..]);
+    (out, sorted, ranges)
+}
+
 /// Present `cells` (an engine's record cells) over `document_text`, the text the units
 /// were located in. `scope` is the document's merged `execute:` scope and `target` the
 /// output format's mime preference for inline values; `format` is the full format name
 /// a fallback unit's stored markdown must have been produced for; figures go through `fig`.
-/// `engine` is the record's entry for the engine that ran (its `known_options` reach a knitr
-/// cell\'s presentation); `None` for a record with no such entry.
+/// `engines` are the record's engine entries; each cell\'s own entry is looked up by its
+/// `quarto_engine` (its `known_options` reach a knitr cell\'s presentation), empty for a record
+/// with none. Render\'s error policy: the first error fails the document, skips become notes.
 pub fn present_document(
     cells: &[RecordCell],
     document_text: &str,
@@ -118,151 +346,87 @@ pub fn present_document(
     scope: Option<&ConfigValue>,
     target: InlineTarget,
     format: &str,
-    engine: Option<&EngineEntry>,
+    engines: &[EngineEntry],
     fig: &mut dyn FigureSink,
 ) -> Result<PresentResult, PresentError> {
-    let matched = match_cells(units, cells);
+    let matched: Vec<(usize, &RecordCell)> = match_cells(units, cells)
+        .into_iter()
+        .enumerate()
+        .filter_map(|(ui, c)| c.map(|c| (ui, c)))
+        .collect();
     // The author text of each unit: its scanned text without the container prefix and indent,
     // which `replacement` puts back on every line of what it splices.
     let author_texts = crate::record::AuthorTexts::from_scanned(units);
-    let mut order: Vec<usize> = (0..units.len()).collect();
-    order.sort_by_key(|&i| units[i].start());
-
-    let mut out = String::with_capacity(document_text.len());
-    let mut last_end = 0;
+    let page_deps = page_dependencies(cells, engines, format);
+    let input = PresentInput {
+        text: document_text,
+        units,
+        author_texts: &author_texts,
+        scope,
+        target,
+        format,
+        engines,
+        page_deps: &page_deps,
+    };
     let mut notes = Vec::new();
-    for ui in order {
-        let Some(cell) = matched[ui] else {
-            continue;
-        };
-        // A fallback unit holds finished markdown: splice it in, never present it.
-        if let Some((markdown, stored)) = stored_markdown(cell) {
-            if stored.as_deref() != Some(format) {
+    let mut edits = Vec::new();
+    for report in present_units(&input, &matched, fig) {
+        let unit = report.unit;
+        match report.outcome {
+            UnitOutcome::Replace(edit) => edits.push(edit),
+            UnitOutcome::Skip(SkipReason::MarkdownFormatMismatch { stored, wanted }) => {
                 notes.push(PresentNote::MarkdownFormatMismatch {
-                    unit: ui,
+                    unit,
                     stored,
-                    wanted: format.to_string(),
+                    wanted,
                 });
-                continue;
             }
-            let (start, end, text) = placed_replacement(cell, &units[ui], document_text, &markdown);
-            if matches!(units[ui], Unit::Cell(_)) {
-                // A fallback cell keeps its figure number, as a presented one does.
-                fig.begin_cell();
+            UnitOutcome::Skip(SkipReason::NoUsableValue) => {
+                notes.push(PresentNote::InlineNoUsableValue { unit });
             }
-            out.push_str(&document_text[last_end..start]);
-            if matches!(units[ui], Unit::Cell(_)) && out.ends_with('\n') && !out.ends_with("\n\n") {
-                out.push('\n');
-            }
-            out.push_str(&text);
-            last_end = end;
-            continue;
+            UnitOutcome::Skip(SkipReason::EmptyValue) => {}
+            UnitOutcome::Error(e) => return Err(e),
         }
-        let result = CellResult::from_nbformat(&cell.outputs, cell.execution_count);
-        match &units[ui] {
-            Unit::Cell(u) => {
-                let author = author_texts.0[ui].text.as_str();
-                let parsed =
-                    partition_cell_options(&u.lang, author, SourceInfo::generated(By::unknown()))
-                        .map_err(|e| PresentError::InvalidCellOptions {
-                        unit: ui,
-                        message: e.to_string(),
-                    })?;
-                let parsed_options = parsed.options.clone();
-                let cell_only = cell_config(parsed.options.clone());
-                let resolved = resolve_cell_options(scope, parsed.options);
-                let visibility = CellVisibility::resolve(resolved.as_ref());
-                // Every presented cell, visible or not, keeps its figure number.
-                fig.begin_cell();
-                let options =
-                    CellOptions::from_config(resolved.as_ref()).forwarding(cell_only.as_ref());
-                let text = match split_expansions(&cell.outputs) {
-                    // An expanded cell is one unit presented as one cell per expansion,
-                    // each with its own options.
-                    Some(expansions) => render_expanded_unit(
-                        &u.lang,
-                        &parsed.code,
-                        &options,
-                        visibility,
-                        &expansions,
-                        scope,
-                        fig,
-                    )
-                    .map_err(|message| PresentError::InvalidCellOptions { unit: ui, message })?,
-                    None => {
-                        // A structured knitr cell is read by the shared reader; any other
-                        // cell presents as it always did.
-                        let header = knitr_header_options(parsed_options);
-                        let (info, lines) = original_chunk(&u.lang, &u.attr_tail, author);
-                        present_knitr_cell(
-                            &u.lang,
-                            &parsed.code,
-                            cell,
-                            engine,
-                            header.as_ref(),
-                            (&info, &lines),
-                            fig,
-                        )
-                        .unwrap_or_else(|| {
-                            render_cell_with(
-                                &u.lang,
-                                &parsed.code,
-                                &result,
-                                &options,
-                                fig,
-                                visibility,
-                            )
-                        })
-                    }
-                };
-                notes.extend(
-                    fig.take_failures()
-                        .into_iter()
-                        .map(|f| PresentNote::ImageUnusable {
-                            unit: ui,
-                            mime: f.mime,
-                            reason: f.reason,
-                        }),
-                );
-                // `replacement` carries the container prefix and indent onto every line; the
-                // rendered text keeps its own trailing newlines, as it always did.
-                // A header `indent` option is deliberately not applied here (KNR-3 slice 7, D8;
-                // KNR-6 kept it inert). If it is ever needed, prefix every line of `text` with the
-                // option's resolved value before calling `replacement`, which then adds the
-                // container prefix and the unit's own indent in front of it. See the plan
-                // `claude-notes/plans/2026-10-30-knr-06-flip-and-consumers.md`, "If `indent` is
-                // ever needed".
-                let trailing = &text[text.trim_end_matches('\n').len()..];
-                let (start, end, placed) = replacement(&units[ui], document_text, &text);
-                let text = format!("{}{trailing}", placed.trim_end_matches('\n'));
-                out.push_str(&document_text[last_end..start]);
-                if out.ends_with('\n') && !out.ends_with("\n\n") {
-                    out.push('\n');
-                }
-                out.push_str(&text);
-                last_end = end;
-            }
-            Unit::Inline(u) => {
-                let Some(text) = inline_text(ui, u, &result, document_text, target, &mut notes)?
-                else {
-                    continue;
-                };
-                out.push_str(&document_text[last_end..u.start]);
-                out.push_str(&text);
-                last_end = u.end;
-            }
+        notes.extend(
+            report
+                .attr_rejections
+                .into_iter()
+                .map(|reason| PresentNote::EngineAttrsRejected { unit, reason }),
+        );
+        if report.widget_view {
+            notes.push(PresentNote::WidgetViewUnsupported { unit });
         }
+        notes.extend(
+            report
+                .image_failures
+                .into_iter()
+                .map(|f| PresentNote::ImageUnusable {
+                    unit,
+                    mime: f.mime,
+                    reason: f.reason,
+                }),
+        );
     }
-    out.push_str(&document_text[last_end..]);
+    let (markdown, _, _) = apply_edits(document_text, edits);
 
     Ok(PresentResult {
-        markdown: out,
+        markdown,
         files_written: fig
             .wrote_any()
             .then(|| fig.files_dir())
             .into_iter()
             .collect(),
         notes,
+        header_includes: page_deps.header_includes,
+    })
+}
+
+/// Whether any output of `cell` carries an ipywidgets view MIME type.
+fn has_widget_view(cell: &RecordCell) -> bool {
+    cell.outputs.iter().any(|o| {
+        o.get("data")
+            .and_then(Value::as_object)
+            .is_some_and(|d| d.contains_key("application/vnd.jupyter.widget-view+json"))
     })
 }
 
@@ -328,34 +492,41 @@ fn unit_content_hash(unit: &Unit) -> String {
     }
 }
 
-/// The text that replaces an inline unit, or `None` to leave it as written (no usable
-/// value, noted; or an empty value, as Q1 leaves it). A front matter value is escaped
-/// for the YAML double-quoted string the writer put it in, and a newline in it is an
-/// error (it would fold to a space).
-fn inline_text(
+/// What presenting an inline unit decided: its replacement, or why it stays as written (no usable
+/// value; an empty value, as Q1 leaves it). A front matter value is escaped for the YAML
+/// double-quoted string the writer put it in, and a newline in it is an error (it would fold to a
+/// space). Both are `front_matter` edits, which the splice ignores.
+fn inline_outcome(
     ui: usize,
     unit: &InlineUnit,
     result: &CellResult,
     document_text: &str,
     target: InlineTarget,
-    notes: &mut Vec<PresentNote>,
-) -> Result<Option<String>, PresentError> {
+) -> UnitOutcome {
     let text = match classify_inline_result(result) {
         InlineOutcome::Value(bundle) => render_inline(&bundle, target),
         InlineOutcome::NoTextValue | InlineOutcome::Silent | InlineOutcome::Raised { .. } => None,
     };
     let Some(text) = text else {
-        notes.push(PresentNote::InlineNoUsableValue { unit: ui });
-        return Ok(None);
+        return UnitOutcome::Skip(SkipReason::NoUsableValue);
     };
     if text.is_empty() {
-        return Ok(None);
+        return UnitOutcome::Skip(SkipReason::EmptyValue);
     }
+    let edit = |text: String| {
+        UnitOutcome::Replace(Edit {
+            start: unit.start,
+            end: unit.end,
+            text,
+            block: false,
+            front_matter: unit.in_front_matter,
+        })
+    };
     if !unit.in_front_matter {
-        return Ok(Some(text));
+        return edit(text);
     }
     if text.contains(['\n', '\r']) {
-        return Err(PresentError::FrontMatterValue {
+        return UnitOutcome::Error(PresentError::FrontMatterValue {
             unit: ui,
             key: front_matter_key_at(document_text, unit.start).unwrap_or_else(|| "?".to_string()),
             reason: "the value contains a newline, which a double-quoted YAML string would \
@@ -363,7 +534,7 @@ fn inline_text(
                 .to_string(),
         });
     }
-    Ok(Some(escape_yaml_double(&text)))
+    edit(escape_yaml_double(&text))
 }
 
 #[cfg(test)]
@@ -378,6 +549,7 @@ mod tests {
         AuthorTexts, EngineEntryInput, HashDefinition, RecordBuilder, UnitResult, fill_ids,
     };
     use quarto_pandoc_types::ConfigMapEntry;
+    use quarto_source_map::SourceInfo;
     use serde_json::{Value, json};
 
     const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
@@ -463,7 +635,7 @@ mod tests {
             scope,
             InlineTarget::from_format("html"),
             "html",
-            None,
+            &[],
             &mut fig,
         )
         .unwrap();
@@ -498,11 +670,15 @@ mod tests {
         let (units, texts) = staged_units(fixture::SOURCE);
         let mut cells = record(&units, &texts, &[(0, fixture::outputs())]);
         fixture::apply(&mut cells[0]);
-        let engine = entry_with(
+        // The entry is looked up per cell, by the engine the cell names.
+        cells[0].metadata.quarto_engine = Some("knitr".into());
+        let mut engine = entry_with(
             &units,
             &texts,
             Some(fixture::KNOWN.iter().map(|s| s.to_string()).collect()),
         );
+        // knitr declares that it interleaves; the fixture's anchors are only used then.
+        engine.interleaves_output = true;
         let dir = tempfile::tempdir().unwrap();
         let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
         let out = present_document(
@@ -512,7 +688,7 @@ mod tests {
             None,
             InlineTarget::from_format("html"),
             "html",
-            Some(&engine),
+            std::slice::from_ref(&engine),
             &mut fig,
         )
         .unwrap();
@@ -546,7 +722,7 @@ mod tests {
             None,
             InlineTarget::from_format("html"),
             "html",
-            Some(&engine),
+            std::slice::from_ref(&engine),
             &mut fig,
         )
         .unwrap()
@@ -567,7 +743,7 @@ mod tests {
         let cells = record(&units, &texts, &[(0, stdout("1\n"))]);
         let dir = tempfile::tempdir().unwrap();
         let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
-        let with = |engine: Option<&EngineEntry>, fig: &mut FsFigureSink| {
+        let with = |engine: &[EngineEntry], fig: &mut FsFigureSink| {
             present_document(
                 &cells,
                 "```{python}\nprint(1)\n```\n",
@@ -582,7 +758,10 @@ mod tests {
             .markdown
         };
         let entry = entry_with(&units, &texts, Some(vec![]));
-        assert_eq!(with(None, &mut fig), with(Some(&entry), &mut fig));
+        assert_eq!(
+            with(&[], &mut fig),
+            with(std::slice::from_ref(&entry), &mut fig)
+        );
     }
 
     // ── expanded cells ──────────────────────────────────────────────────
@@ -820,7 +999,7 @@ print(1)
             None,
             InlineTarget::from_format("html"),
             "html",
-            None,
+            &[],
             &mut fig,
         )
         .unwrap_err();
@@ -867,7 +1046,7 @@ print(1)
             None,
             InlineTarget::from_format("html"),
             "html",
-            None,
+            &[],
             &mut fig,
         )
         .unwrap();
@@ -893,7 +1072,7 @@ print(1)
             None,
             InlineTarget::from_format("html"),
             "html",
-            None,
+            &[],
             &mut fig,
         )
         .unwrap();
@@ -922,7 +1101,7 @@ print(1)
             None,
             InlineTarget::from_format(format),
             format,
-            None,
+            &[],
             &mut fig,
         )
         .unwrap()
@@ -1054,5 +1233,230 @@ print(1)
             out.notes[0],
             PresentNote::ImageUnusable { unit: 1, .. }
         ));
+    }
+
+    // ── OPR-7f: engine attributes the grammar refuses are noted per unit ──
+
+    #[test]
+    fn a_refused_engine_attribute_is_noted_against_its_unit_and_the_rest_renders() {
+        let text = "```{python}\nplot()\n```\n";
+        let outputs = vec![json!({
+            "output_type": "display_data",
+            "data": {"image/png": PNG},
+            "metadata": {"quarto_attrs": {"id": "ok-id", "classes": ["1bad"]}}
+        })];
+        let (out, _) = present(text, &[(0, outputs)], None);
+        let [PresentNote::EngineAttrsRejected { unit, reason }] = out.notes.as_slice() else {
+            panic!("expected one EngineAttrsRejected note, got {:?}", out.notes);
+        };
+        assert_eq!(*unit, 0);
+        assert!(reason.contains("1bad"), "{reason}");
+        assert!(out.markdown.contains("#ok-id"), "{}", out.markdown);
+    }
+
+    #[test]
+    fn valid_engine_attributes_raise_no_note() {
+        let text = "```{python}\nplot()\n```\n";
+        let outputs = vec![json!({
+            "output_type": "display_data",
+            "data": {"image/png": PNG},
+            "metadata": {"quarto_attrs": {"id": "ok-id"}}
+        })];
+        let (out, _) = present(text, &[(0, outputs)], None);
+        assert!(out.notes.is_empty(), "{:?}", out.notes);
+    }
+
+    // ── OPR-1b: the outcome type and `apply_edits` ──
+
+    /// The reports of `present_units` over every unit of `text` the record has a cell for.
+    fn reports_for(
+        text: &str,
+        results: &[(usize, Vec<Value>)],
+        format: &str,
+    ) -> (Vec<UnitReport>, tempfile::TempDir) {
+        let (units, texts) = staged_units(text);
+        let cells = record(&units, &texts, results);
+        let matched: Vec<(usize, &RecordCell)> = match_cells(&units, &cells)
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, c)| c.map(|c| (i, c)))
+            .collect();
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        let input = PresentInput {
+            text,
+            units: &units,
+            author_texts: &texts,
+            scope: None,
+            target: InlineTarget::from_format("html"),
+            format,
+            engines: &[],
+            page_deps: &PageDependencies::default(),
+        };
+        (present_units(&input, &matched, &mut fig), dir)
+    }
+
+    fn image_only() -> Vec<Value> {
+        vec![json!({"output_type": "display_data", "data": {"image/png": PNG}, "metadata": {}})]
+    }
+
+    fn markdown_output(md: &str, format: &str) -> Value {
+        json!({"output_type": "display_data",
+               "data": {"text/x-quarto-markdown": md},
+               "metadata": {"quarto_format": format}})
+    }
+
+    #[test]
+    fn a_subcap_group_through_present_units_keeps_caption_and_panel_ids() {
+        // OPR-7j: `present_document` and the splice stage both reach the cell step through
+        // `present_units`, so this covers render and preview.
+        let text = "```{python}\n#| label: fig-two\n#| fig-cap: A group\n#| fig-subcap:\n#|   - First\n#|   - Second\nplots()\n```\n";
+        let mut outputs = image_only();
+        outputs.extend(image_only());
+        let (reports, _dir) = reports_for(text, &[(0, outputs)], "html");
+        let [cell] = reports.as_slice() else {
+            panic!("{reports:?}");
+        };
+        let UnitOutcome::Replace(cell) = &cell.outcome else {
+            panic!("{cell:?}");
+        };
+        let md = &cell.text;
+        assert!(md.contains("::: {#fig-two .cell}"), "{md}");
+        assert!(
+            md.contains("{#fig-two-1}") && md.contains("{#fig-two-2}"),
+            "{md}"
+        );
+        assert!(md.trim_end().ends_with("\nA group\n:::"), "{md}");
+    }
+
+    #[test]
+    fn a_cell_and_a_span_each_return_a_replacement() {
+        let text = "Value `{python} x`.\n\n```{python}\n1\n```\n";
+        let (reports, _dir) = reports_for(text, &[(0, plain("42")), (1, stdout("hi\n"))], "html");
+        let [span, cell] = reports.as_slice() else {
+            panic!("{reports:?}");
+        };
+        let UnitOutcome::Replace(span) = &span.outcome else {
+            panic!("{span:?}");
+        };
+        assert_eq!(
+            (span.text.as_str(), span.block, span.front_matter),
+            ("42", false, false)
+        );
+        let UnitOutcome::Replace(cell) = &cell.outcome else {
+            panic!("{cell:?}");
+        };
+        assert!(
+            cell.block && cell.text.starts_with("::: {.cell}"),
+            "{cell:?}"
+        );
+    }
+
+    #[test]
+    fn each_skip_reason_is_returned_not_swallowed() {
+        let text = "A `{python} a`, B `{python} b`, C `{python} c`.\n\n```{python}\n1\n```\n";
+        let (reports, _dir) = reports_for(
+            text,
+            &[
+                (0, image_only()),                            // no text value
+                (1, plain("")),                               // empty value
+                (2, vec![]),                                  // nothing at all
+                (3, vec![markdown_output("md", "revealjs")]), // stored for another format
+            ],
+            "html",
+        );
+        let outcomes: Vec<&UnitOutcome> = reports.iter().map(|r| &r.outcome).collect();
+        assert_eq!(outcomes[0], &UnitOutcome::Skip(SkipReason::NoUsableValue));
+        assert_eq!(outcomes[1], &UnitOutcome::Skip(SkipReason::EmptyValue));
+        assert_eq!(outcomes[2], &UnitOutcome::Skip(SkipReason::NoUsableValue));
+        assert_eq!(
+            outcomes[3],
+            &UnitOutcome::Skip(SkipReason::MarkdownFormatMismatch {
+                stored: Some("revealjs".into()),
+                wanted: "html".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn invalid_cell_options_and_a_front_matter_newline_are_returned_as_errors() {
+        // Invalid options: units of the invalid source, a cell recorded for a valid twin.
+        let valid = "```{python}\n#| echo: false\n1\n```\n";
+        let invalid = "```{python}\n#| echo: [\n1\n```\n";
+        let (vu, vt) = staged_units(valid);
+        let cells = record(&vu, &vt, &[(0, stdout("x\n"))]);
+        let (units, texts) = (
+            scan_units(invalid),
+            AuthorTexts::from_scanned(&scan_units(invalid)),
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        let input = PresentInput {
+            text: invalid,
+            units: &units,
+            author_texts: &texts,
+            scope: None,
+            target: InlineTarget::from_format("html"),
+            format: "html",
+            engines: &[],
+            page_deps: &PageDependencies::default(),
+        };
+        let reports = present_units(&input, &[(0, &cells[0])], &mut fig);
+        assert!(
+            matches!(
+                &reports[0].outcome,
+                UnitOutcome::Error(PresentError::InvalidCellOptions { unit: 0, .. })
+            ),
+            "{reports:?}"
+        );
+
+        let fm = "---\ntitle: \"T `{python} x`\"\n---\n\nBody.\n";
+        let (reports, _dir) = reports_for(fm, &[(0, plain("a\nb"))], "html");
+        assert!(
+            matches!(
+                &reports[0].outcome,
+                UnitOutcome::Error(PresentError::FrontMatterValue { unit: 0, .. })
+            ),
+            "{reports:?}"
+        );
+        // A good front-matter value is an edit flagged for the caller to apply or ignore.
+        let (reports, _dir) = reports_for(fm, &[(0, plain("ok"))], "html");
+        assert!(
+            matches!(&reports[0].outcome, UnitOutcome::Replace(e) if e.front_matter && e.text == "ok"),
+            "{reports:?}"
+        );
+    }
+
+    fn edit(start: usize, end: usize, text: &str, block: bool) -> Edit {
+        Edit {
+            start,
+            end,
+            text: text.to_string(),
+            block,
+            front_matter: false,
+        }
+    }
+
+    #[test]
+    fn apply_edits_reports_the_range_each_replacement_occupies() {
+        let text = "aaa\nBBB\ncc\nDDDD\nee";
+        // Out of order on purpose; a block edit after a single newline gets a blank line before it.
+        let edits = vec![
+            edit(11, 15, "X", false),
+            edit(4, 7, "1\n2\n3", true),
+            edit(8, 8, "Y", false),
+        ];
+        let (out, sorted, ranges) = apply_edits(text, edits);
+        assert_eq!(out, "aaa\n\n1\n2\n3\nYcc\nX\nee");
+        assert_eq!(sorted.len(), 3);
+        for (e, r) in sorted.iter().zip(&ranges) {
+            assert_eq!(&out[r.clone()], e.text, "{r:?}");
+        }
+    }
+
+    #[test]
+    fn apply_edits_with_no_edits_returns_the_text() {
+        let (out, sorted, ranges) = apply_edits("same\n", Vec::new());
+        assert_eq!((out.as_str(), sorted.len(), ranges.len()), ("same\n", 0, 0));
     }
 }

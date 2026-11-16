@@ -1,0 +1,12 @@
+---
+title: Document-scope include false
+execute:
+  include: false
+---
+
+```{r}
+x <- 1:3
+x
+```
+
+Prose after.

@@ -55,12 +55,12 @@ fn make_space(start: usize) -> Inline {
 }
 
 fn make_code(text: &str, start: usize, end: usize) -> Inline {
-    Inline::Code(Code {
+    Inline::Code(Box::new(Code {
         attr: Attr::default(),
         text: text.to_string(),
         source_info: si(start, end),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 fn ptr_of(inline: &Inline) -> usize {

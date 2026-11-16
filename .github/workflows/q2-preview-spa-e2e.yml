@@ -32,7 +32,7 @@ on:
 
 # Pins copied from test-suite.yml (keep in step with it).
 env:
-  PANDOC_VERSION: "3.12.1"
+  PANDOC_VERSION: "3.13"
   TYPST_VERSION: "0.15.1"
 
 concurrency:

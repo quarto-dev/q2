@@ -5,7 +5,7 @@
 //! desugar and emit stages and the unexecuted-cell counter all need it, and
 //! none of them is legacy.
 
-use quarto_pandoc_types::{Block, CodeBlock};
+use quarto_pandoc_types::Block;
 
 /// Identify an "engine cell" — a Quarto-syntax fenced code block of
 /// the form ` ```{<lang>}` (e.g. `{r}`, `{python}`). The literal
@@ -21,9 +21,10 @@ use quarto_pandoc_types::{Block, CodeBlock};
 ///
 /// Returns the language token (without braces) when matched.
 pub fn engine_cell_lang(block: &Block) -> Option<&str> {
-    let Block::CodeBlock(CodeBlock { attr, .. }) = block else {
+    let Block::CodeBlock(code_block) = block else {
         return None;
     };
+    let attr = &code_block.attr;
     for class in attr.1.iter() {
         if let Some(stripped) = class.strip_prefix('{').and_then(|s| s.strip_suffix('}')) {
             // `{{lang}}` strips to `{lang}` — still braced, so not a cell.

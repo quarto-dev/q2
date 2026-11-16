@@ -188,3 +188,33 @@ nested task list
                 (task_list_marker_checked)
                 (pandoc_paragraph
                   (pandoc_str))))))))
+
+================================================================================
+empty task item: marker then end of line (bd-2ydvebkc)
+================================================================================
+- [ ] 
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (task_list_marker_unchecked)))))
+
+================================================================================
+empty task item followed by another task item (bd-2ydvebkc)
+================================================================================
+- [x] 
+- [ ] next
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (task_list_marker_checked))
+          (list_item
+            (list_marker_minus)
+            (task_list_marker_unchecked)
+            (pandoc_paragraph
+              (pandoc_str))))))

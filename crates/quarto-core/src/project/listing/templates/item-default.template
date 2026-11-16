@@ -12,9 +12,9 @@ $endif$
 $else$
 ::: thumbnail
 $if(path)$
-[`$image-placeholder-begin$<div class="listing-item-img-placeholder card-img-top">&nbsp;</div>$image-placeholder-end$`{=html}]($path$){.no-external}
+[`$image-placeholder-begin$$image-placeholder-html$$image-placeholder-end$`{=html}]($path$){.no-external}
 $else$
-`$image-placeholder-begin$<div class="listing-item-img-placeholder card-img-top">&nbsp;</div>$image-placeholder-end$`{=html}
+`$image-placeholder-begin$$image-placeholder-html$$image-placeholder-end$`{=html}
 $endif$
 :::
 $endif$

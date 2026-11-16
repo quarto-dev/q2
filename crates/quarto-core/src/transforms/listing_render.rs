@@ -317,11 +317,11 @@ fn render_one(
     if emit_listjs && listjs::supports_listjs(r.listing.kind) {
         let fields = effective_fields(&r.listing, &r.items);
         let raw_html = |text: String| {
-            Block::RawBlock(RawBlock {
+            Block::RawBlock(Box::new(RawBlock {
                 format: "html".to_string(),
                 text,
                 source_info: SourceInfo::generated(By::programmatic_config()),
-            })
+            }))
         };
         if let Some(nav) = listjs::pagination_nav(&r.listing, r.items.len()) {
             parsed_blocks.push(raw_html(nav));
@@ -342,13 +342,13 @@ fn render_one(
     // reported that, is no longer emitted — bd-nbv80e33.)
     if try_replace_explicit_slot(ast, &r.listing, &parsed_blocks) == SlotOutcome::NotFound {
         let mut div = Div {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: parsed_blocks,
             source_info: SourceInfo::generated(By::programmatic_config()),
             attr_source: AttrSourceInfo::empty(),
         };
         mark_as_container(&mut div, &r.listing);
-        ast.blocks.push(Block::Div(div));
+        ast.blocks.push(Block::Div(Box::new(div)));
     }
 }
 
@@ -856,12 +856,12 @@ mod tests {
     fn pandoc_with_slot(id: &str) -> Pandoc {
         Pandoc {
             meta: ConfigValue::default(),
-            blocks: vec![Block::Div(Div {
-                attr: (id.to_string(), vec![], LinkedHashMap::new()),
+            blocks: vec![Block::Div(Box::new(Div {
+                attr: (id.to_string(), vec![], LinkedHashMap::new()).into(),
                 content: vec![],
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         }
     }
 
@@ -2208,9 +2208,9 @@ mod tests {
     // produces ahead of us.
 
     fn header(level: usize, text: &str) -> Block {
-        Block::Header(quarto_pandoc_types::block::Header {
+        Block::Header(Box::new(quarto_pandoc_types::block::Header {
             level,
-            attr: (slug(text), vec![], LinkedHashMap::new()),
+            attr: (slug(text), vec![], LinkedHashMap::new()).into(),
             content: vec![quarto_pandoc_types::inline::Inline::Str(
                 quarto_pandoc_types::inline::Str {
                     text: text.to_string(),
@@ -2219,7 +2219,7 @@ mod tests {
             )],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn slug(text: &str) -> String {
@@ -2239,12 +2239,12 @@ mod tests {
     }
 
     fn slot(id: &str) -> Block {
-        Block::Div(Div {
-            attr: (id.to_string(), vec![], LinkedHashMap::new()),
+        Block::Div(Box::new(Div {
+            attr: (id.to_string(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn sectionized(blocks: Vec<Block>) -> Pandoc {
@@ -2511,7 +2511,7 @@ mod tests {
                 .content
                 .iter()
                 .filter_map(|b| match b {
-                    Block::Div(d) => Some(d),
+                    Block::Div(d) => Some(&**d),
                     _ => None,
                 })
                 .collect();

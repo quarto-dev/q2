@@ -1,6 +1,8 @@
 using Pkg
 using TOML
 
+include(joinpath(@__DIR__, "environment_pins.jl"))
+
 # If the manifest was resolved with the exact Project.toml that we have copied
 # over from quarto's resource folder, then we just ensure that it is instantiated,
 # all packages are downloaded correctly, etc.
@@ -20,7 +22,10 @@ else
   Pkg.is_manifest_current(dirname(Base.active_project()))
 end
 
-manifest_matches_project_toml = is_manifest_current === true # this returns nothing if there's no manifest
+# `is_manifest_current` ignores `[sources]`, so a bumped QuartoNotebookRunner pin also has to match
+# the revision the manifest resolved (see environment_pins.jl).
+manifest_matches_project_toml = is_manifest_current === true && # this returns nothing if there's no manifest
+  sources_pins_match(Base.active_project(), joinpath(dirname(Base.active_project()), "Manifest.toml"))
 
 if manifest_matches_project_toml && manifest_has_correct_julia_version()
   Pkg.instantiate()

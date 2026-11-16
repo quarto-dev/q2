@@ -1081,7 +1081,7 @@ mod tests {
     }
 
     fn empty_attr() -> Attr {
-        (String::new(), vec![], LinkedHashMap::new())
+        (String::new(), vec![], LinkedHashMap::new()).into()
     }
 
     fn make_str(text: &str) -> Inline {
@@ -1180,38 +1180,41 @@ mod tests {
 
     #[test]
     fn test_hash_code_block() {
-        let cb1 = Block::CodeBlock(CodeBlock {
+        let cb1 = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 "id".to_string(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "print('hello')".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let cb2 = Block::CodeBlock(CodeBlock {
+        let cb2 = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 "id".to_string(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "print('hello')".to_string(),
             source_info: other_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let cb3 = Block::CodeBlock(CodeBlock {
+        let cb3 = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 "id".to_string(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "print('world')".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         // Same content, different source -> same hash
         assert_eq!(
@@ -1228,17 +1231,17 @@ mod tests {
 
     #[test]
     fn test_hash_raw_block() {
-        let rb1 = Block::RawBlock(RawBlock {
+        let rb1 = Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: "<div>hello</div>".to_string(),
             source_info: dummy_source(),
-        });
+        }));
 
-        let rb2 = Block::RawBlock(RawBlock {
+        let rb2 = Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: "<div>world</div>".to_string(),
             source_info: dummy_source(),
-        });
+        }));
 
         assert_ne!(
             compute_block_hash_fresh(&rb1),
@@ -1273,23 +1276,23 @@ mod tests {
 
     #[test]
     fn test_hash_ordered_list() {
-        let ol1 = Block::OrderedList(OrderedList {
+        let ol1 = Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("item 1")],
                 source_info: dummy_source(),
             })]],
             source_info: dummy_source(),
-        });
+        }));
 
-        let ol2 = Block::OrderedList(OrderedList {
+        let ol2 = Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("item 1")],
                 source_info: other_source(),
             })]],
             source_info: other_source(),
-        });
+        }));
 
         assert_eq!(
             compute_block_hash_fresh(&ol1),
@@ -1348,21 +1351,21 @@ mod tests {
 
     #[test]
     fn test_hash_header() {
-        let h1 = Block::Header(Header {
+        let h1 = Block::Header(Box::new(Header {
             level: 1,
             attr: empty_attr(),
             content: vec![make_str("Title")],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let h2 = Block::Header(Header {
+        let h2 = Block::Header(Box::new(Header {
             level: 2,
             attr: empty_attr(),
             content: vec![make_str("Title")],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         // Different level -> different hash
         assert_ne!(compute_block_hash_fresh(&h1), compute_block_hash_fresh(&h2));
@@ -1387,33 +1390,35 @@ mod tests {
 
     #[test]
     fn test_hash_div() {
-        let div1 = Block::Div(Div {
+        let div1 = Block::Div(Box::new(Div {
             attr: (
                 "my-div".to_string(),
                 vec!["note".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("content")],
                 source_info: dummy_source(),
             })],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let div2 = Block::Div(Div {
+        let div2 = Block::Div(Box::new(Div {
             attr: (
                 "my-div".to_string(),
                 vec!["note".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("different")],
                 source_info: dummy_source(),
             })],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         // Different content -> different hash
         assert_ne!(
@@ -1521,17 +1526,17 @@ mod tests {
 
     #[test]
     fn test_hash_inline_quoted() {
-        let q1 = Inline::Quoted(Quoted {
+        let q1 = Inline::Quoted(Box::new(Quoted {
             quote_type: QuoteType::DoubleQuote,
             content: vec![make_str("quoted")],
             source_info: dummy_source(),
-        });
+        }));
 
-        let q2 = Inline::Quoted(Quoted {
+        let q2 = Inline::Quoted(Box::new(Quoted {
             quote_type: QuoteType::SingleQuote,
             content: vec![make_str("quoted")],
             source_info: dummy_source(),
-        });
+        }));
 
         // Different quote type -> different hash
         assert_ne!(
@@ -1542,19 +1547,19 @@ mod tests {
 
     #[test]
     fn test_hash_inline_code() {
-        let code1 = Inline::Code(Code {
+        let code1 = Inline::Code(Box::new(Code {
             attr: empty_attr(),
             text: "x = 1".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let code2 = Inline::Code(Code {
+        let code2 = Inline::Code(Box::new(Code {
             attr: empty_attr(),
             text: "x = 2".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         assert_ne!(
             compute_inline_hash_fresh(&code1),
@@ -1586,19 +1591,19 @@ mod tests {
 
     #[test]
     fn test_hash_inline_math() {
-        let math1 = Inline::Math(Math {
+        let math1 = Inline::Math(Box::new(Math {
             math_type: MathType::InlineMath,
             text: "x^2".to_string(),
             source_info: dummy_source(),
             text_source: None,
-        });
+        }));
 
-        let math2 = Inline::Math(Math {
+        let math2 = Inline::Math(Box::new(Math {
             math_type: MathType::DisplayMath,
             text: "x^2".to_string(),
             source_info: dummy_source(),
             text_source: None,
-        });
+        }));
 
         // Different math type -> different hash
         assert_ne!(
@@ -1609,11 +1614,11 @@ mod tests {
 
     #[test]
     fn test_hash_inline_raw() {
-        let raw = Inline::RawInline(RawInline {
+        let raw = Inline::RawInline(Box::new(RawInline {
             format: "tex".to_string(),
             text: "\\alpha".to_string(),
             source_info: dummy_source(),
-        });
+        }));
 
         let hash = compute_inline_hash_fresh(&raw);
         let _ = hash;
@@ -1621,23 +1626,23 @@ mod tests {
 
     #[test]
     fn test_hash_inline_link() {
-        let link1 = Inline::Link(Link {
+        let link1 = Inline::Link(Box::new(Link {
             attr: empty_attr(),
             content: vec![make_str("click")],
             target: ("https://example.com".to_string(), "title".to_string()),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
 
-        let link2 = Inline::Link(Link {
+        let link2 = Inline::Link(Box::new(Link {
             attr: empty_attr(),
             content: vec![make_str("click")],
             target: ("https://other.com".to_string(), "title".to_string()),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
 
         // Different URL -> different hash
         assert_ne!(
@@ -1648,14 +1653,14 @@ mod tests {
 
     #[test]
     fn test_hash_inline_image() {
-        let img = Inline::Image(Image {
+        let img = Inline::Image(Box::new(Image {
             attr: empty_attr(),
             content: vec![make_str("alt text")],
             target: ("image.png".to_string(), String::new()),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
 
         let hash = compute_inline_hash_fresh(&img);
         let _ = hash;
@@ -1677,16 +1682,17 @@ mod tests {
 
     #[test]
     fn test_hash_inline_span() {
-        let span = Inline::Span(Span {
+        let span = Inline::Span(Box::new(Span {
             attr: (
                 "id".to_string(),
                 vec!["class".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![make_str("spanned")],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         let hash = compute_inline_hash_fresh(&span);
         let _ = hash;
@@ -1775,34 +1781,36 @@ mod tests {
 
     #[test]
     fn test_structural_eq_code_block() {
-        let cb1 = Block::CodeBlock(CodeBlock {
+        let cb1 = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 String::new(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "code".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let cb2 = Block::CodeBlock(CodeBlock {
+        let cb2 = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 String::new(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "code".to_string(),
             source_info: other_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let cb3 = Block::CodeBlock(CodeBlock {
-            attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()),
+        let cb3 = Block::CodeBlock(Box::new(CodeBlock {
+            attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()).into(),
             text: "code".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         assert!(structural_eq_block(&cb1, &cb2));
         assert!(!structural_eq_block(&cb1, &cb3)); // Different class
@@ -1810,17 +1818,17 @@ mod tests {
 
     #[test]
     fn test_structural_eq_raw_block() {
-        let rb1 = Block::RawBlock(RawBlock {
+        let rb1 = Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: "<div>".to_string(),
             source_info: dummy_source(),
-        });
+        }));
 
-        let rb2 = Block::RawBlock(RawBlock {
+        let rb2 = Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: "<div>".to_string(),
             source_info: other_source(),
-        });
+        }));
 
         assert!(structural_eq_block(&rb1, &rb2));
     }
@@ -1848,32 +1856,32 @@ mod tests {
 
     #[test]
     fn test_structural_eq_ordered_list() {
-        let ol1 = Block::OrderedList(OrderedList {
+        let ol1 = Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("item")],
                 source_info: dummy_source(),
             })]],
             source_info: dummy_source(),
-        });
+        }));
 
-        let ol2 = Block::OrderedList(OrderedList {
+        let ol2 = Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("item")],
                 source_info: other_source(),
             })]],
             source_info: other_source(),
-        });
+        }));
 
-        let ol3 = Block::OrderedList(OrderedList {
+        let ol3 = Block::OrderedList(Box::new(OrderedList {
             attr: (5, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("item")],
                 source_info: dummy_source(),
             })]],
             source_info: dummy_source(),
-        });
+        }));
 
         assert!(structural_eq_block(&ol1, &ol2));
         assert!(!structural_eq_block(&ol1, &ol3)); // Different start number
@@ -1929,29 +1937,29 @@ mod tests {
 
     #[test]
     fn test_structural_eq_header() {
-        let h1 = Block::Header(Header {
+        let h1 = Block::Header(Box::new(Header {
             level: 1,
             attr: empty_attr(),
             content: vec![make_str("Title")],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let h2 = Block::Header(Header {
+        let h2 = Block::Header(Box::new(Header {
             level: 1,
             attr: empty_attr(),
             content: vec![make_str("Title")],
             source_info: other_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let h3 = Block::Header(Header {
+        let h3 = Block::Header(Box::new(Header {
             level: 2,
             attr: empty_attr(),
             content: vec![make_str("Title")],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         assert!(structural_eq_block(&h1, &h2));
         assert!(!structural_eq_block(&h1, &h3)); // Different level
@@ -1972,25 +1980,25 @@ mod tests {
 
     #[test]
     fn test_structural_eq_div() {
-        let div1 = Block::Div(Div {
-            attr: ("id".to_string(), vec![], LinkedHashMap::new()),
+        let div1 = Block::Div(Box::new(Div {
+            attr: ("id".to_string(), vec![], LinkedHashMap::new()).into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("text")],
                 source_info: dummy_source(),
             })],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let div2 = Block::Div(Div {
-            attr: ("id".to_string(), vec![], LinkedHashMap::new()),
+        let div2 = Block::Div(Box::new(Div {
+            attr: ("id".to_string(), vec![], LinkedHashMap::new()).into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("text")],
                 source_info: other_source(),
             })],
             source_info: other_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         assert!(structural_eq_block(&div1, &div2));
     }
@@ -2044,19 +2052,19 @@ mod tests {
 
     #[test]
     fn test_structural_eq_inline_code() {
-        let c1 = Inline::Code(Code {
+        let c1 = Inline::Code(Box::new(Code {
             attr: empty_attr(),
             text: "code".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let c2 = Inline::Code(Code {
+        let c2 = Inline::Code(Box::new(Code {
             attr: empty_attr(),
             text: "code".to_string(),
             source_info: other_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         assert!(structural_eq_inline(&c1, &c2));
     }
@@ -2076,26 +2084,26 @@ mod tests {
 
     #[test]
     fn test_structural_eq_inline_math() {
-        let m1 = Inline::Math(Math {
+        let m1 = Inline::Math(Box::new(Math {
             math_type: MathType::InlineMath,
             text: "x".to_string(),
             source_info: dummy_source(),
             text_source: None,
-        });
+        }));
 
-        let m2 = Inline::Math(Math {
+        let m2 = Inline::Math(Box::new(Math {
             math_type: MathType::InlineMath,
             text: "x".to_string(),
             source_info: other_source(),
             text_source: None,
-        });
+        }));
 
-        let m3 = Inline::Math(Math {
+        let m3 = Inline::Math(Box::new(Math {
             math_type: MathType::DisplayMath,
             text: "x".to_string(),
             source_info: dummy_source(),
             text_source: None,
-        });
+        }));
 
         assert!(structural_eq_inline(&m1, &m2));
         assert!(!structural_eq_inline(&m1, &m3)); // Different math type
@@ -2103,23 +2111,23 @@ mod tests {
 
     #[test]
     fn test_structural_eq_inline_link() {
-        let l1 = Inline::Link(Link {
+        let l1 = Inline::Link(Box::new(Link {
             attr: empty_attr(),
             content: vec![make_str("text")],
             target: ("url".to_string(), "title".to_string()),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
 
-        let l2 = Inline::Link(Link {
+        let l2 = Inline::Link(Box::new(Link {
             attr: empty_attr(),
             content: vec![make_str("text")],
             target: ("url".to_string(), "title".to_string()),
             source_info: other_source(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
 
         assert!(structural_eq_inline(&l1, &l2));
     }
@@ -2197,17 +2205,20 @@ mod tests {
             "id".to_string(),
             vec!["class".to_string()],
             LinkedHashMap::new(),
-        );
+        )
+            .into();
         let a2: Attr = (
             "id".to_string(),
             vec!["class".to_string()],
             LinkedHashMap::new(),
-        );
+        )
+            .into();
         let a3: Attr = (
             "other".to_string(),
             vec!["class".to_string()],
             LinkedHashMap::new(),
-        );
+        )
+            .into();
 
         assert!(attr_eq(&a1, &a2));
         assert!(!attr_eq(&a1, &a3));
@@ -2225,7 +2236,7 @@ mod tests {
             source_info: dummy_source(),
         };
 
-        let block = Block::Custom(cn);
+        let block = Block::Custom(Box::new(cn));
         let hash = compute_block_hash_fresh(&block);
         let _ = hash;
     }
@@ -2249,7 +2260,7 @@ mod tests {
             source_info: dummy_source(),
         };
 
-        let block = Block::Custom(cn);
+        let block = Block::Custom(Box::new(cn));
         let hash = compute_block_hash_fresh(&block);
         let _ = hash;
     }

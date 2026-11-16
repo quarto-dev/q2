@@ -151,6 +151,10 @@ describe('task-list rendering', () => {
         expect(container.textContent).not.toContain('☒');
         expect(container.textContent).toContain('todo');
         expect(container.textContent).toContain('done');
+        // Per-item hook the theme hides the marker on (GH #892, bd-2ydvebkc).
+        const lis = ul!.querySelectorAll(':scope > li');
+        expect(lis.length).toBe(2);
+        lis.forEach((li) => expect(li.classList.contains('task-list-item')).toBe(true));
     });
 
     it('toggling a checkbox commits a subtree edit with the flipped marker', () => {
@@ -234,7 +238,12 @@ describe('task-list DOM shape across list kinds (bd-qif9l4cx)', () => {
         // Writer parity: `class="task-list"` only when EVERY item is a task.
         const innerUl = inputs[0].closest('ul')!;
         expect(innerUl.classList.contains('task-list')).toBe(false);
-        expect(innerUl.querySelectorAll(':scope > li').length).toBe(2);
+        const innerLis = innerUl.querySelectorAll(':scope > li');
+        expect(innerLis.length).toBe(2);
+        // Per-item class only on the task item (GH #892, bd-2ydvebkc).
+        const taskLi = inputs[0].closest('li')!;
+        expect(taskLi.classList.contains('task-list-item')).toBe(true);
+        expect(container.querySelectorAll('li.task-list-item').length).toBe(1);
         expect(container.querySelector('ul.task-list')).toBeNull();
         expect(container.textContent).not.toContain('☒');
     });
@@ -277,6 +286,9 @@ describe('task-list DOM shape across list kinds (bd-qif9l4cx)', () => {
         expect((inputs[1] as HTMLInputElement).checked).toBe(true);
         expectInlineLabel(inputs[0], 'todo');
         expectInlineLabel(inputs[1], 'done');
+        // The per-item class lands on ordered task items too (bd-2ydvebkc);
+        // whether their numbers show is the theme's call.
+        expect(ol.querySelectorAll(':scope > li.task-list-item').length).toBe(2);
 
         fireEvent.click(inputs[1]);
         expect(setAst).toHaveBeenCalledTimes(1);
@@ -284,5 +296,32 @@ describe('task-list DOM shape across list kinds (bd-qif9l4cx)', () => {
         expect(list.t).toBe('OrderedList');
         expect(list.c[1][0][0].c[0]).toMatchObject({ t: 'Str', c: '☐' });
         expect(list.c[1][1][0].c[0]).toMatchObject({ t: 'Str', c: '☐' });
+    });
+});
+
+
+describe('empty task items (bd-2ydvebkc)', () => {
+    // `- [ ] ` is what a user has typed just before the item text; the
+    // reader gives it Pandoc's `Plain [Str "☐"]` (no Space), and the preview
+    // must already show the checkbox.
+    it('renders an empty checkbox in a task-list-item', () => {
+        const { container } = mountFixture('empty');
+        const ul = container.querySelector('ul.task-list');
+        expect(ul).not.toBeNull();
+        const inputs = ul!.querySelectorAll('li.task-list-item label > input[type="checkbox"]');
+        expect(inputs.length).toBe(2);
+        expect((inputs[0] as HTMLInputElement).checked).toBe(false);
+        expectInlineLabel(inputs[0], '');
+        expectInlineLabel(inputs[1], 'done');
+        expect(container.textContent).not.toContain('☐');
+    });
+
+    it('toggling the empty item flips its lone marker', () => {
+        const { container, setAst } = mountFixture('empty');
+        const inputs = container.querySelectorAll('input[type="checkbox"]');
+        fireEvent.click(inputs[0]);
+        expect(setAst).toHaveBeenCalledTimes(1);
+        const list = JSON.parse(setAst.mock.calls[0][0].modifiedSubtreeJson).blocks[0];
+        expect(list.c[0][0].c).toEqual([expect.objectContaining({ t: 'Str', c: '☒' })]);
     });
 });

@@ -47,7 +47,7 @@ fn get_all_shortcodes(pandoc: &pampa::pandoc::Pandoc) -> Vec<&Shortcode> {
         .iter()
         .filter_map(|i| {
             if let Inline::Shortcode(shortcode) = i {
-                Some(shortcode)
+                Some(&**shortcode)
             } else {
                 None
             }

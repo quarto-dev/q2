@@ -1,0 +1,7 @@
+---
+bibliography: refs.bib
+---
+
+Some text before.
+
+See [@missing2020].

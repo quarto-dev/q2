@@ -11,7 +11,7 @@ A paragraph with *emphasis*, **strong text**, `code` and a [link](https://exampl
 ## Second heading
 
 | Name  | Value |
-| ----- | ----- |
+| ----- | ----: |
 | alpha | 1     |
 | beta  | 2     |
 

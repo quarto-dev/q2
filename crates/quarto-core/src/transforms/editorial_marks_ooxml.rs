@@ -189,7 +189,7 @@ impl Converter {
         let mut out: Inlines = Vec::with_capacity(list.len());
         for inline in std::mem::take(list) {
             match inline {
-                Inline::Span(span) => self.span(span, &mut out),
+                Inline::Span(span) => self.span(*span, &mut out),
                 mut other => {
                     inline_children_mut(&mut other, self);
                     out.push(other);
@@ -207,7 +207,7 @@ impl Converter {
             Some(MarkKind::Comment) if self.fold_comments > 0 => {
                 strip_mark_classes(&mut span);
                 Neutralizer.inlines(&mut span.content);
-                out.push(Inline::Span(span));
+                out.push(Inline::Span(Box::new(span)));
             }
             Some(kind) => match self.target {
                 Target::Docx => self.docx_span(kind, span, out),
@@ -221,7 +221,7 @@ impl Converter {
                     self.commented_range(span, range, out);
                 } else {
                     self.inline_list(&mut span.content);
-                    out.push(Inline::Span(span));
+                    out.push(Inline::Span(Box::new(span)));
                 }
             }
         }
@@ -239,7 +239,7 @@ impl Converter {
                 .to_string();
                 span.attr_source = AttrSourceInfo::empty();
                 self.inline_list(&mut span.content);
-                out.push(Inline::Span(span));
+                out.push(Inline::Span(Box::new(span)));
             }
             MarkKind::Highlight => {
                 // The writer applies a highlight only to a bare span: no id, classes or
@@ -274,7 +274,7 @@ impl Converter {
                 }),
             );
             if let Inline::Span(s) = taken {
-                comments.push(s);
+                comments.push(*s);
             }
         }
         comments.reverse();
@@ -324,7 +324,7 @@ impl Converter {
         let mut out: Vec<Block> = Vec::with_capacity(list.len());
         for block in std::mem::take(list) {
             match block {
-                Block::Div(div) if self.is_live_mark(&div.attr.1) => self.mark_div(div, &mut out),
+                Block::Div(div) if self.is_live_mark(&div.attr.1) => self.mark_div(*div, &mut out),
                 Block::Paragraph(mut p) if wrap.is_some() => {
                     self.inline_list(&mut p.content);
                     p.content = wrap.expect("checked").wrap(p.content);
@@ -558,14 +558,14 @@ fn pptx_run(kind: MarkKind, author: Option<&str>, text: &str) -> Inline {
             ),
         ),
     };
-    Inline::RawInline(RawInline {
+    Inline::RawInline(Box::new(RawInline {
         format: "openxml".to_string(),
         text: format!(
             "<a:r>{rpr}<a:t xml:space=\"preserve\">{}</a:t></a:r>",
             xml_escape(&text)
         ),
         source_info: generated(),
-    })
+    }))
 }
 
 #[cfg(test)]
@@ -831,7 +831,7 @@ mod tests {
             .with_slot("title", Slot::Inlines(title))
             .with_slot("content", Slot::Blocks(vec![Block::Paragraph(inline_para)]))
             .with_slot("one", Slot::Block(Box::new(div)));
-        ast.blocks = vec![Block::Custom(node)];
+        ast.blocks = vec![Block::Custom(Box::new(node))];
         convert_document(&mut ast, Target::Docx, None);
 
         let shown = show_blocks(&ast.blocks);
@@ -855,7 +855,7 @@ mod tests {
         let div = ast.blocks[0].clone();
         let node = CustomNode::new("Callout", Default::default(), SourceInfo::for_test())
             .with_slot("one", Slot::Block(Box::new(div)));
-        ast.blocks = vec![Block::Custom(node)];
+        ast.blocks = vec![Block::Custom(Box::new(node))];
         convert_document(&mut ast, Target::Docx, None);
         assert_eq!(
             show_blocks(&ast.blocks),

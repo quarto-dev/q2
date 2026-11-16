@@ -153,3 +153,71 @@ describe('commentingDisabled (host cannot write)', () => {
         expect(setAst).not.toHaveBeenCalled();
     });
 });
+
+describe('baseline-less comments (Phase 3B1)', () => {
+    const PLAIN = [{ t: 'Str', c: 'hello' }];
+
+    it('offers no new-comment affordance without a source index', async () => {
+        const { container } = mount(PLAIN, { editingDisabled: true, untransformedAstJson: null });
+        await act(async () => {
+            hover(container.querySelector('p')!);
+        });
+        expect(bubble()).toBeNull();
+    });
+
+    it('keeps existing comments readable without an input or resolve button', async () => {
+        const { setAst } = mount([...PLAIN, COMMENT], {
+            editingDisabled: true,
+            untransformedAstJson: null,
+        });
+        expect(bubble()?.textContent).toContain('existing');
+        await act(async () => {
+            fireEvent.click(bubble()!);
+        });
+        expect(bubble()?.textContent).toContain('existing');
+        expect(input()).toBeNull();
+        expect(resolveButton()).toBeNull();
+        expect(setAst).not.toHaveBeenCalled();
+    });
+
+    it('suppresses an open input when the baseline disappears and restores normal UI when it returns', async () => {
+        const inlines = [...PLAIN, COMMENT];
+        const json = astJson(inlines);
+        const view = mount(inlines, { editingDisabled: true });
+        const rerenderBaseline = (baseline: string | null) => view.rerender(
+            <PreviewRoot
+                astJson={json}
+                untransformedAstJson={baseline}
+                renderedContent={CONTENT}
+                currentFilePath="/test.qmd"
+                assetManifest={{}}
+                setAst={view.setAst}
+                onNavigateToDocument={() => {}}
+                editingDisabled={true}
+            />,
+        );
+
+        await act(async () => {
+            fireEvent.click(bubble()!);
+        });
+        expect(input()).not.toBeNull();
+        await act(async () => {
+            fireEvent.change(input()!, { target: { value: 'draft not submitted' } });
+        });
+
+        await act(async () => rerenderBaseline(null));
+        expect(bubble()?.textContent).toContain('existing');
+        expect(input()).toBeNull();
+        expect(resolveButton()).toBeNull();
+        expect(view.setAst).not.toHaveBeenCalled();
+
+        await act(async () => rerenderBaseline(json));
+        expect(input()).not.toBeNull();
+        expect(resolveButton()).not.toBeNull();
+        await act(async () => {
+            fireEvent.click(resolveButton()!);
+        });
+        expect(view.setAst).toHaveBeenCalledOnce();
+        expect(view.setAst.mock.calls[0][0]).toMatchObject({ scope: 'comment' });
+    });
+});

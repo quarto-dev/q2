@@ -1,0 +1,12 @@
+[
+  {"name": "SGR color and reset", "input": "\u001b[31mred \u001b[0m", "expected": "red "},
+  {"name": "bold and combined parameters", "input": "\u001b[1;4;31mx", "expected": "x"},
+  {"name": "256 color", "input": "\u001b[38;5;196mx", "expected": "x"},
+  {"name": "truecolor", "input": "\u001b[38;2;1;2;3mx", "expected": "x"},
+  {"name": "cursor and erase", "input": "a \u001b[2K b \u001b[1A c", "expected": "a  b  c"},
+  {"name": "OSC 8 hyperlink, BEL end", "input": "\u001b]8;;https://e.com/a\u0007link\u001b]8;;\u0007", "expected": "link"},
+  {"name": "OSC 8 hyperlink, ST end", "input": "\u001b]8;;https://e.com\u001b\\link\u001b]8;;\u001b\\", "expected": "link"},
+  {"name": "lone ESC", "input": "a \u001b b", "expected": "a \u001b b"},
+  {"name": "escape split by a line break", "input": "\u001b[3\n1mx", "expected": "\u001b[3\n1mx"},
+  {"name": "no escape", "input": "none", "expected": "none"}
+]

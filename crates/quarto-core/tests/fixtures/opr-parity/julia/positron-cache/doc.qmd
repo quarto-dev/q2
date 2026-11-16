@@ -1,0 +1,15 @@
+---
+title: Julia fixture
+---
+
+```{julia}
+println("hello from julia")
+```
+
+```{julia}
+"a string result"
+```
+
+```{julia}
+using Plots; plot(1:3)
+```

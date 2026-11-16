@@ -418,3 +418,29 @@ fn grid_type_renders_unlinked_subtitle_thumbnail_and_description() {
     assert!(card.contains("Card Subtitle"), "{card}");
     assert!(card.contains("Card description text"), "{card}");
 }
+
+/// GH #1155: grid thumbnails carry Q1's inline height — the
+/// `image-height` default of 150px, or the author's value — plus the
+/// `card-img` class, so a large image can't render at full size.
+#[test]
+fn grid_thumbnails_carry_image_height_and_card_img() {
+    let (_dir, outputs) = render_project(|p| {
+        write(&p.join("_quarto.yml"), PROJECT);
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Home\nlisting:\n  type: grid\n  contents:\n    - title: \"Card\"\n      image: \"https://example.com/thumb.png\"\n---\n",
+        );
+        write(
+            &p.join("explicit.qmd"),
+            "---\ntitle: Explicit\nlisting:\n  type: grid\n  image-height: 100px\n  contents:\n    - title: \"Card\"\n      image: \"https://example.com/thumb.png\"\n---\n",
+        );
+    });
+    for (page, height) in [("index.html", "150px"), ("explicit.html", "100px")] {
+        let host = html_for(&outputs, page);
+        let expected = format!(r#"class="thumbnail-image card-img" style="height: {height};""#);
+        assert!(
+            host.contains(&expected),
+            "{page}: expected {expected}: {host}"
+        );
+    }
+}

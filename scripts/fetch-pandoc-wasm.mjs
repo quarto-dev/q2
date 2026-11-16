@@ -54,8 +54,8 @@ async function obtainWasm(fromWasm) {
   const cached = readIfExists(wasmPath);
   if (cached && sha256(cached) === constants.wasm_sha256) return cached;
 
-  const version = /^pandoc-(.+)\.wasm\.zip$/.exec(constants.asset_name)?.[1];
-  if (!version) throw new Error(`cannot read the pandoc version from asset_name ${constants.asset_name}`);
+  const version = constants.version;
+  if (typeof version !== 'string' || !version) throw new Error('resources/pandoc-wasm.json has no string `version`');
   const url = `https://github.com/jgm/pandoc/releases/download/${version}/${constants.asset_name}`;
   const res = await fetch(url, { redirect: 'follow' });
   if (!res.ok) throw new Error(`GET ${url}: ${res.status} ${res.statusText}`);

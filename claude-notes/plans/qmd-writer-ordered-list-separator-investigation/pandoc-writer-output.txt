@@ -1,0 +1,17 @@
+=== -\ 1.$'
+'\ \ 1\)
+  pandoc -t markdown writes: -\ 1.\ \ $'\n'$'\n'\ \ \<!--\ --\>$'\n'$'\n'\ \ 1\)\ \ 
+  ...re-read by pandoc markdown: [ BulletList [ [ OrderedList ( 1 , Decimal , Period ) [ [] ] , RawBlock (Format "html") "<!-- -->" , OrderedList ( 1 , Decimal , OneParen ) [ [] ] ] ] ] 
+=== -\ 1.\ a$'
+'\ \ 1\)\ b
+  pandoc -t markdown writes: -\ 1.\ \ a$'\n'$'\n'\ \ \<!--\ --\>$'\n'$'\n'\ \ 1\)\ \ b
+  ...re-read by pandoc markdown: [ BulletList [ [ OrderedList ( 1 , Decimal , Period ) [ [ Plain [ Str "a" ] ] ] , RawBlock (Format "html") "<!-- -->" , OrderedList ( 1 , Decimal , OneParen ) [ [ Plain [ Str "b" ] ] ] ] ] ] 
+=== -\ x$'
+'\ \ 1.\ a$'
+'\ \ 1\)
+  pandoc -t markdown writes: -\ x$'\n'\ \ 1.\ \ a$'\n'$'\n'\ \ \<!--\ --\>$'\n'$'\n'\ \ 1\)\ \ 
+  ...re-read by pandoc markdown: [ BulletList [ [ Plain [ Str "x" ] , OrderedList ( 1 , Decimal , Period ) [ [ Plain [ Str "a" ] ] ] , RawBlock (Format "html") "<!-- -->" , OrderedList ( 1 , Decimal , OneParen ) [ [] ] ] ] ] 
+=== 1.\ a$'
+'1\)\ b
+  pandoc -t markdown writes: 1.\ \ a$'\n'$'\n'\<!--\ --\>$'\n'$'\n'1\)\ \ b
+  ...re-read by pandoc markdown: [ OrderedList ( 1 , Decimal , Period ) [ [ Plain [ Str "a" ] ] ] , RawBlock (Format "html") "<!-- -->" , OrderedList ( 1 , Decimal , OneParen ) [ [ Plain [ Str "b" ] ] ] ] 

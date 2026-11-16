@@ -52,7 +52,7 @@ impl UserGrammarProvider for MockProvider {
 
 fn attr_with_class(class: &str) -> Attr {
     use hashlink::LinkedHashMap;
-    (String::new(), vec![class.to_string()], LinkedHashMap::new())
+    (String::new(), vec![class.to_string()], LinkedHashMap::new()).into()
 }
 
 fn empty_source_info() -> SourceInfo {
@@ -64,12 +64,12 @@ fn empty_attr_source() -> AttrSourceInfo {
 }
 
 fn make_code_block(class: &str, text: &str) -> Block {
-    Block::CodeBlock(CodeBlock {
+    Block::CodeBlock(Box::new(CodeBlock {
         attr: attr_with_class(class),
         text: text.to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
-    })
+    }))
 }
 
 fn empty_pandoc() -> Pandoc {

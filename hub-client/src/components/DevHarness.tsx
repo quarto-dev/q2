@@ -508,6 +508,7 @@ function ReplayHarness() {
     isPlaying: false,
     playbackSpeed: 1,
     currentContent: '',
+    currentHeads: null,
     // Seconds, not ms — ReplayDrawer formats with `new Date(ts * 1000)`.
     // Module-level so render stays pure (react-hooks/purity); visual
     // specs pin the clock (FIXED_NOW) before page load, so the module
@@ -554,7 +555,7 @@ function ReplayHarness() {
                 className="replay-drawer__actor-dot"
                 style={{ backgroundColor: '#447099' }}
               />
-              Ada Lovelace
+              <span className="replay-drawer__actor-name qh-truncate">Ada Lovelace</span>
               <span className="replay-drawer__actor-you">(you)</span>
             </span>
             <span className="replay-drawer__actor">
@@ -562,7 +563,7 @@ function ReplayHarness() {
                 className="replay-drawer__actor-dot"
                 style={{ backgroundColor: '#E91E63' }}
               />
-              Grace Hopper
+              <span className="replay-drawer__actor-name qh-truncate">Grace Hopper</span>
             </span>
           </div>
           <ReplayDrawer

@@ -8,25 +8,34 @@ that must agree; tests catch drift in all of them.
 | Where | What |
 |---|---|
 | `PANDOC_PIN` | the version (floor enforced by `version::gate`; the wasm is an exact pin beside it) |
-| `resources/pandoc-wasm.json` | `asset_name`, `upstream_zip_sha256`, `wasm_sha256`, `share_root`, mount `limits` |
-| `.github/workflows/ts-test-suite.yml`, `test-suite.yml` | `PANDOC_VERSION` |
+| `resources/pandoc-wasm.json` | `version`, `asset_name`, `upstream_zip_sha256`, `wasm_sha256`, `share_root`, mount `limits` |
+| `.github/workflows/ts-test-suite.yml`, `test-suite.yml`, `q2-preview-spa-e2e.yml` | `PANDOC_VERSION` |
 | `resources/pandoc-filters/README.md` | the recorded pandoc pin |
+| `crates/xtask/src/dev_setup.rs` | `PANDOC_HYBRID_MIN_VERSION` (the pin's major.minor) |
+| `resources/vendored.toml` | the `pandoc-wasm` entry's `version` and `last_reviewed` |
 
 **Owner:** whoever bumps `PANDOC_PIN` (the author of that PR) owns the wasm bump in
 the same PR; the two never move separately.
 
 ## Runbook
 
-1. Bump `PANDOC_PIN`, both workflows' `PANDOC_VERSION` and the filters README.
-2. Download the asset and measure it (needs `gh`):
+1. Bump `PANDOC_PIN`, every workflow's `PANDOC_VERSION`, the dev-setup floor and the
+   filters README (`cargo xtask lint` checks that they agree).
+2. Download the asset and measure it (needs `gh`). **Upstream's asset name is not
+   stable** — 3.12.1 shipped `pandoc-3.12.1.wasm.zip` with a `pandoc-wasm/` folder,
+   3.13 ships `pandoc-3.13-wasm.zip` with a `pandoc-3.13-wasm/` folder — so look it
+   up rather than guessing:
    ```bash
-   gh release download <ver> -R jgm/pandoc -p 'pandoc-<ver>.wasm.zip'
-   shasum -a 256 pandoc-<ver>.wasm.zip                  # -> upstream_zip_sha256
-   unzip -o pandoc-<ver>.wasm.zip && shasum -a 256 pandoc-wasm/pandoc.wasm   # -> wasm_sha256
+   gh release view <ver> -R jgm/pandoc --json assets --jq '.assets[].name' | grep wasm
+   gh release download <ver> -R jgm/pandoc -p '<asset>'
+   shasum -a 256 <asset>                                          # -> upstream_zip_sha256
+   unzip -p <asset> '*/pandoc.wasm' | shasum -a 256               # -> wasm_sha256
    ```
-3. Update `asset_name`, `upstream_zip_sha256` and `wasm_sha256` in
-   `resources/pandoc-wasm.json`. Leave `share_root` and `limits` alone unless the
-   design changes.
+3. Update `version`, `asset_name`, `upstream_zip_sha256` and `wasm_sha256` in
+   `resources/pandoc-wasm.json`, and `expected_pandoc_wasm_sha256` in the two
+   `crates/quarto-core/schemas/pandoc-request*.golden.json` files. Nothing parses the
+   version out of `asset_name`; `version` is the source of truth. Leave `share_root`
+   and `limits` alone unless the design changes.
 4. `cargo nextest run -p quarto-core pandoc_wasm_constants pandoc_filters` (asset
    name, workflow versions, README pin).
 5. Regenerate the native recordings (`cargo xtask capture-pandoc-recordings`) and goldens against the new native pandoc and
@@ -48,4 +57,4 @@ the same PR; the two never move separately.
     expected `wasm_sha256` is compiled in, so a stale build fails every pandoc test with a
     checksum mismatch.
 
-The 3.11 → 3.12.1 bump (bd-7vum2l3y) is a worked example of all of the above.
+The 3.11 → 3.12.1 bump (bd-7vum2l3y) and the 3.12.1 → 3.13 bump (bd-dti84hkx) are worked examples of all of the above.

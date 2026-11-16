@@ -44,6 +44,14 @@ export interface RunConfig {
    * here; we parse the field for consistency with the Rust side.
    */
   requires_js?: boolean;
+  /**
+   * Execution engines whose runtime the fixture needs (e.g. `jupyter`), a
+   * string or a list, as in the Rust runner (`RunConfig::requires`), which
+   * skips the fixture when that runtime is not installed. The hub renders in
+   * WASM, which has no engine runtimes, so any entry skips it here. Keep in
+   * step with `shouldSkip` in `src/test-utils/smokeAllFixtures.ts`.
+   */
+  requires?: string | string[];
 }
 
 export interface FormatTestSpec {
@@ -316,6 +324,11 @@ export function shouldSkip(
     return 'tests.run.ci is false';
   }
 
+  const requires = runConfig.requires === undefined ? [] : [runConfig.requires].flat();
+  if (requires.length > 0) {
+    return `tests.run.requires ${requires.join(', ')} (no engine runtime in WASM)`;
+  }
+
   const currentOs =
     process.platform === 'darwin'
       ? 'darwin'
@@ -461,6 +474,13 @@ export const DOM_ASSERTIONS_PENDING_PARITY: ReadonlyMap<string, string> = new Ma
   // Same gap, plus no crossref_render wrapper: the preview carries
   // `fig-align` on the CodeBlock and MermaidCodeBlock.tsx applies it.
   ['mermaid/fig-align.qmd', 'bd-c3dtpe36'],
+  // Graphviz blocks: `pre.graphviz` is emitted only by the `q2 render`
+  // HTML writer. In q2-preview GraphvizCodeBlock.tsx draws the diagram
+  // into `div[data-graphviz-diagram]`.
+  ['graphviz/basic.qmd', 'bd-ijlapt70'],
+  // Same gap, plus no crossref_render wrapper class: the preview carries
+  // `fig-align` on the CodeBlock and GraphvizCodeBlock.tsx applies it.
+  ['graphviz/cell-options.qmd', 'bd-ijlapt70'],
   // User-declared `css:` links are not emitted in VFS/preview mode.
   ['metadata/dir-metadata-paths/chapters/intro/doc.qmd', 'bd-b3oq2fsy'],
   // TOC copy of repo actions dropped at the default toc-location.

@@ -369,6 +369,9 @@ export default function ReplayDrawer({
   const showCommentsToggle =
     commentsMode !== undefined && onCommentsModeChange !== undefined;
   const currentActorId = getAuthorId();
+  const actorName = state.actor
+    ? identities?.[state.actor]?.name || state.actor.slice(0, 8)
+    : null;
   const drawerRef = useRef<HTMLDivElement>(null);
   // Clip-path ids for the waveform past/future split (useId's colons are
   // legal but awkward inside url(#…) references — strip them).
@@ -538,20 +541,23 @@ export default function ReplayDrawer({
             </span>
           )}
           {state.actor ? (
-            <span
-              className={`replay-drawer__actor${currentActorId === state.actor ? ' replay-drawer__actor--me' : ''}`}
-              data-actor-key={state.actor}
-              data-current-actor={currentActorId ?? ''}
-            >
+            <Tooltip content={actorName} block>
               <span
-                className="replay-drawer__actor-dot"
-                style={{ backgroundColor: resolveActorColor(state.actor) }}
-              />
-              {identities?.[state.actor]?.name || state.actor.slice(0, 8)}
-              {currentActorId === state.actor && (
-                <span className="replay-drawer__actor-you">(you)</span>
-              )}
-            </span>
+                className={`replay-drawer__actor${currentActorId === state.actor ? ' replay-drawer__actor--me' : ''}`}
+                data-actor-key={state.actor}
+                data-current-actor={currentActorId ?? ''}
+                tabIndex={0}
+              >
+                <span
+                  className="replay-drawer__actor-dot"
+                  style={{ backgroundColor: resolveActorColor(state.actor) }}
+                />
+                <span className="replay-drawer__actor-name qh-truncate">{actorName}</span>
+                {currentActorId === state.actor && (
+                  <span className="replay-drawer__actor-you">(you)</span>
+                )}
+              </span>
+            </Tooltip>
           ) : (
             <span className="replay-drawer__actor replay-drawer__actor--anonymous">
               {replay.anonymous}

@@ -51,16 +51,20 @@ export class MetadataConverter {
     // Find the overall range by getting min/max offsets
     // Must use getSourceLocation() to get RESOLVED top-level coordinates,
     // not getOffsets() which returns LOCAL coordinates from the pool
+    // Entries no source text produced (e.g. a key the reader injects with a
+    // `config-default` Generated source) have no location: they do not
+    // widen the range, and they sort after every located entry.
     let minStart = Infinity;
     let maxEnd = -Infinity;
     for (const [key, value] of Object.entries(jsonMeta)) {
       // Consider both key and value positions
       const keySourceId = this.metaTopLevelKeySources?.[key] ?? value.s;
-      const keyLoc = this.sourceReconstructor.getSourceLocation(keySourceId);
-      const valueLoc = this.sourceReconstructor.getSourceLocation(value.s);
-
-      minStart = Math.min(minStart, keyLoc.start, valueLoc.start);
-      maxEnd = Math.max(maxEnd, keyLoc.end, valueLoc.end);
+      for (const id of [keySourceId, value.s]) {
+        if (!this.sourceReconstructor.hasSourceLocation(id)) continue;
+        const loc = this.sourceReconstructor.getSourceLocation(id);
+        minStart = Math.min(minStart, loc.start);
+        maxEnd = Math.max(maxEnd, loc.end);
+      }
     }
 
     // If no metadata, use defaults
@@ -75,17 +79,31 @@ export class MetadataConverter {
 
     for (const [key, value] of Object.entries(jsonMeta)) {
       const keySourceId = this.metaTopLevelKeySources?.[key] ?? value.s;
-      const keyLoc = this.sourceReconstructor.getSourceLocation(keySourceId);
-      sortedEntries.push({ key, value, keyStart: keyLoc.start });
+      const keyStart = this.sourceReconstructor.hasSourceLocation(keySourceId)
+        ? this.sourceReconstructor.getSourceLocation(keySourceId).start
+        : Infinity;
+      sortedEntries.push({ key, value, keyStart });
     }
 
-    // Sort by key start position
-    sortedEntries.sort((a, b) => a.keyStart - b.keyStart);
+    // Sort by key start position (stable: location-less entries, keyed
+    // Infinity, keep their relative order at the end)
+    sortedEntries.sort((a, b) =>
+      a.keyStart === b.keyStart ? 0 : a.keyStart < b.keyStart ? -1 : 1
+    );
 
     const components: AnnotatedParse[] = [];
     const result: Record<string, JSONValue> = {};
 
-    for (const { key, value } of sortedEntries) {
+    for (const { key, value, keyStart: sortKey } of sortedEntries) {
+      // A key no source text produced is kept in `result` (the JSON value is
+      // reported faithfully) but not in `components`: the AnnotatedParse
+      // tree describes source text, and a location-less node would claim
+      // offset 0 of the user's file.
+      if (sortKey === Infinity) {
+        result[key] = this.convertMetaValue(value).result;
+        continue;
+      }
+
       // Create AnnotatedParse for key
       // Use metaTopLevelKeySources if available, otherwise fall back to value's source
       const keySourceId = this.metaTopLevelKeySources?.[key] ?? value.s;

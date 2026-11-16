@@ -260,7 +260,7 @@ mod tests {
             "resolved": false,
             "label_upper": false,
         });
-        Inline::Custom(node)
+        Inline::Custom(Box::new(node))
     }
 
     fn para(content: Vec<Inline>) -> Block {

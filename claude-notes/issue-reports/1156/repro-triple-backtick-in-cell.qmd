@@ -1,0 +1,10 @@
+---
+title: Three backticks inside a cell's source
+---
+
+<!-- Separate bug found while fixing #1156 (filed as its own strand).
+     The cell is never executed: q2 renders it as an inert code block. -->
+
+```{python}
+print("a ``` b")
+```

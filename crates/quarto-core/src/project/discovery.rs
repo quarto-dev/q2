@@ -1825,6 +1825,7 @@ mod tests {
             claims: None,
             file_extensions: None,
             claims_files: None, // ← decides by inspecting content
+            kernel_equivalence: None,
         };
 
         assert!(

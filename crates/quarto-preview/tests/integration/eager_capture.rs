@@ -83,6 +83,7 @@ async fn eager_capture_populates_index_sidecar() {
 
     let config = PreviewConfig {
         render: Default::default(),
+        upstream: None,
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(project.path().to_path_buf()),
@@ -91,6 +92,7 @@ async fn eager_capture_populates_index_sidecar() {
         spa_dir_override: None,
         engine_registry: Some(Arc::new(registry)),
         engine_policy: Default::default(),
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,
@@ -202,6 +204,7 @@ async fn prose_only_doc_leaves_sidecar_empty() {
 
     let config = PreviewConfig {
         render: Default::default(),
+        upstream: None,
         host: "127.0.0.1".to_string(),
         port: pick_free_port(),
         project_root: Some(project.path().to_path_buf()),
@@ -210,6 +213,7 @@ async fn prose_only_doc_leaves_sidecar_empty() {
         spa_dir_override: None,
         engine_registry: None,
         engine_policy: Default::default(),
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,

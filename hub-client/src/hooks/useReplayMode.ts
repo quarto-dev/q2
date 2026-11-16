@@ -23,6 +23,11 @@ export interface ReplayState {
   isPlaying: boolean;
   playbackSpeed: PlaybackSpeed;
   currentContent: string;
+  /**
+   * Change hashes identifying the document shown at `currentIndex`; null
+   * outside replay. Attribution is built for these, not the live heads.
+   */
+  currentHeads: string[] | null;
   timestamp: number | null;
   actor: string | null; // short hash of the actor who made the change
   chunkActors: ChunkActorShare[][]; // per-chunk actor fractions for the waveform
@@ -50,6 +55,7 @@ const INITIAL_STATE: ReplayState = {
   isPlaying: false,
   playbackSpeed: 1,
   currentContent: '',
+  currentHeads: null,
   timestamp: null,
   actor: null,
   chunkActors: [],
@@ -169,6 +175,7 @@ export function useReplayMode(
       isPlaying: false,
       playbackSpeed: 1,
       currentContent: getContentAtIndex(lastIndex),
+      currentHeads: session.getHeadsAt(lastIndex),
       timestamp: lastMeta.timestamp,
       actor: lastMeta.actor,
       chunkActors: [],
@@ -197,6 +204,7 @@ export function useReplayMode(
       ...prev,
       currentIndex: clamped,
       currentContent: content,
+      currentHeads: session.getHeadsAt(clamped),
       timestamp: meta.timestamp,
       actor: meta.actor,
     }));
@@ -228,6 +236,7 @@ export function useReplayMode(
           ...prev,
           currentIndex: nextIndex,
           currentContent: content,
+          currentHeads: session.getHeadsAt(nextIndex),
           timestamp: meta.timestamp,
           actor: meta.actor,
         }));

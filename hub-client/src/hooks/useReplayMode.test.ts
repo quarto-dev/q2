@@ -41,6 +41,10 @@ function createMockSession(texts: string[], timestamps?: number[], actors?: stri
       if (index < 0 || index >= texts.length) return '';
       return texts[index];
     }),
+    getHeadsAt: vi.fn((index: number) => {
+      if (index < 0 || index >= texts.length) return null;
+      return [`head-${index}`];
+    }),
     getMetadataAt: vi.fn((index: number) => {
       if (index < 0 || index >= texts.length) return { timestamp: null, actor: null };
       const ts = timestamps?.[index] ?? 1000000 + index * 1000;
@@ -133,6 +137,7 @@ describe('useReplayMode', () => {
       const session2 = {
         get length() { return 3; },
         getContentAt: vi.fn((i: number) => ['x', 'y', 'z'][i] ?? ''),
+        getHeadsAt: vi.fn((i: number) => [`head2-${i}`]),
         getMetadataAt: vi.fn(() => ({ timestamp: 5000, actor: 'bob' })),
         applyContentAt: vi.fn(),
         close: vi.fn(),
@@ -145,6 +150,24 @@ describe('useReplayMode', () => {
   });
 
   describe('seekTo()', () => {
+    it('tracks the heads of the step shown, and clears them on exit', () => {
+      createMockSession(['first', 'second', 'third']);
+      const { result } = renderHook(() => useReplayMode('index.qmd'));
+      expect(result.current.state.currentHeads).toBeNull();
+
+      act(() => { result.current.controls.enter(); });
+      expect(result.current.state.currentHeads).toEqual(['head-2']);
+
+      act(() => { result.current.controls.seekTo(0); });
+      expect(result.current.state.currentHeads).toEqual(['head-0']);
+
+      act(() => { result.current.controls.stepForward(); });
+      expect(result.current.state.currentHeads).toEqual(['head-1']);
+
+      act(() => { result.current.controls.exit(); });
+      expect(result.current.state.currentHeads).toBeNull();
+    });
+
     it('updates currentContent with correct text', () => {
       createMockSession(['first', 'second', 'third']);
 

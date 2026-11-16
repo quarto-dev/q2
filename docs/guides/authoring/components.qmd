@@ -138,7 +138,7 @@ local rows = items:map(function(it)
   return { title = pandoc.utils.stringify(it.title), href = it["output-href"], date = it.date }
 end)
 local list = pandoc.BulletList(items:map(function(it)
-  return {=: `{lmd} pandoc.Link(it.title, it.path)` (`{lmd} it.date`) :=}
+  return pandoc.Plain({=[ `{lmd} pandoc.Link(it.title, it.path)` (`{lmd} it.date`) ]=})
 end))
 return quarto.component("filter-table", { rows = rows }, { list })
 ```

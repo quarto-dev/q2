@@ -1,6 +1,7 @@
 //! Shared utilities for Quarto
 
 pub mod data_dir;
+pub mod output_style;
 pub mod path;
 pub mod runtime_dir;
 pub mod user_status;

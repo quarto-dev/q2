@@ -226,6 +226,17 @@ impl LanguageTerms {
     }
 }
 
+/// The localized `toggle-dark-mode` term, which names every color-scheme
+/// toggle switch (bd-kwgtllvn): the navbar's (via
+/// `NavbarGenerateTransform`) and the runtime's floating fallback (via
+/// the color-mode script's `data-toggle-label`). English without a
+/// resolved language table.
+pub fn toggle_dark_mode_label(meta: &ConfigValue) -> String {
+    LanguageTerms::from_meta(meta)
+        .and_then(|t| t.get("toggle-dark-mode").map(str::to_owned))
+        .unwrap_or_else(|| "Toggle dark mode".to_string())
+}
+
 /// The BCP 47 subtag prefix chain for a tag, most general first:
 /// `"pt-BR"` → `["pt", "pt-BR"]`. (Exposed for the stage's sibling-file
 /// probing; resolution itself uses it internally.)

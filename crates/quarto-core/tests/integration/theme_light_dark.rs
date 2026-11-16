@@ -447,7 +447,7 @@ fn light_dark_map_injects_color_mode_script_at_top_of_body() {
 
     let body = html.find("<body").expect("body tag");
     let script = html
-        .find(r#"<script id="quarto-color-mode" data-author-prefers-dark="false" data-respect-user-color-scheme="false">"#)
+        .find(r#"<script id="quarto-color-mode" data-author-prefers-dark="false" data-respect-user-color-scheme="false" data-toggle-label="Toggle dark mode">"#)
         .expect("inline color-mode script with config data attributes");
     assert!(script > body, "script must be inside body");
     // Nothing paintable between <body ...> and the script: only the
@@ -600,7 +600,11 @@ fn website_navbar_gets_dark_toggle_only_with_dark_variant() {
     );
     assert!(
         with_dark.contains("window.quartoToggleColorScheme(); return false;"),
-        "toggle anchor must invoke the runtime entry point"
+        "toggle must invoke the runtime entry point"
+    );
+    assert!(
+        with_dark.contains(r#"<button type="button" role="switch" aria-checked="false" class="quarto-color-scheme-toggle"#),
+        "navbar toggle must be a switch button (bd-kwgtllvn)"
     );
 
     let without_dark = render_site("    theme: cosmo\n");
@@ -876,5 +880,44 @@ fn single_dark_theme_declares_dark_color_scheme() {
     assert!(
         styles.1.contains("color-scheme:dark") || styles.1.contains("color-scheme: dark"),
         "single dark theme must declare color-scheme dark"
+    );
+}
+
+/// bd-kwgtllvn (Q1 #14739): the `toggle-dark-mode` language term names
+/// the navbar switch (`title` + `aria-label`) and reaches the runtime's
+/// floating fallback via `data-toggle-label`, through the real
+/// language pipeline.
+#[test]
+fn color_scheme_toggle_label_is_localized() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("_quarto.yml"),
+        "project:\n  type: website\nlang: fr\nwebsite:\n  navbar:\n    left:\n      - href: index.qmd\n        text: Accueil\nformat:\n  html:\n    theme:\n      light: cosmo\n      dark: darkly\n",
+    );
+    write(
+        &root.join("index.qmd"),
+        "---\ntitle: Accueil\n---\n\n# Bonjour\n",
+    );
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("index.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("website page must render");
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+
+    assert!(
+        html.contains(r#"title="Basculer le mode sombre" aria-label="Basculer le mode sombre""#),
+        "navbar switch must carry the localized label"
+    );
+    assert!(
+        html.contains(r#"data-toggle-label="Basculer le mode sombre""#),
+        "runtime must receive the localized fallback label"
     );
 }

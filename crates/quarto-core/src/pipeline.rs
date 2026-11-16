@@ -90,16 +90,16 @@ use crate::transforms::{
     EditorialMarksOoxmlTransform, EditorialMarksTypstTransform, EquationLabelTransform,
     ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
     FooterGenerateTransform, FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform,
-    LinkExternalTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
-    MermaidRenderTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
-    NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
-    ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
-    ResponsiveImageTransform, SectionizeTransform, ShortcodeResolveTransform,
-    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
-    TableFloatClassForwardTransform, TheoremSugarTransform, TitleBannerTransform,
-    TitleBlockTransform, TocGenerateTransform, TocLocationTransform, TocRenderTransform,
-    WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform, WebsiteFaviconTransform,
-    WebsiteTitlePrefixTransform,
+    GraphvizRenderTransform, LinkExternalTransform, LinkRewriteTransform, ListingGenerateTransform,
+    ListingRenderTransform, MermaidRenderTransform, MetadataNormalizeTransform,
+    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
+    PageNavRenderTransform, ProofSugarTransform, ReferenceLinkDiagnosticsTransform,
+    RepoActionsRenderTransform, ResourceCollectorTransform, ResponsiveImageTransform,
+    SectionizeTransform, ShortcodeResolveTransform, SidebarGenerateTransform,
+    SidebarRenderTransform, TableBootstrapClassTransform, TableFloatClassForwardTransform,
+    TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform, TocGenerateTransform,
+    TocLocationTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
+    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -2074,13 +2074,42 @@ pub async fn render_qmd_to_preview_ast(
     engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
     captures: CapturePayload,
 ) -> Result<PreviewAstOutput> {
+    render_qmd_to_preview_ast_with_capture(
+        content,
+        source_name,
+        ctx,
+        runtime,
+        engine_registry,
+        captures,
+        true,
+    )
+    .await
+}
+
+/// Capture-aware implementation of [`render_qmd_to_preview_ast`].
+///
+/// Project pass 2 discards the untransformed AST, so it disables the capture;
+/// response-producing callers retain the public capture-on wrapper above.
+pub async fn render_qmd_to_preview_ast_with_capture(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+    engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
+    captures: CapturePayload,
+    capture_untransformed_ast: bool,
+) -> Result<PreviewAstOutput> {
     // Capture the untransformed AST before any pipeline stage runs.
     // This is the baseline `incremental_write` reconciles against (plan:
     // 2026-06-04-target-incremental-writes.md, Phase 1).  We parse the
     // content a second time rather than intercepting the pipeline's own
     // parse so that the returned JSON is wholly self-contained (its own
     // source-info pool) and independent of the main pipeline's run.
-    let untransformed_ast_json = capture_untransformed_ast_json(content, source_name);
+    let untransformed_ast_json = if capture_untransformed_ast {
+        capture_untransformed_ast_json(content, source_name)
+    } else {
+        None
+    };
 
     // Thread the optional engine registry override onto `RenderContext` so
     // `run_pipeline` can apply it to `StageContext` after populating the
@@ -2752,6 +2781,13 @@ pub fn build_transform_pipeline(
     // `Q2_PREVIEW_TRANSFORM_EXCLUDED` — the React built-in mermaid
     // component consumes the raw CodeBlock there.
     pipeline.push(Box::new(MermaidRenderTransform::new()));
+    // bd-ijlapt70: replace ```dot code blocks with
+    // `<pre class="graphviz">` RawBlocks + the after-body runtime
+    // script. HTML-family self-gated. Must precede `code-block-render`,
+    // for the same reason as `mermaid-render`. Excluded from q2-preview
+    // via `Q2_PREVIEW_TRANSFORM_EXCLUDED` — `GraphvizCodeBlock.tsx`
+    // consumes the raw CodeBlock there.
+    pipeline.push(Box::new(GraphvizRenderTransform::new()));
     // bd-1tl09 Phase 0: code-block decoration Render. Consumes the
     // typed payload produced by `code-block-generate` in the
     // Normalization Phase and emits the outer wrapping markup
@@ -2989,6 +3025,9 @@ const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     // mermaid component (ts-packages/preview-renderer) renders the
     // diagram live for both q2-preview and q2-slides (bd-5m4ga0s1).
     "mermaid-render",
+    // `graphviz-render` does the same for ```dot blocks; in preview
+    // `GraphvizCodeBlock.tsx` draws the raw CodeBlock (bd-ijlapt70).
+    "graphviz-render",
     // The tabset pair (bd-toc-tabset-titles-zq93gjvf) builds its nav
     // as *split* RawInlines (`<ul…>`, `<li…><a…>`, title inlines,
     // `</a></li>`, `</ul>`) — correct for the string-concatenating
@@ -3041,6 +3080,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "table-float-class-forward",
     "crossref-render",
     "mermaid-render",
+    "graphviz-render",
     "code-block-render",
     "table-bootstrap-class",
     "components-resolve",
@@ -3308,6 +3348,7 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     ("table-float-class-forward", Bucket::B4),
     ("crossref-render", Bucket::B4),
     ("mermaid-render", Bucket::B4),
+    ("graphviz-render", Bucket::B4),
     ("code-block-render", Bucket::B4),
     ("table-bootstrap-class", Bucket::B4),
     // Marks bound Divs/Spans with `data-quarto-component`, ships the
@@ -4846,6 +4887,73 @@ mod tests {
         );
     }
 
+    /// bd-ijlapt70: the same contract for Graphviz. `//|` cell options
+    /// on a ```dot block are processed by `PreEngineSugaringStage` in
+    /// preview too, so the preview AST carries the Figure wrapper, the
+    /// option lines are gone from the diagram source, and `fig-alt`,
+    /// `fig-align` and `graph-layout` arrive as attributes on the
+    /// CodeBlock, which is what `GraphvizCodeBlock.tsx` reads.
+    ///
+    /// The `graphviz-render` transform stays excluded, so the diagram
+    /// arrives as a CodeBlock, not a `<pre class="graphviz">` RawBlock.
+    #[test]
+    fn render_qmd_to_preview_ast_processes_graphviz_cell_options() {
+        let content = "---\ntitle: Test\nformat: q2-preview\n---\n\n\
+                        ```dot\n\
+                        //| fig-cap: A tiny graph.\n\
+                        //| fig-alt: Two nodes joined by an arrow.\n\
+                        //| fig-align: right\n\
+                        //| graph-layout: neato\n\
+                        digraph G { a -> b }\n\
+                        ```\n"
+            .as_bytes();
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content,
+            "test.qmd",
+            &mut ctx,
+            runtime,
+            None,
+            CapturePayload::Empty,
+        ))
+        .expect("q2-preview render");
+
+        let json = &output.ast_json;
+        assert!(
+            json.contains("\"Figure\""),
+            "preview AST must carry the Figure wrapper; got:\n{json}"
+        );
+        for attr in [
+            "[\"fig-alt\",\"Two nodes joined by an arrow.\"]",
+            "[\"fig-align\",\"right\"]",
+            "[\"graph-layout\",\"neato\"]",
+        ] {
+            assert!(
+                json.contains(attr),
+                "preview AST must carry the attribute {attr}; got:\n{json}"
+            );
+        }
+        assert!(
+            !json.contains("//|"),
+            "consumed option lines must not reach the preview; got:\n{json}"
+        );
+        assert!(
+            json.contains("\"CodeBlock\""),
+            "the raw CodeBlock must survive for GraphvizCodeBlock.tsx; got:\n{json}"
+        );
+        assert!(
+            !json.contains("pre class=\\\"graphviz"),
+            "graphviz-render must not run in preview; got:\n{json}"
+        );
+    }
+
     /// Phase 1P: the `q2-slides` preview pseudo-format must run the reveal
     /// slide construction (`RevealSlidesTransform`) and return the
     /// section-structured AST — the shared contract the SPA renders with a
@@ -5110,6 +5218,35 @@ mod tests {
             t_para.source_info(),
             "unchanged paragraph must have byte-identical source_info in both ASTs"
         );
+    }
+
+    #[test]
+    fn render_qmd_to_preview_ast_capture_gate_preserves_transformed_ast() {
+        let content = b"---\nformat: q2-preview\n---\n\nHello world.\n";
+        let project = make_test_project();
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let render = |capture_untransformed_ast| {
+            let doc = DocumentInfo::from_path("/project/test.qmd");
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+            pollster::block_on(render_qmd_to_preview_ast_with_capture(
+                content,
+                "/project/test.qmd",
+                &mut ctx,
+                make_test_runtime(),
+                None,
+                CapturePayload::Empty,
+                capture_untransformed_ast,
+            ))
+            .expect("q2-preview render")
+        };
+
+        let capture_on = render(true);
+        let capture_off = render(false);
+
+        assert!(capture_on.untransformed_ast_json.is_some());
+        assert!(capture_off.untransformed_ast_json.is_none());
+        assert_eq!(capture_off.ast_json, capture_on.ast_json);
     }
 
     /// Plan 2B: with `FootnotesTransform` no longer in the
@@ -6801,6 +6938,68 @@ mod tests {
         );
     }
 
+    /// bd-ijlapt70: `graphviz-render` must run for every HTML-family
+    /// render format, after `mermaid-render` (its sibling) and before
+    /// `code-block-render`, so a diagram block is already a `RawBlock`
+    /// before code-block chrome would attach to it.
+    #[test]
+    fn graphviz_render_present_before_code_block_render() {
+        for format in ["html", "revealjs", "dashboard"] {
+            let runtime = make_test_runtime();
+            let pipeline = build_transform_pipeline(
+                vec![],
+                vec![],
+                runtime,
+                format.to_string(),
+                crate::format::PipelineProfile::from_format(format),
+                None,
+                None,
+            );
+            let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+
+            let graphviz_pos = names.iter().position(|&n| n == "graphviz-render");
+            let mermaid_pos = names.iter().position(|&n| n == "mermaid-render");
+            let cbr_pos = names.iter().position(|&n| n == "code-block-render");
+            assert!(
+                graphviz_pos.is_some(),
+                "[{format}] graphviz-render must be in build_transform_pipeline; got: {names:?}",
+            );
+            assert!(
+                mermaid_pos.expect("mermaid-render anchor missing") < graphviz_pos.unwrap()
+                    && graphviz_pos.unwrap() < cbr_pos.expect("code-block-render anchor missing"),
+                "[{format}] graphviz-render must sit between mermaid-render and \
+                 code-block-render; got positions mermaid={mermaid_pos:?}, \
+                 graphviz={graphviz_pos:?}, code-block-render={cbr_pos:?} in {names:?}",
+            );
+        }
+    }
+
+    /// bd-ijlapt70: in `q2 preview` / hub-client the raw `CodeBlock`
+    /// with class `dot` must survive to the React layer, where
+    /// `GraphvizCodeBlock.tsx` owns rendering. The transform is
+    /// therefore on `Q2_PREVIEW_TRANSFORM_EXCLUDED`.
+    #[test]
+    fn q2_preview_pipeline_excludes_graphviz_render() {
+        for format in ["q2-preview", "q2-slides"] {
+            let runtime = make_test_runtime();
+            let pipeline = build_q2_preview_transform_pipeline(
+                vec![],
+                vec![],
+                runtime,
+                format.to_string(),
+                crate::format::PipelineProfile::from_format(format),
+                None,
+                None,
+            );
+            let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+            assert!(
+                !names.contains(&"graphviz-render"),
+                "[{format}] graphviz-render must NOT run in the preview pipeline — the React \
+                 Graphviz component consumes the raw CodeBlock; got: {names:?}",
+            );
+        }
+    }
+
     /// bd-5m4ga0s1: in `q2 preview` / hub-client the raw `CodeBlock`
     /// with class `mermaid` must survive to the React layer (the
     /// built-in mermaid component in ts-packages/preview-renderer owns
@@ -6913,6 +7112,7 @@ mod tests {
                 "crossref-render",
                 "example-embed-render",
                 "mermaid-render",
+                "graphviz-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
                 "editorial-marks-typst",
@@ -7016,6 +7216,7 @@ mod tests {
                 "example-embed-render",
                 "reveal-auto-stretch",
                 "mermaid-render",
+                "graphviz-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
                 "editorial-marks-typst",

@@ -49,4 +49,5 @@ export {
   generateAnonymousName,
   isValidHexColor,
   isValidUserName,
+  MAX_USER_NAME_LENGTH,
 } from './utils';

@@ -502,7 +502,10 @@ fn escape_html(s: &str) -> String {
 ///
 /// Standard HTML5 attributes (style, title, dir, lang, etc.) and ARIA attributes
 /// are written as-is. Custom attributes are prefixed with `data-`.
-fn write_attr<W: Write>(attr: &Attr, ctx: &mut HtmlWriterContext<'_, W>) -> std::io::Result<()> {
+fn write_attr<W: Write>(
+    attr: &quarto_pandoc_types::AttrTuple,
+    ctx: &mut HtmlWriterContext<'_, W>,
+) -> std::io::Result<()> {
     let (id, classes, attrs) = attr;
 
     if !id.is_empty() {
@@ -545,7 +548,7 @@ fn write_code_container_attr<W: Write>(
         return write_attr(attr, ctx);
     }
 
-    let (id, classes, attrs) = attr;
+    let (id, classes, attrs) = &**attr;
 
     if !id.is_empty() {
         write!(ctx, " id=\"{}\"", escape_html(id))?;
@@ -593,7 +596,7 @@ fn write_highlighted_codeblock<W: Write>(
     spans: Option<&[quarto_highlight_encoding::HighlightSpan]>,
     ctx: &mut HtmlWriterContext<'_, W>,
 ) -> std::io::Result<()> {
-    let (id, classes, kvs) = &codeblock.attr;
+    let (id, classes, kvs) = &*codeblock.attr;
 
     // First class (if any) is the language, per Pandoc convention.
     let (language, extras) = match classes.split_first() {
@@ -1305,34 +1308,48 @@ fn inlines_as_text(inlines: &[Inline]) -> String {
 /// Build the `<li>`'s composed `Attr` for the current incremental state and any
 /// hoisted item attribute.
 ///
-/// Pandoc list items have no per-item `Attr`, so two sources of classes can land
-/// on the `<li>`:
+/// Pandoc list items have no per-item `Attr`, so three sources of classes can
+/// land on the `<li>`:
 /// - `class="fragment"` inside an incremental revealjs context (Pandoc
-///   HTML.hs:493-496), and
+///   HTML.hs:493-496),
+/// - `class="task-list-item"` on a task item (bd-2ydvebkc), and
 /// - a block attribute hoisted from a trailing `Inline::Attr` in the item's last
 ///   block (bd-aeyss6p5).
 ///
-/// They compose: `fragment` comes first (so themes keying off `.fragment` keep
-/// working), then the item's own classes; id and key-values come from the item
-/// attr. An empty result (`is_empty_attr`) means a bare `<li>`.
-fn composed_list_item_attr<W: Write>(item_attr: &Attr, ctx: &HtmlWriterContext<'_, W>) -> Attr {
+/// They compose in that order: `fragment` first (so themes keying off
+/// `.fragment` keep working), then `task-list-item`, then the item's own
+/// classes; id and key-values come from the item attr. An empty result (`is_empty_attr`) means a bare `<li>`.
+fn composed_list_item_attr<W: Write>(
+    item_attr: &Attr,
+    task_item: bool,
+    ctx: &HtmlWriterContext<'_, W>,
+) -> Attr {
     let fragment = ctx.incremental && ctx.config.incremental_lists;
-    let (id, classes, kvs) = item_attr;
-    let mut out_classes: Vec<String> = Vec::with_capacity(classes.len() + 1);
+    let (id, classes, kvs) = &**item_attr;
+    let mut out_classes: Vec<String> = Vec::with_capacity(classes.len() + 2);
     if fragment {
         out_classes.push("fragment".to_string());
+    }
+    // Per-item task hook (GH #892, bd-2ydvebkc): the theme hides the list
+    // marker on `li.task-list-item` rather than on `ul.task-list`, so a task
+    // item in a mixed or ordered list shows its checkbox in place of the
+    // bullet. Pandoc emits no `<li>` class; this is an additive departure
+    // (GitHub's class name), and `ul.task-list` keeps Pandoc's rule.
+    if task_item {
+        out_classes.push("task-list-item".to_string());
     }
     for c in classes {
         if !out_classes.contains(c) {
             out_classes.push(c.clone());
         }
     }
-    (id.clone(), out_classes, kvs.clone())
+    (id.clone(), out_classes, kvs.clone()).into()
 }
 
 /// Task-list detection, mirroring Pandoc's `Writers.Shared.toTaskListItem`:
 /// the item's first block is a `Plain`/`Paragraph` whose inlines start with
-/// `Str "☐"` (unchecked) or `Str "☒"` (checked) followed by `Space`.
+/// `Str "☐"` (unchecked) or `Str "☒"` (checked) followed by `Space`, or
+/// consist of that `Str` alone (an empty item, `- [ ] `; bd-2ydvebkc).
 /// Returns the checked state without rewriting.
 fn task_item_checked(item: &[Block]) -> Option<bool> {
     let content = match item.first()? {
@@ -1348,30 +1365,36 @@ fn task_item_checked(item: &[Block]) -> Option<bool> {
         "☒" => true,
         _ => return None,
     };
-    matches!(content.get(1), Some(Inline::Space(_))).then_some(checked)
+    matches!(content.get(1), None | Some(Inline::Space(_))).then_some(checked)
 }
 
 /// Rewrite a task item the way Pandoc's HTML writer renders it: the marker
 /// `Str`+`Space` is replaced by `<label><input type="checkbox" [checked=""]
-/// />` and a closing `</label>` after the head block's inlines, so a tight
-/// item renders `<li><label>…</label></li>` and a loose one
+/// disabled="" />` and a closing `</label>` after the head block's inlines,
+/// so a tight item renders `<li><label>…</label></li>` and a loose one
 /// `<li><p><label>…</label></p></li>`.
+///
+/// `disabled` departs from Pandoc (≥ 3.0.1 emits an enabled checkbox):
+/// static output cannot persist a click, so an enabled checkbox misleads.
+/// Nearly every other renderer emits `disabled` (GH #892 survey,
+/// `claude-notes/issue-reports/892/survey.md`). Edit-capable surfaces
+/// (q2-preview with editing) render enabled checkboxes themselves.
 fn rewrite_task_item(item: &[Block]) -> Option<Vec<Block>> {
     let checked = task_item_checked(item)?;
     let raw = |text: &str| {
-        Inline::RawInline(crate::pandoc::RawInline {
+        Inline::RawInline(Box::new(crate::pandoc::RawInline {
             format: "html".to_string(),
             text: text.to_string(),
             source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By {
                 kind: "task-list-checkbox".to_string(),
                 data: serde_json::Value::Null,
             }),
-        })
+        }))
     };
     let checkbox = if checked {
-        "<label><input type=\"checkbox\" checked=\"\" />"
+        "<label><input type=\"checkbox\" checked=\"\" disabled=\"\" />"
     } else {
-        "<label><input type=\"checkbox\" />"
+        "<label><input type=\"checkbox\" disabled=\"\" />"
     };
     let mut rewritten: Vec<Block> = item.to_vec();
     let content = match &mut rewritten[0] {
@@ -1379,7 +1402,9 @@ fn rewrite_task_item(item: &[Block]) -> Option<Vec<Block>> {
         Block::Paragraph(p) => &mut p.content,
         _ => unreachable!("task_item_checked only matches Plain/Paragraph"),
     };
-    content.splice(0..2, [raw(checkbox)]);
+    // Marker `Str` + `Space`, or the lone `Str` of an empty item.
+    let marker_len = content.len().min(2);
+    content.splice(0..marker_len, [raw(checkbox)]);
     content.push(raw("</label>"));
     Some(rewritten)
 }
@@ -1392,25 +1417,31 @@ fn write_list_item<W: Write>(
     item: &[Block],
     ctx: &mut HtmlWriterContext<'_, W>,
 ) -> std::io::Result<()> {
-    let rewritten_task_item = rewrite_task_item(item);
-    let item: &[Block] = rewritten_task_item.as_deref().unwrap_or(item);
+    // Hoist the trailing attr BEFORE the task-item rewrite: the rewrite
+    // appends a closing `</label>` raw inline to the head block, after which
+    // a trailing attr on a one-block task item is no longer trailing and
+    // would be dropped (bd-2ydvebkc).
     let (attr, stripped) = super::block_attr::split_list_item_attr(item);
-    let li_attr = composed_list_item_attr(&attr, ctx);
+    let unattributed: std::borrow::Cow<'_, [Block]> = match stripped {
+        Some(last) => {
+            // The earlier blocks verbatim, then the stripped last block, so
+            // the inner `Para`/`Plain` writer never sees the trailing attr.
+            let mut blocks: Vec<Block> = item[..item.len() - 1].to_vec();
+            blocks.push(last);
+            std::borrow::Cow::Owned(blocks)
+        }
+        None => std::borrow::Cow::Borrowed(item),
+    };
+    let rewritten_task_item = rewrite_task_item(&unattributed);
+    let is_task_item = rewritten_task_item.is_some();
+    let rendered: &[Block] = rewritten_task_item.as_deref().unwrap_or(&unattributed);
+    let li_attr = composed_list_item_attr(&attr, is_task_item, ctx);
     write!(ctx, "<li")?;
     if !is_empty_attr(&li_attr) {
         write_attr(&li_attr, ctx)?;
     }
     write!(ctx, ">")?;
-    match stripped {
-        Some(last) => {
-            // Render the earlier blocks verbatim, then the stripped last block,
-            // so the inner `Para`/`Plain` writer never sees the trailing attr.
-            let mut rendered: Vec<Block> = item[..item.len() - 1].to_vec();
-            rendered.push(last);
-            write_blocks_inline(&rendered, ctx)?;
-        }
-        None => write_blocks_inline(item, ctx)?,
-    }
+    write_blocks_inline(rendered, ctx)?;
     writeln!(ctx, "</li>")?;
     Ok(())
 }
@@ -1918,15 +1949,12 @@ fn write_blocks_inline<W: Write>(
     blocks: &[Block],
     ctx: &mut HtmlWriterContext<'_, W>,
 ) -> std::io::Result<()> {
-    // For simple list items with just a single paragraph, write the content inline
-    if blocks.len() == 1 {
-        if let Block::Paragraph(para) = &blocks[0] {
-            write_inlines(&para.content, ctx)?;
-            return Ok(());
-        } else if let Block::Plain(plain) = &blocks[0] {
-            write_inlines(&plain.content, ctx)?;
-            return Ok(());
-        }
+    // A tight item (a lone `Plain`) is written inline: `<li>a</li>`. A loose
+    // item's `Para` keeps its `<p>`, as in Pandoc, whose writer decides on
+    // the block kind alone (bd-nnvvomg6): `<li><p>a</p></li>`.
+    if let [Block::Plain(plain)] = blocks {
+        write_inlines(&plain.content, ctx)?;
+        return Ok(());
     }
 
     // For complex list items, write blocks normally
@@ -2203,7 +2231,7 @@ mod tests {
             source_info: dummy_source_info(),
         };
         let para = Block::Paragraph(Paragraph {
-            content: vec![Inline::Shortcode(sc)],
+            content: vec![Inline::Shortcode(Box::new(sc))],
             source_info: dummy_source_info(),
         });
         let pandoc = Pandoc {
@@ -2513,12 +2541,13 @@ mod tests {
         use quarto_pandoc_types::attr::AttrSourceInfo;
 
         let ctx = ASTContext::anonymous();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: (
                 "my-section".to_string(),
                 vec!["section".to_string(), "level2".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "Content".to_string(),
@@ -2528,7 +2557,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let pandoc = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![div],
@@ -2577,12 +2606,13 @@ mod tests {
         use quarto_pandoc_types::attr::AttrSourceInfo;
 
         let ctx = ASTContext::anonymous();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: (
                 "my-div".to_string(),
                 vec!["callout".to_string(), "warning".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "Content".to_string(),
@@ -2592,7 +2622,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let pandoc = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![div],
@@ -2629,12 +2659,12 @@ mod tests {
         use hashlink::LinkedHashMap;
         let mut kvs = LinkedHashMap::new();
         kvs.insert("data-hl-spans".to_string(), spans_json.to_string());
-        Block::CodeBlock(CodeBlock {
-            attr: (String::new(), vec![language.to_string()], kvs),
+        Block::CodeBlock(Box::new(CodeBlock {
+            attr: (String::new(), vec![language.to_string()], kvs).into(),
             text: text.to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn render_block_to_html(block: Block) -> String {
@@ -2680,16 +2710,17 @@ mod tests {
     fn codeblock_without_hl_spans_falls_back_to_plain() {
         // No data-hl-spans attr: output looks like before this feature.
         use hashlink::LinkedHashMap;
-        let block = Block::CodeBlock(CodeBlock {
+        let block = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 String::new(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "def foo():".to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let html = render_block_to_html(block);
         assert!(!html.contains("<span class=\"hl-"), "no spans expected");
         assert!(html.contains("def foo():"));
@@ -2731,12 +2762,12 @@ mod tests {
             "data-hl-spans".to_string(),
             r#"[[0,3,"keyword"]]"#.to_string(),
         );
-        let code = Inline::Code(Code {
-            attr: (String::new(), vec!["python".to_string()], kvs),
+        let code = Inline::Code(Box::new(Code {
+            attr: (String::new(), vec!["python".to_string()], kvs).into(),
             text: "def".to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let html = render_block_to_html(Block::Paragraph(Paragraph {
             content: vec![code],
             source_info: dummy_source_info(),
@@ -2769,11 +2800,11 @@ mod tests {
                 Inline::Space(Space {
                     source_info: dummy_source_info(),
                 }),
-                Inline::Attr(InlineAttr::new(
-                    attr,
+                Inline::Attr(Box::new(InlineAttr::new(
+                    attr.into(),
                     AttrSourceInfo::empty(),
                     dummy_source_info(),
-                )),
+                ))),
             ],
             source_info: dummy_source_info(),
         });
@@ -2823,11 +2854,11 @@ mod tests {
             classes.iter().map(|s| s.to_string()).collect(),
             m,
         );
-        Inline::Attr(InlineAttr::new(
-            attr,
+        Inline::Attr(Box::new(InlineAttr::new(
+            attr.into(),
             AttrSourceInfo::empty(),
             dummy_source_info(),
-        ))
+        )))
     }
 
     fn li_plain(inlines: Vec<Inline>) -> Block {
@@ -2913,7 +2944,7 @@ mod tests {
 
     #[test]
     fn ordered_list_item_trailing_attr_becomes_li_class() {
-        let list = Block::OrderedList(crate::pandoc::block::OrderedList {
+        let list = Block::OrderedList(Box::new(crate::pandoc::block::OrderedList {
             attr: (
                 1,
                 crate::pandoc::ListNumberStyle::Decimal,
@@ -2925,7 +2956,7 @@ mod tests {
                 li_attr("", &["foo"], &[]),
             ])]],
             source_info: dummy_source_info(),
-        });
+        }));
         let html = render_block_to_html(list);
         assert!(
             html.contains("<li class=\"foo\">item</li>"),
@@ -3011,16 +3042,17 @@ mod tests {
         use hashlink::LinkedHashMap;
         let mut kvs = LinkedHashMap::new();
         kvs.insert("data-hl-spans".to_string(), spans_json.to_string());
-        Block::CodeBlock(CodeBlock {
+        Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 id.to_string(),
                 classes.into_iter().map(|s| s.to_string()).collect(),
                 kvs,
-            ),
+            )
+                .into(),
             text: text.to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     #[test]
@@ -3142,16 +3174,17 @@ mod tests {
     fn unhighlighted_codeblock_has_no_div_wrapper() {
         // No data-hl-spans => no highlighting => no div.sourceCode wrapper.
         use hashlink::LinkedHashMap;
-        let block = Block::CodeBlock(CodeBlock {
+        let block = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 "cb1".to_string(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "def foo()".to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let html = render_block_to_html(block);
         assert!(
             !html.contains("<div class=\"sourceCode"),
@@ -3168,7 +3201,7 @@ mod tests {
         use hashlink::LinkedHashMap;
         let empty_attr = || (String::new(), Vec::new(), LinkedHashMap::new());
         let cell = |text: &str| Cell {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 1,
@@ -3184,13 +3217,13 @@ mod tests {
         };
         let n = colspec.len();
         let row = Row {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             cells: (0..n).map(|_| cell("x")).collect(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
         };
-        Block::Table(Table {
-            attr: empty_attr(),
+        Block::Table(Box::new(Table {
+            attr: empty_attr().into(),
             caption: quarto_pandoc_types::Caption {
                 short: None,
                 long: None,
@@ -3198,13 +3231,13 @@ mod tests {
             },
             colspec,
             head: TableHead {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![TableBody {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rowhead_columns: 0,
                 head: vec![],
                 body: vec![row],
@@ -3212,14 +3245,14 @@ mod tests {
                 attr_source: AttrSourceInfo::empty(),
             }],
             foot: TableFoot {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             },
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// bd-hixmy: an all-default colspec carries no information, so the
@@ -3291,7 +3324,7 @@ mod tests {
         use hashlink::LinkedHashMap;
         let empty_attr = || (String::new(), Vec::new(), LinkedHashMap::new());
         let cell = |text: &str| Cell {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 1,
@@ -3306,13 +3339,13 @@ mod tests {
             attr_source: AttrSourceInfo::empty(),
         };
         let mk_row = |label: &str| Row {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             cells: vec![cell(label)],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
         };
-        Block::Table(Table {
-            attr: empty_attr(),
+        Block::Table(Box::new(Table {
+            attr: empty_attr().into(),
             caption: quarto_pandoc_types::Caption {
                 short: None,
                 long: None,
@@ -3320,13 +3353,13 @@ mod tests {
             },
             colspec: vec![(Alignment::Default, ColWidth::Default)],
             head: TableHead {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rows: (0..head_rows).map(|i| mk_row(&format!("h{i}"))).collect(),
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![TableBody {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rowhead_columns: 0,
                 head: vec![],
                 body: (0..body_rows).map(|i| mk_row(&format!("b{i}"))).collect(),
@@ -3334,14 +3367,14 @@ mod tests {
                 attr_source: AttrSourceInfo::empty(),
             }],
             foot: TableFoot {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             },
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// bd-12fpz (D5): head rows get `<tr class="header">`.

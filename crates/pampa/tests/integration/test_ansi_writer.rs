@@ -133,16 +133,16 @@ fn test_paragraph_spacing() {
 fn test_header_level_1() {
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::Header(Header {
+        blocks: vec![Block::Header(Box::new(Header {
             level: 1,
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             content: vec![Inline::Str(Str {
                 text: "Title".to_string(),
                 source_info: empty_source(),
             })],
             source_info: empty_source(),
             attr_source: empty_attr_source(),
-        })],
+        }))],
     };
 
     let output = write_ansi(&pandoc);
@@ -153,16 +153,16 @@ fn test_header_level_1() {
 fn test_header_level_2() {
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::Header(Header {
+        blocks: vec![Block::Header(Box::new(Header {
             level: 2,
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             content: vec![Inline::Str(Str {
                 text: "Section".to_string(),
                 source_info: empty_source(),
             })],
             source_info: empty_source(),
             attr_source: empty_attr_source(),
-        })],
+        }))],
     };
 
     let output = write_ansi(&pandoc);
@@ -174,16 +174,16 @@ fn test_header_level_3_to_6() {
     for level in 3..=6 {
         let pandoc = Pandoc {
             meta: Default::default(),
-            blocks: vec![Block::Header(Header {
+            blocks: vec![Block::Header(Box::new(Header {
                 level,
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
                     text: format!("Header {}", level),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            })],
+            }))],
         };
 
         let output = write_ansi(&pandoc);
@@ -247,7 +247,7 @@ fn test_bullet_list() {
 fn test_ordered_list() {
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::OrderedList(OrderedList {
+        blocks: vec![Block::OrderedList(Box::new(OrderedList {
             attr: (
                 1,
                 pampa::pandoc::ListNumberStyle::Decimal,
@@ -270,7 +270,7 @@ fn test_ordered_list() {
                 })],
             ],
             source_info: empty_source(),
-        })],
+        }))],
     };
 
     let output = write_ansi(&pandoc);
@@ -339,8 +339,8 @@ fn test_blockquote() {
 fn test_div() {
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::Div(Div {
-            attr: empty_attr(),
+        blocks: vec![Block::Div(Box::new(Div {
+            attr: empty_attr().into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "Div content".to_string(),
@@ -350,7 +350,7 @@ fn test_div() {
             })],
             source_info: empty_source(),
             attr_source: empty_attr_source(),
-        })],
+        }))],
     };
 
     let output = write_ansi(&pandoc);
@@ -365,8 +365,8 @@ fn test_div_with_color() {
 
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::Div(Div {
-            attr,
+        blocks: vec![Block::Div(Box::new(Div {
+            attr: attr.into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "Colored".to_string(),
@@ -376,7 +376,7 @@ fn test_div_with_color() {
             })],
             source_info: empty_source(),
             attr_source: empty_attr_source(),
-        })],
+        }))],
     };
 
     let output = write_ansi(&pandoc);
@@ -391,11 +391,11 @@ fn test_div_with_color() {
 fn test_rawblock_ansi_format() {
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::RawBlock(RawBlock {
+        blocks: vec![Block::RawBlock(Box::new(RawBlock {
             format: "ansi".to_string(),
             text: "Raw ANSI content".to_string(),
             source_info: empty_source(),
-        })],
+        }))],
     };
 
     let output = write_ansi(&pandoc);
@@ -406,11 +406,11 @@ fn test_rawblock_ansi_format() {
 fn test_rawblock_other_format_skipped() {
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::RawBlock(RawBlock {
+        blocks: vec![Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: "<p>HTML content</p>".to_string(),
             source_info: empty_source(),
-        })],
+        }))],
     };
 
     let output = write_ansi(&pandoc);
@@ -666,14 +666,14 @@ fn test_inline_quoted_double() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::Quoted(Quoted {
+            content: vec![Inline::Quoted(Box::new(Quoted {
                 quote_type: pampa::pandoc::QuoteType::DoubleQuote,
                 content: vec![Inline::Str(Str {
                     text: "quoted".to_string(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -687,14 +687,14 @@ fn test_inline_quoted_single() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::Quoted(Quoted {
+            content: vec![Inline::Quoted(Box::new(Quoted {
                 quote_type: pampa::pandoc::QuoteType::SingleQuote,
                 content: vec![Inline::Str(Str {
                     text: "quoted".to_string(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -708,12 +708,12 @@ fn test_inline_code() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::Code(Code {
-                attr: empty_attr(),
+            content: vec![Inline::Code(Box::new(Code {
+                attr: empty_attr().into(),
                 text: "let x = 1".to_string(),
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -727,12 +727,12 @@ fn test_inline_math() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::Math(Math {
+            content: vec![Inline::Math(Box::new(Math {
                 math_type: pampa::pandoc::MathType::InlineMath,
                 text: "E=mc^2".to_string(),
                 source_info: empty_source(),
                 text_source: None,
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -746,11 +746,11 @@ fn test_inline_rawinline_ansi() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::RawInline(RawInline {
+            content: vec![Inline::RawInline(Box::new(RawInline {
                 format: "ansi".to_string(),
                 text: "\x1b[31mRed\x1b[0m".to_string(),
                 source_info: empty_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -764,11 +764,11 @@ fn test_inline_rawinline_other_format() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::RawInline(RawInline {
+            content: vec![Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: "<b>bold</b>".to_string(),
                 source_info: empty_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -783,8 +783,8 @@ fn test_inline_link() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::Link(Link {
-                attr: empty_attr(),
+            content: vec![Inline::Link(Box::new(Link {
+                attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
                     text: "Click me".to_string(),
                     source_info: empty_source(),
@@ -793,7 +793,7 @@ fn test_inline_link() {
                 target_source: TargetSourceInfo::empty(),
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -807,8 +807,8 @@ fn test_inline_image() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::Image(Image {
-                attr: empty_attr(),
+            content: vec![Inline::Image(Box::new(Image {
+                attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
                     text: "Alt text".to_string(),
                     source_info: empty_source(),
@@ -817,7 +817,7 @@ fn test_inline_image() {
                 target_source: TargetSourceInfo::empty(),
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -855,15 +855,15 @@ fn test_inline_span() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::Span(Span {
-                attr: empty_attr(),
+            content: vec![Inline::Span(Box::new(Span {
+                attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
                     text: "Span text".to_string(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -881,15 +881,15 @@ fn test_inline_span_with_color() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::Span(Span {
-                attr,
+            content: vec![Inline::Span(Box::new(Span {
+                attr: attr.into(),
                 content: vec![Inline::Str(Str {
                     text: "Blue text".to_string(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -909,15 +909,15 @@ fn test_inline_span_with_background_color() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::Span(Span {
-                attr,
+            content: vec![Inline::Span(Box::new(Span {
+                attr: attr.into(),
                 content: vec![Inline::Str(Str {
                     text: "Highlighted".to_string(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -944,15 +944,15 @@ fn test_color_parsing_basic_colors() {
         let pandoc = Pandoc {
             meta: Default::default(),
             blocks: vec![Block::Plain(Plain {
-                content: vec![Inline::Span(Span {
-                    attr,
+                content: vec![Inline::Span(Box::new(Span {
+                    attr: attr.into(),
                     content: vec![Inline::Str(Str {
                         text: format!("Color {}", color),
                         source_info: empty_source(),
                     })],
                     source_info: empty_source(),
                     attr_source: empty_attr_source(),
-                })],
+                }))],
                 source_info: empty_source(),
             })],
         };
@@ -989,15 +989,15 @@ fn test_color_parsing_dark_colors() {
         let pandoc = Pandoc {
             meta: Default::default(),
             blocks: vec![Block::Plain(Plain {
-                content: vec![Inline::Span(Span {
-                    attr,
+                content: vec![Inline::Span(Box::new(Span {
+                    attr: attr.into(),
                     content: vec![Inline::Str(Str {
                         text: "Text".to_string(),
                         source_info: empty_source(),
                     })],
                     source_info: empty_source(),
                     attr_source: empty_attr_source(),
-                })],
+                }))],
                 source_info: empty_source(),
             })],
         };
@@ -1017,15 +1017,15 @@ fn test_color_parsing_hex() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::Span(Span {
-                attr,
+            content: vec![Inline::Span(Box::new(Span {
+                attr: attr.into(),
                 content: vec![Inline::Str(Str {
                     text: "Hex color".to_string(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -1044,15 +1044,15 @@ fn test_color_parsing_hex_short() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::Span(Span {
-                attr,
+            content: vec![Inline::Span(Box::new(Span {
+                attr: attr.into(),
                 content: vec![Inline::Str(Str {
                     text: "Short hex".to_string(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -1070,15 +1070,15 @@ fn test_color_parsing_rgb_function() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::Span(Span {
-                attr,
+            content: vec![Inline::Span(Box::new(Span {
+                attr: attr.into(),
                 content: vec![Inline::Str(Str {
                     text: "RGB func".to_string(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -1096,15 +1096,15 @@ fn test_color_parsing_ansi_palette() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::Span(Span {
-                attr,
+            content: vec![Inline::Span(Box::new(Span {
+                attr: attr.into(),
                 content: vec![Inline::Str(Str {
                     text: "ANSI palette".to_string(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -1122,15 +1122,15 @@ fn test_color_parsing_ansi_dash() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
-            content: vec![Inline::Span(Span {
-                attr,
+            content: vec![Inline::Span(Box::new(Span {
+                attr: attr.into(),
                 content: vec![Inline::Str(Str {
                     text: "ANSI dash".to_string(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            })],
+            }))],
             source_info: empty_source(),
         })],
     };
@@ -1149,12 +1149,12 @@ fn test_unsupported_codeblock() {
 
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::CodeBlock(CodeBlock {
-            attr: empty_attr(),
+        blocks: vec![Block::CodeBlock(Box::new(CodeBlock {
+            attr: empty_attr().into(),
             text: "code".to_string(),
             source_info: empty_source(),
             attr_source: empty_attr_source(),
-        })],
+        }))],
     };
 
     let mut buf = Vec::new();
@@ -1175,16 +1175,16 @@ fn test_mixed_blocks_and_inlines() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![
-            Block::Header(Header {
+            Block::Header(Box::new(Header {
                 level: 1,
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
                     text: "Title".to_string(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            }),
+            })),
             Block::Paragraph(Paragraph {
                 content: vec![
                     Inline::Str(Str {

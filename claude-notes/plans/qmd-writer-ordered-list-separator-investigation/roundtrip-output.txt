@@ -1,0 +1,40 @@
+=== input:   $'- 1.\n  1)'
+    before:  [ BulletList [[OrderedList (1, Decimal, Period) [[]], OrderedList (1, Decimal, OneParen) [[]]]] ]
+    written: $'* 1.\n  <!-- -->\n  1)'
+    after:   [ BulletList [[OrderedList (1, Decimal, Period) [[]], RawBlock (Format "html") "<!-- -->", Plain [Str "1)"]]] ]
+    ROUND TRIP: DIFFERS
+=== input:   $'- 1. a\n  1) b'
+    before:  [ BulletList [[OrderedList (1, Decimal, Period) [[Plain [Str "a"]]], OrderedList (1, Decimal, OneParen) [[Plain [Str "b"]]]]] ]
+    written: $'* 1.  a\n  <!-- -->\n  1)  b'
+    after:   [ BulletList [[OrderedList (1, Decimal, Period) [[Plain [Str "a", SoftBreak, RawInline (Format "html") "<!-- -->"]]], OrderedList (1, Decimal, OneParen) [[Plain [Str "b"]]]]] ]
+    ROUND TRIP: DIFFERS
+=== input:   $'- x\n  1. a\n  1)'
+    before:  [ BulletList [[Plain [Str "x"], OrderedList (1, Decimal, Period) [[Plain [Str "a"]]], OrderedList (1, Decimal, OneParen) [[]]]] ]
+    written: $'* x\n\n  1.  a\n\n  <!-- -->\n\n  1)'
+    after:   [ BulletList [[Para [Str "x"], OrderedList (1, Decimal, Period) [[Plain [Str "a"]]], RawBlock (Format "html") "<!-- -->", OrderedList (1, Decimal, OneParen) [[]]]] ]
+    ROUND TRIP: DIFFERS
+=== input:   $'- x\n  1. a\n  1. b'
+    before:  [ BulletList [[Plain [Str "x"], OrderedList (1, Decimal, Period) [[Plain [Str "a"]], [Plain [Str "b"]]]]] ]
+    written: $'* x\n  1.  a\n  2.  b'
+    after:   [ BulletList [[Plain [Str "x"], OrderedList (1, Decimal, Period) [[Plain [Str "a"]], [Plain [Str "b"]]]]] ]
+    ROUND TRIP: same
+=== input:   $'1.\n1)'
+    before:  [ OrderedList (1, Decimal, Period) [[]], OrderedList (1, Decimal, OneParen) [[]] ]
+    written: $'1.\n\n<!-- -->\n\n1)'
+    after:   [ OrderedList (1, Decimal, Period) [[]], RawBlock (Format "html") "<!-- -->", OrderedList (1, Decimal, OneParen) [[]] ]
+    ROUND TRIP: DIFFERS
+=== input:   $'1. a\n\n<!-- -->\n\n1.'
+    before:  [ OrderedList (1, Decimal, Period) [[Plain [Str "a"]]], RawBlock (Format "html") "<!-- -->", OrderedList (1, Decimal, Period) [[]] ]
+    written: $'1.  a\n\n<!-- -->\n\n1.'
+    after:   [ OrderedList (1, Decimal, Period) [[Plain [Str "a"]]], RawBlock (Format "html") "<!-- -->", OrderedList (1, Decimal, Period) [[]] ]
+    ROUND TRIP: same
+=== input:   $'- 1. a\n\n  <!-- -->\n\n  1.'
+    before:  [ BulletList [[OrderedList (1, Decimal, Period) [[Plain [Str "a"]]], RawBlock (Format "html") "<!-- -->", OrderedList (1, Decimal, Period) [[]]]] ]
+    written: $'* 1.  a\n  <!-- -->\n  1.'
+    after:   [ BulletList [[OrderedList (1, Decimal, Period) [[Plain [Str "a", SoftBreak, RawInline (Format "html") "<!-- -->"]], []]]] ]
+    ROUND TRIP: DIFFERS
+=== input:   $'a\n<!-- c -->\nb'
+    before:  [ Para [Str "a", SoftBreak, RawInline (Format "html") "<!-- c -->", SoftBreak, Str "b"] ]
+    written: $'a\n<!-- c -->\nb'
+    after:   [ Para [Str "a", SoftBreak, RawInline (Format "html") "<!-- c -->", SoftBreak, Str "b"] ]
+    ROUND TRIP: same

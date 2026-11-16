@@ -104,11 +104,6 @@ pub fn run_through_record(f: &Fixture, format: &str) -> Result<RecordRun, String
     let text = write_record(&file).map_err(|e| format!("write: {e}"))?;
     dump_record(f, format, &text);
     let record = read_record(&text).map_err(|e| format!("read back: {e}"))?;
-    let engine = record
-        .metadata
-        .quarto_engines
-        .iter()
-        .find(|e| e.name == "knitr");
     let mut fig = FsFigureSink::new(&doc_path);
     let candidate = match present_document(
         &record.cells,
@@ -117,7 +112,7 @@ pub fn run_through_record(f: &Fixture, format: &str) -> Result<RecordRun, String
         None,
         InlineTarget::from_format(format),
         format,
-        engine,
+        &record.metadata.quarto_engines,
         &mut fig,
     ) {
         Ok(p) => Baseline::Candidate(p.markdown),

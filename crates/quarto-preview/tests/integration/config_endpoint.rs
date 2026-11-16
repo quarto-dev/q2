@@ -48,6 +48,7 @@ async fn boot_server_for_test(
     let port = pick_free_port();
     let config = PreviewConfig {
         render: Default::default(),
+        upstream: None,
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(project.path().to_path_buf()),
@@ -56,6 +57,7 @@ async fn boot_server_for_test(
         spa_dir_override: None,
         engine_registry: None,
         engine_policy: Default::default(),
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit,
@@ -190,6 +192,7 @@ async fn config_reports_editor_boot_when_stashed() {
     let port = pick_free_port();
     let config = PreviewConfig {
         render: Default::default(),
+        upstream: None,
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(project.path().to_path_buf()),
@@ -198,6 +201,7 @@ async fn config_reports_editor_boot_when_stashed() {
         spa_dir_override: None,
         engine_registry: None,
         engine_policy: Default::default(),
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,
@@ -372,6 +376,7 @@ async fn config_omits_assets_under_spa_dir_override() {
     let port = pick_free_port();
     let config = PreviewConfig {
         render: Default::default(),
+        upstream: None,
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(project.path().to_path_buf()),
@@ -380,6 +385,7 @@ async fn config_omits_assets_under_spa_dir_override() {
         spa_dir_override: Some(spa.path().to_path_buf()),
         engine_registry: None,
         engine_policy: Default::default(),
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,

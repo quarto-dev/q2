@@ -11,12 +11,18 @@
  *   one paragraph). It becomes a `[^nK]` reference at the note's position and
  *   a fenced definition (`::: ^nK`) placed after the top-level block holding
  *   the reference;
- * - two adjacent `OrderedList`s re-read as one list, and no marker tells them
- *   apart, so a `<!-- -->` raw block goes between them. (Bullet lists are kept
- *   apart by alternating the marker, which the block writer does itself.)
+ * - two adjacent `OrderedList`s whose written markers are the same (`1.`
+ *   and `1.`) re-read as one list, so a `<!-- -->` raw block goes between
+ *   them. Lists whose markers differ (`1.` then `1)`) need nothing: the
+ *   reader starts a new list at a delimiter change, as CommonMark does.
+ *   (Bullet lists are kept apart by alternating the marker, which the block
+ *   writer does itself.) Inside a list item the block writer fences the
+ *   separator, because a bare one written tight would be absorbed by the
+ *   reader (bd-2bcre8cr).
  *
- * The pass is copy-on-trigger. The incremental writer runs on every hub edit
- * and a qmd-read AST never contains either shape, so a read-only scan decides
+ * The pass is copy-on-trigger. The incremental writer runs on every hub edit,
+ * and a qmd-read AST never contains either shape (qmd lists are decimal, and
+ * two adjacent ones always differ in delimiter), so a read-only scan decides
  * first and the document is cloned only when something needs rewriting.
  */
 
@@ -67,12 +73,10 @@ struct TriggerScan {
 
 impl Visit for TriggerScan {
     fn blocks(&mut self, blocks: &[Block]) {
-        if blocks.windows(2).any(|w| {
-            matches!(
-                (&w[0], &w[1]),
-                (Block::OrderedList(_), Block::OrderedList(_))
-            )
-        }) {
+        if blocks
+            .windows(2)
+            .any(|w| needs_list_separator(&w[0], &w[1]))
+        {
             self.found = true;
         }
     }
@@ -388,11 +392,6 @@ impl Rewriter {
                 Children::Inlines(inlines) => self.inlines(inlines),
             }
         }
-        match block {
-            Block::BulletList(list) => loosen_items_with_separators(&mut list.content),
-            Block::OrderedList(list) => loosen_items_with_separators(&mut list.content),
-            _ => {}
-        }
     }
 
     fn inlines(&mut self, inlines: &mut Vec<Inline>) {
@@ -426,45 +425,63 @@ impl Rewriter {
     }
 }
 
+#[cfg(test)]
 fn is_list_separator(block: &Block) -> bool {
     matches!(block, Block::RawBlock(r) if r.format == "html" && r.text == LIST_SEPARATOR)
 }
 
-/// A tight list item writes its blocks with no blank line between them, so a
-/// separator there would read back as a continuation of the preceding item
-/// text, and a blank line would make the item loose. Loose is the lesser harm:
-/// the text survives and only the item's first `Plain` becomes a `Para`.
-fn loosen_items_with_separators(items: &mut [Vec<Block>]) {
-    for item in items {
-        if item.iter().any(is_list_separator)
-            && let Some(Block::Plain(plain)) = item.first()
-        {
-            item[0] = Block::Paragraph(crate::pandoc::Paragraph {
-                content: plain.content.clone(),
-                source_info: plain.source_info.clone(),
-            });
+/// The marker class an ordered list is written with: `(@)` for example
+/// lists, otherwise the delimiter after the number (the block writer's
+/// mapping in `write_orderedlist`). `None` for example lists: the reader's
+/// handling of adjacent `(@)` lists is unreliable (bd-bumesax9), so they are
+/// always separated.
+fn written_delimiter(list: &crate::pandoc::block::OrderedList) -> Option<char> {
+    use crate::pandoc::list::{ListNumberDelim, ListNumberStyle};
+    let (_, style, delim) = &list.attr;
+    if matches!(style, ListNumberStyle::Example) {
+        return None;
+    }
+    Some(match delim {
+        ListNumberDelim::OneParen | ListNumberDelim::TwoParens => ')',
+        ListNumberDelim::Period | ListNumberDelim::Default => '.',
+    })
+}
+
+/// Would `prev` and `next`, written back to back, re-read as one list? Only
+/// two ordered lists with the same written delimiter would; a delimiter
+/// change starts a new list on the next read.
+fn needs_list_separator(prev: &Block, next: &Block) -> bool {
+    match (prev, next) {
+        (Block::OrderedList(a), Block::OrderedList(b)) => {
+            match (written_delimiter(a), written_delimiter(b)) {
+                (Some(x), Some(y)) => x == y,
+                _ => true,
+            }
         }
+        _ => false,
     }
 }
 
-/// Put a raw `<!-- -->` between every two adjacent ordered lists.
+/// Put a raw `<!-- -->` between every two adjacent ordered lists that would
+/// otherwise re-read as one ([`needs_list_separator`]).
 fn separate_ordered_lists(blocks: &mut Vec<Block>) {
-    if !blocks.windows(2).any(|w| {
-        matches!(
-            (&w[0], &w[1]),
-            (Block::OrderedList(_), Block::OrderedList(_))
-        )
-    }) {
+    if !blocks
+        .windows(2)
+        .any(|w| needs_list_separator(&w[0], &w[1]))
+    {
         return;
     }
     let mut out: Vec<Block> = Vec::with_capacity(blocks.len() + 1);
     for block in blocks.drain(..) {
-        if let (Some(Block::OrderedList(prev)), Block::OrderedList(_)) = (out.last(), &block) {
-            out.push(Block::RawBlock(RawBlock {
+        if let Some(prev @ Block::OrderedList(prev_list)) = out.last()
+            && needs_list_separator(prev, &block)
+        {
+            let source_info = prev_list.source_info.clone();
+            out.push(Block::RawBlock(Box::new(RawBlock {
                 format: "html".to_string(),
                 text: LIST_SEPARATOR.to_string(),
-                source_info: prev.source_info.clone(),
-            }));
+                source_info,
+            })));
         }
         out.push(block);
     }
@@ -490,7 +507,7 @@ fn rewrite(pandoc: &Pandoc) -> Pandoc {
         out.push(block);
         for mut definition in rewriter.definitions.drain(..) {
             definition.source_info = source_info.clone();
-            out.push(Block::NoteDefinitionFencedBlock(definition));
+            out.push(Block::NoteDefinitionFencedBlock(Box::new(definition)));
         }
     }
     separate_ordered_lists(&mut out);
@@ -539,6 +556,48 @@ mod tests {
         assert!(matches!(prepared, Cow::Owned(_)));
         assert_eq!(prepared.blocks.len(), 3);
         assert!(is_list_separator(&prepared.blocks[1]));
+    }
+
+    fn ordered(delim: &str, style: &str) -> String {
+        format!(
+            r#"{{"t":"OrderedList","c":[[1,{{"t":"{style}"}},{{"t":"{delim}"}}],[[{{"t":"Plain","c":[{{"t":"Str","c":"a"}}]}}]]]}}"#
+        )
+    }
+
+    /// bd-2bcre8cr: `1.` then `1)` re-read as two lists without help, and
+    /// it's the only adjacent pair a qmd read produces, so it must not
+    /// trigger the copy (or insert a separator the writer then has to place).
+    #[test]
+    fn ordered_lists_with_differing_delimiters_are_borrowed() {
+        let pandoc = doc(&format!(
+            "[{},{}]",
+            ordered("Period", "Decimal"),
+            ordered("OneParen", "Decimal")
+        ));
+        assert!(matches!(prepare(&pandoc), Cow::Borrowed(_)));
+    }
+
+    /// The written marker decides, not the AST field: `Default` and `Period`
+    /// both write as `1.`, `OneParen` and `TwoParens` both as `1)`. Example
+    /// lists are always separated (bd-bumesax9).
+    #[test]
+    fn lists_with_the_same_written_marker_are_separated() {
+        for (a, b) in [
+            (
+                ordered("DefaultDelim", "Decimal"),
+                ordered("Period", "Decimal"),
+            ),
+            (
+                ordered("OneParen", "Decimal"),
+                ordered("TwoParens", "Decimal"),
+            ),
+            (ordered("Period", "Example"), ordered("OneParen", "Decimal")),
+        ] {
+            let pandoc = doc(&format!("[{a},{b}]"));
+            let prepared = prepare(&pandoc);
+            assert_eq!(prepared.blocks.len(), 3, "{a} / {b}");
+            assert!(is_list_separator(&prepared.blocks[1]), "{a} / {b}");
+        }
     }
 
     #[test]

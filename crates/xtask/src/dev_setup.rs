@@ -287,7 +287,7 @@ fn wasm_opt_install_hints() -> &'static [&'static str] {
 /// `PANDOC_VERSION` — see
 /// `claude-notes/plans/2026-09-18-pandoc-hybrid-P4-implementation.md`
 /// Task 7 / Findings for Gordon, item 11(b).
-pub(crate) const PANDOC_HYBRID_MIN_VERSION: (u32, u32) = (3, 12);
+pub(crate) const PANDOC_HYBRID_MIN_VERSION: (u32, u32) = (3, 13);
 
 /// Check for Pandoc 3.6+ (optional — needed only for pampa comparison tests).
 ///

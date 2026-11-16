@@ -93,13 +93,13 @@ pub(crate) fn desugar_div(div: Div, collector: &mut DiagnosticCollector) -> Bloc
                     .add_hint("Check the list-table documentation for the correct structure?")
                     .build(),
             );
-            Block::Div(div)
+            Block::Div(Box::new(div))
         }
         ListTableValidation::NotListTable => {
             if is_valid_definition_list_div(&div) {
                 transform_definition_list_div(div)
             } else {
-                Block::Div(div)
+                Block::Div(Box::new(div))
             }
         }
     }
@@ -117,20 +117,16 @@ pub(crate) fn implicit_figure(para: &Paragraph) -> Option<Figure> {
         return None;
     }
 
-    let figure_attr: Attr = (image.attr.0.clone(), vec![], LinkedHashMap::new());
-    let image_attr: Attr = (String::new(), image.attr.1.clone(), image.attr.2.clone());
+    let figure_attr: Attr = (image.attr.0.clone(), vec![], LinkedHashMap::new()).into();
+    let image_attr: Attr = (String::new(), image.attr.1.clone(), image.attr.2.clone()).into();
 
     // Split attr_source between figure and image the same way.
-    let figure_attr_source = AttrSourceInfo {
-        id: image.attr_source.id.clone(),
-        classes: vec![],
-        attributes: vec![],
-    };
-    let image_attr_source = AttrSourceInfo {
-        id: None,
-        classes: image.attr_source.classes.clone(),
-        attributes: image.attr_source.attributes.clone(),
-    };
+    let figure_attr_source = AttrSourceInfo::new(image.attr_source.id.clone(), vec![], vec![]);
+    let image_attr_source = AttrSourceInfo::new(
+        None,
+        image.attr_source.classes.clone(),
+        image.attr_source.attributes.clone(),
+    );
 
     let mut new_image = image.clone();
     new_image.attr = image_attr;
@@ -162,11 +158,11 @@ fn desugar_filter<'a>(collector: &'a RefCell<&'a mut DiagnosticCollector>) -> Fi
     Filter::new()
         // See `desugar_div` for why this is `Unchanged`, not a re-visit.
         .with_block(move |block, _ctx| match block {
-            Block::Div(div) => Unchanged(desugar_div(div, &mut collector.borrow_mut())),
+            Block::Div(div) => Unchanged(desugar_div(*div, &mut collector.borrow_mut())),
             other => Unchanged(other),
         })
         .with_paragraph(|para, _ctx| match implicit_figure(&para) {
-            Some(figure) => FilterResult(vec![Block::Figure(figure)], true),
+            Some(figure) => FilterResult(vec![Block::Figure(Box::new(figure))], true),
             None => Unchanged(para),
         })
 }
@@ -219,12 +215,12 @@ mod tests {
     }
 
     fn div(class: &str, content: Blocks) -> Block {
-        Block::Div(Div {
-            attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()),
+        Block::Div(Box::new(Div {
+            attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()).into(),
             content,
             source_info: empty_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn list_table() -> Block {
@@ -239,12 +235,13 @@ mod tests {
 
     fn image_para(alt: &str, id: &str) -> Block {
         Block::Paragraph(Paragraph {
-            content: vec![Inline::Image(Image {
+            content: vec![Inline::Image(Box::new(Image {
                 attr: (
                     id.to_string(),
                     vec!["cls".to_string()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content: if alt.is_empty() {
                     vec![]
                 } else {
@@ -257,7 +254,7 @@ mod tests {
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),
-            })],
+            }))],
             source_info: empty_source_info(),
         })
     }

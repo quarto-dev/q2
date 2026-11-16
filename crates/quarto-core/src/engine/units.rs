@@ -232,15 +232,19 @@ pub fn units_for_engine(shared: &[Unit], engine_text: &str) -> Vec<Unit> {
 }
 
 /// Today's executor rule, quarantined in one place: a bare `{lang}` opener
-/// at column 0, a three-backtick opener, no container prefix, no attribute
-/// tail. Where a fence closes (a longer closer closes it) and what counts as
-/// an opener are the scanner's CommonMark answers, not the old regex's:
-/// EXR-2 Phase 4 fixed those two misparses rather than emulate them (epic
-/// decision 26, amended). Deleted with the rest of the legacy rule.
+/// at column 0, an opener of three or more backticks, no container prefix,
+/// no attribute tail. Where a fence closes (a longer closer closes it) and
+/// what counts as an opener are the scanner's CommonMark answers, not the old
+/// regex's: EXR-2 Phase 4 fixed those two misparses rather than emulate them
+/// (epic decision 26, amended). Any opener length of three or more runs, as in
+/// Quarto 1 (`jupyter.ts` opens on ```+): the qmd writer and the ipynb
+/// converter both lengthen a fence over a backtick run in the cell source, so
+/// requiring exactly three silently skipped those cells (bd-f63cqoke).
+/// Deleted with the rest of the legacy rule.
 pub fn runs_in_legacy_executor(cell: &CellUnit) -> bool {
     cell.indent == 0
         && cell.container_prefix.is_empty()
-        && cell.fence_len == 3
+        && cell.fence_len >= 3
         && cell.attr_tail.is_empty()
 }
 
@@ -491,8 +495,8 @@ pub(crate) struct CodeBlock {
 }
 
 /// The cells the legacy executor runs, as `CodeBlock`s, from a unit list: bare
-/// `{lang}` openers at column 0 with a three-backtick fence. Spans, cells the
-/// legacy rule skips (indented, nested, attribute-tail, longer fence) and raw
+/// `{lang}` openers at column 0 with a fence of three or more backticks. Spans,
+/// cells the legacy rule skips (indented, nested, attribute-tail) and raw
 /// fences never appear (the scanner already excludes raw and doubled-brace).
 /// The scanner follows CommonMark for where a fence closes (a longer closer
 /// closes it) and for what an opener is (the info string is on the fence
@@ -725,7 +729,7 @@ mod tests {
     }
 
     #[test]
-    fn nonstandard_cells_report_their_shape_and_do_not_run_in_the_legacy_executor() {
+    fn nonstandard_cells_report_their_shape_and_the_legacy_executor_rule() {
         let indented = cells("- item\n\n  ```{python}\n  x=1\n  ```\n");
         assert_eq!((indented[0].indent, indented[0].fence_len), (2, 3));
         assert!(!runs_in_legacy_executor(&indented[0]));
@@ -734,9 +738,19 @@ mod tests {
         assert_eq!(quote[0].container_prefix, "> ");
         assert!(!runs_in_legacy_executor(&quote[0]));
 
-        let four = cells("````{python}\nx=1\n````\n");
-        assert_eq!(four[0].fence_len, 4);
-        assert!(!runs_in_legacy_executor(&four[0]));
+        // A longer opener runs (Quarto 1 `jupyter.ts` opens on ```+). The qmd
+        // writer emits one whenever the source holds a backtick run of three
+        // or more, so `print("a ``` b")` reaches the executor as ````{python}
+        // (bd-f63cqoke).
+        for ticks in [4, 5] {
+            let fence = "`".repeat(ticks);
+            let c = cells(&format!("{fence}{{python}}\nx=1\n{fence}\n"));
+            assert_eq!(c[0].fence_len, ticks);
+            assert!(runs_in_legacy_executor(&c[0]), "{ticks} backticks");
+        }
+        let with_run = cells("````{python}\nprint(\"a ``` b\")\n````\n");
+        assert_eq!(with_run[0].code, "print(\"a ``` b\")\n");
+        assert!(runs_in_legacy_executor(&with_run[0]));
 
         // A longer closer ends a three-backtick fence (CommonMark), and the
         // executor now takes that answer from the scanner (Phase 4).

@@ -1,0 +1,12 @@
+---
+title: Records mixed Jupyter and knitr
+jupyter: python3
+---
+
+```{python}
+print("python cell")
+```
+
+```{r}
+1 + 1
+```

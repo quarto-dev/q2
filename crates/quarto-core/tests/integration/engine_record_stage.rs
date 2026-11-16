@@ -30,6 +30,7 @@ use quarto_core::record::{
     EngineEntryInput, Record, RecordBuilder, UnitResult, content_hash, read_record,
     read_record_value, write_record,
 };
+use quarto_core::render_to_file::{RenderToFileOptions, render_document_to_file};
 use quarto_core::stage::JsonTraceObserver;
 use quarto_core::stage::stages::{
     ENGINE_CAPTURE_KIND, ENGINE_CAPTURE_RECORD_KIND, ENGINE_RECORD_KIND,
@@ -37,7 +38,7 @@ use quarto_core::stage::stages::{
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 use quarto_trace::RenderInfo;
 
-use crate::engine_stage_driver::{AuxRecorder, run_engine_stage};
+use crate::engine_stage_driver::{AuxRecorder, run_engine_stage, run_engine_stage_presenting};
 
 // ── stub engine ────────────────────────────────────────────────────────────
 
@@ -108,7 +109,7 @@ impl ExecutionEngine for StubRecordEngine {
             result.preserve.insert("ph".to_string(), "<b/>".to_string());
             result.needs_postprocess = true;
         }
-        if ctx.want_record {
+        if ctx.builds_record() {
             self.builds.fetch_add(1, Ordering::SeqCst);
             let def = self.hash_definition();
             let mut builder = RecordBuilder::new(self.name, &def, &ctx.units, &ctx.author_texts)
@@ -388,6 +389,92 @@ fn execute_record_true_builds_a_record_for_a_plain_observer() {
     let record = observer.record();
     assert_eq!(record.cells.len(), 1);
     assert_eq!(record.metadata.quarto_source.as_deref(), Some("doc.qmd"));
+}
+
+// ── OPR-7a: present_from_record builds the record without the extra cost ──────
+
+/// Every file under `dir/.quarto`, so a test can say nothing was written.
+fn files_under_dot_quarto(dir: &Path) -> Vec<PathBuf> {
+    fn walk(p: &Path, out: &mut Vec<PathBuf>) {
+        if let Ok(rd) = std::fs::read_dir(p) {
+            for e in rd.flatten() {
+                let path = e.path();
+                if path.is_dir() {
+                    walk(&path, out);
+                } else {
+                    out.push(path);
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&dir.join(".quarto"), &mut out);
+    out
+}
+
+#[test]
+fn present_from_record_builds_the_record_but_serializes_and_writes_nothing() {
+    let tmp = TempDir::new().unwrap();
+    let input = write_doc(tmp.path(), ONE_ENGINE);
+    let engine = StubRecordEngine::arc("stub-a", "stub-a", false);
+    let observer = AuxRecorder::arc(false);
+
+    run_engine_stage_presenting(&input, observer.clone(), Some(registry(&[engine.clone()])))
+        .unwrap();
+
+    assert_eq!(
+        engine.builds.load(Ordering::SeqCst),
+        1,
+        "the engine built a record"
+    );
+    assert!(
+        observer.events_of(ENGINE_RECORD_KIND).is_empty(),
+        "no full-record JSON copy goes to an observer that did not ask"
+    );
+    assert!(files_under_dot_quarto(tmp.path()).is_empty());
+}
+
+#[test]
+fn present_from_record_with_an_observer_still_emits_the_record() {
+    let tmp = TempDir::new().unwrap();
+    let input = write_doc(tmp.path(), ONE_ENGINE);
+    let engine = StubRecordEngine::arc("stub-a", "stub-a", false);
+    let observer = AuxRecorder::arc(true);
+
+    run_engine_stage_presenting(&input, observer.clone(), Some(registry(&[engine]))).unwrap();
+
+    assert_eq!(observer.record().cells.len(), 2);
+}
+
+#[test]
+fn record_true_still_writes_the_file_and_the_observer_still_receives_the_record() {
+    let tmp = TempDir::new().unwrap();
+    let input = write_doc(
+        tmp.path(),
+        "---\nengine: stub-a\nexecute:\n  record: true\n---\n\n```{stub-a}\nx = 1\n```\n",
+    );
+    let engine = StubRecordEngine::arc("stub-a", "stub-a", false);
+    let observer = AuxRecorder::arc(true);
+
+    run_engine_stage(&input, observer.clone(), Some(registry(&[engine]))).unwrap();
+
+    assert_eq!(observer.record().cells.len(), 1);
+    let files = files_under_dot_quarto(tmp.path());
+    assert!(
+        files
+            .iter()
+            .any(|f| f.extension().is_some_and(|e| e == "ipynb")),
+        "{files:?}"
+    );
+}
+
+#[test]
+fn a_plain_run_writes_no_record_file() {
+    let tmp = TempDir::new().unwrap();
+    let input = write_doc(tmp.path(), ONE_ENGINE);
+    let engine = StubRecordEngine::arc("stub-a", "stub-a", false);
+    run_engine_stage(&input, AuxRecorder::arc(false), Some(registry(&[engine]))).unwrap();
+    assert!(files_under_dot_quarto(tmp.path()).is_empty());
 }
 
 // ── Phase 2: unit ids and author texts in the stage ────────────────────────
@@ -685,4 +772,88 @@ fn plain_render_writes_no_record_file() {
     run_engine_stage(&input, AuxRecorder::arc(true), Some(registry(&[engine]))).unwrap();
 
     assert!(!tmp.path().join(".quarto").exists());
+}
+
+/// Render `input` to HTML through the real entry point `q2 render` uses, with `engine` as
+/// the only engine. Returns the result so a test can read the diagnostics.
+fn render_through_render_document_to_file(
+    input: &Path,
+    engine: Arc<StubRecordEngine>,
+) -> quarto_core::error::Result<quarto_core::render_to_file::RenderToFileResult> {
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let project = ProjectContext::discover(input, runtime.as_ref()).unwrap();
+    let options = RenderToFileOptions {
+        engine_registry_override: Some(registry(&[engine])),
+        ..Default::default()
+    };
+    render_document_to_file(
+        input,
+        "html",
+        &options,
+        Some(&project),
+        runtime.clone(),
+        None,
+        None,
+        None,
+    )
+}
+
+/// RIU-1: a plain `q2 render` of a document with no `record: true` creates no records
+/// directory, even though the writer gate now defaults on for the preview.
+#[test]
+fn plain_render_to_file_creates_no_execution_records_directory() {
+    let tmp = TempDir::new().unwrap();
+    let input = write_doc(tmp.path(), ONE_ENGINE);
+    let engine = StubRecordEngine::arc("stub-a", "stub-a", true);
+
+    render_through_render_document_to_file(&input, engine).expect("the render succeeds");
+
+    assert!(
+        !tmp.path()
+            .join(".quarto")
+            .join("execution-records")
+            .exists(),
+        "a plain render must not create .quarto/execution-records"
+    );
+}
+
+/// RIU-1 (epic decision 10): the copy under `.quarto/execution-records/` is optional, so a
+/// location that cannot be written warns and the render still succeeds.
+#[test]
+fn an_unwritable_record_location_warns_and_the_render_succeeds() {
+    let tmp = TempDir::new().unwrap();
+    let input = write_doc(tmp.path(), RECORD_TRUE);
+    // `.quarto/execution-records` is a regular file, which fails the write on every
+    // platform with no permission bits. (A file at `.quarto` itself fails earlier, in
+    // "Failed to create .quarto directory", with or without `record: true`.)
+    std::fs::create_dir_all(tmp.path().join(".quarto")).unwrap();
+    std::fs::write(
+        tmp.path().join(".quarto").join("execution-records"),
+        b"in the way",
+    )
+    .unwrap();
+    let engine = StubRecordEngine::arc("stub-a", "stub-a", true);
+
+    let result = render_through_render_document_to_file(&input, engine)
+        .expect("a failed optional record copy must not fail the render");
+
+    assert!(result.output_path.exists(), "the HTML is written");
+    let warnings: Vec<String> = result
+        .render_output
+        .diagnostics
+        .iter()
+        .filter(|d| d.kind == quarto_error_reporting::DiagnosticKind::Warning)
+        .map(|d| d.to_text(None))
+        .collect();
+    assert!(
+        warnings.iter().any(|w| w.contains("execution record")
+            && w.contains(
+                &tmp.path()
+                    .join(".quarto")
+                    .join("execution-records")
+                    .display()
+                    .to_string()
+            )),
+        "a warning names the record location: {warnings:?}"
+    );
 }

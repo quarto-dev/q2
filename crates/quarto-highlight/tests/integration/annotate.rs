@@ -13,7 +13,7 @@ use quarto_source_map::{FileId, SourceInfo};
 
 fn attr_with_class(class: &str) -> Attr {
     use hashlink::LinkedHashMap;
-    (String::new(), vec![class.to_string()], LinkedHashMap::new())
+    (String::new(), vec![class.to_string()], LinkedHashMap::new()).into()
 }
 
 fn empty_source_info() -> SourceInfo {
@@ -25,12 +25,12 @@ fn empty_attr_source() -> AttrSourceInfo {
 }
 
 fn make_code_block(class: &str, text: &str) -> Block {
-    Block::CodeBlock(CodeBlock {
+    Block::CodeBlock(Box::new(CodeBlock {
         attr: attr_with_class(class),
         text: text.to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
-    })
+    }))
 }
 
 fn empty_pandoc() -> Pandoc {
@@ -111,16 +111,17 @@ fn leaves_existing_annotation_alone() {
 #[test]
 fn annotates_inline_code() {
     use hashlink::LinkedHashMap;
-    let inline = Inline::Code(Code {
+    let inline = Inline::Code(Box::new(Code {
         attr: (
             String::new(),
             vec!["python".to_string()],
             LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         text: "print(42)".to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
-    });
+    }));
     let mut doc = empty_pandoc();
     doc.blocks.push(Block::Paragraph(Paragraph {
         content: Inlines::from(vec![inline]),
@@ -144,12 +145,12 @@ fn annotates_inline_code() {
 fn code_block_with_no_class_is_skipped() {
     use hashlink::LinkedHashMap;
     let mut doc = empty_pandoc();
-    doc.blocks.push(Block::CodeBlock(CodeBlock {
-        attr: (String::new(), vec![], LinkedHashMap::new()),
+    doc.blocks.push(Block::CodeBlock(Box::new(CodeBlock {
+        attr: (String::new(), vec![], LinkedHashMap::new()).into(),
         text: "foo bar".to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
-    }));
+    })));
 
     annotate_pandoc(&mut doc, None).expect("annotate must not error");
 
@@ -195,16 +196,17 @@ fn builtin_lookup_api_is_case_insensitive() {
 fn annotate_block_with_classes(classes: &[&str], text: &str) -> Attr {
     use hashlink::LinkedHashMap;
     let mut doc = empty_pandoc();
-    doc.blocks.push(Block::CodeBlock(CodeBlock {
+    doc.blocks.push(Block::CodeBlock(Box::new(CodeBlock {
         attr: (
             String::new(),
             classes.iter().map(|c| c.to_string()).collect(),
             LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         text: text.to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
-    }));
+    })));
     annotate_pandoc(&mut doc, None).expect("annotate must not error");
     let Block::CodeBlock(cb) = doc.blocks.remove(0) else {
         unreachable!()
@@ -258,12 +260,12 @@ fn does_not_mark_inline_code_without_grammar() {
     use hashlink::LinkedHashMap;
     let mut doc = empty_pandoc();
     doc.blocks.push(Block::Paragraph(Paragraph {
-        content: Inlines::from(vec![Inline::Code(Code {
-            attr: (String::new(), vec!["ini".to_string()], LinkedHashMap::new()),
+        content: Inlines::from(vec![Inline::Code(Box::new(Code {
+            attr: (String::new(), vec!["ini".to_string()], LinkedHashMap::new()).into(),
             text: "a = 1".to_string(),
             source_info: empty_source_info(),
             attr_source: empty_attr_source(),
-        })]),
+        }))]),
         source_info: empty_source_info(),
     }));
     annotate_pandoc(&mut doc, None).expect("annotate must not error");

@@ -1,0 +1,43 @@
+---
+title: "Task list rendering survey fixture (issue 892)"
+---
+
+## Tight, all tasks
+
+- [ ] one
+- [x] two
+- [X] three (uppercase)
+
+## Mixed tasks and plain items
+
+- [ ] task
+- plain item
+- [x] done task
+
+## Ordered list with tasks
+
+1. [ ] first
+2. [x] second
+
+## Loose task list
+
+- [ ] loose one
+
+- [x] loose two
+
+## Nested
+
+- [ ] parent
+  - [x] child a
+  - [ ] child b
+- [x] other parent
+
+## Long wrapping item
+
+- [ ] a long task item whose text wraps onto a second line so we can see whether the continuation lines up with the first line's text or with the checkbox, which is one of the visible layout questions
+
+## Edge cases
+
+- [ ]
+- [ ]no space after marker
+- text then [ ] marker later

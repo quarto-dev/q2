@@ -568,7 +568,9 @@ This runs:
 0. `cargo xtask lint`, `npm run lint:css -w hub-client`, and clippy - the
    fail-fast lints (step 1 in the xtask's numbering). The CSS lint enforces
    `hub-client/design-system.md` and runs even under `--skip-hub-build`;
-   disable it with `--skip-css-lint`.
+   disable it with `--skip-css-lint`. Step 1 also runs the quarto2 PyPI
+   packaging tests (`python3 -I -m unittest discover -s packaging/pypi/tests`;
+   `--skip-pypi-tests`).
 1. `cargo build --workspace` - Build all Rust crates, then
    `cargo run --bin q2 -- render --strict claude-notes` - render the notes
    website the way CI does, so a note that fails to parse or warns fails
@@ -595,6 +597,7 @@ cargo xtask verify --skip-rust-tests    # Skip Rust tests
 cargo xtask verify --skip-hub-tests     # Skip hub-client tests
 cargo xtask verify --skip-hub-build     # Skip hub-client build entirely
 cargo xtask verify --skip-css-lint      # Skip the hub-client CSS lint
+cargo xtask verify --skip-pypi-tests    # Skip the quarto2 PyPI packaging tests
 cargo xtask verify --skip-claude-notes-render  # Skip the strict claude-notes render
 cargo xtask verify --e2e                # Include slower e2e browser tests
 ```

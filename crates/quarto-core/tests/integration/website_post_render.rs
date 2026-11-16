@@ -768,7 +768,7 @@ fn pipeline_website_post_render_substitutes_image_from_sibling_preview() {
         "expected substituted img src; got: {host}"
     );
     assert!(
-        host.contains(r#"class="thumbnail-image""#),
+        host.contains(r#"class="thumbnail-image card-img""#),
         "expected thumbnail-image class on substituted img"
     );
     // No image envelope markers survive in the rendered host.

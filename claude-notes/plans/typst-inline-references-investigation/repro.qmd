@@ -1,0 +1,13 @@
+---
+references:
+  - id: item
+    type: webpage
+    title: A page
+    author:
+      - family: Smith
+        given: Jane
+    issued:
+      date-parts: [[2020, 7, 12]]
+---
+
+See [@item].

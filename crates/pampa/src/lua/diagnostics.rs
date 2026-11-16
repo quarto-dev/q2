@@ -970,7 +970,7 @@ mod tests {
         register_quarto_namespace(&lua).unwrap();
 
         // Shortcode has source_info — Inline::source_info() returns it directly
-        let shortcode = Inline::Shortcode(Shortcode {
+        let shortcode = Inline::Shortcode(Box::new(Shortcode {
             is_escaped: false,
             name: "test".to_string(),
             positional_args: vec![],
@@ -980,7 +980,7 @@ mod tests {
                 10,
                 20,
             ),
-        });
+        }));
         let lua_inline = LuaInline::new(shortcode);
         lua.globals()
             .set("test_shortcode", lua.create_userdata(lua_inline).unwrap())
@@ -1066,12 +1066,12 @@ mod tests {
             start_offset: 200,
             end_offset: 300,
         };
-        let codeblock = Block::CodeBlock(CodeBlock {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+        let codeblock = Block::CodeBlock(Box::new(CodeBlock {
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             text: "print('hello')".to_string(),
             source_info: source_info.clone(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let lua_block = LuaBlock::new(codeblock);
         lua.globals()
             .set("test_codeblock", lua.create_userdata(lua_block).unwrap())

@@ -86,7 +86,7 @@ describe('EditTypeIndicator', () => {
             </PreviewContext.Provider>,
         );
         const crumbs = Array.from(container.querySelectorAll('.q2-crumb'));
-        expect(crumbs.map((c) => c.textContent)).toEqual(['Dv', '¶']);
+        expect(crumbs.map((c) => c.getAttribute('data-abbrev'))).toEqual(['Dv', '¶']);
         // The full breadcrumb includes the nesting nav arrows.
         expect(container.querySelector('.q2-breadcrumb-out')).not.toBeNull();
         expect(container.querySelector('.q2-breadcrumb-in')).not.toBeNull();

@@ -931,13 +931,13 @@ mod tests {
 
     fn make_include_paragraph(path: &str) -> Block {
         Block::Paragraph(Paragraph {
-            content: vec![Inline::Shortcode(Shortcode {
+            content: vec![Inline::Shortcode(Box::new(Shortcode {
                 is_escaped: false,
                 name: "include".to_string(),
                 positional_args: vec![ShortcodeArg::String(path.to_string())],
                 keyword_args: hashlink::LinkedHashMap::new(),
                 source_info: SourceInfo::original(FileId(0), 0, 30),
-            })],
+            }))],
             source_info: SourceInfo::original(FileId(0), 0, 30),
         })
     }
@@ -997,13 +997,13 @@ mod tests {
     #[test]
     fn extract_include_path_non_include_shortcode() {
         let block = Block::Paragraph(Paragraph {
-            content: vec![Inline::Shortcode(Shortcode {
+            content: vec![Inline::Shortcode(Box::new(Shortcode {
                 is_escaped: false,
                 name: "meta".to_string(),
                 positional_args: vec![ShortcodeArg::String("title".to_string())],
                 keyword_args: hashlink::LinkedHashMap::new(),
                 source_info: SourceInfo::for_test(),
-            })],
+            }))],
             source_info: SourceInfo::for_test(),
         });
         assert_eq!(extract_include_path(&block), None);
@@ -1018,13 +1018,13 @@ mod tests {
                     text: "some text ".to_string(),
                     source_info: SourceInfo::for_test(),
                 }),
-                Inline::Shortcode(Shortcode {
+                Inline::Shortcode(Box::new(Shortcode {
                     is_escaped: false,
                     name: "include".to_string(),
                     positional_args: vec![ShortcodeArg::String("file.qmd".to_string())],
                     keyword_args: hashlink::LinkedHashMap::new(),
                     source_info: SourceInfo::for_test(),
-                }),
+                })),
             ],
             source_info: SourceInfo::for_test(),
         });
@@ -1058,16 +1058,17 @@ mod tests {
         for (k, v) in kvs {
             attrs.insert(k.to_string(), v.to_string());
         }
-        Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
+        Block::CodeBlock(Box::new(quarto_pandoc_types::block::CodeBlock {
             attr: (
                 String::new(),
                 classes.iter().map(|c| c.to_string()).collect(),
                 attrs,
-            ),
+            )
+                .into(),
             text: text.to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Recognize on one line, for the strictness tests.

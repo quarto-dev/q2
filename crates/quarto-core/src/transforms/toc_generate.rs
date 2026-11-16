@@ -280,16 +280,16 @@ mod tests {
     }
 
     fn make_header(level: usize, id: &str, text: &str) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
-            attr: (id.to_string(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (id.to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn make_para(text: &str) -> Block {

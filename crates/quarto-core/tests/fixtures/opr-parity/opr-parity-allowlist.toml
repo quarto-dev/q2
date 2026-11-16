@@ -1,0 +1,28 @@
+# OPR-9g: the allowlist of divergences between a plain render and a recorded render, read by
+# `tests/integration/opr_parity_harness.rs`. It is EMPTY on purpose.
+#
+# Before OPR-9g the plain route (the engine's own markdown) and the recorded route (the
+# presenter) differed, and nine signed entries explained the differences (knitr empty cell wrapper,
+# knitr split blockquote, Julia code block leading newline, and six Julia interleaving entries:
+# targets-epub, presentation-attrs, records-plot, fig-subcap, capture-facts and capture-facts'
+# pinned difference; Gordon signed them 2026-11-09 and 2026-11-11). OPR-9g turned the internal
+# `present_from_record` flag on, so BOTH sides of the harness are now presented from the record
+# and compare identical: the flipped gate run found 93 identical cases and 0 differences, and
+# every one of the nine entries fired 0 times on both sides (a stale entry fails the gate).
+# They were removed in the flip commit. The pre-flip gate report (OPR-9f, in that plan's notes)
+# and git history keep their reasons and measurements; `pins/` keeps the two pinned differences.
+#
+# What the harness is now: a regression test of the recorded route. The "plain" side and the
+# `execute: {record: true}` side must produce the same HTML and the same set of figure files over
+# the Julia manifest and the knitr corpus, with nothing explained away. The normalizer code
+# (`julia-interleaved-cell`, the rules and the pin mechanism) and its unit tests stay, so the
+# mechanism remains tested; a future entry follows the old format:
+#
+#   name    a short label
+#   rule    a built-in normalization applied to BOTH sides (`RULES` in the harness)
+#   scope   a document-name prefix the entry covers, or `document` for one document
+#   status  `proposed` or `signed`
+#   reason  why the divergence is intended, with the evidence
+#
+# Not an entry, ever: the group caption, the panel ids and the references to a `fig-subcap` group
+# (the presenter writes them for every engine, OPR-7j).

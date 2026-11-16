@@ -25,14 +25,22 @@ impl ParseError {
         }
     }
 
-    /// Render all diagnostics with ariadne source context.
-    ///
-    /// This produces beautiful error messages with source snippets,
-    /// line numbers, and visual markers pointing to error locations.
+    /// Render all diagnostics with ariadne source context, as plain text:
+    /// source snippets, line numbers, and markers, but no ANSI color and
+    /// no OSC 8 hyperlinks. This is also the `Display` form, so every
+    /// stored or forwarded string (`to_string()`, anyhow, JSON, WASM) is
+    /// plain (bd-be8ve52f). A terminal sink that may decorate calls
+    /// [`render_with`](Self::render_with) with its resolved style.
     pub fn render(&self) -> String {
+        self.render_with(&quarto_error_reporting::TextRenderOptions::plain())
+    }
+
+    /// Render all diagnostics with `opts`, for a sink that has decided
+    /// how to decorate its stream (color, hyperlinks).
+    pub fn render_with(&self, opts: &quarto_error_reporting::TextRenderOptions) -> String {
         self.diagnostics
             .iter()
-            .map(|d| d.to_text(Some(&self.source_context)))
+            .map(|d| d.to_text_with_options(Some(&self.source_context), opts))
             .collect::<Vec<_>>()
             .join("\n")
     }
@@ -95,6 +103,44 @@ mod tests {
         let error = ParseError::new(diagnostics.clone(), source_context);
 
         assert_eq!(error.diagnostics.len(), 1);
+    }
+
+    /// A parse error whose diagnostic points into a registered file, so
+    /// the renderer draws a source snippet (and, when allowed, color and
+    /// a file hyperlink).
+    fn located_parse_error() -> ParseError {
+        let mut ctx = SourceContext::new();
+        let file = ctx.add_file("doc.qmd".to_string(), Some("hello world\n".to_string()));
+        let diagnostic = DiagnosticMessageBuilder::error("Bad greeting")
+            .with_location(quarto_source_map::SourceInfo::original(file, 0, 5))
+            .build();
+        ParseError::new(vec![diagnostic], ctx)
+    }
+
+    /// bd-be8ve52f: `Display` (and so `to_string()`, anyhow, `{e}` in
+    /// a format string) never carries terminal escapes. Styling is the
+    /// printing sink's decision, made with `render_with`.
+    #[test]
+    fn display_and_render_are_plain() {
+        let error = located_parse_error();
+        let shown = error.to_string();
+        assert!(shown.contains("Bad greeting"), "{shown}");
+        assert!(shown.contains("hello"), "snippet expected: {shown}");
+        assert!(!shown.contains('\u{1b}'), "{shown:?}");
+        assert_eq!(error.render(), shown);
+        assert_eq!(QuartoError::Parse(error).to_string(), shown);
+    }
+
+    #[test]
+    fn render_with_follows_its_options() {
+        use quarto_error_reporting::TextRenderOptions;
+        let error = located_parse_error();
+        let styled = error.render_with(&TextRenderOptions::default().hyperlinks(false));
+        assert!(styled.contains("\u{1b}["), "{styled:?}");
+        assert!(!styled.contains("\u{1b}]8;"), "{styled:?}");
+        let plain = error.render_with(&TextRenderOptions::plain());
+        assert!(!plain.contains('\u{1b}'), "{plain:?}");
+        assert!(plain.contains("Bad greeting"), "{plain}");
     }
 
     #[test]

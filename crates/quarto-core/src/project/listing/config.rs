@@ -1070,17 +1070,21 @@ pub fn apply_type_defaults(l: &mut Listing) {
     // Type-specific knobs (only fill None).
     match l.kind {
         ListingType::Default => {
+            // No image-height default: Q1 sets none for the default
+            // type, and the height is emitted inline (GH #1155).
             l.image_align.get_or_insert(ImageAlign::Right);
-            l.image_height.get_or_insert("120px".to_string());
             l.image_lazy_loading.get_or_insert(true);
         }
         ListingType::Grid => {
+            // Q1 `website-listing-read.ts` grid/table image-height defaults.
+            l.image_height.get_or_insert("150px".to_string());
             l.grid_columns.get_or_insert(3);
             l.grid_item_border.get_or_insert(true);
             l.grid_item_align.get_or_insert(GridItemAlign::Left);
             l.image_lazy_loading.get_or_insert(true);
         }
         ListingType::Table => {
+            l.image_height.get_or_insert("40px".to_string());
             l.image_lazy_loading.get_or_insert(true);
         }
         ListingType::Custom | ListingType::Metadata => {}
@@ -1779,6 +1783,22 @@ listing:
             ("template", s("t.template")),
         ]));
         assert_eq!(listings[0].page_size(), 25, "type custom");
+    }
+
+    #[test]
+    fn image_height_defaults_follow_q1_per_type() {
+        // Q1 `website-listing-read.ts`: grid 150px, table 40px, and no
+        // default for the default type (GH #1155).
+        for (kind, expected) in [
+            ("default", None),
+            ("grid", Some("150px")),
+            ("table", Some("40px")),
+        ] {
+            let (listings, _) = parse(s(kind));
+            assert_eq!(listings[0].image_height.as_deref(), expected, "type {kind}");
+        }
+        let (listings, _) = parse(map(vec![("type", s("grid")), ("image-height", s("100px"))]));
+        assert_eq!(listings[0].image_height.as_deref(), Some("100px"));
     }
 
     #[test]

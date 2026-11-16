@@ -28,7 +28,7 @@ pub mod typst_params;
 pub mod version;
 
 pub const QUARTO_CLI_PIN: &str = "v1.11.6";
-pub const PANDOC_PIN: &str = "3.12.1";
+pub const PANDOC_PIN: &str = "3.13";
 
 pub static FILTERS_DIR: include_dir::Dir =
     include_dir!("$CARGO_MANIFEST_DIR/../../resources/pandoc-filters/filters");

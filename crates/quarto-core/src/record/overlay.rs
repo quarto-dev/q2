@@ -14,6 +14,8 @@ use serde_json::Value;
 
 use super::exec_hash::{HashError, UnitHashRef, hash_document, hash_record};
 use super::types::Record;
+use crate::engine::preview_record::{CaptureRun, SourceInputs};
+use crate::overlay_runtime::RenderOverlay;
 
 /// Recompute every engine entry's `document_hash`, and the record's
 /// `quarto_execution_hash`, over `metadata` (the overlay-free merged metadata) with each
@@ -67,6 +69,34 @@ pub fn overlay_difference(overlay: &Value, record: &Record) -> BTreeMap<String, 
         .filter(|(k, _)| keys.contains(&k.as_str()))
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect()
+}
+
+/// Make a capture run executed under a `-M` overlay describe the source (EXR-5;
+/// F8-D9): the first capture's `input_qmd` becomes the overlay-free bytes, and
+/// the record's unit hashes, document hashes and `quarto_execution_hash` become
+/// the overlay-free ones, with the overlay's execution-relevant keys noted in
+/// `quarto_overlay`. The outputs are untouched: they were produced under the
+/// overlay, which is the point of `-M`.
+pub fn overlay_free_run(
+    mut run: CaptureRun,
+    source: &SourceInputs,
+    overlay: &RenderOverlay,
+) -> Result<CaptureRun, String> {
+    if let Some(first) = run.captures.first_mut() {
+        first.input_qmd = String::from_utf8(source.input_qmd.clone())
+            .map_err(|e| format!("source input_qmd is not UTF-8: {e}"))?;
+    }
+    if let Some(record) = run.record.as_mut() {
+        rehash_record(record, &source.metadata)
+            .map_err(|e| format!("recomputing the record's overlay-free hashes failed: {e}"))?;
+        let noted = overlay
+            .metadata
+            .as_ref()
+            .map(|m| overlay_difference(m, record))
+            .unwrap_or_default();
+        record.metadata.quarto_overlay = (!noted.is_empty()).then_some(noted);
+    }
+    Ok(run)
 }
 
 #[cfg(test)]

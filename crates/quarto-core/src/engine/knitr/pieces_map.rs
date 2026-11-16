@@ -45,8 +45,6 @@ pub fn expression_starts(chunk: &KnitrCapturedChunk) -> Option<Vec<usize>> {
     (total == lines).then_some(starts)
 }
 
-pub use crate::presenter::visibility::knitr_visibility;
-
 /// Which of a chunk\'s outputs is a message or a warning, parallel to the outputs
 /// [`pieces_to_cell_anchored`] returns (the record\'s `quarto_output_kinds`): both become stderr
 /// streams there, so only this tells `class.message` from `class.warning`.
@@ -529,7 +527,7 @@ mod tests {
     }
 
     fn vis(options: Value) -> CellVisibility {
-        knitr_visibility(&options)
+        CellVisibility::from_flags(|k| options.get(k).and_then(Value::as_bool), false)
     }
 
     #[test]

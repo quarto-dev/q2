@@ -24,9 +24,20 @@ fn is_sha256(s: &str) -> bool {
 }
 
 #[test]
+fn version_is_pandoc_pin() {
+    assert_eq!(str_field(&constants(), "version"), PANDOC_PIN);
+}
+
+/// Upstream's asset naming is not stable (3.12.1 shipped
+/// `pandoc-3.12.1.wasm.zip`, 3.13 ships `pandoc-3.13-wasm.zip`), so the
+/// version is recorded in its own field and the name is only checked loosely.
+#[test]
 fn asset_name_carries_pandoc_pin() {
     let name = str_field(&constants(), "asset_name");
-    assert_eq!(name, format!("pandoc-{PANDOC_PIN}.wasm.zip"));
+    assert!(
+        name.starts_with(&format!("pandoc-{PANDOC_PIN}")) && name.ends_with(".zip"),
+        "asset_name {name} does not name pandoc {PANDOC_PIN}'s wasm zip"
+    );
 }
 
 #[test]

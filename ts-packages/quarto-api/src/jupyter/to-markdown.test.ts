@@ -400,6 +400,32 @@ describe("Row 15 — cellOutputs carry {id, markdown} objects", () => {
   });
 });
 
+// ─── OPR-7f Part C — q2's own `metadata.quarto` annotation is not forwarded ──
+
+describe("OPR-7f — attribute forwarding leaves out q2's `quarto` annotation", () => {
+  it("writes no quarto= attribute for metadata.quarto but still forwards other unknown keys", async () => {
+    const nb = pythonKernelNotebook([
+      {
+        cell_type: "code",
+        metadata: {
+          quarto: { unit: 1, language: "python", file: "/abs/doc.qmd", line: 3 },
+          foo: "bar",
+        },
+        source: ["x = 1\n"],
+        outputs: [{ output_type: "stream", name: "stdout", text: ["1\n"] }],
+      },
+    ]);
+    const { host } = makeRecordingHost();
+    const result = await jupyterToMarkdown(host, nb, makeOptions({ toHtml: true }));
+
+    const md = result.cellOutputs[0].markdown;
+    expect(md).not.toContain("quarto=");
+    expect(md).not.toContain("/abs/doc.qmd");
+    // unchanged for users: another unknown key is still forwarded as an attribute
+    expect(md).toContain("foo='bar'");
+  });
+});
+
 // ─── generic helpers exported for Task 9 ────────────────────────────────────
 
 describe("mdFormatOutput / mdRawOutput exports", () => {

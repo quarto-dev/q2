@@ -576,12 +576,13 @@ fn build_path_inlines(path: &str, source_info: &SourceInfo) -> Inlines {
 fn build_glob_inlines(glob: &str, source_info: &SourceInfo) -> Inlines {
     let mut attributes = LinkedHashMap::new();
     attributes.insert("tag".to_string(), "glob".to_string());
-    vec![crate::pandoc::Inline::Span(crate::pandoc::Span {
+    vec![crate::pandoc::Inline::Span(Box::new(crate::pandoc::Span {
         attr: (
             String::new(),
             vec!["yaml-tagged-string".to_string()],
             attributes,
-        ),
+        )
+            .into(),
         content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
             text: glob.to_string(),
             source_info: source_info.clone(),
@@ -590,7 +591,7 @@ fn build_glob_inlines(glob: &str, source_info: &SourceInfo) -> Inlines {
         // so attribution points at the YAML.
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    })]
+    }))]
 }
 
 /// Build Inlines for an Expr ConfigValue variant.
@@ -599,12 +600,13 @@ fn build_glob_inlines(glob: &str, source_info: &SourceInfo) -> Inlines {
 fn build_expr_inlines(expr: &str, source_info: &SourceInfo) -> Inlines {
     let mut attributes = LinkedHashMap::new();
     attributes.insert("tag".to_string(), "expr".to_string());
-    vec![crate::pandoc::Inline::Span(crate::pandoc::Span {
+    vec![crate::pandoc::Inline::Span(Box::new(crate::pandoc::Span {
         attr: (
             String::new(),
             vec!["yaml-tagged-string".to_string()],
             attributes,
-        ),
+        )
+            .into(),
         content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
             text: expr.to_string(),
             source_info: source_info.clone(),
@@ -613,7 +615,7 @@ fn build_expr_inlines(expr: &str, source_info: &SourceInfo) -> Inlines {
         // glob branch above.
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    })]
+    }))]
 }
 
 /// Helper to build a node JSON object with type, optional content, and source info.
@@ -674,7 +676,7 @@ fn node_with_source(
 //     })
 // }
 
-fn write_attr(attr: &Attr) -> Value {
+fn write_attr(attr: &quarto_pandoc_types::AttrTuple) -> Value {
     json!([
         attr.0, // id
         attr.1, // classes
@@ -917,7 +919,7 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
         ),
         Inline::Shortcode(shortcode) => {
             // Convert shortcode to span representation for JSON format output
-            let span = shortcode_to_span(shortcode.clone());
+            let span = shortcode_to_span(*shortcode.clone());
             let attr = (span.attr.0.clone(), span.attr.1.clone(), span.attr.2.clone());
             node_with_source(
                 "Span",
@@ -2016,7 +2018,10 @@ fn stream_write_location<W: io::Write>(
 }
 
 /// Emit `attr` as `[id, [classes...], [[k, v]...]]`.
-fn stream_write_attr<W: io::Write>(w: &mut JsonStreamWriter<W>, attr: &Attr) -> io::Result<()> {
+fn stream_write_attr<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    attr: &quarto_pandoc_types::AttrTuple,
+) -> io::Result<()> {
     w.begin_array()?;
     w.str_value(&attr.0)?;
     w.begin_array()?;
@@ -3031,7 +3036,7 @@ fn stream_write_inline<W: io::Write>(
                     },
                 );
             }
-            let span = shortcode_to_span(shortcode.clone());
+            let span = shortcode_to_span(*shortcode.clone());
             let attr = (
                 span.attr.0.clone(),
                 span.attr.1.clone(),
@@ -4838,7 +4843,7 @@ mod tests {
             source_info: SourceInfo::for_test(),
         };
 
-        let block = Block::Custom(custom);
+        let block = Block::Custom(Box::new(custom));
 
         // Create a minimal Pandoc document with this block
         let pandoc = crate::pandoc::Pandoc {
@@ -4984,7 +4989,7 @@ mod tests {
             source_info: SourceInfo::for_test(),
         };
 
-        let inline = Inline::Custom(custom);
+        let inline = Inline::Custom(Box::new(custom));
 
         // Create a minimal Pandoc document with this inline in a paragraph
         let pandoc = crate::pandoc::Pandoc {
@@ -5043,11 +5048,11 @@ mod tests {
             type_name: "Callout".to_string(),
             slots: hashlink::LinkedHashMap::new(),
             plain_data: serde_json::Value::Null,
-            attr,
+            attr: attr.into(),
             source_info: SourceInfo::for_test(),
         };
 
-        let block = Block::Custom(custom);
+        let block = Block::Custom(Box::new(custom));
 
         // Create a minimal Pandoc document
         let pandoc = crate::pandoc::Pandoc {
@@ -5091,7 +5096,8 @@ mod tests {
             String::new(),
             vec!["caption".to_string()],
             LinkedHashMap::new(),
-        );
+        )
+            .into();
         let para = Paragraph {
             content: vec![
                 Inline::Str(Str {
@@ -5101,11 +5107,11 @@ mod tests {
                 Inline::Space(Space {
                     source_info: SourceInfo::for_test(),
                 }),
-                Inline::Attr(InlineAttr::new(
+                Inline::Attr(Box::new(InlineAttr::new(
                     attr,
                     AttrSourceInfo::empty(),
                     SourceInfo::for_test(),
-                )),
+                ))),
             ],
             source_info: SourceInfo::for_test(),
         };
@@ -5145,7 +5151,8 @@ mod tests {
             "cap1".to_string(),
             vec!["caption".to_string()],
             LinkedHashMap::new(),
-        );
+        )
+            .into();
         let para = Paragraph {
             content: vec![
                 Inline::Str(Str {
@@ -5155,11 +5162,11 @@ mod tests {
                 Inline::Space(Space {
                     source_info: SourceInfo::for_test(),
                 }),
-                Inline::Attr(InlineAttr::new(
+                Inline::Attr(Box::new(InlineAttr::new(
                     attr,
                     AttrSourceInfo::empty(),
                     SourceInfo::for_test(),
-                )),
+                ))),
             ],
             source_info: SourceInfo::for_test(),
         };
@@ -5204,11 +5211,11 @@ mod tests {
             content.push(Inline::Space(Space {
                 source_info: SourceInfo::for_test(),
             }));
-            content.push(Inline::Attr(InlineAttr::new(
+            content.push(Inline::Attr(Box::new(InlineAttr::new(
                 attr,
                 AttrSourceInfo::empty(),
                 SourceInfo::for_test(),
-            )));
+            ))));
         }
         Block::Plain(Plain {
             content,
@@ -5232,7 +5239,7 @@ mod tests {
     fn test_bullet_list_item_attr_emits_itemattr_key() {
         use crate::pandoc::{Block, BulletList};
 
-        let foo: Attr = (String::new(), vec!["foo".to_string()], LinkedHashMap::new());
+        let foo: Attr = (String::new(), vec!["foo".to_string()], LinkedHashMap::new()).into();
         let list = Block::BulletList(BulletList {
             content: vec![
                 vec![li_attr_plain("item one", Some(foo))],
@@ -5281,15 +5288,15 @@ mod tests {
     #[test]
     fn test_ordered_list_item_attr_emits_itemattr_key() {
         use crate::pandoc::{Block, ListNumberDelim, ListNumberStyle, OrderedList};
-        let foo: Attr = (String::new(), vec!["foo".to_string()], LinkedHashMap::new());
-        let list = Block::OrderedList(OrderedList {
+        let foo: Attr = (String::new(), vec!["foo".to_string()], LinkedHashMap::new()).into();
+        let list = Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![
                 vec![li_attr_plain("first", None)],
                 vec![li_attr_plain("second", Some(foo))],
             ],
             source_info: SourceInfo::for_test(),
-        });
+        }));
         let v = write_blocks_to_json(vec![list]);
         let node = &v["blocks"][0];
         assert_eq!(node["t"], "OrderedList");
@@ -5310,7 +5317,8 @@ mod tests {
             "li-id".to_string(),
             vec!["foo".to_string()],
             LinkedHashMap::new(),
-        );
+        )
+            .into();
         let list = Block::BulletList(BulletList {
             content: vec![
                 vec![li_attr_plain("one", Some(foo))],

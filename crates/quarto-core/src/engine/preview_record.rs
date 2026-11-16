@@ -86,6 +86,19 @@ pub struct CaptureRun {
     pub record: Option<Record>,
 }
 
+impl CaptureRun {
+    /// Whether there is anything to publish: legacy captures, or a record that describes
+    /// something. An engine run has captures; an imported record (no engines, no captures,
+    /// cells) has only the second, so "no captures" must not mean "nothing to show".
+    pub fn has_content(&self) -> bool {
+        !self.captures.is_empty()
+            || self
+                .record
+                .as_ref()
+                .is_some_and(|r| r.describes_something())
+    }
+}
+
 impl PipelineObserver for CaptureCollector {
     fn on_auxiliary_data(&self, _stage: &str, _index: usize, kind: &str, data: &serde_json::Value) {
         if kind == ENGINE_RECORD_KIND {
@@ -277,6 +290,84 @@ pub struct SourceInputs {
     /// The pre-sugaring snapshot of the same run: the author's text of each braced block, so
     /// the staleness check hashes units the way the record writer did (EXR-15).
     pub sugared_blocks: Vec<crate::record::SugaredBlock>,
+    /// Language to owning engine, from the engine registry's resolution of the document.
+    /// `None` unless the caller asked for it ([`SourceInputsOptions::ownership`]): only the
+    /// Positron import needs it (the language gate), so every other caller pays nothing.
+    pub ownership: Option<std::collections::BTreeMap<String, String>>,
+    /// Whether the engine that owns a language declares kernel equivalence for it (RFU-2): the
+    /// Positron import gate reads this and no engine name. Requested together with `ownership`.
+    pub kernel_equivalence: Option<KernelEquivalenceOracle>,
+}
+
+/// Answers "does the engine that owns this language declare kernel equivalence for it?",
+/// built from the resolution's ownership map and the engine registry.
+#[derive(Clone)]
+pub struct KernelEquivalenceOracle(Arc<dyn Fn(&str) -> Option<bool> + Send + Sync>);
+
+impl KernelEquivalenceOracle {
+    pub fn new(f: impl Fn(&str) -> Option<bool> + Send + Sync + 'static) -> Self {
+        Self(Arc::new(f))
+    }
+
+    /// Owner lookup is case-insensitive (as [`SourceInputs::owner_of`]); the declaration is
+    /// asked about the unit's own token, so an engine that compares exactly sees it as written.
+    pub fn from_registry(
+        ownership: std::collections::BTreeMap<String, String>,
+        registry: Arc<crate::engine::EngineRegistry>,
+    ) -> Self {
+        Self::new(move |lang| {
+            let owner = ownership
+                .get(lang)
+                .or_else(|| ownership.get(&lang.to_ascii_lowercase()))?;
+            registry.get(owner)?.kernel_equivalence(lang)
+        })
+    }
+
+    pub fn declared(&self, lang: &str) -> Option<bool> {
+        (self.0)(lang)
+    }
+}
+
+impl std::fmt::Debug for KernelEquivalenceOracle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("KernelEquivalenceOracle(..)")
+    }
+}
+
+impl SourceInputs {
+    /// The engine that owns `lang`, case-insensitively; empty when nobody does (or when
+    /// ownership was not requested), which no gate admits.
+    pub fn owner_of(&self, lang: &str) -> String {
+        let Some(map) = &self.ownership else {
+            return String::new();
+        };
+        map.get(lang)
+            .or_else(|| map.get(&lang.to_ascii_lowercase()))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// The kernel-equivalence declaration of `lang`'s owner; `None` when undeclared, unowned,
+    /// or not requested, which no gate admits.
+    pub fn kernel_equivalent(&self, lang: &str) -> Option<bool> {
+        self.kernel_equivalence.as_ref()?.declared(lang)
+    }
+}
+
+/// What [`compute_source_inputs_with`] adds to the default run.
+#[derive(Default, Clone)]
+pub struct SourceInputsOptions {
+    /// Also resolve the document's engines and return the language ownership map.
+    pub ownership: bool,
+    /// Replace the project's engine registry for the resolution (tests; the preview and the
+    /// provider pass `None` and use the project's discovered registry, which is what a real
+    /// run uses). It reaches the resolution through `StageContext::registry`.
+    pub registry: Option<Arc<crate::engine::EngineRegistry>>,
+    /// The format the metadata is merged for. `None` is the preview's `q2-preview` pseudo-format.
+    /// A render passes its own (`html`): an engine whose hash declaration counts the `format` key
+    /// (Julia's does) otherwise sees `q2-preview` here and `html` in the record it wrote, and
+    /// every one of its records reads as stale (OPR-6).
+    pub format: Option<String>,
 }
 
 /// [`compute_input_qmd`] plus the merged metadata, from one pre-engine run.
@@ -288,16 +379,31 @@ pub async fn compute_source_inputs(
     project: &ProjectContext,
     runtime: Arc<dyn SystemRuntime>,
 ) -> Result<SourceInputs, PipelineError> {
+    compute_source_inputs_with(path, project, runtime, SourceInputsOptions::default()).await
+}
+
+/// [`compute_source_inputs`] with options (RIU-3a): the language ownership map and a registry
+/// override.
+pub async fn compute_source_inputs_with(
+    path: &std::path::Path,
+    project: &ProjectContext,
+    runtime: Arc<dyn SystemRuntime>,
+    options: SourceInputsOptions,
+) -> Result<SourceInputs, PipelineError> {
     let content = runtime
         .file_read(path)
         .map_err(|e| PipelineError::other(format!("Failed to read {}: {}", path.display(), e)))?;
 
     let document = DocumentInfo::from_path(path);
-    let format = Format::from_format_string("q2-preview").map_err(|e| {
-        PipelineError::other(format!("Failed to construct q2-preview format: {}", e))
+    let format_name = options.format.as_deref().unwrap_or("q2-preview");
+    let format = Format::from_format_string(format_name).map_err(|e| {
+        PipelineError::other(format!("Failed to construct {format_name} format: {e}"))
     })?;
 
     let mut ctx = StageContext::new(runtime, format, project.clone(), document)?;
+    if let Some(registry) = options.registry {
+        ctx.registry = registry;
+    }
 
     let stages = build_pre_engine_pipeline_stages();
     let pipeline = Pipeline::new(stages).expect("pre-engine pipeline stages should be compatible");
@@ -320,6 +426,23 @@ pub async fn compute_source_inputs(
         _ => std::collections::BTreeMap::new(),
     };
 
+    // The owner of each language, resolved on the parsed document before it is masked, exactly
+    // as `EngineExecutionStage` resolves it. Resolution may load extension engines but never
+    // runs a cell.
+    let ownership: Option<std::collections::BTreeMap<String, String>> =
+        options.ownership.then(|| {
+            crate::engine::resolve_engines_for_document(
+                &doc_ast.ast.meta,
+                &doc_ast.ast,
+                &ctx.registry,
+                ctx.claimed_engine_name.as_deref(),
+                Some(crate::engine::DOCUMENT_OWN_FILE_ID),
+            )
+            .ownership
+            .into_iter()
+            .collect()
+        });
+
     // nested-cell-masking (spec § "The engine capture — asymmetric, by
     // necessity" / `compute_input_qmd`'s three-consumer table): these bytes
     // must match what `EngineExecutionStage` hands the engine as
@@ -338,6 +461,10 @@ pub async fn compute_source_inputs(
         input_qmd: buf,
         metadata,
         sugared_blocks: std::mem::take(&mut ctx.sugared_blocks),
+        kernel_equivalence: ownership
+            .clone()
+            .map(|o| KernelEquivalenceOracle::from_registry(o, Arc::clone(&ctx.registry))),
+        ownership,
     })
 }
 
@@ -345,6 +472,45 @@ pub async fn compute_source_inputs(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    /// A run has content when it has captures or a record that describes something. An import
+    /// has the second and never the first.
+    #[test]
+    fn a_run_has_content_with_captures_or_a_record_that_describes_something() {
+        let record =
+            crate::record::read_record(include_str!("../../tests/fixtures/records/basic.json"))
+                .unwrap();
+        let mut nothing = record.clone();
+        nothing.metadata.quarto_engines.clear();
+        nothing.cells.clear();
+        let capture: EngineCapture = serde_json::from_value(serde_json::json!({
+            "engine_name": "jupyter", "input_qmd": "x", "result": {}
+        }))
+        .unwrap();
+
+        assert!(!CaptureRun::default().has_content());
+        assert!(
+            !CaptureRun {
+                captures: Vec::new(),
+                record: Some(nothing.clone())
+            }
+            .has_content()
+        );
+        assert!(
+            CaptureRun {
+                captures: Vec::new(),
+                record: Some(record.clone())
+            }
+            .has_content()
+        );
+        assert!(
+            CaptureRun {
+                captures: vec![capture],
+                record: Some(nothing)
+            }
+            .has_content()
+        );
+    }
 
     use quarto_system_runtime::NativeRuntime;
     use tempfile::TempDir;
@@ -401,6 +567,41 @@ mod tests {
         let project = ProjectContext::discover(&qmd_path, runtime.as_ref())
             .expect("discover single-file project");
         (dir, qmd_path, project, runtime)
+    }
+
+    /// OPR-6: the staleness inputs are merged for the format the caller names, so an engine whose
+    /// hash declaration counts the `format` key sees what the record writer saw, not
+    /// `q2-preview`.
+    #[tokio::test]
+    async fn source_inputs_merge_metadata_for_the_requested_format() {
+        let (_tmp, path, project, runtime) = fixture("---\ntitle: T\n---\n\nprose\n");
+        let format_of = |format: Option<&str>| {
+            let project = project.clone();
+            let runtime = runtime.clone();
+            let path = path.clone();
+            let format = format.map(str::to_string);
+            async move {
+                compute_source_inputs_with(
+                    &path,
+                    &project,
+                    runtime,
+                    SourceInputsOptions {
+                        format,
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap()
+                .metadata
+                .get("format")
+                .cloned()
+            }
+        };
+        assert_eq!(format_of(None).await, Some(serde_json::json!("q2-preview")));
+        assert_eq!(
+            format_of(Some("html")).await,
+            Some(serde_json::json!("html"))
+        );
     }
 
     #[tokio::test]

@@ -1,0 +1,52 @@
+---
+title: "Inline Reference Ignored By Typst"
+description: "A cited key is defined in both front-matter references: and a bibliography: file; Typst uses the file's entry."
+code: Q-21-6
+subsystem: typst
+status: stub
+since: "99.9.9"
+categories:
+  - typst
+---
+
+# `Q-21-6` — Inline Reference Ignored By Typst
+
+> A cited key is defined both in the front-matter `references:` list
+> and in a `bibliography:` file. Typst uses the entry from the file and
+> ignores the inline one.
+
+## What this means
+
+By default, Typst output formats citations with Typst's own
+bibliography, which reads only the files listed in `bibliography:`. When
+the same key is also defined under `references:` in the front matter,
+that inline entry has no effect on the output. The render still
+completes, using the entry from the bibliography file.
+
+## Why this happens
+
+The document defines an entry twice, for example while moving
+references from front matter into a `.bib` file:
+
+``` yaml
+---
+format: typst
+bibliography: refs.bib   # also defines smith2020
+references:
+  - id: smith2020
+    type: webpage
+    title: A page
+---
+```
+
+## How to fix
+
+Remove one of the two entries so the document matches what Typst
+renders. If you want the inline entry to be used, set `citeproc: true`:
+citeproc then formats the citations and reads both `references:` and
+`bibliography:`.
+
+## Related errors
+
+- [`Q-21-5`](Q-21-5.qmd) — the cited key is defined only in
+  `references:`, so Typst cannot resolve it at all.

@@ -13,6 +13,9 @@ thiserror.workspace = true
 tracing.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
+# Reads the entry keys of BibLaTeX `bibliography:` files (typst_citations;
+# same crate and version as pampa's citeproc).
+biblatex = "0.12"
 async-trait.workspace = true
 tokio-util.workspace = true
 pollster.workspace = true

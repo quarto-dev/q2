@@ -85,6 +85,12 @@ enum Commands {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    // Same color policy as `q2` (bd-be8ve52f), decided once up front.
+    // `colored` has a single process-wide switch, so it follows stdout,
+    // where most of this tool's colored output goes.
+    let style = quarto_util::output_style::init(quarto_util::output_style::ColorFlag::Auto);
+    colored::control::set_override(style.stdout.color);
     let registry = RuleRegistry::new()?;
 
     match cli.command {

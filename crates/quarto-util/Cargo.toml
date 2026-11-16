@@ -8,6 +8,8 @@ repository.workspace = true
 description = "Shared utilities for Quarto"
 
 [dependencies]
+anstyle-query = "1.1"
+supports-hyperlinks = "3.2"
 dirs = "6"
 thiserror.workspace = true
 serde.workspace = true

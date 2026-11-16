@@ -1,0 +1,7 @@
+mixed/uncited: q2=OK q1=OK
+mixed/inboth: q2=OK q1=OK
+mixed/inlineonly: q2=FAIL (label `<item>` does not exist) q1=FAIL (label `<item>` does not exist)
+mixed/nocite: q2=OK q1=OK
+single margin: q2=FAIL (label `<item>` does not exist) q1=FAIL (label `<item>` does not exist)
+book plain: q2=OK q1=FAIL (label `<item>` does not exist)
+book margin: q2=FAIL (label `<item>` does not exist) q1=FAIL (label `<item>` does not exist)

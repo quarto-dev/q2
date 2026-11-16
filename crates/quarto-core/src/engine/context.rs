@@ -74,8 +74,10 @@ pub struct ExecutionContext {
 
     /// Working directory for execution.
     ///
-    /// This is typically the directory containing the source document,
-    /// so relative paths in code cells resolve correctly.
+    /// The render pipeline sets this to the directory containing the source
+    /// document, or to the project root under `project: execute-dir:
+    /// project` (see `resolve_execute_dir` in the engine-execution stage),
+    /// so relative paths in code cells resolve as in Quarto 1.
     pub cwd: PathBuf,
 
     /// Project directory, if rendering within a Quarto project.
@@ -213,6 +215,16 @@ pub struct ExecutionContext {
     /// only because spawn sites apply them with `Command::env`.
     pub project_env: Vec<(String, String)>,
 
+    /// The per-document execute environment Quarto 1 gives code cells
+    /// (`QUARTO_PROJECT_ROOT`, `QUARTO_DOCUMENT_PATH`,
+    /// `QUARTO_DOCUMENT_FILE`, `QUARTO_EXECUTE_INFO`, `QUARTO_FIG_*`; see
+    /// `engine::execute_info`, GH #1131). Unlike [`Self::project_env`]
+    /// these values change from one render to the next, so an engine
+    /// whose process outlives a render (a Jupyter kernel `q2 preview`
+    /// keeps warm) must set them per render, not at spawn. Empty when no
+    /// stage ran.
+    pub execute_env: Vec<(String, String)>,
+
     /// The document's execution units from the one shared scan
     /// (`engine::units::scan_units`), run by `EngineExecutionStage` before any
     /// engine. The list is shared: every engine receives the same one and
@@ -233,9 +245,18 @@ pub struct ExecutionContext {
     /// Whether the engine should build an execution record as a side product
     /// of this run (EXR-5). Set by `EngineExecutionStage` from
     /// `PipelineObserver::wants_execution_record` or from
-    /// `execute: {record: true}` in the merged metadata; a plain render leaves
-    /// it `false` and the engine allocates nothing for the record.
+    /// `execute: {record: true}` in the merged metadata. A plain render leaves it `false`, but
+    /// since OPR-9g the engine still builds the record in memory (see
+    /// [`present_from_record`](Self::present_from_record)); it just serializes and writes nothing.
     pub want_record: bool,
+
+    /// Whether core will present this document from the engine's record (OPR-7a). Unlike
+    /// [`want_record`](Self::want_record) it asks for nothing to be serialized, emitted or
+    /// written: engines build the record in memory (see [`builds_record`](Self::builds_record))
+    /// and core presents from it when the engine acknowledges the offer. Internal control,
+    /// `true` in the render pipelines since OPR-9g (the stage default); `false` in a bare
+    /// `ExecutionContext`.
+    pub present_from_record: bool,
 }
 
 impl ExecutionContext {
@@ -273,9 +294,11 @@ impl ExecutionContext {
             // document metadata (P1.1b).
             metadata: HashMap::new(),
             project_env: Vec::new(),
+            execute_env: Vec::new(),
             units: Vec::new(),
             author_texts: crate::record::AuthorTexts::default(),
             want_record: false,
+            present_from_record: false,
         }
     }
 
@@ -289,6 +312,18 @@ impl ExecutionContext {
     pub fn with_want_record(mut self, want: bool) -> Self {
         self.want_record = want;
         self
+    }
+
+    /// Present from the engine's record (see [`ExecutionContext::present_from_record`]).
+    pub fn with_present_from_record(mut self, present: bool) -> Self {
+        self.present_from_record = present;
+        self
+    }
+
+    /// Whether engines build a record in memory this run: someone wants one, or core will
+    /// present from it.
+    pub fn builds_record(&self) -> bool {
+        self.want_record || self.present_from_record
     }
 
     /// The merged document metadata as JSON, the shape the record's document hash
@@ -312,6 +347,13 @@ impl ExecutionContext {
     /// [`crate::project::environment::env_for_subprocess`]).
     pub fn with_project_env(mut self, project_env: Vec<(String, String)>) -> Self {
         self.project_env = project_env;
+        self
+    }
+
+    /// Set the per-document execute environment (see
+    /// [`ExecutionContext::execute_env`]).
+    pub fn with_execute_env(mut self, execute_env: Vec<(String, String)>) -> Self {
+        self.execute_env = execute_env;
         self
     }
 
@@ -510,6 +552,13 @@ pub struct ExecuteResult {
     /// record through its own `engine_capture.record` field instead).
     #[serde(skip)]
     pub record: Option<crate::record::EngineRecord>,
+
+    /// Page dependencies core derived from the record at present time (OPR-7i): head text for
+    /// an engine whose entry carries a dependency-data label. Never stored: the stage drains it
+    /// into the page's header includes after the record's side data is folded, and a replay or
+    /// a splice derives it again. Skipped by serde so it stays out of the trace capture.
+    #[serde(skip)]
+    pub derived_header_includes: Vec<String>,
 
     /// KNR-6: the skeleton a whole-document engine built the document around, with the nonce
     /// its markers carry. `markdown` holds the final presented text; replay presents the

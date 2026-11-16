@@ -1604,7 +1604,7 @@ impl CommentCollector {
         text: String,
         source: &quarto_source_map::SourceInfo,
     ) {
-        let (_, _, kvs) = attr;
+        let (_, _, kvs) = &**attr;
         let mut author = None;
         let mut date = None;
         let mut attributes = Vec::new();

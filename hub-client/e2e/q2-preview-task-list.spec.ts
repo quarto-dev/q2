@@ -1,5 +1,5 @@
 /**
- * q2-preview task-list layout (bd-qif9l4cx).
+ * q2-preview task-list layout (bd-qif9l4cx, GH #892 / bd-2ydvebkc).
  *
  * Reported 2026-09-10 on quarto-hub.com: a `- [x] item` rendered its
  * checkbox alone on one line with the item text on the next. The cause was
@@ -10,6 +10,12 @@
  * descendants, but jsdom has no layout: only a real browser can prove the
  * checkbox and its text share a line box. This spec is that proof, on the
  * surface the bug was reported on (hub-client's q2-preview iframe).
+ *
+ * GH #892 added the marker half: a task item's checkbox replaces its list
+ * marker (per item, via `li.task-list-item`), hanging into the marker's
+ * gutter so the item text starts at the `<li>`'s content edge, while plain
+ * siblings in a mixed list keep their bullets. That is computed style +
+ * geometry, so it is also asserted here.
  *
  * One document carries the three list shapes the fix covers:
  *   - the reporter's nested list mixing plain items with one `[x]` item;
@@ -72,6 +78,18 @@ interface CheckboxFacts {
      * client rect of the text that follows it (both viewport-relative). */
     textOffsetY: number;
     inputHeight: number;
+    /** Computed `list-style-type` of the item's `<li>`. */
+    liListStyle: string;
+    /** `class` of the item's `<li>`. */
+    liClass: string | null;
+    /** Input's left edge minus the `<li>`'s left edge (negative = hung
+     * into the marker gutter). */
+    inputLeftInLi: number;
+    /** Text's left edge minus the `<li>`'s left edge (≈ 0 when the hung
+     * checkbox exactly fills its gutter). */
+    textLeftInLi: number;
+    /** Computed `list-style-type` of every plain (non-task) sibling `<li>`. */
+    plainSiblingListStyles: string[];
 }
 
 async function openDoc(page: Page): Promise<void> {
@@ -107,6 +125,10 @@ async function collectCheckboxFacts(page: Page): Promise<CheckboxFacts[]> {
             range.selectNodeContents(textNode ?? label);
             const textRect = range.getClientRects()[0] ?? range.getBoundingClientRect();
             const inputRect = input.getBoundingClientRect();
+            const liRect = li.getBoundingClientRect();
+            const plainSiblingListStyles = Array.from(li.parentElement!.children)
+                .filter((sib) => sib !== li && !sib.classList.contains('task-list-item'))
+                .map((sib) => getComputedStyle(sib).listStyleType);
             return {
                 text: label.textContent ?? '',
                 checked: input.checked,
@@ -115,6 +137,11 @@ async function collectCheckboxFacts(page: Page): Promise<CheckboxFacts[]> {
                 blockInsideLabel: label.querySelector('div, p, ul, ol') !== null,
                 textOffsetY: Math.abs(textRect.top - inputRect.top),
                 inputHeight: inputRect.height,
+                liListStyle: getComputedStyle(li).listStyleType,
+                liClass: li.getAttribute('class'),
+                inputLeftInLi: inputRect.left - liRect.left,
+                textLeftInLi: textRect.left - liRect.left,
+                plainSiblingListStyles,
             };
         }),
     );
@@ -158,5 +185,21 @@ test.describe('q2-preview task lists', () => {
         expect(facts[3].ancestors).toContain('p');
         expect(facts[4].ancestors).toContain('p');
         expect(facts[1].ancestors).not.toContain('p');
+
+        // GH #892: the checkbox replaces the bullet, per item. Every task
+        // <li> drops its marker and hangs the checkbox into the gutter; the
+        // item text then starts at the <li>'s content edge, where a plain
+        // item's text would.
+        for (const f of facts) {
+            expect(f.liClass, `${f.text}: li class`).toBe('task-list-item');
+            expect(f.liListStyle, `${f.text}: li list-style-type`).toBe('none');
+            expect(f.inputLeftInLi, `${f.text}: checkbox hangs into the gutter`).toBeLessThan(0);
+            expect(Math.abs(f.textLeftInLi), `${f.text}: text at the li content edge`).toBeLessThan(2);
+        }
+        // ...while the mixed list's plain siblings keep their bullets.
+        expect(facts[0].plainSiblingListStyles.length).toBe(2);
+        for (const style of facts[0].plainSiblingListStyles) {
+            expect(style).not.toBe('none');
+        }
     });
 });

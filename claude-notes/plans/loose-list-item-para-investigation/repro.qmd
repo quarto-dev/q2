@@ -1,0 +1,29 @@
+## Loose
+
+- a
+
+- b
+
+## Mixed
+
+- a
+
+  second
+- b
+
+## Loose ordered
+
+1. one
+
+2. two
+
+## Loose task list
+
+- [ ] loose one
+
+- [x] loose two
+
+## Tight
+
+- a
+- b

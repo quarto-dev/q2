@@ -136,6 +136,17 @@ interface PreviewProps {
    */
   attributionOn: boolean;
   /**
+   * Replay: change hashes of the history step that `content` shows.
+   * `useAttribution` then builds for that step instead of the live heads,
+   * whose run offsets belong to a different text. Null outside replay.
+   */
+  attributionHeads?: string[] | null;
+  /**
+   * The active local branch when `content` is that branch's text.
+   * `useAttribution` then reads the branch's doc instead of the synced one.
+   */
+  attributionBranchId?: string | null;
+  /**
    * Comment-bubble display mode (three-way toggle in the replay bar:
    * expand / show / hide). Forwarded into the q2-preview iframe.
    * Absent ⇒ 'show'.
@@ -239,6 +250,7 @@ async function doRender(
     // pipeline splices the recorded engine output into the AST. `undefined`
     // renders code cells as source.
     captureGzJson?: Uint8Array;
+    captureUntransformedAst: boolean;
   }
 ): Promise<RenderResult> {
   if (!isWasmReady()) {
@@ -282,6 +294,7 @@ async function doRender(
       options.attributionJson,
       options.captureGzJson,
       true,
+      { captureUntransformedAst: options.captureUntransformedAst },
     );
     const allDiagnostics: Diagnostic[] = [
       ...(result.diagnostics ?? []),
@@ -465,6 +478,10 @@ export function CommitStatusBulb({
   );
 }
 
+// One object for "no identities": a fresh `{}` per render would re-run the
+// attribution effects, which set state, on every render.
+const NO_IDENTITIES: Record<string, ActorIdentity> = {};
+
 export default function ReactPreview({
   content,
   currentFile,
@@ -487,6 +504,8 @@ export default function ReactPreview({
   identities,
   captures,
   attributionOn,
+  attributionHeads,
+  attributionBranchId,
   commentsMode,
   onAttributionGeneratingChange,
 }: PreviewProps) {
@@ -497,10 +516,10 @@ export default function ReactPreview({
   // overlay itself is package-internal in @quarto/preview-renderer and
   // takes the value via props (controlled component).
   const [errorOverlayCollapsed, setErrorOverlayCollapsed] = usePreference('errorOverlayCollapsed');
-  // P3.2: nesting-cursor mode preference (default-ON). When true, the
-  // nestedEditBuffers memo below calls regenerateNestedBuffers to produce
-  // a per-siKey clean QMD buffer table; when off, that WASM pass is
-  // completely unreachable.
+  // P3.2: nesting-cursor mode preference (default-ON). With editing enabled,
+  // the nestedEditBuffers memo below calls regenerateNestedBuffers to produce
+  // a per-siKey clean QMD buffer table; read mode or nesting-off skips that
+  // WASM pass completely.
   const [unlockNestingCursor] = usePreference('unlockNestingCursor');
   // bd-j1nto6eq: rich-text editor preference (default-ON), forwarded to the
   // q2-preview iframe so editable paragraphs/headings open the tiptap editor
@@ -531,17 +550,17 @@ export default function ReactPreview({
   // P3.2: gated nested buffer table. Delegates to computeNestedEditBuffers
   // (the exported pure helper) so the gating logic has a single testable
   // source of truth. Returns EMPTY_NESTED_BUFFERS (a module-level constant)
-  // when unlockNestingCursor is off or either render input is missing, keeping
-  // the iframe effect dep referentially stable across renders.
+  // in read mode, when unlockNestingCursor is off, or when either render input
+  // is missing, keeping the iframe effect dep referentially stable across renders.
   const nestedEditBuffers = useMemo(
     () =>
       computeNestedEditBuffers(
-        unlockNestingCursor ?? true,
+        previewEditing && (unlockNestingCursor ?? true),
         rendered.renderedContent,
         rendered.untransformedAstJson,
         regenerateNestedBuffers,
       ),
-    [unlockNestingCursor, rendered.renderedContent, rendered.untransformedAstJson],
+    [previewEditing, unlockNestingCursor, rendered.renderedContent, rendered.untransformedAstJson],
   );
 
   // Scroll sync (editor ↔ preview). Mirrors `Preview.tsx`: the q2-preview
@@ -606,13 +625,18 @@ export default function ReactPreview({
   // table threaded down from `Editor.tsx`; missing entries fall back
   // to the hook's `(actor.slice(0, 8), actorColor(fnv1aHex8(actor)))`
   // so the Phase 6 producer invariant always holds.
-  const { payload: attributionPayload, generating: attributionGenerating } =
-    useAttribution({
-      enabled: attributionOn,
-      filePath: currentFile?.path ?? null,
-      sourceText: content,
-      identities: identities ?? {},
-    });
+  const {
+    payload: attributionPayload,
+    generating: attributionGenerating,
+    pending: attributionPending,
+  } = useAttribution({
+    enabled: attributionOn,
+    filePath: currentFile?.path ?? null,
+    sourceText: content,
+    identities: identities ?? NO_IDENTITIES,
+    atHeads: attributionHeads,
+    branchId: attributionBranchId,
+  });
 
   // Surface the hook's generating flag to the Attribution pill in the
   // replay bar. Cleanup emits `false` on unmount so switching to a
@@ -717,6 +741,7 @@ export default function ReactPreview({
         format,
         attributionJson: attributionPayload,
         captureGzJson: captureBytes,
+        captureUntransformedAst: previewEditing || (commentsMode ?? 'show') !== 'hide',
       });
     } catch (err) {
       // bd-r8iqmg2f: a render a newer edit superseded while it was still
@@ -788,7 +813,7 @@ export default function ReactPreview({
         setPreviewState('ERROR_FROM_GOOD');
       }
     }
-  }, [scrollSyncEnabled, onDiagnosticsChange, onCommentsChange, onAstChange, format, attributionPayload, captureBytes]);
+  }, [scrollSyncEnabled, onDiagnosticsChange, onCommentsChange, onAstChange, format, attributionPayload, captureBytes, previewEditing, commentsMode]);
 
   // Immediate render update (no debounce)
   const updatePreview = useCallback((newContent: string, documentPath?: string) => {
@@ -815,6 +840,10 @@ export default function ReactPreview({
   // stale result of the one render that was in flight — so a burst
   // settles on the latest content.
   useEffect(() => {
+    // Authors overlay on, replay seek: wait for the step's attribution, so
+    // it is drawn once and never with the runs of another text. The effect
+    // runs again when `attributionPending` clears.
+    if (attributionPending) return;
     const fxT0 = perfNow();
     // Pass document path as-is from Automerge (e.g., "index.qmd" or "docs/index.qmd").
     updatePreview(content, currentFile?.path);
@@ -827,6 +856,7 @@ export default function ReactPreview({
     currentFile?.path,
     onDiagnosticsChange,
     attributionPayload,
+    attributionPending,
     captureBytes,
   ]);
 

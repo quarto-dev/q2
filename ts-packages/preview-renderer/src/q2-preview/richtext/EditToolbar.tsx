@@ -16,12 +16,12 @@
 // input DOES take focus; the editor's commit is scoped to "focus left the whole
 // edit box" (see RichTextEditor), so focusing the input keeps the session open.
 //
-// Comment-on-selection (💬, rich surface only — span comments prototype, see
+// Comment-on-selection (comment icon, rich surface only — span comments prototype, see
 // custom/CommentSpan.tsx): applies the editable `span` mark to the selection
 // (serializes as `[selected text]`), commits the block, and opens the span's
 // add-comment bubble in the rendered view.
 
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { getMarkRange, type Editor } from '@tiptap/core';
 import { shouldPlaceChromeBelow } from '../editChromeGeometry';
 import { ensureRichTextStyles } from './styles';
@@ -30,20 +30,22 @@ import { editorialAvailability } from './editorialSelection';
 import { requestOpenCommentOnSpan } from '../commentPending';
 import { ModeToggle } from './ModeToggle';
 import { EditTypeIndicator } from './EditTypeIndicator';
+import { BoldIcon, CommentIcon, DeleteIcon, HighlightIcon, InsertIcon, ItalicIcon, LinkIcon, StrikeIcon } from './ToolbarIcons';
 
 /** Gap (px) between the toolbar and the edit box, matching the CSS margin. */
 const TOOLBAR_GAP = 4;
 
 interface MarkSpec {
   name: string;
-  label: string;
+  /** SVG icon (bold/italic/strike) or text glyph (sub/superscript). */
+  label: ReactNode;
   title: string;
 }
 
 const MARKS: MarkSpec[] = [
-  { name: 'bold', label: 'B', title: 'Bold (⌘B)' },
-  { name: 'italic', label: 'I', title: 'Italic (⌘I)' },
-  { name: 'strike', label: 'S', title: 'Strikethrough' },
+  { name: 'bold', label: <BoldIcon />, title: 'Bold (⌘B)' },
+  { name: 'italic', label: <ItalicIcon />, title: 'Italic (⌘I)' },
+  { name: 'strike', label: <StrikeIcon />, title: 'Strikethrough' },
   { name: 'subscript', label: 'x₂', title: 'Subscript' },
   { name: 'superscript', label: 'x²', title: 'Superscript' },
 ];
@@ -247,9 +249,9 @@ export function EditToolbar({
 
   const editorialButtons = (
     [
-      { sigil: '!!', kind: 'highlight', title: 'Highlight selection', label: '!!' },
-      { sigil: '--', kind: 'delete', title: 'Mark selection as deleted', label: '--' },
-      { sigil: '++', kind: 'insert', title: 'Mark selection as inserted', label: '++' },
+      { sigil: '!!', kind: 'highlight', title: 'Highlight selection', icon: <HighlightIcon /> },
+      { sigil: '--', kind: 'delete', title: 'Mark selection as deleted', icon: <DeleteIcon /> },
+      { sigil: '++', kind: 'insert', title: 'Mark selection as inserted', icon: <InsertIcon /> },
     ] as const
   ).map((b) => {
     const removing = avail.mode === 'remove' && avail.kind === b.kind;
@@ -259,13 +261,14 @@ export function EditToolbar({
         key={b.sigil}
         type="button"
         title={removing ? `Remove ${b.kind} mark` : b.title}
+        aria-label={removing ? `Remove ${b.kind} mark` : b.title}
         disabled={!enabled}
         aria-pressed={removing}
         className={`q2-rt-tb-btn q2-rt-tb-${b.kind}${removing ? ' q2-rt-tb-active' : ''}`}
         onMouseDown={(e) => e.preventDefault()}
         onMouseUp={applyEditorialMark(b.kind)}
       >
-        {b.label}
+        {b.icon}
       </button>
     );
   });
@@ -274,6 +277,7 @@ export function EditToolbar({
     <button
       type="button"
       title="Comment on selection"
+      aria-label="Comment on selection"
       className="q2-rt-tb-btn q2-rt-tb-comment"
       // mousedown only keeps the editor's focus + selection (as every toolbar
       // button does); the action itself runs on mouse-up, so the wrap + commit
@@ -281,7 +285,7 @@ export function EditToolbar({
       onMouseDown={(e) => e.preventDefault()}
       onMouseUp={startComment}
     >
-      💬
+      <CommentIcon />
     </button>
   );
 
@@ -301,6 +305,7 @@ export function EditToolbar({
               key={m.name}
               type="button"
               title={m.title}
+              aria-label={m.title}
               aria-pressed={editor.isActive(m.name)}
               className={`q2-rt-tb-btn q2-rt-tb-${m.name}${editor.isActive(m.name) ? ' q2-rt-tb-active' : ''}`}
               onMouseDown={toggleMark(m.name)}
@@ -312,11 +317,12 @@ export function EditToolbar({
           <button
             type="button"
             title="Link"
+            aria-label="Link"
             aria-pressed={editor.isActive('link')}
             className={`q2-rt-tb-btn q2-rt-tb-link${editor.isActive('link') ? ' q2-rt-tb-active' : ''}`}
             onMouseDown={openLinkEditor}
           >
-            🔗
+            <LinkIcon />
           </button>
           {commentButton}
           {editorialButtons}

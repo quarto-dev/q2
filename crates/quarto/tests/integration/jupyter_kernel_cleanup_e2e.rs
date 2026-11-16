@@ -13,9 +13,9 @@
 //! removed.
 //!
 //! The project fixture has TWO python documents in the same directory
-//! on purpose: they share a daemon session key, and the render-scoped
-//! kernel scope must keep the kernel warm across documents (exactly
-//! one kernel observed) while still shutting it down at the end.
+//! on purpose: each document runs on its own kernel (bd-i7yz08uh — before
+//! that fix they shared one), so exactly two kernels are observed, and
+//! both must be shut down by the time the render exits.
 //!
 //! Skips when the jupyter engine isn't installed — same gating as the
 //! quarto-core engine tests — or when no `python3` kernelspec is
@@ -27,7 +27,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-fn jupyter_available() -> bool {
+pub(crate) fn jupyter_available() -> bool {
     quarto_core::engine::EngineRegistry::default()
         .get("jupyter")
         .is_some_and(|e| e.is_available())
@@ -39,7 +39,7 @@ fn jupyter_available() -> bool {
 /// skip, not fail (bd-ce4fftg8); any other discovery error fails the
 /// test. The error message names the kernel, the searched dirs, and
 /// the kernels that *were* found.
-fn python3_kernel_available() -> bool {
+pub(crate) fn python3_kernel_available() -> bool {
     // find_kernelspec is async and runtimelib's `jupyter --paths`
     // probe needs a Tokio reactor; pollster provides none. This test
     // is deliberately not #[tokio::test], so build a short-lived
@@ -202,30 +202,30 @@ fn render_leaves_no_kernel_behind() {
         assert!(html.contains(needle), "{doc} contains executed output");
     }
 
-    // The render-scoped kernel pool keeps one kernel warm across the
-    // two documents (same kernel + working dir → same session); more
-    // than one observed kernel means per-document restarts crept in.
+    // bd-i7yz08uh: one kernel per document, never one shared by the
+    // two documents (which let their cells and globals mix).
     assert_eq!(
         observed.len(),
-        1,
-        "expected the two python docs to share one kernel, observed: {observed:?}"
+        2,
+        "expected one kernel per python document, observed: {observed:?}"
     );
 
-    // bd-hxhnnlzs: after the q2 process exits, the kernel must be dead
+    // bd-hxhnnlzs: after the q2 process exits, every kernel must be dead
     // and its connection file removed.
-    let kernel = &observed[0];
-    for (label, port) in [
-        ("shell", kernel.shell_port),
-        ("control", kernel.control_port),
-    ] {
-        assert!(
-            eventually(Duration::from_secs(5), || !port_is_open(port)),
-            "kernel {} still listening on {} port {} after q2 render exited — \
+    for kernel in &observed {
+        for (label, port) in [
+            ("shell", kernel.shell_port),
+            ("control", kernel.control_port),
+        ] {
+            assert!(
+                eventually(Duration::from_secs(5), || !port_is_open(port)),
+                "kernel {} still listening on {} port {} after q2 render exited — \
              the kernel process leaked (bd-hxhnnlzs)",
-            kernel.file_name,
-            label,
-            port,
-        );
+                kernel.file_name,
+                label,
+                port,
+            );
+        }
     }
     assert!(
         eventually(Duration::from_secs(5), || {

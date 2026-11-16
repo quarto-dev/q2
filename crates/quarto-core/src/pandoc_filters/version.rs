@@ -138,10 +138,10 @@ mod tests {
         let err = gate(Some("3.8.3")).expect_err("3.8.3 is below the floor");
         assert_eq!(err.code.as_deref(), Some("Q-20-2"));
 
-        let err = gate(Some("3.11")).expect_err("3.11 is below the 3.12 floor");
+        let err = gate(Some("3.12.1")).expect_err("3.12.1 is below the 3.13 floor");
         assert_eq!(err.code.as_deref(), Some("Q-20-2"));
 
-        assert!(gate(Some("3.12")).is_ok());
+        assert!(gate(Some("3.13")).is_ok());
         assert!(gate(Some(PANDOC_PIN)).is_ok());
     }
 

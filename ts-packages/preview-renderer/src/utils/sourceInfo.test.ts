@@ -91,6 +91,13 @@ describe('ATOMIC_KINDS', () => {
         expect(ATOMIC_KINDS.has('tree-sitter-postprocess')).toBe(true);
     });
 
+    test('contains the kinds the Rust side added after Plan 4', () => {
+        // `jupyter-output` marks spliced record output (RIU-3b); `citeproc` was already
+        // atomic in `By::is_atomic_kind` and missing here.
+        expect(ATOMIC_KINDS.has('jupyter-output')).toBe(true);
+        expect(ATOMIC_KINDS.has('citeproc')).toBe(true);
+    });
+
     test('excludes known non-atomic kinds', () => {
         expect(ATOMIC_KINDS.has('sectionize')).toBe(false);
         expect(ATOMIC_KINDS.has('user-edit')).toBe(false);

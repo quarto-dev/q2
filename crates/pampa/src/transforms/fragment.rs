@@ -172,7 +172,7 @@ pub fn strip_derived_heading_ids(blocks: Blocks) -> Blocks {
             if header.attr_source.id.is_none() && !header.attr.0.is_empty() {
                 header.attr.0.clear();
                 // A heading holds no headings; nothing below needs this pass.
-                return FilterReturn::FilterResult(vec![Block::Header(header)], false);
+                return FilterReturn::FilterResult(vec![Block::Header(Box::new(header))], false);
             }
             FilterReturn::Unchanged(header)
         }),

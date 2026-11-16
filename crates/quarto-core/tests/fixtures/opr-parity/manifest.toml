@@ -1,0 +1,352 @@
+# OPR-0b: the plan's own parity corpus. The existing knitr corpus (tests/fixtures/knitr-corpus) is run
+# by the harness too and is not listed here.
+#
+# requires: tools a document needs: r, julia, plots (Julia Plots in the default environment), uv.
+# pending:  a plan after which the expected result changes (the case is still measured).
+# renders:  2 renders each side in one scratch directory, so a cache miss and then a hit are both covered.
+
+[[document]]
+name = "julia/fig-png-bare"
+dir = "julia/fig-png-bare"
+file = "doc.qmd"
+requires = ["julia", "plots"]
+formats = ["html"]
+note = "two cells that display only the PNG, the second labeled, after a prose block (OPR-0c: file names and the cell-output class)"
+
+[[document]]
+name = "julia/fig-subcap"
+dir = "julia/fig-subcap"
+file = "doc.qmd"
+requires = ["julia", "plots"]
+formats = ["html", "typst", "revealjs"]
+note = "a fig-subcap group with layout-ncol 2 plus references to the group and each member (OPR-7j: the presenter writes the group caption and panel ids; only interleaving differs)"
+
+[[document]]
+name = "julia/fig-subcap-gfm"
+dir = "julia/fig-subcap-gfm"
+file = "doc.qmd"
+requires = ["julia", "plots"]
+formats = ["gfm"]
+note = "OPR-9e: julia/fig-subcap with echo false on the group cell, to gfm: gfm has no cell wrapper to normalize the interleaved split against, so the group markup is compared without the echoed code (the echoed split is pinned for epub and normalized for html)"
+
+[[document]]
+name = "jupyter/fig-subcap"
+dir = "jupyter/fig-subcap"
+file = "doc.ipynb"
+requires = []
+formats = ["html", "gfm", "typst", "revealjs"]
+note = "the same group case from a stored notebook (bd-gbaykhth)"
+
+[[document]]
+name = "julia/presentation-attrs"
+dir = "julia/presentation-attrs"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "OPR-7f: an unlabeled cell after prose, a labeled figure cell, two figures, a print before a figure and a value; a hardcoded PNG, no Plots. Wrapper id, execution_count, figure file names and the figure output class must agree"
+
+[[document]]
+name = "julia/plot-website"
+dir = "julia/plot-website"
+file = "plot.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "from extensions/julia-website; a hardcoded PNG, no Plots"
+
+[[document]]
+name = "julia/records-plot"
+dir = "julia/records-plot"
+file = "doc.qmd"
+requires = ["julia", "plots"]
+formats = ["html"]
+note = "from records-export/julia-plot.qmd, with record: true removed"
+
+[[document]]
+name = "julia/records-error"
+dir = "julia/records-error"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "from records-export/julia-error.qmd, with record: true removed; error: true"
+
+[[document]]
+name = "julia/positron-cache"
+dir = "julia/positron-cache"
+file = "doc.qmd"
+requires = ["julia", "plots"]
+formats = ["html"]
+note = "from positron-cache/julia.qmd"
+
+[[document]]
+name = "julia/records-in-use"
+dir = "julia/records-in-use"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "from quarto-preview records-in-use/julia.qmd"
+
+[[document]]
+name = "julia/docs-index-chunk"
+dir = "julia/docs-index-chunk"
+file = "doc.qmd"
+requires = ["julia", "plots"]
+formats = ["html"]
+note = "the Julia chunk of docs/index.qmd, as a fixture copy"
+
+[[document]]
+name = "julia/capture-facts"
+dir = "julia/capture-facts"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "OPR-4d: interleaved output, exact prompt, numeric echo and warning: false by kind. The recorded route differs from plain render by design (Julia never interleaved in Quarto 1), so a diff here is the new behavior, not a regression"
+
+[[document]]
+name = "julia/engine-error"
+dir = "julia/engine-error"
+file = "error.qmd"
+requires = ["julia"]
+formats = ["html"]
+expect_failure = true
+note = "the Julia engine's own error document: the render is expected to fail on both routes"
+
+[[document]]
+name = "julia/engine-keep-ipynb"
+dir = "julia/engine-keep-ipynb"
+file = "keep-ipynb.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "engine test doc"
+
+[[document]]
+name = "julia/engine-no-keep-ipynb"
+dir = "julia/engine-keep-ipynb"
+file = "no-keep-ipynb.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "engine test doc"
+
+[[document]]
+name = "julia/engine-source-ranges"
+dir = "julia/engine-source-ranges"
+file = "source-ranges-test.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "engine test doc with an include"
+
+[[document]]
+name = "julia/engine-reordering"
+dir = "julia/engine-reordering"
+file = "notebook.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "engine test doc with a _metadata.yml"
+
+[[document]]
+name = "julia/ansi-output"
+dir = "julia/ansi-output"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "OPR-7g: printstyled to stdout and stderr, then a value; plain and recorded must both carry no ESC byte"
+
+[[document]]
+name = "jupyter/ansi-output"
+dir = "jupyter/ansi-output"
+file = "doc.ipynb"
+requires = []
+formats = ["html"]
+note = "OPR-7g: a stored notebook with colored stdout, stderr, text/plain and a colored traceback"
+
+[[document]]
+name = "julia/engine-sleep"
+dir = "julia/engine-sleep"
+file = "sleep.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "engine test doc"
+
+[[document]]
+name = "knitr/cache-mixed"
+dir = "knitr/cache-mixed"
+file = "doc.qmd"
+requires = ["r"]
+formats = ["html"]
+renders = 2
+note = "two live and two cache: true chunks; rendered twice (miss, then hit); identical on both (OPR-7c, after OPR-7b: cached units use the markdown fallback)"
+
+[[document]]
+name = "knitr/fig-subcap"
+dir = "knitr/fig-subcap"
+file = "doc.qmd"
+requires = ["r"]
+formats = ["html", "gfm", "typst", "revealjs"]
+note = "a fig-subcap group with layout-ncol 2 and references (bd-au5gts6e; identical on both routes)"
+
+[[document]]
+name = "knitr/exec-scope"
+dir = "knitr/exec-scope"
+file = "doc.qmd"
+requires = ["r"]
+formats = ["html"]
+note = "document-scope execute: echo, warning, message"
+
+[[document]]
+name = "knitr/exec-scope-output"
+dir = "knitr/exec-scope-output"
+file = "doc.qmd"
+requires = ["r"]
+formats = ["html"]
+note = "document-scope execute: output false"
+
+[[document]]
+name = "knitr/exec-scope-include"
+dir = "knitr/exec-scope-include"
+file = "doc.qmd"
+requires = ["r"]
+formats = ["html"]
+note = "document-scope execute: include false"
+
+[[document]]
+name = "marimo/minimal"
+dir = "marimo/minimal"
+file = "doc.qmd"
+requires = ["uv"]
+formats = ["html"]
+note = "the marimo extension; documented exception D12, expected identical"
+
+[[document]]
+name = "knitr/margin-layout/custom-geometry-asymmetric"
+dir = "knitr/margin-layout"
+file = "custom-geometry-asymmetric.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/custom-geometry-narrow"
+dir = "knitr/margin-layout"
+file = "custom-geometry-narrow.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/custom-geometry-wide"
+dir = "knitr/margin-layout"
+file = "custom-geometry-wide.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/fig-column-margin"
+dir = "knitr/margin-layout"
+file = "fig-column-margin.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/fullwidth-figure"
+dir = "knitr/margin-layout"
+file = "fullwidth-figure.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/margin-figure-cell-option"
+dir = "knitr/margin-layout"
+file = "margin-figure-cell-option.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/margin-subfigure-ggplot2"
+dir = "knitr/margin-layout"
+file = "margin-subfigure-ggplot2.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/margin-table-flextable-crossref"
+dir = "knitr/margin-layout"
+file = "margin-table-flextable-crossref.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/margin-table-flextable"
+dir = "knitr/margin-layout"
+file = "margin-table-flextable.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/margin-table-gt-r-crossref"
+dir = "knitr/margin-layout"
+file = "margin-table-gt-r-crossref.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/margin-table-gt-r"
+dir = "knitr/margin-layout"
+file = "margin-table-gt-r.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/tbl-column-margin"
+dir = "knitr/margin-layout"
+file = "tbl-column-margin.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "julia/targets-gfm"
+dir = "julia/targets"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["gfm"]
+note = "OPR-9e: the hand-run document (println, labeled figure, labeled table, bare expression, fig-subcap group) to gfm; needs no Plots (text)"
+
+[[document]]
+name = "julia/targets-typst"
+dir = "julia/targets"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["typst"]
+note = "OPR-9e: the hand-run document (println, labeled figure, labeled table, bare expression, fig-subcap group) to typst; needs no Plots (text, compared through the .typ)"
+
+[[document]]
+name = "julia/targets-docx"
+dir = "julia/targets"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["docx"]
+note = "OPR-9e: the hand-run document (println, labeled figure, labeled table, bare expression, fig-subcap group) to docx; needs no Plots (zip, word/document.xml)"
+
+[[document]]
+name = "julia/targets-pptx"
+dir = "julia/targets"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["pptx"]
+note = "OPR-9e: the hand-run document (println, labeled figure, labeled table, bare expression, fig-subcap group) to pptx; needs no Plots (zip, slide XML)"
+
+[[document]]
+name = "julia/targets-epub"
+dir = "julia/targets-echo"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["epub"]
+note = "OPR-9e: the hand-run document (println, labeled figure, labeled table, bare expression, fig-subcap group) to epub with the group cell echoed: the interleaving case (a pinned entry, since epub has no div.cell); the other classes set echo false on that cell"

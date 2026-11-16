@@ -12,6 +12,26 @@ import React, { useContext } from 'react';
 import { PreviewContext } from './PreviewContext';
 import { detectPlatform } from './nestingNav';
 import type { AncestorCrumb } from './nestingNav';
+import { ParagraphIcon } from './richtext/ToolbarIcons';
+
+/**
+ * A crumb's visible glyph: the Para pilcrow renders as the toolbar's paragraph
+ * SVG; every other abbrev stays text. The raw abbrev is mirrored on
+ * `data-abbrev` (see `crumbProps`) so it stays inspectable when it's an icon.
+ */
+export function CrumbGlyph({ abbrev }: { abbrev: string }): React.ReactElement {
+    return abbrev === '¶' ? <ParagraphIcon /> : <>{abbrev}</>;
+}
+
+/** Shared crumb class list + data attribute (used here and by EditTypeIndicator). */
+export function crumbClassName(category: string, isCurrent: boolean, abbrev: string): string {
+    return [
+        'q2-crumb',
+        `q2-crumb-cat-${category}`,
+        isCurrent ? 'q2-crumb-current' : '',
+        abbrev === '¶' ? 'q2-crumb-icon' : '',
+    ].filter(Boolean).join(' ');
+}
 
 // ── Shared stylesheet (inject-once) ─────────────────────────────────────────────
 
@@ -50,6 +70,11 @@ const CSS = `
     font-weight: bold;
     text-decoration: underline;
 }
+/* Icon crumbs (the paragraph SVG) can't take text-decoration, so the current /
+   hover underline is drawn as a bottom rule instead. */
+.q2-crumb-icon { display: inline-flex; align-items: center; border-bottom: 1px solid transparent; }
+.q2-crumb-icon.q2-crumb-current,
+.q2-crumb-icon:not(.q2-crumb-current):hover { border-bottom-color: currentColor; }
 .q2-crumb:not(.q2-crumb-current):hover {
     text-decoration: underline;
 }
@@ -112,17 +137,14 @@ export function BreadcrumbCrumbs({ crumbs }: BreadcrumbCrumbsProps): React.React
                     <button
                         key={`${c.r0}-${c.r1}`}
                         type="button"
-                        className={[
-                            'q2-crumb',
-                            `q2-crumb-cat-${c.category}`,
-                            c.isCurrent ? 'q2-crumb-current' : '',
-                        ].filter(Boolean).join(' ')}
+                        className={crumbClassName(c.category, c.isCurrent, c.abbrev)}
+                        data-abbrev={c.abbrev}
                         title={c.label}
                         aria-label={c.label}
                         aria-current={c.isCurrent ? 'true' : undefined}
                         onPointerDown={(e) => e.preventDefault()}
                         onClick={(e) => { e.stopPropagation(); ctx?.requestNestingSelect?.(c.r0, c.r1); }}
-                    >{c.abbrev}</button>
+                    ><CrumbGlyph abbrev={c.abbrev} /></button>
                 ))}
             </div>
             {/* ▶ in-arrow + future-crumb placeholder */}

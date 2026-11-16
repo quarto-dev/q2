@@ -117,10 +117,17 @@ test.describe('P3.5 — SPA nesting-cursor resolution (real q2 preview binary)',
             toolbar.locator('.q2-breadcrumb-out'),
             'navigator ◀ must be inside the toolbar row (inline breadcrumb)',
         ).toBeVisible();
+        // The ¶ crumb renders as the paragraph SVG (no text content); its type
+        // abbrev is mirrored on data-abbrev.
+        const currentCrumb = toolbar.locator('.q2-crumb').last();
         await expect(
-            toolbar.locator('.q2-crumb').last(),
+            currentCrumb,
             'current crumb (¶) must be inside the toolbar row',
-        ).toHaveText('¶');
+        ).toHaveAttribute('data-abbrev', '¶');
+        await expect(
+            currentCrumb.locator('svg.q2-rt-tb-icon'),
+            'current ¶ crumb renders the paragraph icon',
+        ).toBeVisible();
         await expect(
             iframe.locator('[data-testid="q2-breadcrumb-chip"]'),
             'standalone floating chip must be suppressed when the inline breadcrumb shows',

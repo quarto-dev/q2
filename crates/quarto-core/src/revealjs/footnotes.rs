@@ -146,7 +146,7 @@ fn extract_footnotes_section(blocks: &mut Vec<Block>) -> HashMap<String, Blocks>
                     if let Block::Div(d) = b {
                         let mut content = d.content;
                         strip_backlinks(&mut content);
-                        defs.insert(d.attr.0, content);
+                        defs.insert(d.attr.into_tuple().0, content);
                     }
                 }
             }
@@ -218,11 +218,11 @@ fn coalesce_one_slide(slide: &mut Div, defs: &HashMap<String, Blocks>) {
             .iter()
             .map(|fn_id| defs.get(fn_id).cloned().unwrap_or_default())
             .collect();
-        let ol = Block::OrderedList(OrderedList {
+        let ol = Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: items,
             source_info: SourceInfo::generated(By::revealjs()),
-        });
+        }));
         aside_content.push(classed_div("aside-footnotes", vec![ol]));
     }
     slide.content.push(classed_div("aside", aside_content));
@@ -230,22 +230,22 @@ fn coalesce_one_slide(slide: &mut Div, defs: &HashMap<String, Blocks>) {
 
 /// A `<div>` with no attributes wrapping `content`.
 fn plain_div(content: Blocks) -> Block {
-    Block::Div(Div {
-        attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+    Block::Div(Box::new(Div {
+        attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
         content,
         source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// A `<div class="{class}">` wrapping `content`.
 fn classed_div(class: &str, content: Blocks) -> Block {
-    Block::Div(Div {
-        attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()),
+    Block::Div(Box::new(Div {
+        attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()).into(),
         content,
         source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Remove footnote backlinks (`<a class="footnote-back">`) from a definition's

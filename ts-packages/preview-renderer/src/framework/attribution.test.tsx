@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect } from 'vitest';
-import { buildActorStyles, cssEscape } from './attribution';
+import { attributionBadgePlacement, buildActorStyles, cssEscape } from './attribution';
 import type { NodeAttributionIdentity } from './AttributionLookupContext';
 
 const sample = (
@@ -14,6 +14,20 @@ const sample = (
     sid,
     { actor, name, color, time: 0 },
 ];
+
+describe('attributionBadgePlacement', () => {
+    it('anchors at the leaf\'s left edge when there is room to its right', () => {
+        expect(attributionBadgePlacement(100, 180, 1280)).toEqual({ left: 100, maxWidth: 320 });
+    });
+
+    it('anchors to the leaf\'s right edge near the viewport edge, so a short badge stays adjacent', () => {
+        expect(attributionBadgePlacement(1200, 1210, 1280)).toEqual({ right: 70, maxWidth: 320 });
+    });
+
+    it('spans the viewport margins when neither side has room', () => {
+        expect(attributionBadgePlacement(40, 60, 200)).toEqual({ left: 8, maxWidth: 184 });
+    });
+});
 
 describe('buildActorStyles', () => {
     it('returns empty string when lookup is null', () => {
