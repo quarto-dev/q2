@@ -29,14 +29,20 @@ struct Rendered {
 
 /// Render the fixture to `format`, writing `index.<extension>`.
 fn render(format: &str, extension: &str) -> Rendered {
+    render_qmd(
+        format,
+        extension,
+        &format!("---\nformat: {format}\nbibliography: refs.bib\n---\n\n{BODY}\n"),
+    )
+}
+
+/// Render `qmd` (with `refs.bib` beside it) to `format`, writing
+/// `index.<extension>`.
+fn render_qmd(format: &str, extension: &str, qmd: &str) -> Rendered {
     let temp = TempDir::new().unwrap();
     let project_dir = temp.path().canonicalize().unwrap();
     let input_path = project_dir.join("index.qmd");
-    std::fs::write(
-        &input_path,
-        format!("---\nformat: {format}\nbibliography: refs.bib\n---\n\n{BODY}\n"),
-    )
-    .unwrap();
+    std::fs::write(&input_path, qmd).unwrap();
     std::fs::write(project_dir.join("refs.bib"), REFS_BIB).unwrap();
     let output_path = project_dir.join(format!("index.{extension}"));
     let options = RenderToFileOptions {
@@ -128,4 +134,29 @@ fn typst_unknown_key_warns_at_the_key_and_keeps_known_keys_for_typst() {
     );
     assert!(!typ.contains("@missing2020"), "{typ}");
     assert!(!typ.contains("@alsomissing"), "{typ}");
+}
+
+/// GH #1226: an explicit `filters: [citeproc]` (which books need, #1157)
+/// runs citeproc in `.pre`, before crossrefs are resolved, so `@sec-one`
+/// still reaches it as a `Cite`. A crossref key is not a missing
+/// citation: only the genuinely unknown key warns.
+#[test]
+fn pre_citeproc_does_not_warn_for_crossref_keys() {
+    let rendered = render_qmd(
+        "html",
+        "html",
+        "---\nbibliography: refs.bib\nfilters:\n  - citeproc\n---\n\n\
+         # One {#sec-one}\n\nSee @sec-one, [@fig-nope] and [@doe2020; @missing2020].\n",
+    );
+    let keys: Vec<String> = rendered
+        .diagnostics
+        .iter()
+        .filter(|d| d.code.as_deref() == Some("Q-23-2"))
+        .map(|d| d.to_text(None))
+        .collect();
+    assert_eq!(keys.len(), 1, "{keys:#?}");
+    assert!(keys[0].contains("missing2020"), "{}", keys[0]);
+    let html = &rendered.output;
+    assert!(html.contains(r##"href="#sec-one""##), "{html}");
+    assert!(html.contains("<strong>missing2020?</strong>"), "{html}");
 }

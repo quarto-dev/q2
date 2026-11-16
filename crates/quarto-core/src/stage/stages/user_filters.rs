@@ -328,6 +328,20 @@ impl PipelineStage for UserFiltersStage {
         }
         let filters = filters.as_slice();
 
+        // GH #1226: citeproc placed in `.pre` (an explicit
+        // `filters: [citeproc]`, which books need) sees crossref keys
+        // (`@sec-one`) as plain `Cite`s, since crossrefs resolve later in
+        // `AstTransformsStage`, and warns `Q-23-2` for each. Record their
+        // spans now, before the filters rewrite the `Cite`s, so those
+        // warnings can be dropped below.
+        let crossref_key_spans = if filters.contains(&pampa::unified_filter::FilterSpec::Citeproc)
+            && let Some(registry) = ctx.ref_type_registry.as_ref()
+        {
+            crossref_cite_spans(&mut doc.ast.blocks, registry)
+        } else {
+            Vec::new()
+        };
+
         trace_event!(
             ctx,
             EventLevel::Debug,
@@ -423,7 +437,15 @@ impl PipelineStage for UserFiltersStage {
         .await
         .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()));
 
-        let output = filter_result?;
+        let mut output = filter_result?;
+        if !crossref_key_spans.is_empty() {
+            output.diagnostics.retain(|d| {
+                d.code.as_deref() != Some(UNKNOWN_CITATION_KEY)
+                    || d.location
+                        .as_ref()
+                        .is_none_or(|loc| !crossref_key_spans.contains(loc))
+            });
+        }
 
         doc.ast = output.pandoc;
         doc.ast_context = output.context;
@@ -464,6 +486,34 @@ impl PipelineStage for UserFiltersStage {
 
         Ok(PipelineData::DocumentAst(doc))
     }
+}
+
+/// Citeproc's "Citation Key Not Found" warning code.
+const UNKNOWN_CITATION_KEY: &str = "Q-23-2";
+
+/// The span citeproc reports each crossref citation item at (the key, else
+/// the whole `Cite`; see `pampa::citeproc_filter::citation_key_location`),
+/// for every item whose id `registry` classifies as a crossref.
+fn crossref_cite_spans(
+    blocks: &mut [quarto_pandoc_types::block::Block],
+    registry: &crate::crossref::RefTypeRegistry,
+) -> Vec<quarto_source_map::SourceInfo> {
+    let mut spans = Vec::new();
+    crate::ast_walk::for_each_inline_mut(blocks, &mut |inline| {
+        if let quarto_pandoc_types::inline::Inline::Cite(cite) = inline {
+            for citation in &cite.citations {
+                if registry.classify_cite_id(&citation.id).is_some() {
+                    spans.push(
+                        citation
+                            .id_source
+                            .clone()
+                            .unwrap_or_else(|| cite.source_info.clone()),
+                    );
+                }
+            }
+        }
+    });
+    spans
 }
 
 #[cfg(test)]
