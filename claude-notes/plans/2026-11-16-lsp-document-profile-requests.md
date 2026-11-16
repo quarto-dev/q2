@@ -497,9 +497,8 @@ from reading them.
 ## C3 design (bd-ojsx06at) — for review
 
 This section turns "The analysis worker" and "Toward a `q2` server
-manager" into concrete decisions for C3. **Status: proposed, waiting
-for review before implementation.** Questions for the reviewer are
-marked **R1–R5** at the end.
+manager" into concrete decisions for C3. **Status: reviewed 2026-11-16;
+R1–R5 accepted as recommended** (see the end of this section).
 
 ### Facts found while designing
 
@@ -590,6 +589,18 @@ impl Workspace {
   config (`_quarto.yml` / `_quarto.yaml`). Check the client's open
   buffers first, then the inner runtime. Never walk a directory to find
   it.
+  - **One shared walk.** Before C3 there were three copies of the
+    upward walk:
+    - `ProjectContext::find_project_config` (private, and it also
+      parses the config);
+    - `find_project_root_upward` in `commands/render.rs`, which called
+      itself "the cheap half" of the first;
+    - `find_project_root_above` in `commands/preview.rs`, which used
+      `std` I/O.
+
+    C3 replaces all three with `quarto_core::project::discovery::find_project_root(start, runtime)`.
+    The LSP calls it through an `OverlayRuntime` of the client's open
+    buffers over the inner runtime, so an unsaved `_quarto.yml` counts.
   - **Project found:** a disk session at the canonical root, with
     `VfsBaseLayer::load_from_disk` and an eager Pass-1 sweep (a `Job`)
     of the render list.
@@ -685,7 +696,11 @@ impl Workspace {
 - **Gates:** `cargo xtask verify`, which includes the WASM build that
   `quarto-lsp-project` must pass.
 
-### Questions for review
+### Questions for review (decided 2026-11-16: all as recommended)
+
+R4 resolution: carry both `lsp-types` versions until F3. R5 resolution:
+keep the eager sweep. It may need to change later, but it is better to
+have it now and build the rest of the infrastructure on it.
 
 - **R1. Broader diagnostics.** Native diagnostics would broaden to the
   whole analysis pipeline, matching the browser. Recommended. The

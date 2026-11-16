@@ -2306,36 +2306,14 @@ impl ProjectContext {
         runtime: &dyn SystemRuntime,
         cli_selection: Option<&[String]>,
     ) -> Result<(Option<PathBuf>, Option<ProjectConfig>)> {
-        let mut current = start_dir.to_path_buf();
-
-        loop {
-            let config_path = current.join("_quarto.yml");
-            let exists = runtime
-                .path_exists(&config_path, None)
-                .map_err(|e| QuartoError::Other(format!("Failed to check config path: {}", e)))?;
-            if exists {
-                // Found config file - parse it
+        match discovery::find_project_root(start_dir, runtime)
+            .map_err(|e| QuartoError::Other(format!("Failed to check config path: {}", e)))?
+        {
+            Some((dir, config_path)) => {
                 let config = Self::parse_config(&config_path, runtime, cli_selection)?;
-                return Ok((Some(current), Some(config)));
+                Ok((Some(dir), Some(config)))
             }
-
-            // Also check for _quarto.yaml (alternate extension)
-            let config_path_yaml = current.join("_quarto.yaml");
-            let exists_yaml = runtime
-                .path_exists(&config_path_yaml, None)
-                .map_err(|e| QuartoError::Other(format!("Failed to check config path: {}", e)))?;
-            if exists_yaml {
-                let config = Self::parse_config(&config_path_yaml, runtime, cli_selection)?;
-                return Ok((Some(current), Some(config)));
-            }
-
-            // Move to parent directory
-            if let Some(parent) = current.parent() {
-                current = parent.to_path_buf();
-            } else {
-                // Reached root, no config found
-                return Ok((None, None));
-            }
+            None => Ok((None, None)),
         }
     }
 

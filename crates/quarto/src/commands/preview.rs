@@ -13,7 +13,6 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use quarto_core::project::discovery::PROJECT_CONFIG_FILENAMES;
 use quarto_preview::{
     EnginePolicy, PreviewConfig,
     config::{
@@ -1133,17 +1132,11 @@ pub(crate) fn resolve_project_and_initial_page(canonical: &Path) -> Result<Resol
 /// directory, or `None` if the walk reaches the filesystem root without
 /// finding one.
 fn find_project_root_above(start: &Path) -> Option<PathBuf> {
-    let mut current = Some(start.to_path_buf());
-    while let Some(dir) = current {
-        if PROJECT_CONFIG_FILENAMES
-            .iter()
-            .any(|name| dir.join(name).is_file())
-        {
-            return Some(dir);
-        }
-        current = dir.parent().map(|p| p.to_path_buf());
-    }
-    None
+    let runtime = quarto_system_runtime::NativeRuntime::new();
+    quarto_core::project::discovery::find_project_root(start, &runtime)
+        .ok()
+        .flatten()
+        .map(|(dir, _config)| dir)
 }
 
 /// Build the boot URL with an optional `?page=<rel>` query. The
