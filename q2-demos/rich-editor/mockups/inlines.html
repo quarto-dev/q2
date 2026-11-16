@@ -18,6 +18,9 @@ aside h2:first-child { margin-top:0; }
 .opt.on { background:#fff; box-shadow:0 0 0 1px var(--line); }
 .opt b { display:block; font-weight:600; }
 .opt span { color:var(--muted); font-size:12.5px; line-height:1.35; display:block; margin-top:2px; }
+.opt span.why { font-style:italic; color:#8a6d00; }
+details.archived { margin-top:22px; border-top:1px solid var(--line); padding-top:12px; }
+details.archived summary { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); cursor:pointer; margin-bottom:8px; }
 .reset { margin-top:12px; font:inherit; font-size:13px; padding:4px 10px; border:1px solid var(--line); background:#fff; border-radius:5px; cursor:pointer; }
 
 /* Toolbar, as in the editor (and block-annotations.html). */
@@ -117,7 +120,7 @@ const GROUPS = [
   { key: 'edge', title: 'At the edge of formatting', options: [
     ['continue', 'Carry on', 'Typing at the end of bold, italic or code continues it; ⌘B / ⌘E or the toolbar turns it off. As in Word and Google Docs.'],
     ['code', 'Arrow out of code', 'Bold and italic carry on, but code has an inside and an outside at each end: → at the end of code steps out of it without moving. As in Notion and Slack.'],
-    ['all', 'Arrow out of everything', 'Every format has an inside and an outside at each end.'],
+    ['all', 'Arrow out of everything', 'Every format has an inside and an outside at each end.', 'An extra arrow press at every edge of bold and italic, where nothing shows which side the caret is on.'],
   ]},
   { key: 'md', title: 'Typing markdown', options: [
     ['on', 'Converts as you type', '**bold**, *italic*, ~~strike~~, `code` and [text](url) become formatting when closed. Backspace right after gives the characters back.'],
@@ -147,31 +150,43 @@ for (const [k, v] of new URLSearchParams(location.hash.slice(1))) if (k in opts)
 function renderOptions() {
   const aside = document.getElementById('options')
   aside.replaceChildren()
+  // An option with a fourth entry was decided against: it's kept, with that
+  // reason, under "Archived".
+  const card = (g, [value, name, why, archived], into) => {
+    const el = document.createElement('label')
+    el.className = 'opt' + (opts[g.key] === value ? ' on' : '')
+    el.innerHTML = '<b></b><span></span>'
+    el.children[0].textContent = name
+    el.children[1].textContent = why
+    if (archived) {
+      el.children[0].textContent = `${g.title}: ${name}`
+      el.append(Object.assign(document.createElement('span'), { className: 'why', textContent: archived }))
+    }
+    el.onclick = () => {
+      opts[g.key] = value
+      history.replaceState(null, '', '#' + new URLSearchParams(opts))
+      renderOptions()
+      closeForm()
+      render()
+    }
+    into.append(el)
+  }
   for (const g of GROUPS) {
     const h = document.createElement('h2')
     h.textContent = g.title
     aside.append(h)
-    for (const [value, name, why] of g.options) {
-      const el = document.createElement('label')
-      el.className = 'opt' + (opts[g.key] === value ? ' on' : '')
-      el.innerHTML = '<b></b><span></span>'
-      el.children[0].textContent = name
-      el.children[1].textContent = why
-      el.onclick = () => {
-        opts[g.key] = value
-        history.replaceState(null, '', '#' + new URLSearchParams(opts))
-        renderOptions()
-        closeForm()
-        render()
-      }
-      aside.append(el)
-    }
+    for (const o of g.options) if (!o[3]) card(g, o, aside)
   }
   const reset = document.createElement('button')
   reset.className = 'reset'
   reset.textContent = 'Reset the document'
   reset.onclick = () => { start(); editor.focus(); render() }
   aside.append(reset)
+  const archive = document.createElement('details')
+  archive.className = 'archived'
+  archive.innerHTML = '<summary>Archived</summary>'
+  for (const g of GROUPS) for (const o of g.options) if (o[3]) { card(g, o, archive); if (opts[g.key] === o[0]) archive.open = true }
+  aside.append(archive)
 }
 
 // ------------------------------------------------------------------ model
