@@ -2,27 +2,43 @@
  * Parent-side asset walker for q2-preview.
  *
  * Walks the AST for `Image` nodes, resolves each `target.0` against
- * `currentFilePath`, reads VFS bytes, mints (or reuses cached) blob URLs,
- * and produces a manifest of `{ origPath → blobUrl }` that the iframe's
- * `<Image>` component consumes via `AssetManifestContext`.
+ * `currentFilePath`, reads VFS bytes, and produces a manifest of
+ * `{ origPath → { key, blob } }`. The iframe mints its own blob URL for
+ * each entry (`iframeAssets.ts`) and hands `<Image>` the result via
+ * `AssetManifestContext`.
+ *
+ * The parent must not mint the URLs: a `blob:` URL only loads in the
+ * origin that minted it, and when the host frames the preview with
+ * `sandbox="allow-scripts"` (no `allow-same-origin`) the iframe has a
+ * different opaque origin from the parent. A `Blob` crosses
+ * `postMessage` by value, as the theme's CSS text does.
  *
  * Cache identity is the base64 content string itself — `vfsReadBinaryFile`
  * returns base64-encoded bytes, identical bytes always produce identical
  * base64, so the string is a deterministic 1-to-1 fingerprint with no
  * hashing required (and stays synchronous, which lets the caller use a
- * `useMemo` keyed on `astJson + currentFilePath`).
+ * `useMemo` keyed on `astJson + currentFilePath`). Each cached entry gets a
+ * short `key`, which the iframe uses to keep one URL per content.
  *
- * Cache eviction: any entry whose key is not seen in this run is revoked
- * via `URL.revokeObjectURL` and removed from the cache. The caller passes
- * in a long-lived `Map` (typically a `useRef` on `Q2PreviewIframe`), so
- * stable image content keeps the same blob URL across renders.
+ * Cache eviction: any entry whose identity is not seen in this run is
+ * removed. The caller passes in a long-lived `Map` (typically a `useRef`
+ * on `Q2PreviewIframe`), so stable image content keeps the same key (and
+ * so the same iframe URL) across renders.
  */
 
 import { vfsReadBinaryFile } from '@quarto/preview-runtime';
 import { resolveRelativePath, guessMimeType } from '../utils/vfsPaths';
 
+/**
+ * One image as the parent posts it: its bytes, and a key that is the same
+ * for the same path and content. A plain string is a URL that is used
+ * as-is (a host that re-posts a payload the iframe already resolved).
+ */
+export type AssetManifestEntry = string | { readonly key: string; readonly blob: Blob };
+
 export interface ManifestCacheEntry {
-    url: string;
+    key: string;
+    blob: Blob;
     /** The base64 content string — held in cache as the identity key
      * is `${path}\0${contentB64}`, so reads of `contentB64` are not
      * needed by callers; field is here for debugability. */
@@ -31,13 +47,13 @@ export interface ManifestCacheEntry {
 
 export interface AssetManifestResult {
     /** origPath (the user-facing string from the Image node's `target.0`)
-     * → blob URL. External URLs (`http(s):`, `data:`, `//`) are not in
-     * the manifest; the iframe's lookup helper passes those through. */
-    manifest: Record<string, string>;
-    /** Blob URLs that fell out of the manifest this run; the caller
-     * may use this for telemetry, but revocation has already happened. */
-    revoked: string[];
+     * → the image's key and bytes. External URLs (`http(s):`, `data:`,
+     * `//`) are not in the manifest; the iframe's lookup helper passes
+     * those through. */
+    manifest: Record<string, AssetManifestEntry>;
 }
+
+let nextAssetKey = 0;
 
 /**
  * Build the asset manifest for one render cycle.
@@ -46,7 +62,7 @@ export interface AssetManifestResult {
  * @param currentFilePath — the doc's file path, used to resolve
  *   relative image paths. Convention: `/project/<…>`.
  * @param cache — caller-owned Map. Mutated in place; entries that fall
- *   out of the manifest this run are revoked and deleted.
+ *   out of the manifest this run are deleted.
  */
 export function buildAssetManifest(
     astJson: string,
@@ -57,11 +73,11 @@ export function buildAssetManifest(
     try {
         ast = JSON.parse(astJson);
     } catch {
-        return { manifest: {}, revoked: [] };
+        return { manifest: {} };
     }
 
     const imagePaths = collectImagePaths(ast);
-    const manifest: Record<string, string> = {};
+    const manifest: Record<string, AssetManifestEntry> = {};
     const seenKeys = new Set<string>();
 
     for (const origPath of imagePaths) {
@@ -79,24 +95,21 @@ export function buildAssetManifest(
 
         let entry = cache.get(cacheKey);
         if (!entry) {
-            const blob = base64ToBlob(result.content, guessMimeType(resolved));
-            entry = { url: URL.createObjectURL(blob), contentB64: result.content };
+            entry = {
+                key: `asset-${nextAssetKey++}`,
+                blob: base64ToBlob(result.content, guessMimeType(resolved)),
+                contentB64: result.content,
+            };
             cache.set(cacheKey, entry);
         }
-        manifest[origPath] = entry.url;
+        manifest[origPath] = { key: entry.key, blob: entry.blob };
     }
 
-    // Revoke and evict cache entries no longer referenced.
-    const revoked: string[] = [];
-    for (const [key, entry] of cache) {
-        if (!seenKeys.has(key)) {
-            URL.revokeObjectURL(entry.url);
-            revoked.push(entry.url);
-            cache.delete(key);
-        }
+    for (const key of cache.keys()) {
+        if (!seenKeys.has(key)) cache.delete(key);
     }
 
-    return { manifest, revoked };
+    return { manifest };
 }
 
 /**

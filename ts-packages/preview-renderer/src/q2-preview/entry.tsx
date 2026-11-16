@@ -111,6 +111,8 @@ import {
 } from '../utils/customRegistry';
 import { jumpToAnchor } from '../utils/jumpToAnchor';
 import { PreviewRoot } from './PreviewRoot';
+import type { AssetManifestEntry } from './assetWalker';
+import { resolveAssetManifest } from './iframeAssets';
 
 // Set the renderer-surface global at module top. Importing this module
 // is sufficient to populate `window.__Q2_PREVIEW_RENDERER__`. The
@@ -190,14 +192,15 @@ interface UpdateAstPayload {
      */
     untransformedAstJson?: string | null;
     /**
-     * Manifest of `{ origPath → blobUrl }` produced by the parent's
-     * `assetWalker.ts`. Forwarded into `AssetManifestContext` so
-     * `<Image>` can resolve project-relative URLs to blob URLs without
-     * any VFS access in the iframe. External URLs (`https?:`, `data:`,
-     * `//`) are not in the manifest — `lookupAssetUrl` passes them
-     * through.
+     * Manifest of `{ origPath → { key, blob } }` produced by the parent's
+     * `assetWalker.ts`. The iframe mints a blob URL per entry
+     * (`resolveAssetManifest`) and forwards the result into
+     * `AssetManifestContext`, so `<Image>` can resolve project-relative
+     * URLs without any VFS access in the iframe. A string entry is a URL
+     * used as-is. External URLs (`https?:`, `data:`, `//`) are not in the
+     * manifest — `lookupAssetUrl` passes them through.
      */
-    assetManifest?: Record<string, string>;
+    assetManifest?: Record<string, AssetManifestEntry>;
     /**
      * Phase F.1 (bd-kw93.14): project file paths (no leading slash)
      * forwarded into the iframe link handler so artifact-rooted
@@ -426,7 +429,7 @@ function updateAst(payload: UpdateAstPayload) {
             <PreviewRoot
                 astJson={astJson}
                 currentFilePath={currentFilePath}
-                assetManifest={assetManifest ?? {}}
+                assetManifest={resolveAssetManifest(assetManifest ?? {})}
                 projectFilePaths={projectFilePaths}
                 pendingAnchor={pendingAnchor}
                 pendingAnchorEpoch={pendingAnchorEpoch}
