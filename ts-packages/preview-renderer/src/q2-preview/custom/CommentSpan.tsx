@@ -46,6 +46,11 @@ import {
     isComment,
     sameCommentableKind,
 } from './CommentBlock';
+import {
+    commentLineBreaksAllowed,
+    commentTextToInlines,
+    makeCommentSpan,
+} from '../../utils/commentEdits';
 
 /** Class the rendered copy of a commented span carries (styled in CommentBlock's injected rules). */
 export const COMMENTED_SPAN_CLASS = 'q2-commented-span';
@@ -169,13 +174,15 @@ export const CommentInline = (args: NodeArgs<InlineNode>) => {
     const content = <I node={rendered} onNavigateToDocument={onNavigateToDocument} setLocalAst={setLocalAst} />;
     if (mode === 'hide') return content;
 
+    // New lines become `LineBreak`s, except when the span sits in a
+    // heading, which is one source line (bd-ov4jydyf).
+    const allowLineBreaks = commentLineBreaksAllowed(enclosing);
     const addComment = (text: string) => {
+        const inlines = commentTextToInlines(text, { allowLineBreaks });
+        if (inlines.length === 0) return;
         const found = locate();
         if (!found) return;
-        found.target.c[1].push({
-            t: 'Span',
-            c: [['', ['quarto-edit-comment'], []], [{ t: 'Str', c: text }]],
-        });
+        found.target.c[1].push(makeCommentSpan(inlines));
         edit.commitSubtreeEdit(JSON.stringify(found.sourceEntry), found.modified, COMMENT_EDIT);
     };
 
@@ -204,6 +211,7 @@ export const CommentInline = (args: NodeArgs<InlineNode>) => {
             claimInitialOpen={claimInitialOpen}
             addComment={addComment}
             resolveCommentAtIndex={resolveCommentAtIndex}
+            allowLineBreaks={allowLineBreaks}
             mode={mode}
             onNavigateToDocument={onNavigateToDocument}
         >

@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-11-16
 
+- [`17792be75`](https://github.com/quarto-dev/q2/commits/17792be75): In preview comments, Shift+Enter now starts a new line in a comment (Enter still adds it), and pasting text with blank lines into a comment no longer breaks the document
 - [`087d309a6`](https://github.com/quarto-dev/q2/commits/087d309a6): Math in the sandboxed preview now renders with KaTeX 0.19.1, matching the version used by `q2 render`
 
 ### 2026-11-13

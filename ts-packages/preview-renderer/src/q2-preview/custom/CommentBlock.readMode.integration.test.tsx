@@ -101,7 +101,14 @@ describe('comments with Edit off (hub-client read mode, #973)', () => {
         expect(setAst).toHaveBeenCalledOnce();
         const payload = setAst.mock.calls[0][0];
         expect(payload).toMatchObject({ __isPreviewNodeEdit: true, channel: 'subtree', scope: 'comment' });
-        expect(payload.modifiedSubtreeJson).toContain('a reviewer note');
+        // The comment's words arrive as Str/Space, the qmd reader's shape
+        // (bd-ov4jydyf), not as one Str holding the raw text.
+        const committed = JSON.parse(payload.modifiedSubtreeJson).blocks[0];
+        expect(committed.c[1].c[1]).toEqual([
+            { t: 'Str', c: 'a' }, { t: 'Space' },
+            { t: 'Str', c: 'reviewer' }, { t: 'Space' },
+            { t: 'Str', c: 'note' },
+        ]);
     });
 
     it('resolves a comment through a comment-scoped commit', async () => {
