@@ -480,6 +480,71 @@ function moveH(dir, shift) {
   else setCaret(b, o, dir < 0 ? 'R' : 'L')
 }
 
+/** Where the caret is drawn for a point in the page. */
+function caretRect(node, offset) {
+  const r = document.createRange()
+  if (node.nodeType === 3 && node.length) {
+    // The side of a neighbouring character: an empty range has no box in every browser.
+    const after = offset < node.length
+    r.setStart(node, after ? offset : offset - 1)
+    r.setEnd(node, after ? offset + 1 : offset)
+    const boxes = r.getClientRects()
+    const box = after ? boxes[0] : boxes[boxes.length - 1]
+    if (box) return { x: after ? box.left : box.right, top: box.top, bottom: box.bottom }
+  }
+  const child = node.nodeType === 1 && (node.childNodes[offset] ?? node.childNodes[offset - 1])
+  const el = child && child.nodeType === 1 ? child : node.nodeType === 1 ? node : node.parentElement
+  const box = el.getBoundingClientRect()
+  const atEnd = child && child === node.childNodes[offset - 1]
+  return { x: atEnd ? box.right : box.left, top: box.top, bottom: box.bottom }
+}
+
+function pointFrom(x, y) {
+  if (document.caretPositionFromPoint) {
+    const p = document.caretPositionFromPoint(x, y)
+    return p && [p.offsetNode, p.offset]
+  }
+  const r = document.caretRangeFromPoint(x, y)
+  return r && [r.startContainer, r.startOffset]
+}
+
+/**
+ * Up and Down. The caret keeps its horizontal place in the text as it's
+ * drawn: `goalX` is where it was when the run of Up and Down presses began,
+ * so a short line on the way doesn't pull it left for good. The browser's own
+ * Up and Down forget that place each time the line is redrawn.
+ */
+let goalX = null
+function moveV(dir, shift) {
+  const here = caretRect(...locate(sel.f))
+  const x = goalX ?? here.x
+  const bounds = editor.getBoundingClientRect()
+  const px = Math.min(Math.max(x, bounds.left + 1), bounds.right - 1)
+  const mid = (here.top + here.bottom) / 2
+  let found = null
+  for (let y = dir > 0 ? here.bottom + 2 : here.top - 2; y > bounds.top && y < bounds.bottom; y += dir * 4) {
+    const point = pointFrom(px, y)
+    const at = point && pointToModel(...point)
+    if (!at) continue
+    // On another line, not further along this one.
+    const there = caretRect(...locate(at))
+    if (!(dir > 0 ? there.top > mid : there.bottom < mid)) continue
+    // The probe may have been in the gap between two lines, which gives a
+    // line's start or end: ask again at the line's own height.
+    const again = pointFrom(px, (there.top + there.bottom) / 2)
+    found = (again && pointToModel(...again)) ?? at
+    break
+  }
+  if (!found) {
+    // No line that way: the start or the end of this paragraph.
+    found = { b: sel.f.b, o: dir > 0 ? doc[sel.f.b].cells.length : 0 }
+  }
+  pending = null
+  if (shift) sel = { a: sel.a, f: found, aff: 'L' }
+  else setCaret(found.b, found.o)
+  goalX = x
+}
+
 // ------------------------------------------------------------------ links
 function setLink(b, s, e, h) { for (let i = s; i < e; i++) doc[b].cells[i].h = h }
 
@@ -995,6 +1060,8 @@ editor.addEventListener('keydown', (e) => {
   // the end of the line).
   const mod = IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey
   const key = e.key.toLowerCase()
+  const vertical = (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.metaKey && !e.ctrlKey && !e.altKey
+  if (!vertical && !['Shift', 'Alt', 'Meta', 'Control'].includes(e.key)) goalX = null
   const does = (action) => { e.preventDefault(); ruled = null; action(); hist.kind = null; render() }
   if (mod && key === 'z') does(e.shiftKey ? redo : undo)
   else if (mod && !e.shiftKey && key === 'b') does(() => toggle(B))
@@ -1004,7 +1071,7 @@ editor.addEventListener('keydown', (e) => {
   else if (mod && !e.shiftKey && key === 'k') does(linkCommand)
   else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.metaKey && !e.ctrlKey && !e.altKey) {
     does(() => moveH(e.key === 'ArrowLeft' ? -1 : 1, e.shiftKey))
-  }
+  } else if (vertical) does(() => moveV(e.key === 'ArrowUp' ? -1 : 1, e.shiftKey))
 })
 
 editor.addEventListener('mousedown', (e) => {
@@ -1021,6 +1088,7 @@ editor.addEventListener('mousedown', (e) => {
     return
   }
   mouseDown = true
+  goalX = null
 })
 /** Take the page's selection into the model. Returns whether it moved. */
 function syncSelection() {
