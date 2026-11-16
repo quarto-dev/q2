@@ -2,3 +2,4 @@
 //! (see `.claude/rules/integration-tests.md`).
 
 pub mod crossref_outline;
+pub mod project_analysis;
