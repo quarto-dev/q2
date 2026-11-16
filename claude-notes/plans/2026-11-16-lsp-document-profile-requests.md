@@ -190,6 +190,36 @@ inner runtime's overrides are never replaced by trait defaults. The
 existing `every_trait_method_is_written_out` test is the pattern to
 copy.
 
+**As built (C2, bd-c1gyrfvt).** The code lives in
+`quarto_core::session_runtime`: `SessionRuntime`, `EditorLayer`, the
+`BaseLayer` trait, and `VfsBaseLayer` with `load_from_disk`, which uses
+the `quarto-project-files` walk.
+
+- **Two project sources.** `ProjectSource::Disk` reads unclassified
+  project files (a `.bib`, a data file) through to disk.
+  `ProjectSource::Attached` never falls through for project paths.
+  Paths outside the root always go to the inner runtime.
+- **Read-only.** The runtime refuses writes, removals and renames inside
+  the root.
+- **Reads are recorded.** Every project-file lookup is logged with a
+  `VersionKey`:
+  - `Buffer(version)` for an open buffer;
+  - `Content(sha256)` for file contents;
+  - `Stat` for an on-demand binary;
+  - `Opaque` for automerge heads, in F3;
+  - `Absent` for a missing path.
+
+  `SessionRuntime::reads()` returns the log, which C3's invalidation
+  uses. Directory listings are not recorded: a session rebuilds when its
+  feeder reports files added or removed.
+- **Snapshots.** A `SessionRuntime` holds `Arc`s of the layers and is
+  rebuilt per analysis run.
+- **Tests.** `tests/integration/session_runtime_pass1.rs` checks three
+  things: Pass 1 over the session runtime equals Pass 1 over the native
+  runtime; unsaved edits to an include and to `_metadata.yml` reach the
+  profile; and a project that exists only in the base layer is profiled
+  the same as on disk.
+
 ### Identity: sessions, paths, and URIs
 
 - Inside a session, files are keyed by **project-relative path**. The

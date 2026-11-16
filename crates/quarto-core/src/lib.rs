@@ -95,6 +95,7 @@ pub mod resource_copy_diagnostics;
 pub mod resource_resolver;
 pub mod resources;
 pub mod revealjs;
+pub mod session_runtime;
 pub mod stage;
 pub mod template;
 pub mod theme_diagnostic;

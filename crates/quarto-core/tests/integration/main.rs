@@ -231,6 +231,7 @@ pub mod revealjs_format;
 pub mod root_directory_metadata;
 pub mod sass_cache_key;
 pub mod secondary_nav_pipeline;
+pub mod session_runtime_pass1;
 pub mod shortcode_all_contexts;
 pub mod shortcode_config_pipeline;
 pub mod shortcode_pandoc_escapes;
