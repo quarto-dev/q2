@@ -49,7 +49,9 @@
 //!    every `.py` and `.R` on the way.
 //! 3. Exclude in either mode:
 //!    - the output directory (e.g. `_site/`)
-//!    - `.quarto/`, `.git/`, `node_modules/`
+//!    - `.quarto/`, `.git/`, `node_modules/`, and the engine environment
+//!      directories `renv/`, `packrat/`, `rsconnect/`, `venv/`, `env/`
+//!      (at any depth; matches Quarto 1)
 //!    - any path whose component starts with `_` (partials /
 //!      `_metadata.yml` / `_quarto*.yml`)
 //!    - any path whose component starts with `.` (hidden)
@@ -541,11 +543,25 @@ fn has_md_extension(path: &Path) -> bool {
     path.extension().and_then(|e| e.to_str()) == Some("md")
 }
 
+/// Directory names discovery never descends into, at any depth. Matches
+/// Quarto 1's `engineIgnoreDirs()`: `node_modules` plus each engine's
+/// environment directories — knitr's `renv`, `packrat`, `rsconnect` and
+/// jupyter's `venv`, `env`. These hold installed packages, whose bundled
+/// `.qmd` vignettes must not render as project pages (GH #1222).
+const IGNORED_DIR_NAMES: &[&str] = &[
+    "node_modules",
+    "renv",
+    "packrat",
+    "rsconnect",
+    "venv",
+    "env",
+];
+
 fn is_excluded_component(name: &str) -> bool {
     if name.starts_with('_') || name.starts_with('.') {
         return true;
     }
-    matches!(name, "node_modules")
+    IGNORED_DIR_NAMES.contains(&name)
 }
 
 fn starts_with(path: &Path, prefix: &Path) -> bool {
@@ -1246,6 +1262,71 @@ mod tests {
         let files = discover_project_files(&config, &native()).unwrap().files;
         assert_eq!(files.len(), 1);
         assert!(files[0].ends_with("index.qmd"));
+    }
+
+    /// GH #1222: renv installs packages (and their `.qmd` vignettes) under
+    /// `renv/library/`. Quarto 1 never walks the execution engines'
+    /// environment directories — `renv`, `packrat`, `rsconnect` (knitr) and
+    /// `venv`, `env` (jupyter) — at any depth, and neither do we.
+    #[test]
+    fn discovery_excludes_engine_environment_dirs() {
+        let temp = TempDir::new().unwrap();
+        let project_dir = canonical(temp.path());
+        write_file(&project_dir.join("index.qmd"), "# x\n");
+        for dir in ["renv", "packrat", "rsconnect", "venv", "env"] {
+            write_file(
+                &project_dir.join(format!("{dir}/library/pkg/doc/vignette.qmd")),
+                "# v\n",
+            );
+            write_file(&project_dir.join(format!("sub/{dir}/nested.qmd")), "# n\n");
+        }
+        // Names that merely contain an ignored dir name still render.
+        write_file(&project_dir.join("environment/page.qmd"), "# e\n");
+
+        let output_dir = project_dir.join("_site");
+        let exts = RenderableExtensions::fixed();
+        let config = DiscoveryConfig {
+            project_dir: &project_dir,
+            output_dir: &output_dir,
+            render_patterns: &[],
+            renderable_extensions: &exts,
+        };
+        let files = discover_project_files(&config, &native()).unwrap().files;
+        let mut rels: Vec<_> = files
+            .iter()
+            .map(|p| {
+                p.strip_prefix(&project_dir)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace(std::path::MAIN_SEPARATOR, "/")
+            })
+            .collect();
+        rels.sort();
+        assert_eq!(rels, vec!["environment/page.qmd", "index.qmd"]);
+    }
+
+    /// An explicit pattern naming a file under an engine environment dir
+    /// does not override the exclusion (Quarto 1 subtracts these dirs from
+    /// `project.render` too); the author gets Q-5-13 instead.
+    #[test]
+    fn discovery_engine_environment_dirs_are_hard_filters() {
+        let temp = TempDir::new().unwrap();
+        let project_dir = canonical(temp.path());
+        write_file(&project_dir.join("index.qmd"), "# x\n");
+        write_file(
+            &project_dir.join("renv/library/pkg/doc/vignette.qmd"),
+            "# v\n",
+        );
+
+        let (rels, _) = discover_with(&project_dir, &["**/*.qmd"]);
+        assert_eq!(rels, vec!["index.qmd"]);
+
+        let (rels, diags) = discover_with(&project_dir, &["renv/library/pkg/doc/vignette.qmd"]);
+        assert!(rels.is_empty(), "got {rels:?}");
+        assert!(
+            diags.iter().any(|d| d.code.as_deref() == Some("Q-5-13")),
+            "expected Q-5-13, got {diags:?}"
+        );
     }
 
     #[test]

@@ -147,6 +147,9 @@ matches them:
 - files and directories whose name starts with `_` (partials,
   metadata) or `.` (hidden);
 - anything under `node_modules/` or the output directory;
+- anything under a package-environment directory: `renv/`,
+  `packrat/`, `rsconnect/`, `venv/`, or `env/` (at any depth), so
+  vignettes that installed packages ship are never rendered;
 - `README` files (any extension, any capitalization);
 - agent-instruction Markdown: `CLAUDE.md`, `CLAUDE.local.md`,
   `AGENTS.md`, `AGENTS.local.md`, and `*.llms.md` companions.
