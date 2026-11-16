@@ -161,24 +161,33 @@
 
   /* I: in front of the label, as it is in the source. */
   .tip-caps .md-before { color: #8d949b; margin-right: -3px; }
-  .tip-dark .md-before { color: #8d949b; margin-right: 5px; }
+  /* I2, I3: light, like the style menu, with its colours: the shortcut and
+     the Markdown in the grey the menu gives its shortcuts and `#`s. */
+  .tip-plain {
+    padding: 5px 9px; border: 1px solid #dee2e6; border-radius: 7px;
+    background: #fff; color: #343a40; font: 12.5px system-ui, sans-serif;
+    box-shadow: 0 4px 16px rgba(0,0,0,.10);
+  }
+  .tip-plain .sc { margin-left: 8px; color: #6c757d; letter-spacing: .04em; }
+  .tip-plain .md-before { color: #6c757d; margin-right: 5px; }
 
   /* I3: I2, with the Markdown growing in to the left once you linger. The
      tooltip is anchored by its right edge, so the label doesn't move. */
-  .tip-dark .md-reveal {
+  .tip-plain .md-reveal {
     display: inline-block; max-width: 0; overflow: hidden; opacity: 0; vertical-align: bottom;
     transition: max-width .2s ease, opacity .2s ease .05s;
   }
-  .tip-dark.open .md-reveal { max-width: 3em; opacity: 1; }
+  .tip-plain.open .md-reveal { max-width: 3em; opacity: 1; }
 
-  /* G4: G3, with the Markdown fading in once the menu has been open a moment.
-     Its column is kept, so the labels don't move. */
+  /* G4, G5: the Markdown in a column of its own, right-aligned, so each run
+     of #s ends the same distance before its label and the labels line up. */
   .qe-item .md-col {
-    display: inline-block; width: 4.6ch; opacity: 0; transition: opacity .25s ease;
+    display: inline-block; width: 4ch; margin-right: 7px; text-align: right;
     font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 400; color: #6c757d;
     vertical-align: 1px;
   }
-  .qe-menu.open .md-col { opacity: 1; }
+  .qe-menu.linger .md-col { opacity: 0; transition: opacity .25s ease; }
+  .qe-menu.linger.open .md-col { opacity: 1; }
   .qe-menu[hidden] { display: none; }
 
   /* J: C, until the pointer stays; then the Markdown grows in below. */
@@ -357,8 +366,8 @@ const MD_TIPS = [
   },
   {
     name: 'I2. Before the label, plain text',
-    note: 'I1 with B’s dimmed shortcut, written as G3 writes it.',
-    cls: 'tip-dark',
+    note: 'Light like the style menu, the shortcut written as G3 writes it.',
+    cls: 'tip-plain',
     render: (b) =>
       (b.md ? `<span class="mono md-before">${md(b.md)}</span>` : '') +
       `${b.label}${b.keys ? `<span class="sc">${keysText(b.keys)}</span>` : ''}`,
@@ -366,7 +375,7 @@ const MD_TIPS = [
   {
     name: 'I3. Before the label, on linger',
     note: 'I2, but the Markdown grows in to the left after a second more on the button. Passing by shows only the label.',
-    cls: 'tip-dark',
+    cls: 'tip-plain',
     grow: true,
     anchorRight: true,
     render: (b) =>
@@ -507,13 +516,19 @@ const MENUS = [
   },
   {
     name: 'G3. Markdown before the label',
-    note: 'Each heading reads as its line of qmd: a cheat sheet whenever the menu is open. The tooltips’ I1 and I2.',
+    note: 'Each heading reads as its line of qmd: a cheat sheet whenever the menu is open. The tooltips’ I1, I2 and I3.',
     item: (s) =>
       `<span>${s.level ? `<span class="md md-lead">${'#'.repeat(s.level)}</span>` : ''}${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
   },
   {
-    name: 'G4. Markdown before the label, on linger',
-    note: 'G3, with the Markdown fading in after the menu has been open a second. The tooltips’ I3. Click the style box to replay.',
+    name: 'G4. Right-aligned column',
+    note: 'G3 with the #s in a column, right-aligned: the labels line up, each the same distance after its #s.',
+    item: (s) =>
+      `<span><span class="md-col">${'#'.repeat(s.level)}</span>${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
+  },
+  {
+    name: 'G5. Right-aligned column, on linger',
+    note: 'G4, with the #s fading in after the menu has been open a second. Click the style box to replay.',
     linger: true,
     item: (s) =>
       `<span><span class="md-col">${'#'.repeat(s.level)}</span>${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
@@ -546,7 +561,7 @@ function render() {
 
   const menus = document.getElementById('menus')
   menus.innerHTML = MENUS.map((m) => {
-    const menu = `<div class="qe-menu">${STYLES.map((s) =>
+    const menu = `<div class="qe-menu${m.linger ? ' linger' : ''}">${STYLES.map((s) =>
       `<button class="qe-item qe-item-${s.level} with-keys" role="menuitemradio" aria-checked="${s.level === 0}">${m.item(s)}</button>`).join('')}</div>`
     return `
     <div class="option menu-option">
