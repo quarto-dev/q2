@@ -1,4 +1,4 @@
-//! Project file discovery
+//! Project file discovery (moved from `quarto-hub`; see the crate docs).
 //!
 //! Walks the project directory to find source files (`.qmd`, `.md`), config
 //! files, and binary resources.
@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use tracing::debug;
 use walkdir::WalkDir;
 
-use crate::resource::is_binary_extension;
+use crate::is_binary_extension;
 
 /// Discovered files in a Quarto project.
 #[derive(Debug, Default)]

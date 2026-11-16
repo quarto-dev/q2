@@ -200,6 +200,7 @@ pub mod pandoc_typst_template_partials;
 pub mod pandoc_typst_writer;
 pub mod pandoc_wasm_constants;
 pub mod pass1_engine_resolution_pipeline;
+pub mod pass1_profile_document;
 pub mod pipeline_temp_dir_cleanup;
 pub mod placeholder_shortcode;
 pub mod positron_conformance;

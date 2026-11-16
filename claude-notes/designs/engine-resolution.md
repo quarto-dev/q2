@@ -650,7 +650,7 @@ catch up — the condition the index-pass warning (§12) surfaces.
 The file-claim half (§8) *is* in Pass 1 (it must, to convert non-QMD input before
 parse), but it only spawns an engine when a doc genuinely needs conversion, and
 it must be inserted into **both** the full pipeline and the Pass-1 builder
-(`pass1_profile_single_file_live`) — otherwise non-QMD docs get a garbage
+(`build_head_stages`, which `quarto_core::pass1::profile_document` runs) — otherwise non-QMD docs get a garbage
 `DocumentProfile`. File-claim conversion and engine-set resolution are
 independent Pass-1 activities: a claimed file's `claimed` argument feeds
 `resolve_engines_pass1` exactly as it feeds `resolve_engines` today (§8's

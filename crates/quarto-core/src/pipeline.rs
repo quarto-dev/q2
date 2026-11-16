@@ -333,7 +333,7 @@ pub fn build_html_pipeline_stages_with_apply_config(
 /// **Single source of truth for what a profile sees.** The full HTML
 /// pipeline ([`build_html_pipeline_stages_with_options`]) starts with
 /// exactly these stages, and Pass-1 profiling
-/// (`orchestrator::pass1_profile_single_file_live`) runs exactly
+/// ([`crate::pass1::profile_document`]) runs exactly
 /// these, so a document's Pass-1 profile — the one listings, sidebars
 /// and the dependency graph read — equals the profile its full render
 /// computes. The two lists used to be maintained by hand and drifted:

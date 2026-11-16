@@ -25,73 +25,11 @@ use sha2::{Digest, Sha256};
 
 use crate::error::Result;
 
-/// Known binary file extensions and their MIME types.
-///
-/// Used as a fallback when `infer` cannot detect the type from magic bytes.
-const BINARY_EXTENSIONS: &[(&str, &str)] = &[
-    // Images
-    ("png", "image/png"),
-    ("jpg", "image/jpeg"),
-    ("jpeg", "image/jpeg"),
-    ("gif", "image/gif"),
-    ("webp", "image/webp"),
-    ("svg", "image/svg+xml"),
-    ("ico", "image/x-icon"),
-    ("bmp", "image/bmp"),
-    ("tiff", "image/tiff"),
-    ("tif", "image/tiff"),
-    // Documents
-    ("pdf", "application/pdf"),
-    // Import sources (document import I21): stored as-is, and EMF/WMF when
-    // conversion fails. Mirror of `BINARY_EXTENSIONS` in
-    // ts-packages/quarto-automerge-schema.
-    (
-        "docx",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ),
-    ("odt", "application/vnd.oasis.opendocument.text"),
-    ("rtf", "application/rtf"),
-    ("epub", "application/epub+zip"),
-    (
-        "pptx",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ),
-    ("emf", "image/emf"),
-    ("wmf", "image/wmf"),
-    // hephaestus plot documents (bd-sxiv2tio). Not an IANA type; the
-    // vendor-tree name keeps the binary document self-describing. Mirror
-    // of `BINARY_EXTENSIONS` in ts-packages/quarto-automerge-schema.
-    ("hep", "application/vnd.hephaestus.plot"),
-    // Fonts
-    ("woff", "font/woff"),
-    ("woff2", "font/woff2"),
-    ("ttf", "font/ttf"),
-    ("otf", "font/otf"),
-    ("eot", "application/vnd.ms-fontobject"),
-    // Audio/Video
-    ("mp3", "audio/mpeg"),
-    ("mp4", "video/mp4"),
-    ("webm", "video/webm"),
-    ("ogg", "audio/ogg"),
-    ("wav", "audio/wav"),
-];
-
-/// Check if a file extension indicates a binary file.
-pub fn is_binary_extension(ext: &str) -> bool {
-    let ext_lower = ext.to_lowercase();
-    BINARY_EXTENSIONS.iter().any(|(e, _)| *e == ext_lower)
-}
-
-/// Get MIME type from file extension.
-///
-/// Returns `None` if the extension is not recognized.
-pub fn mime_type_from_extension(ext: &str) -> Option<&'static str> {
-    let ext_lower = ext.to_lowercase();
-    BINARY_EXTENSIONS
-        .iter()
-        .find(|(e, _)| *e == ext_lower)
-        .map(|(_, mime)| *mime)
-}
+// The extension table and the extension predicates live in
+// `quarto-project-files`, shared with the language server so both classify a
+// project's files identically. Re-exported here so existing callers and
+// `quarto_hub::resource::*` paths keep working.
+pub use quarto_project_files::{is_binary_extension, mime_type_from_extension};
 
 /// Detect MIME type from file content using magic bytes.
 ///
