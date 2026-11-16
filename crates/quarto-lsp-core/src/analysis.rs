@@ -45,8 +45,8 @@ const LEAF_LEVEL: usize = 7;
 /// Analyze a document, extracting symbols, folding ranges, and diagnostics.
 ///
 /// Internally runs `quarto_core::pipeline::build_analysis_pipeline()` —
-/// Parse + MetadataMerge + PreEngineSugaring + AstTransforms (analysis
-/// subset). Meta shortcodes in headers are resolved after the pipeline so
+/// the render head (through the profile checkpoint) + PreEngineSugaring +
+/// AstTransforms (analysis subset). Meta shortcodes in headers are resolved after the pipeline so
 /// `# {{< meta title >}}` shows its resolved value in the outline.
 pub fn analyze_document(doc: &Document) -> DocumentAnalysis {
     pollster::block_on(analyze_document_async(doc))
