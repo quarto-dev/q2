@@ -84,6 +84,7 @@
     white-space: nowrap; transform: translateX(-50%);
   }
   .tip[hidden] { display: none; }
+  .tip.instant, .tip.instant * { transition: none !important; }
 
   /* A: the browser's own tooltip (simulated: it's what macOS draws for `title`). */
   .tip-native {
@@ -408,7 +409,17 @@ function wireTips(row, opt, pinned) {
     el.style.left = `${t.left - b.left + t.width / 2}px`
     el.style.top = `${t.bottom - b.top + gap}px`
   }
-  const show = (id) => {
+  // Whether the Markdown has grown in since the pointer came to the toolbar.
+  // Moving on to the next button while warm keeps it, at once: the reader has
+  // already shown they want it.
+  let lingered = false
+  const show = (id, warm = false) => {
+    if (!warm) lingered = false
+    clearTimeout(growTimer)
+    // Collapsed (with no transition) before the new content goes in, so the
+    // last button's state can't flash in it.
+    tip.classList.add('instant')
+    tip.classList.remove('open')
     tip.innerHTML = opt.render(BUTTONS[id])
     tip.hidden = false
     // The OS puts it below the pointer, not centred on the button.
@@ -418,18 +429,22 @@ function wireTips(row, opt, pinned) {
     tip.style.transform = ''
     if (opt.anchorRight) {
       // Centred while the Markdown is hidden, then pinned by its right edge.
-      tip.classList.remove('open')
       const w = tip.getBoundingClientRect().width
       const right = parseFloat(tip.style.left) + w / 2
       tip.style.left = 'auto'
       tip.style.transform = 'none'
       tip.style.right = `${bar.getBoundingClientRect().width - right}px`
     }
-    if (opt.grow) {
-      clearTimeout(growTimer)
-      tip.classList.remove('open')
-      if (BUTTONS[id].md) growTimer = setTimeout(() => tip.classList.add('open'), 1100)
+    if (opt.grow && BUTTONS[id].md) {
+      if (lingered) tip.classList.add('open')
+      else
+        growTimer = setTimeout(() => {
+          lingered = true
+          tip.classList.add('open')
+        }, 1100)
     }
+    tip.getBoundingClientRect() // Lay it out before transitions come back.
+    tip.classList.remove('instant')
   }
   const hide = () => {
     clearTimeout(growTimer)
@@ -448,8 +463,9 @@ function wireTips(row, opt, pinned) {
     target.addEventListener('mouseenter', () => {
       clearTimeout(timer)
       if (!hint.hidden) return
-      const delay = Date.now() < warmUntil ? 0 : opt.native ? 900 : 500
-      timer = setTimeout(() => show(target.dataset.id), delay)
+      const warm = Date.now() < warmUntil
+      const delay = warm ? 0 : opt.native ? 900 : 500
+      timer = setTimeout(() => show(target.dataset.id, warm), delay)
     })
     target.addEventListener('mouseleave', () => {
       clearTimeout(timer)
