@@ -199,6 +199,34 @@ fn a_replayed_knitr_record_presents_what_the_live_engine_produced() {
     assert_replay_equals_live(CHUNKS);
 }
 
+/// KNR-7: the replay step must not need R. Record with R on `PATH`, then replace `PATH` with an
+/// empty directory (built with `join_paths`, so it works on Windows too) and replay: the output
+/// is the recorded run\'s, byte for byte.
+#[test]
+fn a_knitr_record_replays_with_r_hidden_from_the_environment() {
+    if !r_available() {
+        return;
+    }
+    let (capture, rec_dir, recorded) = record_capture(CHUNKS);
+
+    let empty = tempfile::tempdir().unwrap();
+    let hidden = std::env::join_paths([empty.path()]).unwrap();
+    // SAFETY: nextest runs each test in its own process, so nothing else reads `PATH` here.
+    unsafe { std::env::set_var("PATH", &hidden) };
+    assert!(
+        std::process::Command::new("Rscript")
+            .arg("--version")
+            .output()
+            .is_err(),
+        "R must really be hidden for this test to prove anything"
+    );
+
+    let replayed = ReplayEngine::new(capture)
+        .execute(CHUNKS, &context(CHUNKS, rec_dir.path(), false))
+        .expect("replay needs no R");
+    assert_eq!(replayed.markdown, recorded.markdown);
+}
+
 /// Red until the flip: the presenter splices over the input text, where a classic span is
 /// still `` `r 1 + 1` ``. After the flip R returns the skeleton (spans substituted, chunks as
 /// markers) and `capture.result.markdown` holds it, and replay presents over that. The flip

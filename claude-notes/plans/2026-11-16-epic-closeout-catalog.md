@@ -209,11 +209,19 @@ fallback counter, and the date of the JOL-2b alias-table deletion follow-up.
 5. **KNR-7:** map the six end-to-end items to existing tests and add what is missing.
 6. **Gordon-gated items** as Gordon schedules them.
 
+## Progress, 2026-11-16 (second pass)
+
+- **Reconciliation done** (one combined commit, `164e21998`): stale ticks, status lines, the EXR lane table, and `instructions/replay-engine.md`.
+- **Golden script: not a regression.** `scripts/check-presenter-goldens-unchanged.sh` reports seven files that three approved re-blesses changed on purpose: EXR-8 B3 (three files), Q-18-11 (three `*-invalid-base64-*` files), and bd-f63cqoke (`four-backtick-source`). The README documents each. The `presenter_goldens` test passes. The script's "never changes" rule is stale, and fixing it means either excluding those files or giving each its own baseline, which weakens or reshapes a guard. **Gordon decides.**
+- **Survey correction.** The Ark/RIU survey said no test covers a deleted cell or a cache older than the document. Both have tests (`positron_record.rs`: `a_deleted_unit_flags_the_page`, `a_cache_older_than_the_document_is_stale_at_publish_through_the_unclaimed_count`), plus `capture_driver.rs::re_execute_on_an_imported_page_is_refused_without_engine_and_runs_it_when_listed`. riu-03 line 180 is ticked; its viewer and editor-label parts stay with the browser items.
+- **Small tests done:** the Julia `warning` flip test, the imported Ark ANSI test, and the `.gitattributes` pin for the Positron fixtures (a Windows run still has to confirm it).
+- **KNR-7:** four of six end-to-end items are covered (Render, Replay with R hidden, Positron import, Mixed). New tests: `knitr_end_to_end_cli.rs` (two) and `knitr_replay_equals_live::a_knitr_record_replays_with_r_hidden_from_the_environment`. **Still open:** Preview with a real knitr record, and Hub (`provide-hub` writes a knitr record; a guest without R shows host output). No Windows cross-clippy was possible for the new tests (`aws-lc-sys`).
+
 ## Checklist
 
 - [x] OPR-8 (done 2026-11-16; see its notes)
-- [ ] Reconcile stale boxes and status lines (after OPR-8)
-- [ ] Investigate `check-presenter-goldens-unchanged.sh` failure
-- [ ] Small agent tests and the `.gitattributes` pin
-- [ ] KNR-7 end-to-end mapping
+- [x] Reconcile stale boxes and status lines (after OPR-8)
+- [x] Investigate `check-presenter-goldens-unchanged.sh` failure (not a regression; decision for Gordon)
+- [x] Small agent tests and the `.gitattributes` pin
+- [ ] KNR-7 end-to-end mapping (four of six done; Preview and Hub open)
 - [ ] Gordon-gated items

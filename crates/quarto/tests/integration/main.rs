@@ -30,6 +30,7 @@ pub mod julia_targets_cli;
 pub mod jupyter_document_isolation_e2e;
 pub mod jupyter_kernel_cleanup_e2e;
 pub mod jupyter_subcap_group_cli;
+pub mod knitr_end_to_end_cli;
 pub mod lmd_snapshots;
 pub mod loose_list_render;
 pub mod lua_host_context_cli;
