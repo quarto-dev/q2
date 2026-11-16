@@ -988,8 +988,12 @@ editor.addEventListener('paste', (e) => {
   render()
 })
 
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform)
 editor.addEventListener('keydown', (e) => {
-  const mod = e.metaKey || e.ctrlKey
+  // On a Mac the shortcuts are Cmd only: Ctrl+E, Ctrl+B and Ctrl+K keep
+  // their text-editing meanings (end of line, back a character, delete to
+  // the end of the line).
+  const mod = IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey
   const key = e.key.toLowerCase()
   const does = (action) => { e.preventDefault(); ruled = null; action(); hist.kind = null; render() }
   if (mod && key === 'z') does(e.shiftKey ? redo : undo)
