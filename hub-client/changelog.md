@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-11-16
+
+- [`17792be75`](https://github.com/quarto-dev/q2/commits/17792be75): In preview comments, Shift+Enter now starts a new line in a comment (Enter still adds it), and pasting text with blank lines into a comment no longer breaks the document
+
 ### 2026-11-13
 
 - [`05b9c3bd1`](https://github.com/quarto-dev/q2/commits/05b9c3bd1): Typing with the authors overlay on no longer slows down as the document grows
