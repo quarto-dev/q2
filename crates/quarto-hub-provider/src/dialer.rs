@@ -1,9 +1,13 @@
-//! A samod [`Dialer`] that injects an `Authorization: Bearer` header.
+//! samod [`Dialer`]s that add handshake headers.
 //!
-//! samod's built-in `dial_websocket` cannot set request headers, so an
-//! authenticated hub (`/ws` behind a Bearer JWT) is unreachable with it. This
-//! dialer reimplements the (small) tungstenite connect path with the header
-//! added, fetching a fresh token from a [`TokenSource`] on every (re)connect.
+//! samod's built-in `dial_websocket` cannot set request headers, so a hub
+//! behind an authenticating front is unreachable with it. These dialers
+//! reimplement the (small) tungstenite connect path with headers added:
+//!
+//! - [`BearerDialer`] sends `Authorization: Bearer`, fetching a fresh token
+//!   from a [`TokenSource`] on every (re)connect.
+//! - [`HeaderDialer`] sends a fixed set of headers, such as the relay key a
+//!   token-gated gateway in front of a hub requires.
 //!
 //! The byte-mapping mirrors samod's private `ws_to_bytes`: binary frames carry
 //! sync bytes, Ping/Pong are transport-level and dropped, Close ends the
@@ -18,7 +22,7 @@ use samod::{DialError, Dialer, Transport};
 use tungstenite::Message;
 use tungstenite::client::IntoClientRequest;
 use tungstenite::handshake::client::Request;
-use tungstenite::http::header::AUTHORIZATION;
+use tungstenite::http::header::{AUTHORIZATION, HeaderName, HeaderValue};
 use url::Url;
 
 use crate::ProviderError;
@@ -36,9 +40,48 @@ impl BearerDialer {
     }
 }
 
-/// Build a websocket client handshake request for `url` carrying an
-/// `Authorization: Bearer <bearer>` header.
-pub(crate) fn build_auth_request(url: &Url, bearer: &str) -> Result<Request, ProviderError> {
+/// A samod [`Dialer`] that dials `url` with a fixed set of handshake headers.
+///
+/// The headers are validated once, at construction: unlike a bearer token,
+/// they never change between attempts, so a malformed one could never
+/// succeed on retry.
+pub struct HeaderDialer {
+    url: Url,
+    headers: Vec<(HeaderName, HeaderValue)>,
+}
+
+impl HeaderDialer {
+    /// A dialer for `url` sending each `(name, value)` pair on every
+    /// handshake. Fails with [`ProviderError::Handshake`] when a name or a
+    /// value is not legal in an HTTP header.
+    pub fn new(url: Url, headers: Vec<(String, String)>) -> Result<Self, ProviderError> {
+        let headers = headers
+            .into_iter()
+            .map(|(name, value)| {
+                let name = HeaderName::from_bytes(name.as_bytes()).map_err(|_| {
+                    ProviderError::Handshake(format!("'{name}' is not a valid header name"))
+                })?;
+                let value = HeaderValue::from_str(&value).map_err(|_| {
+                    ProviderError::Handshake(format!("the value of '{name}' is not valid"))
+                })?;
+                Ok((name, value))
+            })
+            .collect::<Result<Vec<_>, ProviderError>>()?;
+        Ok(Self { url, headers })
+    }
+
+    /// The handshake request this dialer sends.
+    pub(crate) fn build_request(&self) -> Result<Request, ProviderError> {
+        let mut request = websocket_request(&self.url)?;
+        for (name, value) in &self.headers {
+            request.headers_mut().insert(name.clone(), value.clone());
+        }
+        Ok(request)
+    }
+}
+
+/// A websocket client handshake request for `url`, with no extra headers.
+fn websocket_request(url: &Url) -> Result<Request, ProviderError> {
     // tungstenite validates the scheme only at connect time; reject it here
     // so a bad --server URL is a permanent, nameable failure (bd-q96fhj3q).
     match url.scheme() {
@@ -49,10 +92,15 @@ pub(crate) fn build_auth_request(url: &Url, bearer: &str) -> Result<Request, Pro
             )));
         }
     }
-    let mut request = url
-        .as_str()
+    url.as_str()
         .into_client_request()
-        .map_err(|e| ProviderError::InvalidUrl(e.to_string()))?;
+        .map_err(|e| ProviderError::InvalidUrl(e.to_string()))
+}
+
+/// Build a websocket client handshake request for `url` carrying an
+/// `Authorization: Bearer <bearer>` header.
+pub(crate) fn build_auth_request(url: &Url, bearer: &str) -> Result<Request, ProviderError> {
+    let mut request = websocket_request(url)?;
     let value = format!("Bearer {bearer}")
         .parse()
         .map_err(|_| ProviderError::Handshake("bearer token is not a valid header value".into()))?;
@@ -109,42 +157,68 @@ impl Dialer for BearerDialer {
                 }
                 Err(err) => return Err(DialError::transient(err)),
             };
-
-            let (ws, _response) = match tokio_tungstenite::connect_async(request).await {
-                Ok(ok) => ok,
-                // A URL error at connect (e.g. a scheme tungstenite rejects)
-                // is a property of the fixed URL, never of the network.
-                Err(tungstenite::Error::Url(err)) => {
-                    return Err(DialError::PermanentFailure(ProviderError::InvalidUrl(
-                        err.to_string(),
-                    )));
-                }
-                Err(err) => return Err(DialError::transient(err)),
-            };
-            let (write, read) = ws.split();
-
-            // Inbound: tungstenite frames -> sync bytes (dropping control frames).
-            let msg_stream = read
-                .filter_map(|res| async move {
-                    match res {
-                        Ok(msg) => inbound_to_bytes(msg),
-                        Err(e) => Some(Err(ProviderError::Protocol(format!(
-                            "websocket receive error: {e}"
-                        )))),
-                    }
-                })
-                .boxed();
-
-            // Outbound: sync bytes -> binary frames.
-            let msg_sink = write
-                .sink_map_err(|e| ProviderError::Protocol(format!("websocket send error: {e}")))
-                .with(|bytes: Vec<u8>| {
-                    futures::future::ready(Ok::<Message, ProviderError>(outbound_to_ws(bytes)))
-                });
-
-            Ok(Transport::new(msg_stream, msg_sink))
+            connect_transport(request).await
         })
     }
+}
+
+impl Dialer for HeaderDialer {
+    // The headers were validated at construction, so the only permanent
+    // failure left is the URL's, as for BearerDialer (bd-q96fhj3q).
+    type Error = ProviderError;
+
+    fn url(&self) -> Url {
+        self.url.clone()
+    }
+
+    fn connect(&self) -> BoxFuture<'static, Result<Transport, DialError<Self::Error>>> {
+        let request = self.build_request();
+        Box::pin(async move {
+            let request = request.map_err(|err| match err {
+                ProviderError::InvalidUrl(_) => DialError::PermanentFailure(err),
+                err => DialError::transient(err),
+            })?;
+            connect_transport(request).await
+        })
+    }
+}
+
+/// Perform the websocket handshake for `request` and wrap the socket as a
+/// samod [`Transport`].
+async fn connect_transport(request: Request) -> Result<Transport, DialError<ProviderError>> {
+    let (ws, _response) = match tokio_tungstenite::connect_async(request).await {
+        Ok(ok) => ok,
+        // A URL error at connect (e.g. a scheme tungstenite rejects)
+        // is a property of the fixed URL, never of the network.
+        Err(tungstenite::Error::Url(err)) => {
+            return Err(DialError::PermanentFailure(ProviderError::InvalidUrl(
+                err.to_string(),
+            )));
+        }
+        Err(err) => return Err(DialError::transient(err)),
+    };
+    let (write, read) = ws.split();
+
+    // Inbound: tungstenite frames -> sync bytes (dropping control frames).
+    let msg_stream = read
+        .filter_map(|res| async move {
+            match res {
+                Ok(msg) => inbound_to_bytes(msg),
+                Err(e) => Some(Err(ProviderError::Protocol(format!(
+                    "websocket receive error: {e}"
+                )))),
+            }
+        })
+        .boxed();
+
+    // Outbound: sync bytes -> binary frames.
+    let msg_sink = write
+        .sink_map_err(|e| ProviderError::Protocol(format!("websocket send error: {e}")))
+        .with(|bytes: Vec<u8>| {
+            futures::future::ready(Ok::<Message, ProviderError>(outbound_to_ws(bytes)))
+        });
+
+    Ok(Transport::new(msg_stream, msg_sink))
 }
 
 #[cfg(test)]
@@ -247,6 +321,71 @@ mod tests {
             Err(DialError::TransientFailure(_)) => {}
             Err(err) => panic!("expected a transient failure, got permanent: {err}"),
             Ok(_) => panic!("expected a transient failure, got a live transport"),
+        }
+    }
+
+    fn relay_headers() -> Vec<(String, String)> {
+        vec![
+            ("X-Relay-Key".to_string(), "secret-1".to_string()),
+            ("X-Other".to_string(), "two".to_string()),
+        ]
+    }
+
+    #[test]
+    fn header_request_carries_every_configured_header_and_target() {
+        let dialer = HeaderDialer::new(
+            Url::parse("ws://127.0.0.1:40404/ws").unwrap(),
+            relay_headers(),
+        )
+        .unwrap();
+        let req = dialer.build_request().unwrap();
+
+        assert_eq!(req.headers().get("x-relay-key").unwrap(), "secret-1");
+        assert_eq!(req.headers().get("x-other").unwrap(), "two");
+        assert_eq!(req.headers().get(AUTHORIZATION), None);
+        assert_eq!(req.uri().host(), Some("127.0.0.1"));
+        assert_eq!(req.uri().port_u16(), Some(40404));
+        assert_eq!(req.uri().path(), "/ws");
+    }
+
+    #[test]
+    fn header_dialer_rejects_an_invalid_header_name_at_construction() {
+        let err = HeaderDialer::new(
+            Url::parse("ws://127.0.0.1:40404/ws").unwrap(),
+            vec![("not a header".to_string(), "v".to_string())],
+        )
+        .err()
+        .expect("a header name with spaces must be rejected");
+        assert!(matches!(err, ProviderError::Handshake(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn header_dialer_rejects_an_invalid_header_value_at_construction() {
+        let err = HeaderDialer::new(
+            Url::parse("ws://127.0.0.1:40404/ws").unwrap(),
+            vec![("X-Relay-Key".to_string(), "bad\nvalue".to_string())],
+        )
+        .err()
+        .expect("a header value with a newline must be rejected");
+        assert!(matches!(err, ProviderError::Handshake(_)), "got {err:?}");
+    }
+
+    #[tokio::test]
+    async fn header_dialer_connect_with_a_non_ws_scheme_is_a_permanent_failure() {
+        let dialer = HeaderDialer::new(
+            Url::parse("https://127.0.0.1:40404/ws").unwrap(),
+            relay_headers(),
+        )
+        .unwrap();
+        match dialer.connect().await {
+            Err(err @ DialError::PermanentFailure(_)) => {
+                assert!(
+                    err.to_string().contains("invalid websocket url"),
+                    "permanent failure should name the URL as the cause, got: {err}"
+                );
+            }
+            Err(err) => panic!("expected a permanent failure, got transient: {err}"),
+            Ok(_) => panic!("expected a permanent failure, got a live transport"),
         }
     }
 
