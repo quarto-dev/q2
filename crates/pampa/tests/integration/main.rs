@@ -119,6 +119,7 @@ pub mod test_lua_attr_mutation;
 pub mod test_lua_constructors;
 pub mod test_lua_content_mutation;
 pub mod test_lua_list;
+pub mod test_lua_popen_parallel;
 pub mod test_lua_utils;
 pub mod test_lua_walk;
 pub mod test_math_attr;
