@@ -21,14 +21,23 @@
  * disabled, but for its undo and redo buttons, which come first and work
  * wherever the caret is, as the keyboard's undo and redo do.
  *
+ * Resting the mouse on a button shows a tooltip with its name and keyboard
+ * shortcut (`Tooltip.tsx`), and the style menu gives each style's shortcut
+ * (`shortcuts.ts`). What the style menu and the list and quote buttons do,
+ * and when they can, is `editing/lineStyles.ts`, shared with their
+ * shortcuts.
+ *
  * It lives outside the document's frame. Pressing it doesn't take the
  * focus, so the caret stays where it was.
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { BULLET, headingLevel, headingPrefix, isBullet, isItem, isNumbered, isQuote, NUMBERED, QUOTE } from './editing/body.ts'
+import { BULLET, NUMBERED } from './editing/body.ts'
 import { EMPH, HIGHLIGHT, STRONG, UNDERLINE } from './editing/inlines.ts'
-import { linePrefix, type State } from './engine/model.ts'
+import { canChoose, canList, canQuote, caretLine, chooseStyle, toggleList, toggleQuote } from './editing/lineStyles.ts'
+import { type State } from './engine/model.ts'
+import { ariaKeyshortcuts, SHORTCUTS, shortcutText, styleShortcut, type Shortcut } from './shortcuts.ts'
+import { useTooltips } from './Tooltip.tsx'
 
 interface ToolbarProps {
   state: State
@@ -60,25 +69,25 @@ const icon = (d: string) => (
   </svg>
 )
 
-/** The formatting buttons: name, format, icon and keyboard shortcut. */
+/** The formatting buttons: name, format, keyboard shortcut and icon. */
 const FORMATS = [
   {
     name: 'Bold',
     format: STRONG,
-    keys: '⌘B',
+    shortcut: SHORTCUTS.bold,
     icon: icon('M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z'),
   },
-  { name: 'Italic', format: EMPH, keys: '⌘I', icon: icon('M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z') },
+  { name: 'Italic', format: EMPH, shortcut: SHORTCUTS.italic, icon: icon('M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z') },
   {
     name: 'Underline',
     format: UNDERLINE,
-    keys: '⌘U',
+    shortcut: SHORTCUTS.underline,
     icon: icon('M12 17c3.31 0 6-2.69 6-6V3h-2.5v8c0 1.93-1.57 3.5-3.5 3.5S8.5 12.93 8.5 11V3H6v8c0 3.31 2.69 6 6 6zm-7 2v2h14v-2H5z'),
   },
   {
     name: 'Highlight',
     format: HIGHLIGHT,
-    keys: '⌘⇧H',
+    shortcut: SHORTCUTS.highlight,
     // "border_color": a marker pen over a bar.
     icon: icon('M16.81 8.94l-3.75-3.75L4 14.25V18h3.75l9.06-9.06zM6 16v-.92l7.06-7.06.92.92L6.92 16H6zm13.71-9.96c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83zM2 20h20v4H2z'),
   },
@@ -132,6 +141,16 @@ const QUOTE_ICON = (
   </svg>
 )
 
+/**
+ * A button's tooltip (its name, and its shortcut if it has one), and its
+ * shortcut for assistive technology.
+ */
+const tip = (name: string, shortcut?: Shortcut) => ({
+  'data-tip': name,
+  'data-keys': shortcut && shortcutText(shortcut),
+  'aria-keyshortcuts': shortcut && ariaKeyshortcuts(shortcut),
+})
+
 const CHEVRON = (
   <svg viewBox="0 0 8 8" aria-hidden="true">
     <path d="M1 2.5 4 5.5 7 2.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
@@ -154,16 +173,12 @@ export function Toolbar({
 }: ToolbarProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const tooltips = useTooltips(ref)
 
-  // The caret's line in the body, by its prefix (null: the caret isn't in the body).
-  const focus = state.selection?.focus
-  const prefix = writable && focus?.field === 'body' ? linePrefix(state.fields.body ?? '', focus.offset) : null
-  const disabled = prefix === null
-  const level = prefix === null ? 0 : headingLevel(prefix)
-  const quoted = prefix !== null && isQuote(prefix)
-  const bulleted = prefix !== null && isBullet(prefix)
-  const numbered = prefix !== null && isNumbered(prefix)
-  const listed = bulleted || numbered
+  // The caret's line in the body (null: the caret isn't in the body).
+  const line = caretLine(state, writable)
+  const disabled = line === null
+  const level = line?.level ?? 0
   const style = level > 0 ? `Heading ${level}` : 'Paragraph'
 
   useEffect(() => {
@@ -194,22 +209,10 @@ export function Toolbar({
     }
   }, [open, frameDoc])
 
-  const choose = (to: number) => {
+  // Change the lines the selection is on, closing the menu.
+  const change = (prefixFor: (prefix: string) => string) => {
     setOpen(false)
-    // A quote's or a list item's line is a paragraph, and stays one.
-    setPrefixes((p) => (isQuote(p) || isItem(p) ? p : to > 0 ? headingPrefix(to) : ''))
-  }
-
-  // Pressed, a list button makes the items of its kind paragraphs; else it
-  // makes paragraphs and the other kind's items items of its kind.
-  const toggleList = (kind: string, pressed: boolean) => {
-    setOpen(false)
-    setPrefixes((p) => (pressed ? (p === kind ? '' : p) : p === '' || isItem(p) ? kind : p))
-  }
-
-  const toggleQuote = () => {
-    setOpen(false)
-    setPrefixes((p) => (quoted ? (isQuote(p) ? '' : p) : p === '' ? QUOTE : p))
+    setPrefixes(prefixFor)
   }
 
   return (
@@ -218,14 +221,19 @@ export function Toolbar({
       className="qe-toolbar"
       role="toolbar"
       aria-label="Formatting"
-      // Keep the focus, and so the caret, in the document.
-      onMouseDown={(e) => e.preventDefault()}
+      onMouseDown={(e) => {
+        // Keep the focus, and so the caret, in the document.
+        e.preventDefault()
+        tooltips.onMouseDown()
+      }}
+      onMouseMove={tooltips.onMouseMove}
+      onMouseLeave={tooltips.onMouseLeave}
     >
       <button
         type="button"
         className="qe-icon"
         aria-label="Undo"
-        title="Undo"
+        {...tip('Undo', SHORTCUTS.undo)}
         disabled={!writable || !canUndo}
         onClick={() => {
           setOpen(false)
@@ -238,7 +246,7 @@ export function Toolbar({
         type="button"
         className="qe-icon"
         aria-label="Redo"
-        title="Redo"
+        {...tip('Redo', SHORTCUTS.redo)}
         disabled={!writable || !canRedo}
         onClick={() => {
           setOpen(false)
@@ -253,6 +261,8 @@ export function Toolbar({
           type="button"
           className={`qe-style${open ? ' open' : ''}`}
           aria-label="Text style"
+          // No tooltip while its menu is open.
+          {...(open ? {} : tip('Text style'))}
           aria-haspopup="menu"
           aria-expanded={open}
           disabled={disabled}
@@ -269,11 +279,14 @@ export function Toolbar({
                 type="button"
                 role="menuitemradio"
                 aria-checked={s.level === level}
+                aria-label={s.name}
+                aria-keyshortcuts={ariaKeyshortcuts(styleShortcut(s.level))}
                 className={`qe-item qe-item-${s.level}`}
-                disabled={(quoted || listed) && s.level > 0}
-                onClick={() => choose(s.level)}
+                disabled={line !== null && !canChoose(line, s.level)}
+                onClick={() => change(chooseStyle(s.level))}
               >
-                {s.name}
+                <span>{s.name}</span>
+                <kbd>{shortcutText(styleShortcut(s.level))}</kbd>
               </button>
             ))}
           </div>
@@ -286,7 +299,7 @@ export function Toolbar({
           type="button"
           className="qe-icon"
           aria-label={f.name}
-          title={`${f.name} (${f.keys})`}
+          {...tip(f.name, f.shortcut)}
           aria-pressed={marks !== null && (marks & (1 << f.format)) !== 0}
           disabled={disabled || marks === null}
           onClick={() => {
@@ -302,7 +315,7 @@ export function Toolbar({
         type="button"
         className="qe-icon"
         aria-label="Link"
-        title="Link (⌘K)"
+        {...tip('Link', SHORTCUTS.link)}
         aria-pressed={inLink}
         disabled={disabled || marks === null}
         onClick={() => {
@@ -317,10 +330,10 @@ export function Toolbar({
         type="button"
         className="qe-icon"
         aria-label="Bulleted list"
-        title="Bulleted list"
-        aria-pressed={bulleted}
-        disabled={disabled || level > 0 || quoted}
-        onClick={() => toggleList(BULLET, bulleted)}
+        {...tip('Bulleted list', SHORTCUTS.bulletList)}
+        aria-pressed={line?.bulleted ?? false}
+        disabled={line === null || !canList(line)}
+        onClick={() => line && change(toggleList(line, BULLET))}
       >
         {LIST_ICON}
       </button>
@@ -328,10 +341,10 @@ export function Toolbar({
         type="button"
         className="qe-icon"
         aria-label="Numbered list"
-        title="Numbered list"
-        aria-pressed={numbered}
-        disabled={disabled || level > 0 || quoted}
-        onClick={() => toggleList(NUMBERED, numbered)}
+        {...tip('Numbered list', SHORTCUTS.numberedList)}
+        aria-pressed={line?.numbered ?? false}
+        disabled={line === null || !canList(line)}
+        onClick={() => line && change(toggleList(line, NUMBERED))}
       >
         {NUMBERED_ICON}
       </button>
@@ -339,13 +352,14 @@ export function Toolbar({
         type="button"
         className="qe-icon"
         aria-label="Quote"
-        title="Quote"
-        aria-pressed={quoted}
-        disabled={disabled || level > 0 || listed}
-        onClick={toggleQuote}
+        {...tip('Quote', SHORTCUTS.quote)}
+        aria-pressed={line?.quoted ?? false}
+        disabled={line === null || !canQuote(line)}
+        onClick={() => line && change(toggleQuote(line))}
       >
         {QUOTE_ICON}
       </button>
+      {tooltips.element}
     </div>
   )
 }

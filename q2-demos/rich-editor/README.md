@@ -84,6 +84,15 @@ made a heading or a quote, or a heading or a quote an item; outside the body, it
 redo buttons, first in it, work wherever the caret is, as the keyboard's
 undo and redo do, and are disabled while there's nothing to undo or redo. Its design is the toolbar of `mockups/block-annotations.html`
 with nothing in the margin and no breadcrumb.
+Resting the mouse on one of its buttons, enabled or not, shows a tooltip
+with the button's name and keyboard shortcut (`src/Tooltip.tsx`), and
+its style menu gives each style's shortcut; their design is the "Chosen"
+section of `mockups/shortcut-tooltips.html`. The line styles have
+shortcuts as in Google Docs (`src/shortcuts.ts`), which do what the
+toolbar does, and nothing where it's disabled: Cmd+Option+0 Paragraph,
+Cmd+Option+1 to 4 the headings, Cmd+Shift+8 the bulleted list,
+Cmd+Shift+7 the numbered list and Cmd+Shift+9 the quote (Ctrl and Alt
+elsewhere).
 The rest of the body (paragraphs, headings, quotes and lists with math,
 a citation, a note, an image or a span of another kind in their text,
 quotes of more than one paragraph, lists with blank lines
@@ -309,7 +318,7 @@ The specs are: `title-block.spec.ts`, `cross-field.spec.ts`,
 and `links.spec.ts` (links, their popover and form)
 (editing),
 `title-block-widget.spec.ts` (adding and removing title-block fields),
-`toolbar.spec.ts` (the toolbar's undo and redo buttons, style box and quote button), `keys.spec.ts` (moving and
+`toolbar.spec.ts` (the toolbar's undo and redo buttons, style box and quote button, its tooltips, and the line styles' shortcuts), `keys.spec.ts` (moving and
 deleting by word and by line), `clipboard.spec.ts` (copy, cut, paste, drag
 and drop),
 `composition.spec.ts` (input methods), `blocks.spec.ts` (how each kind of

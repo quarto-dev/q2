@@ -74,6 +74,7 @@ body {
 
 /* The toolbar above the visual editor, Word / Google Docs style. */
 .qe-toolbar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 3px;
@@ -101,6 +102,38 @@ body {
 .qe-toolbar button:disabled {
   color: #adb5bd;
   cursor: default;
+  /* The mouse goes through to the toolbar, which shows the button's tooltip. */
+  pointer-events: none;
+}
+
+/* A toolbar button's tooltip: its name, then its shortcut, more muted. Light, like the style menu. */
+.qe-tip {
+  position: absolute;
+  z-index: 20;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 9px;
+  border: 1px solid #dee2e6;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  color: #343a40;
+  font: 12.5px system-ui, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.qe-tip kbd,
+.qe-toolbar .qe-item kbd {
+  padding: 0;
+  background: none;
+  color: #9aa1a8;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
 }
 
 .qe-toolbar button[aria-pressed='true'] {
@@ -163,6 +196,8 @@ body {
 
 .qe-toolbar .qe-item {
   position: relative;
+  justify-content: space-between;
+  gap: 16px;
   padding: 5px 8px 5px 26px;
   font-size: 13.5px;
   text-align: left;
