@@ -208,7 +208,6 @@ if ($WithPython) {
     Copy-Item -Force (Join-Path $scripts 'python.exe') (Join-Path $scripts 'python3.exe')
     $env:PATH = $scripts + ';' + $env:PATH
     & (Join-Path $scripts 'python3.exe') -m ipykernel install --user --name python3 2>&1 | Out-Null
-    & (Join-Path $scripts 'python3.exe') -I -c 'import ipykernel; print("ipykernel ok")'
 }
 $pyOk = $false
 & python3 -I -c 'import ipykernel' 2>$null
