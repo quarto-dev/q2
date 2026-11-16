@@ -153,7 +153,6 @@
 
   /* ── Teaching the Markdown (built on C) ─────────────── */
   .mono { font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .sp { color: #6c737a; }
 
   /* H: after the keys, past a hairline. */
   .tip-caps .md-sep { width: 1px; height: 12px; background: #50565c; }
@@ -207,7 +206,7 @@
   (after a short delay, then instantly as you move along the toolbar, as macOS does). Undo and redo's shortcuts
   exist; the others are <b>proposals</b>, following Google Docs: <code>⇧⌘8</code> bulleted list,
   <code>⇧⌘7</code> numbered list, <code>⇧⌘9</code> quote, <code>⌥⌘0</code>–<code>⌥⌘4</code> paragraph and headings.
-  The Markdown hints (<code>- </code>, <code>1. </code>, <code>&gt; </code>, <code>#</code>) already work as you type.</p>
+  The Markdown hints (<code>*</code>, <code>1.</code>, <code>&gt;</code>, <code>#</code>, each and a space) already work as you type; <code>*</code> is the bullet q2 writes.</p>
 <div class="platform" role="group" aria-label="Platform">
   <button type="button" data-platform="mac" aria-pressed="true">macOS</button>
   <button type="button" data-platform="pc" aria-pressed="false">Windows and Linux</button>
@@ -217,7 +216,7 @@
 <div id="tips"></div>
 
 <h2>Teaching the Markdown</h2>
-<p class="intro">Subtler ways than E to show what to type, on C’s tooltip. <code>␣</code> is a space.</p>
+<p class="intro">Subtler ways than E to show what to type, on C’s tooltip.</p>
 <div id="md"></div>
 
 <h2>The text style menu</h2>
@@ -244,7 +243,7 @@ const BUTTONS = {
   undo: { label: 'Undo', keys: KEYS.undo },
   redo: { label: 'Redo', keys: KEYS.redo },
   style: { label: 'Text style' },
-  bullet: { label: 'Bulleted list', keys: KEYS.bullet, md: '-' },
+  bullet: { label: 'Bulleted list', keys: KEYS.bullet, md: '*' },
   numbered: { label: 'Numbered list', keys: KEYS.numbered, md: '1.' },
   quote: { label: 'Quote', keys: KEYS.quote, md: '>' },
 }
@@ -312,7 +311,7 @@ const toolbar = (menu = '') => `
   </div></div>`
 
 // Markdown with its space shown.
-const md = (s) => `${s}<span class="sp">␣</span>`
+const md = (s) => s
 const capsRow = (b) => `<span>${b.label}</span>${b.keys ? caps(b.keys) : ''}`
 
 const MD_TIPS = [
@@ -352,7 +351,7 @@ const MD_TIPS = [
     grow: true,
     render: (b) =>
       `<div class="row">${capsRow(b)}</div>` +
-      (b.md ? `<div class="md-line"><div><div>or type <code class="mono">${md(b.md)}</code></div></div></div>` : ''),
+      (b.md ? `<div class="md-line"><div><div>or type <code class="mono">${md(b.md)}</code> and a space</div></div></div>` : ''),
   },
   {
     name: 'K. After you press it',
@@ -399,7 +398,7 @@ function wireTips(row, opt, pinned) {
   }
   const showHint = (id, stay) => {
     hide()
-    hint.innerHTML = `Next time, type <code>${md(BUTTONS[id].md)}</code> at the start of a line`
+    hint.innerHTML = `Next time, type <code>${md(BUTTONS[id].md)}</code> and a space at the start of a line`
     hint.hidden = false
     place(hint, id, 6)
     clearTimeout(hintTimer)
