@@ -7128,6 +7128,7 @@ dependencies = [
  "quarto-node-discovery",
  "quarto-output-extract",
  "quarto-pandoc-types",
+ "quarto-project-files",
  "quarto-sass",
  "quarto-source-map",
  "quarto-system-runtime",

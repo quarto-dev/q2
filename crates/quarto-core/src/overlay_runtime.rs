@@ -400,13 +400,13 @@ impl SystemRuntime for OverlayRuntime {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use quarto_system_runtime::NativeRuntime;
     use std::collections::BTreeSet;
 
     /// Method names declared inside `pub trait SystemRuntime { .. }`.
-    fn trait_methods(src: &str) -> BTreeSet<String> {
+    pub(crate) fn trait_methods(src: &str) -> BTreeSet<String> {
         let start = src.find("pub trait SystemRuntime").expect("trait");
         let body = &src[start..];
         let end = body.find("\n}\n").expect("end of trait");
@@ -414,7 +414,7 @@ mod tests {
     }
 
     /// Method names declared at four-space indent (`fn` or `async fn`).
-    fn method_names(body: &str) -> BTreeSet<String> {
+    pub(crate) fn method_names(body: &str) -> BTreeSet<String> {
         body.lines()
             .filter_map(|line| {
                 let rest = line.strip_prefix("    ")?;
