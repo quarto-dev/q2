@@ -161,6 +161,7 @@
 
   /* I: in front of the label, as it is in the source. */
   .tip-caps .md-before { color: #8d949b; margin-right: -3px; }
+  .tip-dark .md-before { color: #8d949b; margin-right: 5px; }
 
   /* J: C, until the pointer stays; then the Markdown grows in below. */
   .tip-grow {
@@ -331,10 +332,18 @@ const MD_TIPS = [
       (b.keys ? caps(b.keys) : ''),
   },
   {
-    name: 'I. Before the label',
+    name: 'I1. Before the label, keycaps',
     note: 'Written as it is in the source: the label reads as a line of qmd. The menu’s G3.',
     cls: 'tip-caps',
     render: (b) => (b.md ? `<span class="mono md-before">${md(b.md)}</span>` : '') + capsRow(b),
+  },
+  {
+    name: 'I2. Before the label, plain text',
+    note: 'I1 with B’s dimmed shortcut, written as G3 writes it.',
+    cls: 'tip-dark',
+    render: (b) =>
+      (b.md ? `<span class="mono md-before">${md(b.md)}</span>` : '') +
+      `${b.label}${b.keys ? `<span class="sc">${keysText(b.keys)}</span>` : ''}`,
   },
   {
     name: 'J. Grows in while you linger',
@@ -444,7 +453,7 @@ const MENUS = [
   },
   {
     name: 'G3. Markdown before the label',
-    note: 'Each heading reads as its line of qmd. The tooltips’ I.',
+    note: 'Each heading reads as its line of qmd. The tooltips’ I1 and I2.',
     item: (s) =>
       `<span>${s.level ? `<span class="md md-lead">${'#'.repeat(s.level)}</span>` : ''}${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
   },
