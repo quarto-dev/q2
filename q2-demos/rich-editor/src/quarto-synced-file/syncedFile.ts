@@ -24,8 +24,14 @@ const PEER_TIMEOUT_MS = 10000
 
 export interface SyncedFileParams {
   syncServer: string
-  indexDocId: string
+  /** The project's index document (null: make a new project, with `create`). */
+  indexDocId: string | null
   filePath: string
+  /**
+   * For a new project: the file's text, and what to do with the new
+   * project's index document id once the server has it.
+   */
+  create?: { content: string; onCreated: (indexDocId: string) => void }
 }
 
 export interface SyncedFileSnapshot {
@@ -62,7 +68,7 @@ export const idleSnapshot: SyncedFileSnapshot = {
   error: null,
 }
 
-export function createSyncedFile({ syncServer, indexDocId, filePath }: SyncedFileParams): SyncedFile {
+export function createSyncedFile({ syncServer, indexDocId, filePath, create }: SyncedFileParams): SyncedFile {
   let snapshot: SyncedFileSnapshot = { ...idleSnapshot, connecting: true }
   let disposed = false
   const listeners = new Set<() => void>()
@@ -111,9 +117,24 @@ export function createSyncedFile({ syncServer, indexDocId, filePath }: SyncedFil
       // Wait for the hub before loading. The client's default is not to
       // (1 ms, then offline mode with a background reconnect), which can
       // leave collaborators' changes seconds late.
-      await client.connect(syncServer, indexDocId, undefined, undefined, undefined, {
-        peerTimeoutMs: PEER_TIMEOUT_MS,
-      })
+      if (indexDocId !== null) {
+        await client.connect(syncServer, indexDocId, undefined, undefined, undefined, {
+          peerTimeoutMs: PEER_TIMEOUT_MS,
+        })
+      } else {
+        if (!create) throw new Error('No document to open, and none to make.')
+        // The client that makes the project stays on as the file's, so its
+        // documents keep syncing to the server (one that disconnects at
+        // once can leave part of them behind).
+        const project = await client.createNewProject({
+          syncServer,
+          files: [{ path: filePath, content: create.content, contentType: 'text' }],
+          peerTimeoutMs: PEER_TIMEOUT_MS,
+          requireOnline: true,
+        })
+        if (disposed) return
+        create.onCreated(project.indexDocId)
+      }
       if (disposed) return
       // The file may have loaded before our callbacks saw it.
       if (snapshot.text === null) setText(client.getFileContent(filePath))

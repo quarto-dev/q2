@@ -218,23 +218,24 @@ besides an optional React hook, so it could become its own package.
    cd hub-client && npm run build:wasm
    ```
 
-2. Start a hub (for example, `npm run local-prod` in `hub-client/`) and
-   open a project there to get its index document id.
-
-3. Start the dev server:
+2. Start the dev server:
 
    ```bash
    cd q2-demos/rich-editor && npm run dev
    ```
 
-4. Open the printed URL with the document to edit:
+3. Open the printed URL. Without a document in it, the page makes a new
+   one from the tutorial (`src/tutorial.qmd`) on the public automerge sync
+   server, and puts it in the URL: reloading opens it again, and anyone
+   you give the URL to edits it with you. To open a document of your own:
 
    ```
-   http://localhost:5173/?doc=<index-doc-id>&file=index.qmd
+   http://localhost:5173/?server=<ws-url>&doc=<index-doc-id>&file=index.qmd
    ```
 
-   `server` defaults to `ws://127.0.0.1:8080/ws`; override it with
-   `&server=<ws-url>`.
+   `server` defaults to `wss://sync.automerge.org`, and `file` to
+   `index.qmd`. A `server` without a `doc` makes the tutorial there (for
+   example, on a local hub: `npm run local-prod` in `hub-client/`).
 
 ## Trying it together
 
@@ -366,7 +367,8 @@ The specs find their way around the page by this markup, which a new
 editor has to keep:
 
 - The page: `?doc=<index document id>&file=<path>`, with
-  `&server=<ws-url>` (see `app.spec.ts`), and
+  `&server=<ws-url>`, or none of them for a new document from the
+  tutorial (see `app.spec.ts`), and
   `/fixture.html?fixture=<name>`. The source pane is a `textarea`, shown
   by the toolbar's "Developer tools" button. The
   page's own status is `.status` (`.status-error` for an error), and the

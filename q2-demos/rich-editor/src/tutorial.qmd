@@ -1,0 +1,29 @@
+---
+title: Welcome to the Quarto visual editor
+subtitle: A short tour. Edit anything on this page.
+---
+
+This page is a Quarto document, and you are editing it. Everything you type is saved as you go, and anyone you share this page's address with can edit it with you, live.
+
+## Formatting text
+
+Select some text and use the toolbar, or a shortcut: **bold** with ⌘B, *italic* with ⌘I, [underline]{.underline} with ⌘U, [highlight]{.mark} with ⇧⌘H, ~~strikethrough~~ with ⇧⌘X, and `code` with ⌘E. On Windows and Linux, use Ctrl instead of ⌘.
+
+You can also type the markdown: `**bold**`, `*italic*` or a pair of backticks turn into formatting as you finish them.
+
+## Links
+
+Select some words and press ⌘K to make them a [link](https://quarto.org). Put the caret in a link to see where it goes, and to edit or remove it. Press Tab to reach its buttons from the keyboard.
+
+## Headings, lists and quotes
+
+Use the style box at the left of the toolbar to make a line a heading, or ⌥⌘1 to ⌥⌘4.
+
+* The list buttons make bulleted lists, ⇧⌘8,
+* and numbered ones, ⇧⌘7.
+
+> The quote button, or ⇧⌘9, quotes a paragraph.
+
+## Under the hood
+
+The page is the same document as its qmd source. The Developer tools button at the right end of the toolbar shows that source next to the editor: edit either one, and the other follows.

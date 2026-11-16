@@ -152,6 +152,31 @@ export async function createDocument(source: string): Promise<Document> {
   return new Document(testHub, client, project.indexDocId)
 }
 
+/** The test hub's WebSocket URL. */
+export async function hubUrl(): Promise<string> {
+  hub ??= startTestHub()
+  return (await hub).url
+}
+
+/** A collaborator on a document already on the hub, made by someone else. */
+export async function joinDocument(indexDocId: string): Promise<Document> {
+  hub ??= startTestHub()
+  const testHub = await hub
+  const client = createSyncClient({
+    onFileAdded() {},
+    onFileChanged() {},
+    onBinaryChanged() {},
+    onFileRemoved() {},
+    onConnectionChange() {},
+    onError(error) {
+      console.error('[e2e collaborator]', error.message)
+    },
+  })
+  await client.connect(testHub.url, indexDocId, undefined, undefined, undefined, { peerTimeoutMs: 10000, storage: 'memory' })
+  cleanups.push(() => client.disconnect())
+  return new Document(testHub, client, indexDocId)
+}
+
 /** Open the visual editor on a new document made from `e2e/fixtures/<name>.qmd`. */
 export async function openEditor(page: Page, name = 'basic'): Promise<Editor> {
   const document = await createDocument(fixture(name))

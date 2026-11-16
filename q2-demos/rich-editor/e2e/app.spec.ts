@@ -5,13 +5,16 @@
  * layout in a narrow window.
  *
  * The document is named in the URL: `?doc=<index document id>&file=<path>`,
- * with `&server=<hub's WebSocket URL>` unless the hub is the local one.
+ * with `&server=<hub's WebSocket URL>` unless it's the public automerge
+ * sync server. Without a document, the page makes one from the tutorial.
  * `/fixture.html` opens a fixture with no hub at all.
  */
 
-import { createDocument, expect, fixture, openEditor, test } from './helpers.ts'
+import { readFileSync } from 'node:fs'
+import { createDocument, expect, fixture, hubUrl, joinDocument, openEditor, test } from './helpers.ts'
 
 const basic = fixture('basic')
+const tutorial = readFileSync(new URL('../src/tutorial.qmd', import.meta.url), 'utf-8')
 
 /** The URL of the page `open` went to, with other query parameters. */
 function withQuery(url: string, change: (query: URLSearchParams) => void): string {
@@ -21,13 +24,25 @@ function withQuery(url: string, change: (query: URLSearchParams) => void): strin
 }
 
 test.describe('which document', () => {
-  test('without a document in the URL, the page says how to name one', async ({ page }) => {
-    await page.goto('/')
+  test('without a document in the URL, a new one is made from the tutorial, on the server, and the URL names it', async ({
+    page,
+  }) => {
+    const server = await hubUrl()
 
-    await expect(page.locator('.status')).toHaveText(
-      'Add ?doc=<index-doc-id>&file=<path.qmd> to the URL (optionally &server=<ws-url>, default ws://127.0.0.1:8080/ws).',
-    )
-    await expect(page.locator('iframe')).toHaveCount(0)
+    await page.goto(`/?${new URLSearchParams({ server })}`)
+
+    const title = page.frameLocator('iframe.visual-frame').locator('h1.title')
+    await expect(title).toHaveText('Welcome to the Quarto visual editor')
+    const query = new URL(page.url()).searchParams
+    expect(query.get('server')).toBe(server)
+    expect(query.get('file')).toBe('index.qmd')
+    // Another collaborator finds it on the server.
+    const document = await joinDocument(query.get('doc')!)
+    await document.expectSource(tutorial)
+    // Reloading opens it again, rather than making another.
+    await page.reload()
+    await expect(title).toHaveText('Welcome to the Quarto visual editor')
+    expect(page.url()).toContain(`doc=${query.get('doc')}`)
   })
 
   test('a file the project does not have is waited for', async ({ page }) => {
