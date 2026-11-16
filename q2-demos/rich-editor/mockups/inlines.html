@@ -540,7 +540,7 @@ let blockEls = []
 
 function wrap(m, node) {
   let el = node
-  for (const [bit, tag] of [[C, 'code'], [S, 's'], [I, 'em'], [B, 'strong']]) {
+  for (const [bit, tag] of [[S, 's'], [I, 'em'], [B, 'strong'], [C, 'code']]) {
     if (!(m & bit)) continue
     const outer = document.createElement(tag)
     outer.append(el)
@@ -575,7 +575,8 @@ function renderBlock(blk, b) {
   for (let o = 0; o <= cs.length; ) {
     if (o === caret && (pending !== null || edge(o)) && !pieces.some((p) => p.holder)) {
       holder = document.createTextNode('​')
-      pieces.push({ holder: true, h: inheritedLink(sel.f, sel.f), node: wrap(typingMarks(), holder) })
+      const m = typingMarks()
+      pieces.push({ holder: true, h: inheritedLink(sel.f, sel.f), node: wrap(m & ~C, holder), code: Boolean(m & C) })
       continue
     }
     if (o === cs.length) break
@@ -593,11 +594,22 @@ function renderBlock(blk, b) {
       continue
     }
     let e = o + 1
-    while (e < cs.length && !cs[e].a && cs[e].m === c.m && cs[e].h === c.h && e !== caret) e++
+    while (e < cs.length && !cs[e].a && cs[e].m === c.m && cs[e].h === c.h && !(e === caret && pending !== null)) e++
     const text = document.createTextNode(cs.slice(o, e).map((x) => x.c).join(''))
     own.push({ node: text, start: o, len: e - o })
-    pieces.push({ h: c.h, node: wrap(c.m, text), start: o })
+    pieces.push({ h: c.h, node: wrap(c.m & ~C, text), start: o, code: Boolean(c.m & C) })
     o = e
+  }
+
+  // Code next to code is one box, whatever else differs inside it and
+  // wherever the caret is.
+  for (let i = 0; i < pieces.length; i++) {
+    if (!pieces[i].code) continue
+    const first = pieces[i]
+    const code = document.createElement('code')
+    let n = 0
+    while (pieces[i + n]?.code && pieces[i + n].h === first.h) code.append(pieces[i + n++].node)
+    pieces.splice(i, n, { h: first.h, start: first.start, node: code })
   }
 
   // Pieces of one link next to each other are in one <a>.
