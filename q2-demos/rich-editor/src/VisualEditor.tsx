@@ -38,6 +38,7 @@ import type { MarkView } from './engine/dom.ts'
 import { CODE, EMPH, formatElement, HIGHLIGHT, inlineRule, LEAF, STRIKEOUT, STRONG, TWO_SIDED, UNDERLINE } from './editing/inlines.ts'
 import { LinkPopover, type LinkForm } from './LinkPopover.tsx'
 import {
+  BULLET,
   blocksOfLines,
   bodyInputRule,
   headingAttr,
@@ -47,15 +48,18 @@ import {
   isNumbered,
   isQuote,
   listStart,
+  NUMBERED,
   prefixMarkdown,
   readOnlyBlocks,
   type Node,
 } from './editing/body.ts'
 import { createMetaFieldSource, type QmdFile } from './editing/fieldSource.ts'
+import { canChoose, canList, canQuote, caretLine, chooseStyle, toggleList, toggleQuote } from './editing/lineStyles.ts'
 import { setMetaText, type Meta } from './editing/meta.ts'
 import { ReadOnlyBlock } from './ReadOnlyBlock.tsx'
 import { TitleBlockWidget, type WidgetFocus } from './TitleBlockWidget.tsx'
 import { Toolbar } from './Toolbar.tsx'
+import { matches, SHORTCUTS, styleShortcut } from './shortcuts.ts'
 
 interface VisualEditorProps {
   file: QmdFile
@@ -115,20 +119,21 @@ li.qe-field { display: list-item; }
 const MARK_VIEW: MarkView = { element: formatElement, twoSided: TWO_SIDED, leaf: LEAF }
 
 /**
- * The formatting shortcuts (with ⌘ on a Mac, Ctrl elsewhere), as in
- * Google Docs: ⌘B bold, ⌘I italic, ⌘U underline, ⌘⇧X strikethrough, ⌘E
- * code and ⌘⇧H highlight. (⌘K, the link form, is handled on its own.)
+ * The formatting shortcuts (see `shortcuts.ts`): ⌘B bold, ⌘I italic, ⌘U
+ * underline, ⇧⌘X strikethrough, ⌘E code and ⇧⌘H highlight. (⌘K, the link
+ * form, is handled on its own.)
  */
-const SHORTCUTS: { key: string; shift: boolean; format: number }[] = [
-  { key: 'b', shift: false, format: STRONG },
-  { key: 'i', shift: false, format: EMPH },
-  { key: 'u', shift: false, format: UNDERLINE },
-  { key: 'x', shift: true, format: STRIKEOUT },
-  { key: 'e', shift: false, format: CODE },
-  { key: 'h', shift: true, format: HIGHLIGHT },
+const FORMAT_SHORTCUTS = [
+  { shortcut: SHORTCUTS.bold, format: STRONG },
+  { shortcut: SHORTCUTS.italic, format: EMPH },
+  { shortcut: SHORTCUTS.underline, format: UNDERLINE },
+  { shortcut: SHORTCUTS.strikeout, format: STRIKEOUT },
+  { shortcut: SHORTCUTS.code, format: CODE },
+  { shortcut: SHORTCUTS.highlight, format: HIGHLIGHT },
 ]
 
-const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+/** The line styles' shortcuts: ⌥⌘0 Paragraph, ⌥⌘1 to ⌥⌘4 the headings. */
+const STYLE_LEVELS = [0, 1, 2, 3, 4]
 
 /** The title block's editable fields, in reading order. */
 const TITLE_BLOCK = ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[]
@@ -243,26 +248,39 @@ export function VisualEditor({ file }: VisualEditorProps) {
     setLinkForm({ from, to, text, url: '', selection })
   }, [state, writable, marks, caretLink])
 
-  // The formatting shortcuts, while the caret is in the document.
+  // The caret's line in the body, for the line styles' shortcuts.
+  const line = caretLine(state, writable)
+
+  // The formatting and line style shortcuts, while the caret is in the
+  // document. A line style's shortcut does what the toolbar's button or
+  // menu item does, and nothing where that's disabled.
   useEffect(() => {
     if (!frameDoc || !root) return
     const onKey = (e: KeyboardEvent) => {
       if (frameDoc.activeElement !== root) return
-      const primary = IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey
-      if (!primary || e.altKey) return
-      const key = e.key.toLowerCase()
-      const shortcut = SHORTCUTS.find((s) => s.key === key && s.shift === e.shiftKey)
-      if (shortcut) {
+      const format = FORMAT_SHORTCUTS.find((f) => matches(e, f.shortcut))
+      const level = STYLE_LEVELS.find((l) => matches(e, styleShortcut(l)))
+      if (format) {
         e.preventDefault()
-        toggleMark(shortcut.format)
-      } else if (key === 'k' && !e.shiftKey) {
+        toggleMark(format.format)
+      } else if (matches(e, SHORTCUTS.link)) {
         e.preventDefault()
         openLinkForm()
+      } else if (matches(e, SHORTCUTS.bulletList) || matches(e, SHORTCUTS.numberedList)) {
+        e.preventDefault()
+        const kind = matches(e, SHORTCUTS.bulletList) ? BULLET : NUMBERED
+        if (line && canList(line)) setPrefixes(toggleList(line, kind))
+      } else if (matches(e, SHORTCUTS.quote)) {
+        e.preventDefault()
+        if (line && canQuote(line)) setPrefixes(toggleQuote(line))
+      } else if (level !== undefined) {
+        e.preventDefault()
+        if (line && canChoose(line, level)) setPrefixes(chooseStyle(level))
       }
     }
     frameDoc.addEventListener('keydown', onKey)
     return () => frameDoc.removeEventListener('keydown', onKey)
-  }, [frameDoc, root, toggleMark, openLinkForm])
+  }, [frameDoc, root, toggleMark, openLinkForm, line, setPrefixes])
   const present = useMemo(() => new Set(TITLE_BLOCK.filter((f) => state.fields[f] !== undefined)), [state.fields])
   const caretInTitleBlock = TITLE_BLOCK.some((f) => state.selection?.focus.field === f)
   const empty = present.size === 0 && !state.fields.body

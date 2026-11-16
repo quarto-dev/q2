@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toolbar shortcut tooltips</title>
+<style>
+  body {
+    margin: 0;
+    padding: 32px 24px 96px;
+    background: #f8f9fa;
+    color: #212529;
+    font: 14px system-ui, sans-serif;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 56px 0 6px; }
+  .intro { margin: 0 0 16px; color: #6c757d; max-width: 75ch; }
+  .intro code { font-size: 12.5px; }
+  .platform { display: inline-flex; gap: 0; margin: 0 0 28px; border: 1px solid #dee2e6; border-radius: 6px; overflow: hidden; }
+  .platform button { padding: 5px 12px; border: 0; background: #fff; font: inherit; font-size: 13px; cursor: pointer; }
+  .platform button[aria-pressed='true'] { background: #e7f1fc; color: #145ca8; }
+  .option {
+    display: grid;
+    grid-template-columns: 240px auto;
+    align-items: start;
+    gap: 24px;
+    margin-bottom: 72px;
+  }
+  .menu-option { margin-bottom: 230px; }
+  .label b { display: block; font-size: 15px; }
+  .label span { display: block; color: #6c757d; font-size: 12.5px; margin-top: 2px; }
+
+  /* The toolbar, copied from src/index.css. */
+  .visual-box { position: relative; border: 1px solid #ccc; border-radius: 4px; background: #fff; width: max-content; }
+  .qe-toolbar { position: relative; display: flex; align-items: center; gap: 3px; padding: 6px 8px; }
+  .qe-toolbar button {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px;
+    border: 1px solid transparent; border-radius: 5px; background: none;
+    color: #343a40; font: 13px system-ui, sans-serif; cursor: pointer;
+  }
+  .qe-toolbar button:hover:not(:disabled) { background: #f1f3f5; }
+  .qe-toolbar button:disabled { color: #adb5bd; cursor: default; pointer-events: none; }
+  .qe-toolbar button[aria-pressed='true'] { background: #e7f1fc; border-color: #c5dcf5; color: #145ca8; }
+  .qe-style-box { position: relative; }
+  .qe-toolbar .qe-style { width: 150px; justify-content: space-between; border-color: #dee2e6; }
+  .qe-toolbar .qe-style.open { background: #f1f3f5; }
+  .qe-style svg { width: 8px; height: 8px; }
+  .qe-toolbar .qe-icon { padding: 4px; color: #444746; }
+  .qe-toolbar .qe-icon:disabled { color: #adb5bd; }
+  .qe-icon svg { display: block; width: 20px; height: 20px; }
+  .qe-sep { width: 1px; height: 20px; margin: 0 6px; background: #dee2e6; }
+  .tip-target { display: inline-flex; }
+
+  .qe-menu {
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 10;
+    display: flex; flex-direction: column; width: 230px; padding: 5px;
+    border: 1px solid #dee2e6; border-radius: 8px; background: #fff;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  }
+  .qe-toolbar .qe-item { position: relative; padding: 5px 8px 5px 26px; font-size: 13.5px; text-align: left; }
+  .qe-toolbar .qe-item[aria-checked='true']::before {
+    content: '✓'; position: absolute; top: 50%; left: 9px; transform: translateY(-50%);
+    font-size: 13.5px; font-weight: 400; line-height: 1; color: #145ca8;
+  }
+  .qe-toolbar .qe-item-1 { font-size: 20px; font-weight: 600; }
+  .qe-toolbar .qe-item-2 { font-size: 18px; font-weight: 600; }
+  .qe-toolbar .qe-item-3 { font-size: 16px; font-weight: 600; }
+  .qe-toolbar .qe-item-4 { font-size: 14.5px; font-weight: 600; }
+
+  /* Menu items with a shortcut column. */
+  .menu-wide .qe-menu { width: 280px; }
+  .qe-toolbar .qe-item.with-keys { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .qe-item .keys { font-size: 12.5px; font-weight: 400; color: #9aa1a8; letter-spacing: .04em; white-space: nowrap; }
+  .qe-item .md { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 400; color: #6c757d; }
+  .qe-item .md + .keys { margin-left: 10px; }
+  .qe-item .right { display: inline-flex; align-items: center; }
+  /* After the keys: a column as wide as the longest, so the keys line up. */
+  .qe-item .md-trail { width: 4ch; margin-left: 10px; text-align: left; }
+  .qe-item .md-lead { margin-right: 7px; vertical-align: 1px; }
+
+  /* ── Tooltips ───────────────────────────────────────── */
+  .tip {
+    position: absolute; z-index: 20; pointer-events: none;
+    white-space: nowrap; transform: translateX(-50%);
+  }
+  .tip[hidden] { display: none; }
+  .tip.instant, .tip.instant * { transition: none !important; }
+
+  /* A: the browser's own tooltip (simulated: it's what macOS draws for `title`). */
+  .tip-native {
+    padding: 2px 6px; background: #f5f5f5; color: #222;
+    border: 1px solid #c8c8c8; border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.18);
+    font: 11.5px -apple-system, system-ui, sans-serif;
+    transform: none;
+  }
+
+  /* B: dark, the shortcut as dimmed text (Google Docs, Figma). */
+  .tip-dark {
+    padding: 5px 8px; border-radius: 5px; background: #2b2f33; color: #fff;
+    font: 12px system-ui, sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  }
+  .tip-dark .sc { margin-left: 8px; color: #a6acb3; letter-spacing: .04em; }
+
+  /* C: dark, a keycap per key (Linear, GitHub). */
+  .tip-caps {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 5px 4px 8px; border-radius: 6px; background: #2b2f33; color: #fff;
+    font: 12px system-ui, sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  }
+  .tip-caps .caps { display: inline-flex; gap: 3px; }
+  .tip-caps kbd {
+    min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 4px; background: #44494f; color: #e9ecef;
+    font: 11px system-ui, sans-serif; border-bottom: 1px solid #1e2124;
+  }
+
+  /* D: light, like the style menu, with keycaps. */
+  .tip-light {
+    display: flex; align-items: center; gap: 10px;
+    padding: 5px 6px 5px 9px; border: 1px solid #dee2e6; border-radius: 7px;
+    background: #fff; color: #343a40; font: 12.5px system-ui, sans-serif;
+    box-shadow: 0 4px 16px rgba(0,0,0,.10);
+  }
+  .tip-light .caps { display: inline-flex; gap: 3px; }
+  .tip-light kbd {
+    min-width: 19px; height: 19px; padding: 0 4px; box-sizing: border-box;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid #dee2e6; border-bottom-width: 2px; border-radius: 4px;
+    background: #f8f9fa; color: #495057; font: 11px system-ui, sans-serif;
+  }
+
+  /* E: dark keycaps, and the Markdown that does the same on a second line. */
+  .tip-rich {
+    padding: 6px 8px 7px; border-radius: 7px; background: #2b2f33; color: #fff;
+    font: 12px system-ui, sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,.22);
+  }
+  .tip-rich .row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .tip-rich .caps { display: inline-flex; gap: 3px; }
+  .tip-rich kbd {
+    min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 4px; background: #44494f; color: #e9ecef;
+    font: 11px system-ui, sans-serif; border-bottom: 1px solid #1e2124;
+  }
+  .tip-rich .md-line { margin-top: 5px; padding-top: 5px; border-top: 1px solid #3d4248; color: #a6acb3; font-size: 11.5px; }
+  .tip-rich code {
+    padding: 1px 4px; border-radius: 3px; background: #44494f; color: #fff;
+    font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .note { margin-top: 10px; color: #6c757d; font-size: 12.5px; max-width: 70ch; }
+
+  /* ── Teaching the Markdown (built on C) ─────────────── */
+  .mono { font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  /* H: after the keys, past a hairline. */
+  .tip-caps .md-sep { width: 1px; height: 12px; background: #50565c; }
+  .tip-caps .md-after { color: #a6acb3; }
+
+  /* I: in front of the label, as it is in the source. */
+  .tip-caps .md-before { color: #8d949b; margin-right: -3px; }
+  /* I2, I3: light, like the style menu, with its colours: the shortcut and
+     the Markdown in the grey the menu gives its shortcuts and `#`s. */
+  .tip-plain {
+    padding: 5px 9px; border: 1px solid #dee2e6; border-radius: 7px;
+    background: #fff; color: #343a40; font: 12.5px system-ui, sans-serif;
+    box-shadow: 0 4px 16px rgba(0,0,0,.10);
+  }
+  .tip-plain .sc { margin-left: 8px; color: #9aa1a8; letter-spacing: .04em; }
+  .tip-plain .md-before { color: #6c757d; margin-right: 5px; }
+  /* Markdown around the label (bold, italic, link). */
+  .tip-plain .md-wrap { color: #6c757d; }
+
+  /* I3: I2, with the Markdown growing in to the left once you linger. The
+     tooltip is anchored by its right edge, so the label doesn't move. */
+  .tip-plain .md-reveal {
+    display: inline-block; max-width: 0; overflow: hidden; opacity: 0; vertical-align: bottom;
+    transition: max-width .2s ease, opacity .2s ease .05s;
+  }
+  .tip-plain.open .md-reveal { max-width: 3em; opacity: 1; }
+
+  /* G4, G5: the Markdown in a column of its own, right-aligned, so each run
+     of #s ends the same distance before its label and the labels line up. */
+  .qe-item .md-col {
+    display: inline-block; width: 4ch; margin-right: 7px; text-align: right;
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 400; color: #6c757d;
+    vertical-align: 1px;
+  }
+  .qe-menu.linger .md-col { opacity: 0; transition: opacity .25s ease; }
+  .qe-menu.linger.open .md-col { opacity: 1; }
+  .qe-menu[hidden] { display: none; }
+
+  /* G6, G7: the labels at the usual indent; on linger, the menu grows to the
+     left by a gutter (--g) for the #s, so the labels don't move. G6 puts the
+     gutter left of the check mark (nothing moves); G7 between it and the
+     labels (the check mark moves out with the menu's edge). */
+  @property --g { syntax: '<length>'; inherits: true; initial-value: 0px; }
+  .menu-wide .qe-menu.gutter {
+    --g: 0px; transition: --g .2s ease;
+    margin-left: calc(-1 * var(--g)); width: calc(280px + var(--g));
+  }
+  .menu-wide .qe-menu.gutter.open { --g: 36px; }
+  .qe-menu.gutter .qe-item { padding-left: calc(26px + var(--g)); }
+  .qe-item .md-g {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: var(--g); overflow: hidden; text-align: right; white-space: nowrap;
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 400; color: #6c757d;
+    opacity: 0; transition: opacity .2s ease .05s;
+  }
+  .qe-menu.gutter.open .md-g { opacity: 1; }
+  .qe-menu.g-outer .qe-item .md-g { left: 0; }
+  .qe-menu.g-outer .qe-item[aria-checked='true']::before { left: calc(9px + var(--g)); }
+  .qe-menu.g-inner .qe-item .md-g { left: 20px; }
+
+  /* J: C, until the pointer stays; then the Markdown grows in below. */
+  .tip-grow {
+    padding: 4px 5px 4px 8px; border-radius: 6px; background: #2b2f33; color: #fff;
+    font: 12px system-ui, sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  }
+  .tip-grow .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .tip-grow .caps { display: inline-flex; gap: 3px; }
+  .tip-grow kbd {
+    min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 4px; background: #44494f; color: #e9ecef;
+    font: 11px system-ui, sans-serif; border-bottom: 1px solid #1e2124;
+  }
+  .tip-grow .md-line {
+    display: grid; grid-template-rows: 0fr; opacity: 0;
+    color: #a6acb3; font-size: 11.5px;
+    transition: grid-template-rows .18s ease, opacity .18s ease .05s;
+  }
+  .tip-grow .md-line > div { overflow: hidden; }
+  .tip-grow.open .md-line { grid-template-rows: 1fr; opacity: 1; }
+  .tip-grow .md-line > div > div { padding: 4px 0 2px; }
+  .tip-grow code { color: #fff; }
+
+  /* K: a hint after you press the button, in place of the tooltip. */
+  .hint {
+    position: absolute; z-index: 21; transform: translateX(-50%);
+    padding: 5px 9px; border: 1px solid #c5dcf5; border-radius: 7px;
+    background: #f3f8fe; color: #343a40; white-space: nowrap;
+    font: 12px system-ui, sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.10);
+    transition: opacity .25s ease;
+  }
+  .hint[hidden] { display: block; opacity: 0; pointer-events: none; }
+  .hint code {
+    padding: 1px 4px; border-radius: 3px; background: #dcebfb; color: #145ca8;
+    font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+</style>
+</head>
+<body>
+<h1>Toolbar shortcut tooltips</h1>
+<p class="intro">Each option shows its tooltip under one button. Hover the other buttons to see theirs
+  (after a short delay, then instantly as you move along the toolbar, as macOS does). Undo and redo's shortcuts
+  exist; the others are <b>proposals</b>, following Google Docs: <code>⇧⌘8</code> bulleted list,
+  <code>⇧⌘7</code> numbered list, <code>⇧⌘9</code> quote, <code>⌥⌘0</code>–<code>⌥⌘4</code> paragraph and headings.
+  The Markdown hints (<code>*</code>, <code>1.</code>, <code>&gt;</code>, <code>#</code>, each and a space) already work as you type; <code>*</code> is the bullet q2 writes.</p>
+<div class="platform" role="group" aria-label="Platform">
+  <button type="button" data-platform="mac" aria-pressed="true">macOS</button>
+  <button type="button" data-platform="pc" aria-pressed="false">Windows and Linux</button>
+</div>
+
+<h2>Chosen</h2>
+<p class="intro">The whole toolbar: light tooltips with the name and a more muted shortcut, and the style menu
+  with its shortcuts right-aligned (F). No Markdown: it read badly around the inline buttons’ names
+  (<code>**Bold**</code>), so a cheat sheet of it can come later instead.</p>
+<div id="chosen"></div>
+
+<h2>Tooltips</h2>
+<div id="tips"></div>
+
+<h2>Teaching the Markdown</h2>
+<p class="intro">Subtler ways than E to show what to type, on C’s tooltip.</p>
+<div id="md"></div>
+
+<h2>The text style menu</h2>
+<div id="menus"></div>
+
+<script>
+let platform = 'mac'
+
+// Keys as [mac, pc] lists.
+const KEYS = {
+  undo: [['⌘', 'Z'], ['Ctrl', 'Z']],
+  redo: [['⇧', '⌘', 'Z'], ['Ctrl', 'Y']],
+  bullet: [['⇧', '⌘', '8'], ['Ctrl', 'Shift', '8']],
+  numbered: [['⇧', '⌘', '7'], ['Ctrl', 'Shift', '7']],
+  quote: [['⇧', '⌘', '9'], ['Ctrl', 'Shift', '9']],
+  h: (n) => [['⌥', '⌘', String(n)], ['Ctrl', 'Alt', String(n)]],
+}
+const keys = (k) => (platform === 'mac' ? k[0] : k[1])
+// As text: macOS writes the glyphs together, the others join with +.
+const keysText = (k) => (platform === 'mac' ? keys(k).join('') : keys(k).join('+'))
+const caps = (k) => `<span class="caps">${keys(k).map((c) => `<kbd>${c}</kbd>`).join('')}</span>`
+
+const BUTTONS = {
+  undo: { label: 'Undo', keys: KEYS.undo },
+  redo: { label: 'Redo', keys: KEYS.redo },
+  style: { label: 'Text style' },
+  bullet: { label: 'Bulleted list', keys: KEYS.bullet, md: '*' },
+  numbered: { label: 'Numbered list', keys: KEYS.numbered, md: '1.' },
+  quote: { label: 'Quote', keys: KEYS.quote, md: '>' },
+  bold: { label: 'Bold', keys: [['⌘', 'B'], ['Ctrl', 'B']], wrap: ['**', '**'] },
+  italic: { label: 'Italic', keys: [['⌘', 'I'], ['Ctrl', 'I']], wrap: ['*', '*'] },
+  underline: { label: 'Underline', keys: [['⌘', 'U'], ['Ctrl', 'U']] },
+  highlight: { label: 'Highlight', keys: [['⇧', '⌘', 'H'], ['Ctrl', 'Shift', 'H']] },
+  link: { label: 'Link', keys: [['⌘', 'K'], ['Ctrl', 'K']], wrap: ['[', '](url)'] },
+}
+
+const TIPS = [
+  {
+    name: 'A. The browser’s own (title)',
+    note: 'Plain text only; the OS draws it, with its own delay. Simulated here.',
+    cls: 'tip-native',
+    render: (b) => (b.keys ? `${b.label} (${keysText(b.keys)})` : b.label),
+    native: true,
+  },
+  {
+    name: 'B. Dark, dimmed shortcut',
+    note: 'Google Docs, Figma',
+    cls: 'tip-dark',
+    render: (b) => `${b.label}${b.keys ? `<span class="sc">${keysText(b.keys)}</span>` : ''}`,
+  },
+  {
+    name: 'C. Dark, keycaps',
+    note: 'Linear, GitHub',
+    cls: 'tip-caps',
+    render: (b) => `<span>${b.label}</span>${b.keys ? caps(b.keys) : ''}`,
+  },
+  {
+    name: 'D. Light, keycaps',
+    note: 'Matches the style menu’s popover',
+    cls: 'tip-light',
+    render: (b) => `<span>${b.label}</span>${b.keys ? caps(b.keys) : ''}`,
+  },
+  {
+    name: 'E. Dark, keycaps and Markdown',
+    note: 'Also teaches what to type instead',
+    cls: 'tip-rich',
+    render: (b) =>
+      `<div class="row"><span>${b.label}</span>${b.keys ? caps(b.keys) : ''}</div>` +
+      (b.md ? `<div class="md-line">or type <code>${b.md}</code> and a space</div>` : ''),
+  },
+]
+
+const ICON = {
+  undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>',
+  redo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/></svg>',
+  bullet: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 19h14v-2H7v2zm0-6h14v-2H7v2zm0-8v2h14V5H7z"/></svg>',
+  numbered: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 17h2v.5H3v1h1v.5H2v1h3v-4H2v1zm1-9h1V4H2v1h1v3zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2v1zm5-6v2h14V5H7zm0 14h14v-2H7v2zm0-6h14v-2H7v2z"/></svg>',
+  quote: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>',
+  bold: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z"/></svg>',
+  italic: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z"/></svg>',
+  underline: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17c3.31 0 6-2.69 6-6V3h-2.5v8c0 1.93-1.57 3.5-3.5 3.5S8.5 12.93 8.5 11V3H6v8c0 3.31 2.69 6 6 6zm-7 2v2h14v-2H5z"/></svg>',
+  highlight: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.81 8.94l-3.75-3.75L4 14.25V18h3.75l9.06-9.06zM6 16v-.92l7.06-7.06.92.92L6.92 16H6zm13.71-9.96c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83zM2 20h20v4H2z"/></svg>',
+  link: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>',
+  chevron: '<svg viewBox="0 0 8 8"><path d="M1 2.5 4 5.5 7 2.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
+}
+
+// Disabled buttons get no pointer events, so the wrapper takes the hover:
+// a disabled button still says what it does.
+const btn = (id, extra = '') =>
+  `<span class="tip-target" data-id="${id}"><button class="qe-icon" aria-label="${BUTTONS[id].label}" ${extra}>${ICON[id]}</button></span>`
+
+const toolbar = (menu = '', full = false) => `
+  <div class="visual-box"><div class="qe-toolbar">
+    ${btn('undo')}${btn('redo', 'disabled')}
+    <span class="qe-sep"></span>
+    <div class="qe-style-box"><span class="tip-target" data-id="style">
+      <button class="qe-style${menu ? ' open' : ''}"><span>Paragraph</span>${ICON.chevron}</button></span>${menu}</div>
+    <span class="qe-sep"></span>
+    ${full ? `${btn('bold')}${btn('italic')}${btn('underline')}${btn('highlight')}<span class="qe-sep"></span>${btn('link')}<span class="qe-sep"></span>` : ''}
+    ${btn('bullet', 'aria-pressed="true"')}${btn('numbered')}${btn('quote')}
+    <div class="tip" hidden></div>
+    <div class="hint" hidden></div>
+  </div></div>`
+
+// Markdown with its space shown.
+const md = (s) => s
+const capsRow = (b) => `<span>${b.label}</span>${b.keys ? caps(b.keys) : ''}`
+
+// I2: the label as its source: Markdown before it (blocks) or around it
+// (inlines), then the shortcut.
+const renderI2 = (b) =>
+  (b.md ? `<span class="mono md-before">${md(b.md)}</span>` : '') +
+  (b.wrap ? `<span class="mono md-wrap">${b.wrap[0]}</span>${b.label}<span class="mono md-wrap">${b.wrap[1]}</span>` : b.label) +
+  (b.keys ? `<span class="sc">${keysText(b.keys)}</span>` : '')
+
+const MD_TIPS = [
+  {
+    name: 'H1. After the keys',
+    note: 'One line; the Markdown dimmer than the keys, past a hairline. The menu’s G2.',
+    cls: 'tip-caps',
+    render: (b) => capsRow(b) + (b.md ? `<span class="md-sep"></span><span class="mono md-after">${md(b.md)}</span>` : ''),
+  },
+  {
+    name: 'H2. Before the keys',
+    note: 'As H1, with what to type first. The menu’s G1.',
+    cls: 'tip-caps',
+    render: (b) =>
+      `<span>${b.label}</span>` +
+      (b.md ? `<span class="mono md-after">${md(b.md)}</span><span class="md-sep"></span>` : '') +
+      (b.keys ? caps(b.keys) : ''),
+  },
+  {
+    name: 'I1. Before the label, keycaps',
+    note: 'Written as it is in the source: the label reads as a line of qmd. The menu’s G3.',
+    cls: 'tip-caps',
+    render: (b) => (b.md ? `<span class="mono md-before">${md(b.md)}</span>` : '') + capsRow(b),
+  },
+  {
+    name: 'I2. Before the label, plain text',
+    note: 'Light like the style menu, the shortcut written as G3 writes it.',
+    cls: 'tip-plain',
+    render: (b) => renderI2(b),
+  },
+  {
+    name: 'I3. Before the label, on linger',
+    note: 'I2, but the Markdown grows in to the left after a second more on the button. Passing by shows only the label.',
+    cls: 'tip-plain',
+    grow: true,
+    anchorRight: true,
+    render: (b) =>
+      (b.md ? `<span class="md-reveal"><span class="mono md-before">${md(b.md)}</span></span>` : '') +
+      `${b.label}${b.keys ? `<span class="sc">${keysText(b.keys)}</span>` : ''}`,
+  },
+  {
+    name: 'J. Grows in while you linger',
+    note: 'C at first; after a second more on the button, the Markdown slides in below',
+    cls: 'tip-grow',
+    grow: true,
+    render: (b) =>
+      `<div class="row">${capsRow(b)}</div>` +
+      (b.md ? `<div class="md-line"><div><div>or type <code class="mono">${md(b.md)}</code> and a space</div></div></div>` : ''),
+  },
+  {
+    name: 'K. After you press it',
+    note: 'C on hover; pressing the button says how to type it next time. Could stop after a few times.',
+    cls: 'tip-caps',
+    clickHint: true,
+    render: (b) => capsRow(b),
+  },
+]
+
+// The shared warm-up: the first tooltip waits, and the next ones show at once
+// while the pointer moves along the toolbar.
+let warmUntil = 0
+let timer = 0
+
+function wireTips(row, opt, pinned) {
+  const bar = row.querySelector('.qe-toolbar')
+  const tip = bar.querySelector('.tip')
+  const hint = bar.querySelector('.hint')
+  tip.className = `tip ${opt.cls}`
+  let growTimer = 0
+  let hintTimer = 0
+  const place = (el, id, gap) => {
+    const t = bar.querySelector(`[data-id="${id}"]`).getBoundingClientRect()
+    const b = bar.getBoundingClientRect()
+    el.style.left = `${t.left - b.left + t.width / 2}px`
+    el.style.top = `${t.bottom - b.top + gap}px`
+  }
+  // Whether the Markdown has grown in since the pointer came to the toolbar.
+  // Moving on to the next button while warm keeps it, at once: the reader has
+  // already shown they want it.
+  let lingered = false
+  const show = (id, warm = false) => {
+    if (!warm) lingered = false
+    clearTimeout(growTimer)
+    // Collapsed (with no transition) before the new content goes in, so the
+    // last button's state can't flash in it.
+    tip.classList.add('instant')
+    tip.classList.remove('open')
+    tip.innerHTML = opt.render(BUTTONS[id])
+    tip.hidden = false
+    // The OS puts it below the pointer, not centred on the button.
+    place(tip, id, opt.native ? 12 : 6)
+    if (opt.native) tip.style.left = `${parseFloat(tip.style.left) - 4}px`
+    tip.style.right = ''
+    tip.style.transform = ''
+    if (opt.anchorRight) {
+      // Centred while the Markdown is hidden, then pinned by its right edge.
+      const w = tip.getBoundingClientRect().width
+      const right = parseFloat(tip.style.left) + w / 2
+      tip.style.left = 'auto'
+      tip.style.transform = 'none'
+      tip.style.right = `${bar.getBoundingClientRect().width - right}px`
+    }
+    if (opt.grow && BUTTONS[id].md) {
+      if (lingered) tip.classList.add('open')
+      else
+        growTimer = setTimeout(() => {
+          lingered = true
+          tip.classList.add('open')
+        }, 1100)
+    }
+    tip.getBoundingClientRect() // Lay it out before transitions come back.
+    tip.classList.remove('instant')
+  }
+  const hide = () => {
+    clearTimeout(growTimer)
+    tip.hidden = true
+  }
+  const showHint = (id, stay) => {
+    hide()
+    hint.innerHTML = `Next time, type <code>${md(BUTTONS[id].md)}</code> and a space at the start of a line`
+    hint.hidden = false
+    place(hint, id, 6)
+    clearTimeout(hintTimer)
+    if (!stay) hintTimer = setTimeout(() => (hint.hidden = true), 3500)
+  }
+  row.show = () => (opt.clickHint ? showHint(pinned, true) : show(pinned))
+  for (const target of bar.querySelectorAll('.tip-target')) {
+    target.addEventListener('mouseenter', () => {
+      clearTimeout(timer)
+      if (!hint.hidden) return
+      const warm = Date.now() < warmUntil
+      const delay = warm ? 0 : opt.native ? 900 : 500
+      timer = setTimeout(() => show(target.dataset.id, warm), delay)
+    })
+    target.addEventListener('mouseleave', () => {
+      clearTimeout(timer)
+      warmUntil = Date.now() + 400
+      if (opt.clickHint) hide()
+    })
+    if (opt.clickHint) {
+      target.addEventListener('click', () => {
+        clearTimeout(timer)
+        if (BUTTONS[target.dataset.id].md) showHint(target.dataset.id)
+        else hide()
+      })
+    }
+  }
+  bar.addEventListener('mouseleave', () => {
+    clearTimeout(timer)
+    if (opt.clickHint) hide()
+    else show(pinned)
+  })
+}
+
+const MENUS = [
+  {
+    name: 'F. Shortcuts, right-aligned',
+    note: 'As in a macOS menu',
+    item: (s) => `<span>${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
+  },
+  {
+    name: 'G1. Markdown before the keys',
+    note: 'What to type, then the keys. The tooltips’ H2.',
+    item: (s) =>
+      `<span>${s.name}</span><span class="right">${s.level ? `<span class="md">${'#'.repeat(s.level)}</span>` : ''}<span class="keys">${keysText(KEYS.h(s.level))}</span></span>`,
+  },
+  {
+    name: 'G2. Markdown after the keys',
+    note: 'The keys line up; what to type trails them. The tooltips’ H1.',
+    item: (s) =>
+      `<span>${s.name}</span><span class="right"><span class="keys">${keysText(KEYS.h(s.level))}</span><span class="md md-trail">${'#'.repeat(s.level)}</span></span>`,
+  },
+  {
+    name: 'G3. Markdown before the label',
+    note: 'Each heading reads as its line of qmd: a cheat sheet whenever the menu is open. The tooltips’ I1, I2 and I3.',
+    item: (s) =>
+      `<span>${s.level ? `<span class="md md-lead">${'#'.repeat(s.level)}</span>` : ''}${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
+  },
+  {
+    name: 'G4. Right-aligned column',
+    note: 'G3 with the #s in a column, right-aligned: the labels line up, each the same distance after its #s.',
+    item: (s) =>
+      `<span><span class="md-col">${'#'.repeat(s.level)}</span>${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
+  },
+  {
+    name: 'G5. Right-aligned column, on linger',
+    note: 'G4, with the #s fading in after the menu has been open a second. Click the style box to replay.',
+    linger: true,
+    item: (s) =>
+      `<span><span class="md-col">${'#'.repeat(s.level)}</span>${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
+  },
+  {
+    name: 'G6. Grows left, outside the check mark',
+    note: 'Labels at the usual indent. On linger the menu grows to the left and the #s fill the new gutter; nothing else moves. Click the style box to replay.',
+    linger: true,
+    gutter: 'g-outer',
+    item: (s) => `<span class="md-g">${'#'.repeat(s.level)}</span><span>${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
+  },
+  {
+    name: 'G7. Grows left, inside the check mark',
+    note: 'As G6, but the #s go between the check mark and the labels; the check mark moves out with the menu’s edge. Click the style box to replay.',
+    linger: true,
+    gutter: 'g-inner',
+    item: (s) => `<span class="md-g">${'#'.repeat(s.level)}</span><span>${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
+  },
+]
+const STYLES = ['Paragraph', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4'].map((name, level) => ({ name, level }))
+
+// The chosen tooltip: I2's light style, without its Markdown.
+const CHOSEN_TIP = {
+  cls: 'tip-plain',
+  render: (b) => `${b.label}${b.keys ? `<span class="sc">${keysText(b.keys)}</span>` : ''}`,
+}
+
+function render() {
+  const chosen = document.getElementById('chosen')
+  const chosenMenu = `<div class="qe-menu">${STYLES.map((s) =>
+    `<button class="qe-item qe-item-${s.level} with-keys" role="menuitemradio" aria-checked="${s.level === 0}">${MENUS[0].item(s)}</button>`).join('')}</div>`
+  chosen.innerHTML = `
+    <div class="option"><div class="label"><b>Tooltips</b><span>Hover the buttons.</span></div>${toolbar('', true)}</div>
+    <div class="option menu-option"><div class="label"><b>Text style menu (F)</b></div>${toolbar(chosenMenu, true)}</div>`
+  wireTips(chosen.querySelector('.option'), CHOSEN_TIP, 'bold')
+  chosen.querySelector('.option').show()
+
+  const tips = document.getElementById('tips')
+  tips.innerHTML = TIPS.map((o) => `
+    <div class="option">
+      <div class="label"><b>${o.name}</b><span>${o.note}</span></div>
+      ${toolbar()}
+    </div>`).join('')
+  tips.querySelectorAll('.option').forEach((row, i) => {
+    wireTips(row, TIPS[i], i % 2 ? 'undo' : 'bullet')
+    row.show()
+  })
+
+  const mdRows = document.getElementById('md')
+  mdRows.innerHTML = MD_TIPS.map((o) => `
+    <div class="option">
+      <div class="label"><b>${o.name}</b><span>${o.note}</span></div>
+      ${toolbar()}
+    </div>`).join('')
+  mdRows.querySelectorAll('.option').forEach((row, i) => {
+    wireTips(row, MD_TIPS[i], 'bullet')
+    row.show()
+  })
+
+  const menus = document.getElementById('menus')
+  menus.innerHTML = MENUS.map((m) => {
+    const menu = `<div class="qe-menu${m.gutter ? ` gutter ${m.gutter}` : m.linger ? ' linger' : ''}">${STYLES.map((s) =>
+      `<button class="qe-item qe-item-${s.level} with-keys" role="menuitemradio" aria-checked="${s.level === 0}">${m.item(s)}</button>`).join('')}</div>`
+    return `
+    <div class="option menu-option">
+      <div class="label"><b>${m.name}</b><span>${m.note}</span></div>
+      <div class="menu-wide">${toolbar(menu)}</div>
+    </div>`
+  }).join('')
+  menus.querySelectorAll('.option').forEach((row, i) => {
+    if (!MENUS[i].linger) return
+    const menu = row.querySelector('.qe-menu')
+    const style = row.querySelector('.qe-style')
+    let t = 0
+    const open = () => {
+      menu.hidden = false
+      style.classList.add('open')
+      menu.classList.remove('open')
+      clearTimeout(t)
+      t = setTimeout(() => menu.classList.add('open'), 1000)
+    }
+    style.addEventListener('click', () => {
+      if (menu.hidden) open()
+      else {
+        clearTimeout(t)
+        menu.hidden = true
+        style.classList.remove('open')
+      }
+    })
+    open()
+  })
+}
+
+for (const b of document.querySelectorAll('.platform button')) {
+  b.addEventListener('click', () => {
+    platform = b.dataset.platform
+    for (const o of document.querySelectorAll('.platform button')) o.setAttribute('aria-pressed', String(o === b))
+    render()
+  })
+}
+render()
+</script>
+</body>
+</html>

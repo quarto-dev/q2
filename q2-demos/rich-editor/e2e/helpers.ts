@@ -9,7 +9,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { test as base, expect, type Frame, type Page } from '@playwright/test'
+import { test as base, expect, type Frame, type Locator, type Page } from '@playwright/test'
 import { createSyncClient, setSyncLogger, type SyncClient } from '../../../ts-packages/quarto-sync-client/src/index.ts'
 import { startTestHub, type TestHub } from '../../../ts-packages/quarto-sync-client/src/test-hub.ts'
 
@@ -432,6 +432,21 @@ export class Editor {
   async chooseStyle(name: string) {
     await this.styleBox().click()
     await this.styleMenu().getByRole('menuitemradio', { name }).click()
+  }
+
+  /** The tooltip of the toolbar's button under the mouse. */
+  tooltip() {
+    return this.page.getByRole('tooltip')
+  }
+
+  /**
+   * Rest the mouse on a toolbar button, enabled or not. (Playwright's
+   * `hover` waits for a disabled button to take the mouse, which it doesn't.)
+   */
+  async hoverOver(button: Locator) {
+    const box = await button.boundingBox()
+    if (!box) throw new Error('the button isn\'t shown')
+    await this.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
   }
 
   /** The toolbar's undo button. */
