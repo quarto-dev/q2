@@ -3384,6 +3384,7 @@ async fn pass1_profile_with_cache(
             profile,
             diagnostics,
             source_context,
+            ..
         } = crate::pass1::profile_document(
             runtime.clone(),
             project,

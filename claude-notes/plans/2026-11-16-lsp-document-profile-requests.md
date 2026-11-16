@@ -261,18 +261,20 @@ holds the following:
   `quarto_core::pass1::profile_document`, which is
   `pass1_profile_single_file_live` made public (C1). The orchestrator
   calls it too.
-- **Merged metadata** per document, computed by
-  `quarto_core::get_config::merge_document_metadata` (the `q2
-  get-config` function) when a client asks for it, and cached with the
-  same version keys. It cannot be taken from the Pass-1 run.
-  - By the profile checkpoint, `LanguageResolveStage`,
-    `IncludeResolveStage` and `ListingItemInfoStage` have written their
-    own keys into `ast.meta`: `quarto.language`, `rendered.includes` and
-    `listing-item`. That makes it no longer the authored merge that D7
-    promises.
-  - Found in C1 and pinned by
-    `pass1_profile_document::checkpoint_meta_is_not_the_authored_merge`.
-  - The extra parse costs a few milliseconds, and only on request.
+- **Authored metadata** per document (D7), from the same Pass-1 run:
+  `Pass1Document::authored_meta` (C1b). The head pipeline is split into
+  named phases: ingest, then an authored-metadata checkpoint, then
+  enrich, then the profile checkpoint, then the Pass-1 analyses.
+  - The checkpoint records `ast.meta` before the enrich stages
+    (`LanguageResolve`, `IncludeResolve`, `ListingItemInfo`) write their
+    derived keys into it: `quarto.language`, `rendered.includes` and
+    `listing-item`. C1 found that `ast.meta` at the profile checkpoint is
+    therefore not what `q2 get-config` reports.
+  - `q2 get-config` runs the ingest phase itself, so the two agree by
+    construction. A test checks that they do.
+  - The authored metadata is kept next to the profile, not inside it.
+    It is open-shaped, it repeats the project configuration in every
+    document, and its serde form is internal.
 - **No whole-project ASTs.** The session does not keep ASTs or
   `SourceContext`s for every document. The measurements under D1 show
   that profiles for 1,841 documents fit comfortably in memory, while
@@ -469,6 +471,7 @@ Execution order is top to bottom.
 | # | Strand | Scope | Depends on |
 | --- | --- | --- | --- |
 | C1 (bd-n0uth2zt) | Prep | Move the LSP test files into `tests/integration/`. Extract `quarto_core::pass1::profile_document`. Move `quarto_hub::discovery` into a new light crate, `quarto-project-files` (D3), and make the hub use it. | none |
+| C1b (bd-xzsnuoqq) | Head phases | Name the head pipeline's phases (`build_ingest_stages`, then `AuthoredMetadataStage`, then enrich, then the profile checkpoint, then Pass-1 analyses). Record authored metadata on a `DocumentAst` side-channel and on `Pass1Document`. `q2 get-config` runs the ingest prefix. This fixes `q2 get-config` on `.ipynb`, which failed with Q-2-2 because get-config skipped source conversion. | C1 |
 | C2 (bd-c1gyrfvt) | `SessionRuntime` | Native and WASM `SystemRuntime` over EditorLayer ▷ BaseLayer ▷ inner, generalizing `OverlayRuntime`. The VFS-backed `BaseLayer` records binaries as present with metadata and reads their bytes on demand (D2). Tests: every trait method is written out; `ProjectContext` discovery plus Pass 1 over the runtime equals disk; attached mode never falls through for project paths. | C1 |
 | C3 (bd-ojsx06at) | Worker and sessions | New crate `quarto-lsp-project`. The `lsp-server` main loop is the worker (D1). `Workspace`, `ProjectSession`, `Mount`, `DiskFeeder` (client file watching, `notify` fallback), invalidation, sweeps fanned out to rayon. Non-QMD inputs are refused through a session capability flag (D6). Review the host boundary for a server manager (D9). Existing diagnostics and symbols are rerouted through sessions (fixes bd-5d7frwlo in the LSP). Existing LSP tests pass unchanged, plus an `exit`-with-open-stdin test. | C2 |
 | C4 (bd-kkmn4413) | First requests | Wire schema plus field-coverage test, `quarto/documentMetadata` (a requirement, D7), `quarto/documentProfile`, the outline span on `TocEntry` with a profile version bump (D5), the `experimental` capability, and the protocol reference doc. | C3 |
@@ -534,7 +537,21 @@ case-insensitive paths.
 - **D7. Merged metadata per document is a requirement**, alongside the
   typed profile. The aim is that Quarto 2-native tooling uses
   per-document merged metadata instead of its own reasoning over
-  project, directory, and document levels.
+  project, directory, and document levels. "Merged metadata" means the
+  *authored* merge: `ast.meta` at the end of the ingest phase (C1b).
+  - **`q2 get-config` runs only the ingest prefix (decided 2026-11-16).**
+    It does not run the whole head and then read the snapshot. The two
+    give the same value today, because the snapshot is taken at the end
+    of the prefix.
+  - Running the whole head would be more uniform, but it would add
+    include expansion and listing autofill to every call. A broken
+    include could then fail `get-config` even though includes cannot
+    change authored metadata.
+  - **Revisit this if the distinction ever matters.** For example, if a
+    stage after the merge comes to contribute *authored* metadata, or if
+    `get-config` should report enriched values too (`quarto.language`).
+    Then `get-config` should run the full head and read
+    `Pass1Document::authored_meta`, or the enriched `meta`, instead.
 - **D8. Comments in included files: report both.** In
   `quarto/projectComments`, each comment is listed under the file it is
   written in, and it also names the documents that include that file. A

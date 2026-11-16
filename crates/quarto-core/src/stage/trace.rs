@@ -611,6 +611,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let data = PipelineData::DocumentAst(doc);
@@ -634,6 +635,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let data = PipelineData::DocumentAst(doc);

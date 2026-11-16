@@ -579,6 +579,7 @@ pub(crate) async fn render_book_core<S, T>(
         warnings: Vec::new(),
         recorded_includes: Vec::new(),
         derived_listing: Default::default(),
+        authored_meta: None,
     };
 
     // Run the merged document's Crossref phase (`crossref-index` +
@@ -680,6 +681,7 @@ pub(crate) async fn render_book_core<S, T>(
             warnings: crossref_doc.warnings,
             recorded_includes: crossref_doc.recorded_includes,
             derived_listing: crossref_doc.derived_listing,
+            authored_meta: crossref_doc.authored_meta,
         }
     };
 

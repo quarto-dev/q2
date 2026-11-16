@@ -557,6 +557,7 @@ impl PipelineStage for EngineExecutionStage {
             warnings,
             recorded_includes,
             derived_listing,
+            authored_meta,
         } = doc_ast;
         let mut ast = ast;
         let mut merged_context = ast_context;
@@ -974,6 +975,7 @@ impl PipelineStage for EngineExecutionStage {
             warnings,
             recorded_includes,
             derived_listing,
+            authored_meta,
         }))
     }
 }
@@ -1881,6 +1883,7 @@ mod tests {
             warnings,
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         }
     }
 
