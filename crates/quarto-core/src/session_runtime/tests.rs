@@ -215,3 +215,57 @@ fn an_unsaved_new_file_is_listed_and_readable() {
         "# new"
     );
 }
+
+#[test]
+fn still_matches_validates_every_kind_of_read() {
+    let (_tmp, root) = project_dir();
+    std::fs::write(root.join("a.qmd"), "base").unwrap();
+    std::fs::write(root.join("refs.bib"), "@a").unwrap();
+    let base = Arc::new(VfsBaseLayer::load_from_disk(&root).unwrap());
+    let mut editor = EditorLayer::new();
+    editor.set("open.qmd", b"buffer".to_vec(), 2);
+    let editor = Arc::new(editor);
+    let rt = |editor: Arc<EditorLayer>| {
+        SessionRuntime::new(
+            &root,
+            ProjectSource::Disk,
+            editor,
+            base.clone(),
+            Arc::new(NativeRuntime::new()),
+        )
+    };
+
+    let first = rt(editor.clone());
+    first.file_read(&root.join("a.qmd")).unwrap();
+    first.file_read(&root.join("refs.bib")).unwrap();
+    first.file_read(&root.join("open.qmd")).unwrap();
+    assert!(!first.is_file(&root.join("later.yml")).unwrap());
+    let reads = first.reads();
+    assert_eq!(reads.len(), 4, "{reads:?}");
+
+    // Nothing changed: every read still matches.
+    let same = rt(editor.clone());
+    assert!(reads.iter().all(|(rel, key)| same.still_matches(rel, key)));
+
+    // Each kind of change invalidates exactly its own entry.
+    let mut edited = (*editor).clone();
+    edited.set("open.qmd", b"buffer v3".to_vec(), 3);
+    let after_edit = rt(Arc::new(edited));
+    assert!(!after_edit.still_matches(Path::new("open.qmd"), &reads[Path::new("open.qmd")]));
+    assert!(after_edit.still_matches(Path::new("a.qmd"), &reads[Path::new("a.qmd")]));
+
+    let mut shadowing = (*editor).clone();
+    shadowing.set("a.qmd", b"now open".to_vec(), 1);
+    let after_open = rt(Arc::new(shadowing));
+    assert!(!after_open.still_matches(Path::new("a.qmd"), &reads[Path::new("a.qmd")]));
+
+    std::fs::write(root.join("refs.bib"), "@b").unwrap();
+    std::fs::write(root.join("later.yml"), "x: 1").unwrap();
+    let after_disk = rt(editor.clone());
+    assert!(!after_disk.still_matches(Path::new("refs.bib"), &reads[Path::new("refs.bib")]));
+    assert!(!after_disk.still_matches(Path::new("later.yml"), &reads[Path::new("later.yml")]));
+    // The base is a snapshot: a disk edit to a base file is not seen until
+    // the feeder reports it.
+    std::fs::write(root.join("a.qmd"), "changed").unwrap();
+    assert!(after_disk.still_matches(Path::new("a.qmd"), &reads[Path::new("a.qmd")]));
+}

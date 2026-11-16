@@ -148,6 +148,51 @@ impl SessionRuntime {
         self.reads.lock().map(|r| r.clone()).unwrap_or_default()
     }
 
+    /// Whether a lookup of project file `rel` would still see `key`.
+    /// Records nothing.
+    ///
+    /// This is pull validation: a cached result is current iff every entry
+    /// of the [`reads`](Self::reads) log of the run that produced it still
+    /// matches in a runtime built over the *current* layers. An open buffer
+    /// shadows everything below it, so a buffer that appeared, closed or
+    /// moved to another version invalidates; so does a change in the base
+    /// layer's content hash, a file appearing where one was absent, and (in
+    /// disk mode) a change on disk to a file no layer holds, which is
+    /// re-hashed or re-stat'ed here.
+    pub fn still_matches(&self, rel: &Path, key: &VersionKey) -> bool {
+        let buffer = self.buffer_key(rel);
+        if let VersionKey::Buffer(_) = key {
+            return buffer.as_ref() == Some(key);
+        }
+        if buffer.is_some() {
+            return false;
+        }
+        if let Some(entry) = self.base.entry(rel) {
+            return match entry {
+                BaseEntry::File { version, .. } => &version == key,
+                BaseEntry::Dir => false,
+            };
+        }
+        let path = self.root.join(rel);
+        match (self.source, key) {
+            (ProjectSource::Attached, VersionKey::Absent) => true,
+            (ProjectSource::Attached, _) => false,
+            (ProjectSource::Disk, VersionKey::Absent) => {
+                !self.inner.path_exists(&path, None).unwrap_or(false)
+            }
+            (ProjectSource::Disk, VersionKey::Content(_)) => self
+                .inner
+                .file_read(&path)
+                .is_ok_and(|bytes| &VersionKey::content_of(&bytes) == key),
+            (ProjectSource::Disk, VersionKey::Stat { size, modified }) => {
+                self.inner.path_metadata(&path).is_ok_and(|m| {
+                    m.kind == PathKind::File && m.size == *size && m.modified == *modified
+                })
+            }
+            (ProjectSource::Disk, _) => false,
+        }
+    }
+
     /// The project-relative form of `path`, if it is inside the root.
     fn project_rel(&self, path: &Path) -> Option<PathBuf> {
         let absolute = if path.is_absolute() {

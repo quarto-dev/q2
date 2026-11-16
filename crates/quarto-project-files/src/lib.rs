@@ -21,7 +21,7 @@
 
 pub mod discovery;
 
-pub use discovery::ProjectFiles;
+pub use discovery::{FileClass, ProjectFiles, classify};
 
 /// Known binary file extensions and their MIME types.
 ///

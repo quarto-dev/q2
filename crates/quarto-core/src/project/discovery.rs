@@ -945,7 +945,9 @@ mod tests {
         let native = std::sync::Arc::new(NativeRuntime::new());
         let on_disk = find_project_root(&root.join("sub"), native.as_ref()).unwrap();
         assert!(
-            on_disk.as_ref().is_none_or(|(dir, _)| !dir.starts_with(&root)),
+            on_disk
+                .as_ref()
+                .is_none_or(|(dir, _)| !dir.starts_with(&root)),
             "no config on disk under the temp root: {on_disk:?}"
         );
 
