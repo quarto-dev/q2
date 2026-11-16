@@ -66,10 +66,11 @@ and `message` selection leaves it alone.
       (starts are relative to the code after them).
       **Partly done:** multi-expression, `#|` options and an error cell were run; a plot cell was not (see notes).
   (Reconciled 2026-11-16: plot cells are covered by the parity corpus `julia/plot-*` cases run in OPR-7c and 7h; the error cell ran here.)
-- [ ] **`warning: false` end to end.** With OPR-4b\'s stderr fix the record holds stderr; check the presenter hides
+- [x] **`warning: false` end to end.** With OPR-4b\'s stderr fix the record holds stderr; check the presenter hides
       warnings but not `@info`, and that flipping the option does not need a re-run (this is OPR-2\'s D2 rule applied to
       Julia; if OPR-2 left a Julia gap in its notes, close it here).
       **Partly done:** the hiding by kind is built and shown end to end; the flip without a re-run was not checked.
+  (Reconciled 2026-11-16: ran earlier: by-kind hiding (an `@info` and a raw `println(stderr, ...)` stayed, a `@warn` went). The flip without a re-run is now pinned by `flipping_warning_changes_the_presented_warnings_from_the_same_julia_shaped_record` in `presenter/cell_step.rs`, and `warning` is display-only in Julia's hash definition, so the flip does not make the unit stale.)
 - [x] **End-to-end** with Julia and `target/debug/q2`: a document with a two-expression cell, `prompt: true`, and
       `echo: [2]`; read the HTML and check the facts (interleaving, prompt lines, the selected expression). Record the
       invocations and what you saw.

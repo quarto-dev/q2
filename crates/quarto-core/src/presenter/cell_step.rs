@@ -364,6 +364,51 @@ mod tests {
         assert!(md.contains("fine") && !md.contains("careful"), "{md}");
     }
 
+    /// OPR-4d: a Julia cell keeps all its stderr in the record, so flipping `warning` in the
+    /// author text brings the warnings back from the same record, with no re-run. (`warning` is
+    /// display-only in the hash definition, so the flip does not make the unit stale either.)
+    #[test]
+    fn flipping_warning_changes_the_presented_warnings_from_the_same_julia_shaped_record() {
+        use crate::presenter::knitr_inputs::OUTPUT_KINDS_KEY;
+        let def = jupyter_like();
+        let (e, mut c) = (entry(&def), cell(&def, None));
+        c.outputs = vec![
+            json!({"output_type": "stream", "name": "stdout", "text": "fine\n"}),
+            json!({"output_type": "stream", "name": "stderr", "text": "careful\n"}),
+            json!({"output_type": "stream", "name": "stderr", "text": "an info line\n"}),
+            json!({"output_type": "stream", "name": "stderr", "text": "raw stderr\n"}),
+        ];
+        c.metadata.extra.insert(
+            OUTPUT_KINDS_KEY.into(),
+            json!([null, "warning", "message", null]),
+        );
+
+        let hidden = present("#| warning: false", &c, Some(&e), None);
+        assert!(hidden.contains("fine"), "{hidden}");
+        assert!(
+            hidden.contains("an info line") && hidden.contains("raw stderr"),
+            "only the warning kind is hidden: {hidden}"
+        );
+        assert!(!hidden.contains("careful"), "{hidden}");
+
+        let shown = present("#| warning: true", &c, Some(&e), None);
+        assert!(
+            shown.contains("careful")
+                && shown.contains("an info line")
+                && shown.contains("raw stderr"),
+            "the same record shows every stream once the flag flips: {shown}"
+        );
+        let unset = present("", &c, Some(&e), None);
+        assert!(unset.contains("careful"), "{unset}");
+
+        // Display-only in the hash definition: the flip never makes the unit stale.
+        assert!(!def.presentation_cell_options.is_empty());
+        assert!(
+            def.presentation_cell_options.iter().any(|o| o == "warning"),
+            "warning must stay display-only for this test to describe the flip"
+        );
+    }
+
     #[test]
     fn warning_false_is_not_filtered_again_when_capture_enforced_it() {
         // knitr-style: warning is in the hash, R recorded no warning, and the stderr that is

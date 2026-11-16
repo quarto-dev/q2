@@ -47,6 +47,7 @@ Item 8\'s deletion of `commands/record.rs` moved the old export-command entries 
 - [ ] `crates/quarto-core/src/record/sources.rs:~49,~101-107,~179-199` and
       `crates/quarto-preview/src/capture_driver.rs:~2932-2934`: native-separator display and a self-consistent URI test.
 - [ ] CRLF: `positron-conformance/crlf.qmd` and `positron-cache/*.ipynb` under `autocrlf`.
+  (Reconciled 2026-11-16: `.gitattributes` now pins `positron-conformance/**` and `positron-cache/**` to `text eol=lf` and leaves `crlf.qmd` as committed (`-text`); `git add --renormalize` changes no fixture. A Windows run still has to confirm it, so the box stays open.)
 - [ ] Then the epic\'s command, once: `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub
       -p quarto-hub-provider -p quarto-ast-reconcile --all-targets -- -D warnings` and `cargo nextest run` for the same
       crates. Also run the new `record-sources` (render, preview, provider) and `convert` integration tests (they build paths with

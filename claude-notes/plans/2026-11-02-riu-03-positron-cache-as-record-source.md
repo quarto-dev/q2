@@ -177,7 +177,7 @@ RIU-4 keeps start-up validation, the defaults, the `provide-hub` rules, the `--j
       sets `PreviewConfig.record_sources`. It does no validation, defaults or conflicts; those are RIU-4.
       Test it through the real argument parser.
       *Done 2026-11-06: `ImportContext` on `WalkContext`; `--records` is `FromStr for RecordSource` plus clap's comma delimiter and repeated flag, tested through the real parser in `main.rs`. Not parsed or checked: that a directory exists, defaults, and the `--join`/`--static`/`--no-project` conflicts (RIU-4).*
-- [ ] **Tests (3a).** Editing a cell on an imported page flips the staleness (the viewer shows the
+- [x] **Tests (3a).** Editing a cell on an imported page flips the staleness (the viewer shows the
       Re-execute overlay; the editor UI label reads "code changed"). An unedited imported page stays quiet,
       including a page with units the cache does not cover and a page with an `{r}` chunk the gate refuses.
       Deleting a cell flags the page. A cache older than the document is flagged at boot (through the
@@ -185,6 +185,7 @@ RIU-4 keeps start-up validation, the defaults, the `provide-hub` rules, the `--j
       absent the same re-execute is refused (RIU-2's guard, exercised here through an imported page); the
       viewer still shows its Re-execute overlay on a stale page, and a click is refused with the guard's
       message, which the demo states rather than hides (RIU-6).
+  (Reconciled 2026-11-16: the Rust-level cases have tests: `positron_record.rs` (`a_deleted_unit_flags_the_page`, `a_cache_older_than_the_document_is_stale_at_publish_through_the_unclaimed_count`, `a_unit_the_cache_does_not_cover_does_not_flag_the_page`, `a_chunk_the_gate_refuses_does_not_flag_the_page`), `positron_source.rs` (`an_edit_after_import_keeps_the_other_outputs_and_flags_the_page`) and `capture_driver.rs` (`re_execute_on_an_imported_page_is_refused_without_engine_and_runs_it_when_listed`). The viewer overlay and the editor label are browser checks tracked in the boxes below.)
 - [x] **A mis-paired expanded-cell Div (3b, Phase E): an interim rule, not a contract.** Read 2026-11-05:
       `splice_units` substitutes text, then reparses and reconciles (`merge_markdown_into_ast`). The
       `ReconciliationPlan` it returns holds only index alignments (`KeepBefore`, `UseAfter`,
@@ -498,7 +499,7 @@ TypeScript set).
 - [x] The TypeScript set change is under `ts-packages/`, which `hub-client` bundles from source: run
       `npm run build:all` from `hub-client/` and `npm run test` in the preview-renderer package even
       though no `hub-client/` file changes (so no changelog entry).
-- [ ] Verify how an imported Ark error traceback shows, against a real Ark cache (settled 2026-11-05: a
+- [x] Verify how an imported Ark error traceback shows, against a real Ark cache (settled 2026-11-05: a
       check, not a build). Positron tracebacks carry raw ANSI escape sequences, which the preview
       displayed as literal text (S4; Positron itself rendered them in color, S7). KNR-5 reports ANSI
       stripped through its presenter on a real cache (2026-11-04, its plan). The mechanism is
@@ -506,6 +507,7 @@ TypeScript set).
       traceback lines at `:280`; on `knr-5-positron-interop` it also strips `evalue` and handles an empty
       `ename`). It strips CSI sequences only. Add a test with escapes in a traceback; if they show, the fix is in KNR-5's
       presenter, not here.
+  (Reconciled 2026-11-16: `an_imported_ark_error_shows_its_text_without_ansi_escapes` in `tests/integration/positron_source.rs` imports the real Ark cache `r.cache.ipynb`, whose error `evalue` carries raw ANSI, previews it, and asserts the text shows with no escape character.)
 - [x] Stamped nodes lose their resolved location in the JSON (`Generated` serializes offsets 0 and 0,
       `json.rs:380-398`), so `data-loc` and scroll sync (`iframe/scrollSyncDom.ts:145`) can reach an
       author-owned ancestor instead. Check click-to-source and scroll sync in a browser on a document

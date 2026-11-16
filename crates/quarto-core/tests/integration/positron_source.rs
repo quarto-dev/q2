@@ -208,6 +208,24 @@ async fn the_r_fixture_converts_through_the_knitr_owner() {
     assert!(ast.contains("speed"), "the printed data frame shows");
 }
 
+/// RIU-3: a real Ark cache carries ANSI escapes in the `evalue` of an error cell (here
+/// `\u{1b}[1m\u{1b}[33mError\u{1b}[39m...`). The presenter strips them, so the imported error
+/// shows its text and never an escape character.
+#[tokio::test]
+async fn an_imported_ark_error_shows_its_text_without_ansi_escapes() {
+    assert!(
+        fixture("r.cache.ipynb").contains("\\u001b["),
+        "the fixture must carry raw ANSI escapes for this test to mean anything"
+    );
+    let (record, _dir, path) = import_fixture("r").await;
+    let ast = preview_ast(&path, &record).await;
+    assert!(ast.contains("boom"), "the error text shows: {ast}");
+    assert!(
+        !ast.contains('\u{1b}') && !ast.contains("\\u001b") && !ast.contains("[33m"),
+        "no ANSI escape reaches the page: {ast}"
+    );
+}
+
 /// A document edited after import: only the edited cell loses its output and the page is stale.
 #[tokio::test]
 async fn an_edit_after_import_keeps_the_other_outputs_and_flags_the_page() {

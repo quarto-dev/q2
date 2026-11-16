@@ -61,3 +61,11 @@ crates/quarto-core/tests/fixtures/units/* -text
 # Viz.js embeds a WebAssembly binary as raw characters inside a string, so any
 # line-ending conversion would corrupt it (see resources/graphviz/README.md).
 resources/graphviz/viz-global.js -text
+
+# Positron fixtures: conformance and cache documents are hashed raw and compared
+# byte for byte, so an `autocrlf` checkout on Windows would change their hashes.
+# `crlf.qmd` is the exception: it is stored with CRLF on purpose (it pins CRLF
+# handling), so it keeps its bytes as committed on every platform (`-text`).
+crates/quarto-core/tests/fixtures/positron-conformance/** text eol=lf
+crates/quarto-core/tests/fixtures/positron-conformance/crlf.qmd -text
+crates/quarto-core/tests/fixtures/positron-cache/** text eol=lf
