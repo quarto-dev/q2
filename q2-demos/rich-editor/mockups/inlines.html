@@ -123,7 +123,8 @@ const GROUPS = [
     ['all', 'Arrow out of everything', 'Every format has an inside and an outside at each end.', 'An extra arrow press at every edge of bold and italic, where nothing shows which side the caret is on.'],
   ]},
   { key: 'md', title: 'Typing markdown', options: [
-    ['on', 'Converts as you type', '**bold**, *italic*, ~~strike~~, `code` and [text](url) become formatting when closed. Backspace right after gives the characters back.'],
+    ['on', 'Converts as you type', '**bold**, *italic* (or __bold__, _italic_), ~~strike~~, `code` and [text](url) become formatting when closed. Backspace right after gives the characters back.'],
+    ['early', 'Converts as you start', 'Bold and italic turn on at the first character after ** or * (or __ or _), so the stars never sit in the text; typing them again turns the format off. The rest convert when closed.'],
     ['off', 'Stays as typed', 'A typed * is a *, as today.'],
   ]},
   { key: 'links', title: 'Links', options: [
@@ -337,10 +338,61 @@ function insertText(text) {
 const RULES = [
   [/(?<![*\\])\*\*([^*\s](?:[^*]*[^*\s])?)\*\*$/, B, 2],
   [/(?<![*\\])\*([^*\s](?:[^*]*[^*\s])?)\*$/, I, 1],
+  [/(?<![\w\\])__([^_\s](?:[^_]*[^_\s])?)__$/, B, 2],
+  [/(?<![\w\\])_([^_\s](?:[^_]*[^_\s])?)_$/, I, 1],
   [/~~([^~\s](?:[^~]*[^~\s])?)~~$/, S, 2],
   [/`([^`\s](?:[^`]*[^`\s])?)`$/, C, 1],
 ]
 /** Markdown typed out and just closed becomes formatting. */
+/**
+ * Bold and italic that convert as soon as they start: the first character
+ * typed after ** or * takes the format and the stars go, and stars typed
+ * right after a word in that format turn it off. Returns whether it applied.
+ */
+function earlyRule() {
+  const { b, o } = sel.f
+  const cs = doc[b].cells
+  const typed = cs[o - 1]
+  if (!typed || typed.a || typed.m & C) return false
+  // The stars (or underscores) up to the caret, or up to the character just typed.
+  const mark = (c) => c && !c.a && (c.c === '*' || c.c === '_')
+  const end = mark(typed) ? o : o - 1
+  const star = (c) => mark(c) && c.c === cs[end - 1].c
+  let n = 0
+  while (star(cs[end - 1 - n])) n++
+  if (n === 0 || n > 3) return false
+  const prev = cs[end - n - 1]
+  const m = cs[end - n].m
+  const before = snapshot()
+  // Closing: stars right after a word, in the format they'd close.
+  const closes = prev && !prev.a && !/\s/.test(prev.c)
+  if (star(typed)) {
+    if (!closes) return false
+    // In bold italic, one star may be the first of two: what follows decides.
+    const bit = n === 1 && (m & (B | I)) === I ? I : n === 2 && m & B ? B : 0
+    if (!bit) return false
+    cs.splice(end - n, n)
+    setCaret(b, end - n)
+    pending = m & ~bit
+  } else if (closes) {
+    // That one star, now that something else follows it.
+    if (n !== 1 || !(m & I)) return false
+    typed.m &= ~I
+    cs.splice(end - n, n)
+    setCaret(b, o - n)
+  } else {
+    // Opening: stars after a space (or at the start), then a character.
+    if (/\s/.test(typed.c) || (prev && !prev.a && !/[\s(\[{"'“‘—–-]/.test(prev.c))) return false
+    const bits = [I, B, B | I][n - 1]
+    if ((m & bits) === bits) return false
+    typed.m |= bits
+    cs.splice(end - n, n)
+    setCaret(b, o - n)
+  }
+  ruled = before
+  return true
+}
+
 function typingRule() {
   const { b, o } = sel.f
   const cs = doc[b].cells
@@ -902,26 +954,36 @@ function toQmd(blk) {
       i = j
     }
   }
-  const DELIM = { [B]: '**', [I]: '*', [S]: '~~', [C]: '`' }
-  let out = ''
-  let href = null
-  const open = []
-  const closeTo = (n) => { while (open.length > n) { const t = open.pop(); out += t === 'L' ? `](${href})` : DELIM[t] } }
-  for (const c of cs) {
-    const want = []
-    if (c.h !== null) want.push('L')
-    for (const bit of [B, I, S, C]) if (marksOf(c) & bit) want.push(bit)
-    if (open[0] === 'L' && c.h !== href) closeTo(0)
-    let k = 0
-    while (k < open.length && k < want.length && open[k] === want[k]) k++
-    closeTo(k)
-    for (; k < want.length; k++) {
-      if (want[k] === 'L') { href = c.h; out += '[' } else out += DELIM[want[k]]
-      open.push(want[k])
+  // Formats nest, the one that runs furthest outermost (code always
+  // innermost). Bold or italic inside the other is written with underscores,
+  // as q2 writes it: qmd doesn't read three stars in a row.
+  const emit = (i, j, open) => {
+    let out = ''
+    while (i < j) {
+      const rest = marksOf(cs[i]) & ~open
+      if (cs[i].a || !rest) { out += cs[i].a ? cs[i].a.src : cs[i].c; i++; continue }
+      let bit = C, end = i
+      for (const t of [B, I, S]) {
+        if (!(rest & t)) continue
+        let e = i
+        while (e < j && marksOf(cs[e]) & t) e++
+        if (e > end) { bit = t; end = e }
+      }
+      if (bit === C) while (end < j && marksOf(cs[end]) & C && (marksOf(cs[end]) & ~open) === rest) end++
+      const inner = open & (B | I)
+      const d = bit === B ? (inner ? '__' : '**') : bit === I ? (inner ? '_' : '*') : bit === S ? '~~' : '`'
+      out += d + emit(i, end, open | bit) + d
+      i = end
     }
-    out += c.a ? c.a.src : c.c
+    return out
   }
-  closeTo(0)
+  let out = ''
+  for (let i = 0; i < cs.length; ) {
+    let j = i + 1
+    while (j < cs.length && cs[j].h === cs[i].h) j++
+    out += cs[i].h === null ? emit(i, j, 0) : `[${emit(i, j, 0)}](${cs[i].h})`
+    i = j
+  }
   return (blk.tag === 'h2' ? '## ' : '') + out
 }
 
@@ -1038,7 +1100,7 @@ editor.addEventListener('beforeinput', (e) => {
   }
   if (type === 'insertText') {
     insertText(e.data ?? '')
-    if (opts.md === 'on') typingRule()
+    if (opts.md === 'on' || (opts.md === 'early' && !earlyRule())) typingRule()
   } else if (type === 'insertReplacementText') {
     target()
     insertText(e.dataTransfer?.getData('text/plain') ?? e.data ?? '')
