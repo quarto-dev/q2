@@ -1,7 +1,7 @@
 # Shift+Enter in the comment input: span-friendly hard line breaks
 
 **Strand:** bd-ov4jydyf
-**Status:** plan — decisions reviewed 2026-11-16; awaiting go-ahead (not started)
+**Status:** implemented 2026-11-16 (17792be75; see "Implementation notes" at the end)
 **Related:** bd-ajeb4y6f (writer hardening, parallel)
 
 ## Goal
@@ -369,3 +369,31 @@ several lines.
   `Str` shape. I will grep for assertions on `{ t: 'Str', c: <text with
   spaces> }` in the comment tests and update any that rely on the old
   shape.
+
+## Implementation notes (2026-11-16)
+
+- Shipped as planned, D1–D6 as decided. The helpers live in
+  `ts-packages/preview-renderer/src/utils/commentEdits.ts`
+  (`commentTextToInlines`, `appendCommentToBlock`, `makeCommentSpan`,
+  `commentLineBreaksAllowed`, plus `isComment` / `inlineSlot` /
+  `isCommentContainer` moved out of `CommentBlock.tsx`). They live under
+  `utils/` because the package already exports `./utils/*`, which is
+  what lets the hub-client WASM test import the real code.
+- Tests were written first. A (19) and B (12) failed before the change.
+  C (25) passed against the new code on its first run, so it was checked
+  against a temporary revert to the old single-`Str` behaviour: all 25
+  failed. D (4) passed from the start, as the measurements predicted.
+- D6 effect on existing tests: one assertion in
+  `CommentBlock.readMode.integration.test.tsx` looked for the raw text
+  in the payload JSON. It now checks the Str/Space inlines.
+- Manual check (E) in `q2 preview --allow-edit`. Paragraph:
+  Shift+Enter inserts a new line, Enter commits
+  `[>> first line\`⏎`second line]` to disk with the rest of the file
+  untouched, the expanded bubble shows the break, and the compact bubble
+  shows `first line second line` on one line. Heading: Shift+Enter does
+  nothing, the hint is `↵ add · Esc close`, and the comment commits as
+  one line. The hint fits on one line in the input. `q2 render` of the
+  edited file is clean.
+- Already true before this change: an expanded comment row wraps
+  almost every word, because of the bubble's shrink-to-fit sizing. A
+  one-line comment does it too, so line breaks don't cause it.
