@@ -1072,6 +1072,8 @@ function renderOverlay() {
     url.className = link.h ? 'url' : 'none'
     url.textContent = link.h || 'No address'
     if (link.h) Object.assign(url, { href: link.h, target: '_blank', rel: 'noopener' })
+    // Once it's opened, the keyboard is back in the text for the return.
+    url.onclick = () => setTimeout(() => editor.focus())
     // Tab in the document comes here; Tab past either end, or Escape, goes back.
     el.onkeydown = (e) => {
       const stops = [...el.querySelectorAll('a[href], button')]
