@@ -217,6 +217,10 @@ export interface FieldEditor {
    * the one it has (see `setLinePrefixes`): an edit of its own.
    */
   setPrefixes(prefixFor: (prefix: string) => string): void
+  /** Undo the last edit, as the keyboard's undo does (nothing to undo: nothing happens). */
+  undo(): void
+  /** Redo the last undone edit (nothing to redo: nothing happens). */
+  redo(): void
 }
 
 /** How the caret left the fields before the first one. */
@@ -349,6 +353,13 @@ export function useFieldEditor(
     },
     [schema, source, commit],
   )
+
+  const undoEdit = useCallback(() => {
+    if (source.writable()) commit(undo(latest.current), true)
+  }, [source, commit])
+  const redoEdit = useCallback(() => {
+    if (source.writable()) commit(redo(latest.current), true)
+  }, [source, commit])
 
   const focusStart = useCallback(() => {
     const h = latest.current
@@ -709,7 +720,7 @@ export function useFieldEditor(
     }
   }, [root, schema, source, commit, followDocument])
 
-  return { state: editor.present, editor, writable, add, focusStart, setPrefixes }
+  return { state: editor.present, editor, writable, add, focusStart, setPrefixes, undo: undoEdit, redo: redoEdit }
 }
 
 /** Keys that move the selection: after one, it is no longer the mouse's. */

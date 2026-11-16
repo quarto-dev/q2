@@ -13,7 +13,9 @@
  * be in a quote yet, so headings can't be chosen in a quote, and a heading
  * can't be quoted. Nor can a list item be a heading or a quote yet, so on
  * an item neither can be chosen, and a heading or a quote can't be made an
- * item. Outside the body, it's disabled.
+ * item. Outside the body, it's disabled, but for its undo and redo
+ * buttons, which come first and work wherever the caret is, as the
+ * keyboard's undo and redo do.
  *
  * It lives outside the document's frame. Pressing it doesn't take the
  * focus, so the caret stays where it was.
@@ -31,6 +33,11 @@ interface ToolbarProps {
   frameDoc: Document | null
   /** Give each line the selection is on the prefix `prefixFor` returns for its own. */
   setPrefixes: (prefixFor: (prefix: string) => string) => void
+  /** Whether there is an edit to undo, and one to redo. */
+  canUndo: boolean
+  canRedo: boolean
+  undo: () => void
+  redo: () => void
 }
 
 const STYLES = [
@@ -40,6 +47,19 @@ const STYLES = [
   { name: 'Heading 3', level: 3 },
   { name: 'Heading 4', level: 4 },
 ]
+
+// Material Icons' "undo" and "redo" (Apache 2.0), as in Google Docs' toolbar.
+const UNDO_ICON = (
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z" />
+  </svg>
+)
+
+const REDO_ICON = (
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z" />
+  </svg>
+)
 
 // Material Icons' "format_list_bulleted" (Apache 2.0), as in Google Docs' toolbar.
 const LIST_ICON = (
@@ -68,7 +88,7 @@ const CHEVRON = (
   </svg>
 )
 
-export function Toolbar({ state, writable, frameDoc, setPrefixes }: ToolbarProps) {
+export function Toolbar({ state, writable, frameDoc, setPrefixes, canUndo, canRedo, undo, redo }: ToolbarProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -138,6 +158,33 @@ export function Toolbar({ state, writable, frameDoc, setPrefixes }: ToolbarProps
       // Keep the focus, and so the caret, in the document.
       onMouseDown={(e) => e.preventDefault()}
     >
+      <button
+        type="button"
+        className="qe-icon"
+        aria-label="Undo"
+        title="Undo"
+        disabled={!writable || !canUndo}
+        onClick={() => {
+          setOpen(false)
+          undo()
+        }}
+      >
+        {UNDO_ICON}
+      </button>
+      <button
+        type="button"
+        className="qe-icon"
+        aria-label="Redo"
+        title="Redo"
+        disabled={!writable || !canRedo}
+        onClick={() => {
+          setOpen(false)
+          redo()
+        }}
+      >
+        {REDO_ICON}
+      </button>
+      <span className="qe-sep" />
       <div className="qe-style-box">
         <button
           type="button"

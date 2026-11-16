@@ -54,7 +54,9 @@ caret is in a quote and quotes or unquotes the line.
 With a selection, they change every line it is on, as one undo step, and
 the caret stays on its text. A heading can't be in a quote yet, so neither
 can be made into the other from the toolbar, and nor can a list item be
-made a heading or a quote, or a heading or a quote an item; outside the body, it's disabled. Its design is the toolbar of `mockups/block-annotations.html`
+made a heading or a quote, or a heading or a quote an item; outside the body, it's disabled. Its undo and
+redo buttons, first in it, work wherever the caret is, as the keyboard's
+undo and redo do, and are disabled while there's nothing to undo or redo. Its design is the toolbar of `mockups/block-annotations.html`
 with nothing in the margin and no breadcrumb.
 The rest of the body (paragraphs, headings, quotes and lists with
 formatting, quotes of more than one paragraph, lists with blank lines
@@ -255,7 +257,7 @@ The specs are: `title-block.spec.ts`, `cross-field.spec.ts`,
 `numbered-lists.spec.ts` and `rules.spec.ts`
 (editing),
 `title-block-widget.spec.ts` (adding and removing title-block fields),
-`toolbar.spec.ts` (the toolbar's style box and quote button), `keys.spec.ts` (moving and
+`toolbar.spec.ts` (the toolbar's undo and redo buttons, style box and quote button), `keys.spec.ts` (moving and
 deleting by word and by line), `clipboard.spec.ts` (copy, cut, paste, drag
 and drop),
 `composition.spec.ts` (input methods), `blocks.spec.ts` (how each kind of
@@ -323,8 +325,8 @@ editor has to keep:
   `.qe-widget`.
 - The toolbar is found by its roles: a `toolbar` named "Formatting",
   holding a "Text style" button that opens a "Text style" `menu` of
-  `menuitemradio`s, and "Bulleted list", "Numbered list" and "Quote"
-  buttons with `aria-pressed`.
+  `menuitemradio`s, "Undo" and "Redo" buttons, and "Bulleted list",
+  "Numbered list" and "Quote" buttons with `aria-pressed`.
 
 ### What no spec covers
 

@@ -205,3 +205,67 @@ test.describe('the quote button', () => {
     await expect(editor.quoteButton()).toBeDisabled()
   })
 })
+
+test.describe('the undo and redo buttons', () => {
+  test('are disabled before anything is edited', async ({ page }) => {
+    const editor = await openEditor(page, 'toolbar')
+    await editor.placeCaretInLine(0, 2)
+
+    await expect(editor.undoButton()).toBeDisabled()
+    await expect(editor.redoButton()).toBeDisabled()
+  })
+
+  test('undo takes back the last edit, with the caret where it was', async ({ page }) => {
+    const editor = await openEditor(page, 'toolbar')
+    await editor.placeCaretInLine(0, 2)
+    await page.keyboard.type('xy')
+    await editor.document.expectSource(toolbar.replace('Intro.', 'Inxytro.'))
+
+    await editor.undoButton().click()
+
+    await editor.document.expectSource(toolbar)
+    await expect(editor.undoButton()).toBeDisabled()
+    await page.keyboard.type('!')
+    await editor.document.expectSource(toolbar.replace('Intro.', 'In!tro.'))
+  })
+
+  test('redo makes the undone edit again', async ({ page }) => {
+    const editor = await openEditor(page, 'toolbar')
+    await editor.placeCaretInLine(3, 2)
+    await editor.quoteButton().click()
+    await editor.undoButton().click()
+    await editor.document.expectSource(toolbar)
+    await expect(editor.redoButton()).toBeEnabled()
+
+    await editor.redoButton().click()
+
+    await editor.document.expectSource(toolbar.replace('End.', '> End.'))
+    await expect(editor.redoButton()).toBeDisabled()
+    await expect(editor.undoButton()).toBeEnabled()
+  })
+
+  test('another edit after an undo leaves nothing to redo', async ({ page }) => {
+    const editor = await openEditor(page, 'toolbar')
+    await editor.placeCaretInLine(0, 2)
+    await page.keyboard.type('x')
+    await editor.undoButton().click()
+    await expect(editor.redoButton()).toBeEnabled()
+
+    await page.keyboard.type('y')
+
+    await expect(editor.redoButton()).toBeDisabled()
+  })
+
+  test('work in the title block too', async ({ page }) => {
+    const editor = await openEditor(page, 'toolbar')
+    await editor.placeCaret('title', 5)
+    await page.keyboard.type('!')
+    await editor.document.expectSource(toolbar.replace('Field notes', 'Field! notes'))
+
+    await editor.undoButton().click()
+
+    await editor.document.expectSource(toolbar)
+    await editor.redoButton().click()
+    await editor.document.expectSource(toolbar.replace('Field notes', 'Field! notes'))
+  })
+})

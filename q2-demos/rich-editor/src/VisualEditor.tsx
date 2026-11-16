@@ -164,7 +164,7 @@ export function VisualEditor({ file }: VisualEditorProps) {
   // Where the focus goes in the "+" row when the caret leaves the fields for it.
   const [widgetFocus, setWidgetFocus] = useState<WidgetFocus | null>(null)
   const onLeaveStart = useCallback((how: LeaveStart) => setWidgetFocus({ field: how.removed, x: how.x }), [])
-  const { state, writable, add, focusStart, setPrefixes } = useFieldEditor(root, SCHEMA, source, { autoFocus: true, onLeaveStart })
+  const { state, editor, writable, add, focusStart, setPrefixes, undo, redo } = useFieldEditor(root, SCHEMA, source, { autoFocus: true, onLeaveStart })
   const present = useMemo(() => new Set(TITLE_BLOCK.filter((f) => state.fields[f] !== undefined)), [state.fields])
   const caretInTitleBlock = TITLE_BLOCK.some((f) => state.selection?.focus.field === f)
   const empty = present.size === 0 && !state.fields.body
@@ -218,7 +218,16 @@ export function VisualEditor({ file }: VisualEditorProps) {
   return (
     <div className="visual-editor">
       <div className="visual-box">
-        <Toolbar state={state} writable={writable} frameDoc={frameDoc} setPrefixes={setPrefixes} />
+        <Toolbar
+          state={state}
+          writable={writable}
+          frameDoc={frameDoc}
+          setPrefixes={setPrefixes}
+          canUndo={editor.past.length > 0}
+          canRedo={editor.future.length > 0}
+          undo={undo}
+          redo={redo}
+        />
         <iframe
           className="visual-frame"
           title="Visual editor"

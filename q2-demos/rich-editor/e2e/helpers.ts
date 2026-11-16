@@ -424,6 +424,16 @@ export class Editor {
     await this.styleMenu().getByRole('menuitemradio', { name }).click()
   }
 
+  /** The toolbar's undo button. */
+  undoButton() {
+    return this.toolbar().getByRole('button', { name: 'Undo' })
+  }
+
+  /** The toolbar's redo button. */
+  redoButton() {
+    return this.toolbar().getByRole('button', { name: 'Redo' })
+  }
+
   /** The toolbar's bulleted list button. */
   listButton() {
     return this.toolbar().getByRole('button', { name: 'Bulleted list' })
