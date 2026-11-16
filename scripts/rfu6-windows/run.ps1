@@ -62,8 +62,16 @@ function Invoke-Logged {
         '@echo off',
         ($CmdLine + ' > "' + $log + '" 2>&1'),
         'exit /b %ERRORLEVEL%')
-    & $bat
-    return @{ Exit = $LASTEXITCODE; Log = $log }
+    # Not `& $bat`: that captures cmd's stdout through a pipe and waits for EOF, which a leaked
+    # grandchild (nextest LEAK tests leave python kernels) can hold open for hours. WaitForExit()
+    # on the one cmd process has no pipe to wait on.
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $env:ComSpec
+    $psi.Arguments = '/c "' + $bat + '"'
+    $psi.UseShellExecute = $false
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $p.WaitForExit()
+    return @{ Exit = $p.ExitCode; Log = $log }
 }
 
 function Get-Tail {
