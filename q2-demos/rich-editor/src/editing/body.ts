@@ -10,9 +10,12 @@
  * after the numbered prefix (`NUMBERED`): an edit keeps its start number
  * and delimiter, and a new one is numbered `1.` from 1. A
  * horizontal rule is a line that can be removed but not edited (`VOID`).
- * Every other block (a paragraph or heading with formatting, a quote or
- * list of anything else) is a line that can't be edited (`ATOM`), and
- * comes back from an edit as the block it was.
+ * "Plain text" here can be formatted: bold, italic, underline,
+ * strikethrough, highlight, code and links are marks in the line's text
+ * (see `inlines.ts`). Every other block (a paragraph or heading with math,
+ * a note or an image in it, a quote or list of anything else) is a line
+ * that can't be edited (`ATOM`), and comes back from an edit as the block
+ * it was.
  *
  * An empty line is an empty paragraph, which qmd has no syntax for: it's
  * written as a paragraph of one non-breaking space, which takes up a line
@@ -26,10 +29,11 @@
  * them stays.
  */
 
-import { ATOM, isPrefix, VOID, withoutPrefixes } from '../engine/model.ts'
+import { ATOM, isPrefix, VOID } from '../engine/model.ts'
 import { diff, matchLines } from '../engine/rebase.ts'
+import { inlinesOf, inlineText, keptText, type Node } from './inlines.ts'
 
-export type Node = { t: string; c?: unknown }
+export { words, type Node } from './inlines.ts'
 
 /** What an empty paragraph holds. */
 const NBSP = '\u00a0'
@@ -102,14 +106,9 @@ export function lineOf(block: Node): string | undefined {
   }
   if (block.t !== 'Header' || !Array.isArray(block.c)) return undefined
   const [level, , inlines] = block.c as [number, Attr, Node[]]
-  const text = plainText(inlines, ' ')
-  if (text === undefined || !editable(text) || level < 1 || level > 6) return undefined
+  const text = inlineText(inlines)
+  if (text === undefined || level < 1 || level > 6) return undefined
   return headingPrefix(level) + text
-}
-
-/** Whether text can be a line's: it holds no character the editor gives a meaning. */
-function editable(text: string): boolean {
-  return !text.includes(ATOM) && !text.includes(VOID) && withoutPrefixes(text) === text
 }
 
 /**
@@ -118,9 +117,9 @@ function editable(text: string): boolean {
  */
 export function plainParagraph(block: Node): string | undefined {
   if (block.t !== 'Para' || !Array.isArray(block.c)) return undefined
-  const text = plainText(block.c as Node[], ' ')
+  const text = inlineText(block.c as Node[])
   if (text === NBSP) return ''
-  return text === undefined || text === '' || !editable(text) ? undefined : text
+  return text === undefined || text === '' ? undefined : text
 }
 
 /** A numbered list's start number, numbering style and delimiter. */
@@ -169,8 +168,8 @@ function itemLines(list: Node): string[] | undefined {
       continue
     }
     if (item.length !== 1 || item[0].t !== 'Plain') return undefined
-    const text = plainText(item[0].c as Node[], ' ')
-    if (text === undefined || !editable(text)) return undefined
+    const text = inlineText(item[0].c as Node[])
+    if (text === undefined) return undefined
     lines.push(prefix + (text === NBSP ? '' : text))
   }
   return lines
@@ -364,7 +363,7 @@ function listOf(
 
 /** An item reading `text` (nothing in it, for no text), wrapped in the source where `wrapped` says. */
 function item(text: string, wrapped: (offset: number) => boolean): Node[] {
-  return text === '' ? [] : [{ t: 'Plain', c: words(text, wrapped) }]
+  return text === '' ? [] : [{ t: 'Plain', c: inlinesOf(text, wrapped) }]
 }
 
 /**
@@ -373,7 +372,7 @@ function item(text: string, wrapped: (offset: number) => boolean): Node[] {
  */
 function paragraph(text: string, wrapped: (offset: number) => boolean): Node {
   if (text === '') return { t: 'Para', c: [{ t: 'Str', c: NBSP }] }
-  return { t: 'Para', c: words(text, wrapped) }
+  return { t: 'Para', c: inlinesOf(text, wrapped) }
 }
 
 /**
@@ -382,7 +381,7 @@ function paragraph(text: string, wrapped: (offset: number) => boolean): Node {
  * the reader made from the old text, which isn't written in the source.
  */
 function heading(level: number, text: string, was: Node | undefined): Node {
-  const inlines = text === '' ? [] : words(text)
+  const inlines = text === '' ? [] : inlinesOf(text)
   if (was?.t !== 'Header' || lineOf(was) === undefined) return { t: 'Header', c: [level, ['', [], []], inlines] }
   const [, [id, classes, kvs]] = was.c as [number, Attr, Node[]]
   const written = (was as { a?: { id?: unknown } }).a?.id != null
@@ -431,11 +430,11 @@ function keptWraps(
       if (item >= 0) {
         const [plain] = itemOf(blocks, { line, block: index, item })
         const prefix = linePrefix(line)
-        return line === prefix ? line : prefix + plainText(plain.c as Node[], '\n')
+        return line === prefix ? line : prefix + inlineText(plain.c as Node[], '\n')
       }
-      if (block.t === 'Para' && line) return plainText(block.c as Node[], '\n')
+      if (block.t === 'Para' && line) return inlineText(block.c as Node[], '\n')
       if (block.t === 'BlockQuote' && line !== QUOTE) {
-        return QUOTE + plainText((block.c as Node[])[0].c as Node[], '\n')
+        return QUOTE + inlineText((block.c as Node[])[0].c as Node[], '\n')
       }
       return line
     })
@@ -450,44 +449,10 @@ function keptWraps(
 
 /**
  * The part of a line that qmd keeps: its prefix, and its text with no
- * spaces at its ends and runs of spaces as one.
+ * spaces at its ends and runs of spaces as one (but in code), and spaces
+ * at the ends of formatting outside it (see `keptText`).
  */
 export function kept(line: string): string {
   const text = lineText(line)
-  return line.slice(0, line.length - text.length) + text.trim().replace(/\s+/g, ' ')
-}
-
-/**
- * A line of plain text as inlines: words and the spaces between them. A
- * space is a line break in the source when `wrapped` says so of its offset.
- */
-export function words(line: string, wrapped: (offset: number) => boolean = () => false): Node[] {
-  const inlines: Node[] = []
-  let offset = 0
-  for (const word of line.split(' ')) {
-    if (offset > 0) inlines.push({ t: wrapped(offset - 1) ? 'SoftBreak' : 'Space' })
-    inlines.push({ t: 'Str', c: word })
-    offset += word.length + 1
-  }
-  return inlines
-}
-
-/**
- * The text of inlines that are only text, or undefined when there's
- * anything else. `softBreak` is what a line break in the source reads as.
- */
-function plainText(inlines: Node[], softBreak: string): string | undefined {
-  let text = ''
-  for (const inline of inlines) {
-    if (inline.t === 'Str' && typeof inline.c === 'string') text += inline.c
-    else if (inline.t === 'Space') text += ' '
-    else if (inline.t === 'SoftBreak') text += softBreak
-    else if (inline.t === 'Quoted') {
-      const [kind, inner] = inline.c as [{ t: string }, Node[]]
-      const quoted = plainText(inner, softBreak)
-      if (quoted === undefined) return undefined
-      text += kind.t === 'SingleQuote' ? `‘${quoted}’` : `“${quoted}”`
-    } else return undefined
-  }
-  return text
+  return line.slice(0, line.length - text.length) + keptText(text)
 }

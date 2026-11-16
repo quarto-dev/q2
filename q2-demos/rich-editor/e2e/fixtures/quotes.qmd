@@ -11,7 +11,7 @@ Middle.
 > Wrapped quote
 > over two lines.
 
-> *Formatted* quote.
+> *Formatted* quote.^[A note.]
 
 > One.
 >

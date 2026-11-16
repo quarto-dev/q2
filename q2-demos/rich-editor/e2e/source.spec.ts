@@ -184,9 +184,11 @@ test.describe('typed text is text', () => {
       '<div>not HTML</div> &amp; <!-- no comment -->',
       '$not$ $$math$$',
       '@not a citation, [@nor] this',
-      '[not a link](https://example.com), ![nor an image](image.png)',
+      // (Links, code, bold, italic and strikethrough typed out become
+      // formatting: see `inlines.spec.ts`.)
+      '![not an image](image.png)',
       '{{< not a shortcode >}}',
-      '[not a span]{.mark}, `not code`, _not_ **emphasis**, ~not~ ^sub^ ~~or struck~~',
+      '[not a span]{.mark}, ~not~ ^sub^',
       'not a dash -- or --- an ellipsis...',
       'a\\backslash',
     ]

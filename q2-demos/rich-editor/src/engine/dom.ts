@@ -11,9 +11,221 @@
  * with the offset of its line in the field's text as `data-start`. A line
  * with no element of its own (one that can't be edited) has no caret
  * positions: a position on it is shown at the end of the line before.
+ *
+ * A field's text can be formatted (see `marks.ts`): its element then holds
+ * the visible text in elements for its formats (`renderText`), and each
+ * text node knows where it starts in the field's text, so a point in one
+ * is a position, and the other way round. The marks have no text in the
+ * page; where the caret is at a position no text node's edge stands for
+ * (outside code at the end of a line, or in a format just turned on), the
+ * element holds a zero-width space there, in the caret's formats, for the
+ * caret to be drawn in (the holder): a point in it is the caret's position.
  */
 
+import {
+  edgeOf,
+  hasMarks,
+  PLAIN,
+  sameStyle,
+  scan,
+  stopAt,
+  tree,
+  withoutMarks,
+  type InlineNode,
+  type Run,
+  type Style,
+} from './marks.ts'
 import type { Position, Selection } from './model.ts'
+
+/** How formatted text is shown. */
+export interface MarkView {
+  /** The element for a format (by its number), and its class. */
+  element(format: number): { as: string; className?: string }
+  /** Formats with two caret positions at each edge (a bit for each). */
+  twoSided: number
+  /** Formats that hold only text, innermost (a bit for each). */
+  leaf: number
+}
+
+/** The zero-width space a holder holds. */
+export const HOLDER = '\u200b'
+
+/** Where each text node of a field's element starts in the element's text. */
+const leafStarts = new WeakMap<Node, number>()
+/** The position (in its element's text) of the caret a holder holds. */
+const holders = new WeakMap<Node, number>()
+/** The text each field's element shows, marks and all, and the key it was rendered for. */
+const shown = new WeakMap<Element, { text: string; key: string; view: MarkView | undefined }>()
+/** Whether `renderText` rebuilt an element the page's selection was in: it must be put back. */
+let selectionLost = false
+
+/** Whether the page's selection was lost to a rebuilt element since the last call. */
+export function takeSelectionLost(): boolean {
+  const lost = selectionLost
+  selectionLost = false
+  return lost
+}
+
+/**
+ * Whether the caret at `caret` in `text` needs a holder to be drawn where
+ * it is: when neither the text before it nor after it is in its style, or
+ * it's at an edge of a format with two caret positions.
+ */
+export function needsHolder(text: string, caret: number, twoSided: number): boolean {
+  if (!hasMarks(text)) return false
+  const scanned = scan(text)
+  const stop = stopAt(scanned, caret)
+  const before = scanned.chars[stop.index - 1]?.style
+  const after = scanned.chars[stop.index]?.style
+  if (!before && !after) return !sameStyle(stop.style, PLAIN)
+  if (edgeOf(scanned, stop.index, twoSided)) return true
+  return !(before && sameStyle(before, stop.style)) && !(after && sameStyle(after, stop.style))
+}
+
+/**
+ * Show `text` (marks and all) in `el`, a field's element, and a holder for
+ * a collapsed caret at `caret` if it needs one (see `needsHolder`). Text
+ * ending in a line break, and text with nothing visible, get a trailing
+ * `<br>` (see `Field`). Nothing is done when `el` already shows it.
+ */
+export function renderText(el: HTMLElement, text: string, view: MarkView | undefined, caret: number | undefined): void {
+  const holder = view && caret !== undefined && needsHolder(text, caret, view.twoSided) ? caret : undefined
+  const key = `${text}\u0000${holder ?? ''}\u0000${el.dataset.start ?? ''}`
+  const wantsBreak = text.endsWith('\n') || withoutMarks(text) === ''
+  const hasBreak = el.lastChild?.nodeName === 'BR'
+  if (shown.get(el)?.key === key && hasBreak === wantsBreak) return
+  const selection = el.ownerDocument.getSelection()
+  if (selection && [selection.anchorNode, selection.focusNode].some((n) => n && el.contains(n))) selectionLost = true
+  shown.set(el, { text, key, view })
+  const doc = el.ownerDocument
+  el.replaceChildren()
+  if (!view || (!hasMarks(text) && holder === undefined)) {
+    if (text !== '') {
+      const node = doc.createTextNode(text)
+      leafStarts.set(node, 0)
+      el.append(node)
+    }
+  } else {
+    const nodes = tree(runsWithHolder(text, holder), view.leaf)
+    build(doc, el, nodes, view, holder, Number(el.dataset.start ?? 0))
+  }
+  if (wantsBreak) el.append(doc.createElement('br'))
+}
+
+/** Show again what `el` was last given, throwing away whatever the browser wrote into it (a composition not taken). */
+export function restoreText(el: HTMLElement): void {
+  const was = shown.get(el)
+  if (!was) return
+  shown.delete(el)
+  renderText(el, was.text, was.view, undefined)
+}
+
+/** The runs of `text`, with an empty one for the holder at `holder`, in the caret's style. */
+function runsWithHolder(text: string, holder: number | undefined): Run[] {
+  const scanned = scan(text)
+  const runs: Run[] = []
+  let style: Style | null = null
+  const stop = holder === undefined ? undefined : stopAt(scanned, holder)
+  const pushHolder = () => runs.push({ text: '', start: holder!, ...stop!.style })
+  scanned.chars.forEach((c, i) => {
+    if (stop && stop.index === i) {
+      pushHolder()
+      style = null
+    }
+    const last = runs[runs.length - 1]
+    if (last && style && sameStyle(style, c.style) && last.start + last.text.length === c.offset) {
+      runs[runs.length - 1] = { ...last, text: last.text + c.char }
+    } else runs.push({ text: c.char, start: c.offset, ...c.style })
+    style = c.style
+  })
+  if (stop && stop.index === scanned.chars.length) pushHolder()
+  return runs
+}
+
+function build(doc: Document, parent: Node, nodes: readonly InlineNode[], view: MarkView, holder: number | undefined, start: number): void {
+  for (const node of nodes) {
+    if (node.kind === 'text') {
+      const text = doc.createTextNode(node.text === '' ? HOLDER : node.text)
+      if (node.text === '') holders.set(text, holder!)
+      else leafStarts.set(text, node.start)
+      parent.appendChild(text)
+    } else if (node.kind === 'mark') {
+      const { as, className } = view.element(node.format)
+      const el = doc.createElement(as)
+      if (className) el.className = className
+      el.dataset.qeMark = String(node.format)
+      build(doc, el, node.children, view, holder, start)
+      parent.appendChild(el)
+    } else {
+      const a = doc.createElement('a')
+      a.setAttribute('href', node.url)
+      const first = firstStart(node.children)
+      if (first !== undefined) a.dataset.qeAt = String(start + first)
+      build(doc, a, node.children, view, holder, start)
+      parent.appendChild(a)
+    }
+  }
+}
+
+function firstStart(nodes: readonly InlineNode[]): number | undefined {
+  for (const node of nodes) {
+    if (node.kind === 'text') {
+      if (node.text !== '') return node.start
+    } else {
+      const found = firstStart(node.children)
+      if (found !== undefined) return found
+    }
+  }
+  return undefined
+}
+
+/** The text nodes of a field's element that stand for its text (and its holder), in order. */
+function leaves(el: HTMLElement): Text[] {
+  const walker = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+  const out: Text[] = []
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (leafStarts.has(node) || holders.has(node)) out.push(node as Text)
+  }
+  return out
+}
+
+/** The span of the element's text a leaf stands for. */
+function leafSpan(leaf: Text): { start: number; end: number } {
+  const holder = holders.get(leaf)
+  if (holder !== undefined) return { start: holder, end: holder }
+  const start = leafStarts.get(leaf)!
+  return { start, end: start + leaf.length }
+}
+
+/** The text a field's element stands for (marks and all). */
+function textOf(el: HTMLElement): string {
+  return shown.get(el)?.text ?? el.textContent ?? ''
+}
+
+/** Where a DOM point inside a field's element is in the element's text. */
+function offsetIn(el: HTMLElement, node: Node, offset: number): number {
+  const holder = holders.get(node)
+  if (holder !== undefined) return holder
+  const start = leafStarts.get(node)
+  if (start !== undefined) return start + Math.min(offset, (node as Text).length)
+  const own = leaves(el)
+  if (own.length === 0) {
+    // Text the element shows that it wasn't given (during a composition).
+    const prefix = el.ownerDocument.createRange()
+    prefix.selectNodeContents(el)
+    prefix.setEnd(node, offset)
+    return prefix.toString().length
+  }
+  // A point between nodes: the end of the text before it, or the start of the text after.
+  const point = el.ownerDocument.createRange()
+  point.setStart(node, offset)
+  let found: number | undefined
+  for (const leaf of own) {
+    if (point.comparePoint(leaf, 0) >= 0) return found ?? leafSpan(leaf).start
+    found = leafSpan(leaf).end
+  }
+  return found ?? 0
+}
 
 const FIELD = '[data-field]'
 
@@ -54,10 +266,7 @@ export function positionAt(
   const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
   const field = element?.closest<HTMLElement>(FIELD)
   if (field && root.contains(field)) {
-    const prefix = doc.createRange()
-    prefix.selectNodeContents(field)
-    prefix.setEnd(node, offset)
-    return { field: field.dataset.field!, offset: startOf(field) + prefix.toString().length }
+    return { field: field.dataset.field!, offset: startOf(field) + offsetIn(field, node, offset) }
   }
   const fields = fieldsIn(root)
   if (fields.length === 0) return null
@@ -66,7 +275,7 @@ export function positionAt(
   const after = fields.find((f) => point.comparePoint(f, 0) >= 0)
   const before = fields.filter((f) => f !== after && point.comparePoint(f, f.childNodes.length) <= 0).pop()
   const start = after && { field: after.dataset.field!, offset: startOf(after) }
-  const end = before && { field: before.dataset.field!, offset: startOf(before) + (before.textContent ?? '').length }
+  const end = before && { field: before.dataset.field!, offset: startOf(before) + textOf(before).length }
   return (bias === 'backward' ? (end ?? start) : (start ?? end)) ?? null
 }
 
@@ -132,8 +341,19 @@ export function pointOnLine(field: HTMLElement, x: number, line: 'first' | 'last
 
 /** The DOM point at the start or end of `field`'s text. */
 export function edge(field: HTMLElement, which: 'start' | 'end'): { node: Node; offset: number } {
-  const text = field.textContent ?? ''
-  return locateIn(field, which === 'start' ? 0 : text.length)
+  return locateIn(field, which === 'start' ? 0 : textOf(field).length)
+}
+
+/** Where the text from `from` to `to` is drawn: the box of its last line, or null when it isn't shown. */
+export function rectOf(root: HTMLElement, from: Position, to: Position): DOMRect | null {
+  const start = locate(root, from)
+  const end = locate(root, to)
+  if (!start || !end) return null
+  const range = root.ownerDocument.createRange()
+  range.setStart(start.node, start.offset)
+  range.setEnd(end.node, end.offset)
+  const rects = range.getClientRects()
+  return rects.length > 0 ? rects[rects.length - 1] : range.getBoundingClientRect()
 }
 
 /** Focus `root` and select `selection` in it. */
@@ -217,17 +437,20 @@ function locateIn(field: HTMLElement, offset: number): { node: Node; offset: num
   // At the very end of text ending in a line break, the end of the text
   // node draws at the end of the line above; the caret belongs just before
   // the trailing <br> (see `Field`).
-  const text = field.textContent ?? ''
+  const text = textOf(field)
   if (offset >= text.length && text.endsWith('\n') && field.lastChild?.nodeName === 'BR') {
     return { node: field, offset: field.childNodes.length - 1 }
   }
-  const walker = field.ownerDocument.createTreeWalker(field, NodeFilter.SHOW_TEXT)
-  let remaining = Math.max(0, offset)
-  let last: Text | null = null
-  for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
-    if (remaining <= node.length) return { node, offset: remaining }
-    remaining -= node.length
-    last = node
-  }
-  return last ? { node: last, offset: last.length } : { node: field, offset: 0 }
+  const own = leaves(field)
+  const holder = own.find((leaf) => holders.get(leaf) === offset)
+  if (holder) return { node: holder, offset: 1 }
+  const texts = own.filter((leaf) => leafStarts.has(leaf))
+  const inside = texts.find((leaf) => leafSpan(leaf).start <= offset && offset <= leafSpan(leaf).end)
+  if (inside) return { node: inside, offset: offset - leafSpan(inside).start }
+  // Between text nodes (among marks): the end of the one before, or the start of the first.
+  const before = texts.filter((leaf) => leafSpan(leaf).end <= offset).pop()
+  if (before) return { node: before, offset: before.length }
+  if (texts[0]) return { node: texts[0], offset: 0 }
+  if (own[0]) return { node: own[0], offset: 1 }
+  return { node: field, offset: 0 }
 }

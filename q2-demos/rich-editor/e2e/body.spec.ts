@@ -2,8 +2,11 @@
  * The document's body, under the title block. Paragraphs of plain text are
  * edited in place: Enter splits one, Backspace at its start joins it to
  * the one before. (So are headings of plain text: see `headings.spec.ts`.)
- * Everything else (formatted text, code) is shown as `q2 render` would
- * show it and can't be edited yet, and no edit changes its source.
+ * Their text can be formatted (see `inlines.spec.ts`). Everything else
+ * (text with a note, math, a citation or an image in it, code) is shown as
+ * `q2 render` would show it and can't be edited yet, and no edit changes
+ * its source. (In the fixtures, a note is what makes a block read-only:
+ * it isn't shown, so the block reads as its text.)
  */
 
 import { createDocument, expect, fixture, lineEnd, openEditor, test, type Editor } from './helpers.ts'
@@ -26,7 +29,7 @@ test.describe('showing the body', () => {
     await expect(editor.frame.locator('main p em')).toHaveText('emphasised')
   })
 
-  test('only paragraphs of plain text can be edited', async ({ page }) => {
+  test('only paragraphs of text can be edited', async ({ page }) => {
     const editor = await openEditor(page, 'body')
 
     expect(await editor.paragraphs()).toEqual(['First paragraph.', 'Second paragraph.', 'Last paragraph.'])
@@ -41,7 +44,7 @@ test.describe('showing the body', () => {
     ])
   })
 
-  test('typing on a heading with formatting changes nothing', async ({ page }) => {
+  test('typing on a heading with a note changes nothing', async ({ page }) => {
     const editor = await openEditor(page, 'body')
     await editor.frame.locator('main h2').click()
     await page.keyboard.type('x')
@@ -64,15 +67,15 @@ test.describe('editing a paragraph', () => {
     await editor.document.expectSource(body.replace('Second paragraph.', 'Second short paragraph.'))
   })
 
-  test('markdown characters are typed as text', async ({ page }) => {
+  test('markdown characters that close nothing are typed as text', async ({ page }) => {
     const editor = await openEditor(page, 'body')
     await editor.placeCaretInParagraph(0, 0)
 
-    await page.keyboard.type('*not* emphasis: ')
+    await page.keyboard.type('*not emphasis: ')
 
-    await expect.poll(() => editor.paragraphs()).toContain('*not* emphasis: First paragraph.')
+    await expect.poll(() => editor.paragraphs()).toContain('*not emphasis: First paragraph.')
     await expect(editor.frame.locator('main p em')).toHaveCount(1)
-    await editor.document.expectSource(body.replace('First paragraph.', '\\*not\\* emphasis: First paragraph.'))
+    await editor.document.expectSource(body.replace('First paragraph.', '\\*not emphasis: First paragraph.'))
   })
 
   test('spaces the source does not keep show while the caret is in the paragraph', async ({ page }) => {
@@ -612,8 +615,8 @@ test.describe('between the title block and the body', () => {
 })
 
 test.describe('between the title block and a body that starts with what can\'t be edited', () => {
-  // (A heading of plain text can be edited; these have formatting.)
-  const source = '---\ntitle: Notes\nsubtitle: Rough\n---\n\n## *Results*\n\nSome text.\n'
+  // (A heading of text can be edited; this one has a note.)
+  const source = '---\ntitle: Notes\nsubtitle: Rough\n---\n\n## *Results*^[A note.]\n\nSome text.\n'
 
   test('Enter in the last field of the title block goes to the first paragraph', async ({ page }) => {
     const editor = await (await createDocument(source)).open(page)
@@ -640,7 +643,7 @@ test.describe('between the title block and a body that starts with what can\'t b
   })
 
   test('Enter stays where it is when the body has no paragraph to go to', async ({ page }) => {
-    const headingOnly = '---\ntitle: Notes\nsubtitle: Rough\n---\n\n## *Results*\n'
+    const headingOnly = '---\ntitle: Notes\nsubtitle: Rough\n---\n\n## *Results*^[A note.]\n'
     const document = await createDocument(headingOnly)
     const editor = await document.open(page)
     await editor.placeCaret('subtitle', 5)
@@ -766,13 +769,13 @@ test.describe('with collaborators', () => {
     )
   })
 
-  test('a paragraph that gets formatting in the source stops being editable', async ({ page }) => {
+  test('a paragraph that gets math in the source stops being editable', async ({ page }) => {
     const editor = await openEditor(page, 'body')
 
-    editor.document.replace('Second paragraph.', 'Second **bold** paragraph.')
+    editor.document.replace('Second paragraph.', 'Second $x^2$ paragraph.')
 
     await expect.poll(() => editor.paragraphs()).toEqual(['First paragraph.', 'Last paragraph.'])
-    await expect(editor.frame.locator('main p strong')).toHaveText('bold')
+    await expect(editor.frame.locator('main p span.math')).toHaveText('x^2')
   })
 
   test('two people type in different paragraphs at once, and both edits stay', async ({ page }) => {
@@ -810,17 +813,17 @@ test.describe('with collaborators, when the paragraph my caret is in goes', () =
     await editor.expectParagraphCaret(0, 16)
   })
 
-  test('someone gives it formatting, and my caret goes to the end of the paragraph before', async ({ page }) => {
+  test('someone puts math in it, and my caret goes to the end of the paragraph before', async ({ page }) => {
     const editor = await openEditor(page, 'body')
     await editor.placeCaretInParagraph(1, 6)
 
-    editor.document.replace('Second paragraph.', 'Second **bold** paragraph.')
+    editor.document.replace('Second paragraph.', 'Second $x^2$ paragraph.')
 
     await expect.poll(() => editor.paragraphs()).toEqual(['First paragraph.', 'Last paragraph.'])
     await editor.expectParagraphCaret(0, 16)
     await page.keyboard.type('!')
     await editor.document.expectSource(
-      body.replace('First paragraph.', 'First paragraph.!').replace('Second paragraph.', 'Second **bold** paragraph.'),
+      body.replace('First paragraph.', 'First paragraph.!').replace('Second paragraph.', 'Second $x^2$ paragraph.'),
     )
   })
 })

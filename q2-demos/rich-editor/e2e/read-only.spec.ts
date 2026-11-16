@@ -138,8 +138,8 @@ test.describe('an empty document', () => {
 })
 
 test.describe('a document with no text that can be edited', () => {
-  // (A heading of plain text can be edited; this one has formatting.)
-  const source = '## *Results*\n\nSome *emphasised* text.\n'
+  // (A heading or paragraph of text can be edited; these have notes.)
+  const source = '## *Results*^[A note.]\n\nSome *emphasised* text.^[A note.]\n'
 
   test('is shown, with no title block', async ({ page }) => {
     const editor = await (await createDocument(source)).open(page)

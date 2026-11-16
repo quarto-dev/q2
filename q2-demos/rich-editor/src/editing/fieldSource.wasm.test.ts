@@ -8,6 +8,8 @@ import { join } from 'path'
 import { createLocalFile } from '../quarto-synced-file/localFile.ts'
 import { initWasmFromBytes } from '../quarto-synced-file/wasm.ts'
 import { createMetaFieldSource } from './fieldSource.ts'
+import { CODE, EMPH, formatted, HIGHLIGHT, STRONG, UNDERLINE } from './inlines.ts'
+import { LINK_CLOSE, LINK_OPEN, LINK_TEXT } from '../engine/marks.ts'
 
 beforeAll(async () => {
   const bytes = await readFile(
@@ -256,5 +258,48 @@ End.
     source.set({ body: `Intro.\n${N}A\n${N}\n${N}B` })
     expect(text()).toBe('---\ntitle: T\n---\n\nIntro.\n\n1.  A\n2.\n3.  B\n')
     expect(openBody(text()!).source.get().body).toBe(`Intro.\n${N}A\n${N}\n${N}B`)
+  })
+})
+
+describe('formatting in the body', () => {
+  const BODY = `---
+title: T
+---
+
+Some **bold**, *italic*, [under]{.underline}, [lit]{.mark}, \`code\` and [a link](https://q.org).
+
+End.
+`
+  const link = (url: string, text: string) => LINK_OPEN + url + LINK_TEXT + text + LINK_CLOSE
+  const line = `Some ${formatted(STRONG, 'bold')}, ${formatted(EMPH, 'italic')}, ${formatted(UNDERLINE, 'under')}, ${formatted(HIGHLIGHT, 'lit')}, ${formatted(CODE, 'code')} and ${link('https://q.org', 'a link')}.`
+  function openBody(text = BODY) {
+    const file = createLocalFile(text)
+    const source = createMetaFieldSource(file, { keys: ['title'], body: 'body' })
+    return { source, text: () => file.getSnapshot().text }
+  }
+
+  it('reads a formatted paragraph as a line with its formatting', () => {
+    expect(openBody().source.get().body).toBe(`${line}\nEnd.`)
+  })
+
+  it('writes an edit of a formatted paragraph as markdown, and reads it back', () => {
+    const { source, text } = openBody()
+    const edited = line.replace(formatted(STRONG, 'bold'), formatted(STRONG, 'bolder'))
+    source.set({ body: `${edited}\nEnd.` })
+    expect(text()).toBe(BODY.replace('**bold**', '**bolder**'))
+    expect(openBody(text()!).source.get().body).toBe(`${edited}\nEnd.`)
+  })
+
+  it('writes new formatting of every kind', () => {
+    const { source, text } = openBody('---\ntitle: T\n---\n\nEnd.\n')
+    source.set({ body: `${formatted(STRONG, `a ${formatted(EMPH, 'b')}`)} ${formatted(HIGHLIGHT, 'c')} ${link('u', 'd')}\nEnd.` })
+    expect(text()).toBe('---\ntitle: T\n---\n\n**a _b_** [c]{.mark} [d](u)\n\nEnd.\n')
+  })
+
+  it("doesn't write an edit that wouldn't read back", () => {
+    const { source, text } = openBody('---\ntitle: T\n---\n\nEnd.\n')
+    // Italic inside bold, in a word: the qmd writer writes `**a_b_**`.
+    source.set({ body: `${formatted(STRONG, `a${formatted(EMPH, 'b')}`)}\nEnd.` })
+    expect(text()).toBe('---\ntitle: T\n---\n\nEnd.\n')
   })
 })

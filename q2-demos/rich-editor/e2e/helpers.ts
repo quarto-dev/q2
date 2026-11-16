@@ -33,6 +33,13 @@ const SELECTORS: Record<Field, string> = {
   abstract: '.abstract .qe-field',
 }
 
+/*
+ * Formatted text is in the elements `q2 render` writes for it, and where
+ * the caret is at a place no text stands for (outside code at the end of a
+ * line, say), the line holds a zero-width space for the caret to be drawn
+ * in: offsets and text here leave it out.
+ */
+
 /** The body's editable paragraphs. */
 const PARAGRAPH = '#quarto-document-content > p.qe-field'
 
@@ -201,7 +208,7 @@ export class Editor {
 
   /** The text the selection covers. */
   selectedText(): Promise<string> {
-    return this.frame.evaluate(() => String(document.getSelection() ?? ''))
+    return this.frame.evaluate(() => String(document.getSelection() ?? '').replaceAll('\u200b', ''))
   }
 
   /** Wait until the caret is at `offset` in `field`. */
@@ -221,7 +228,10 @@ export class Editor {
   /** A field's text now, or null when the field is absent. */
   text(field: Field): Promise<string | null> {
     // In one step: a collaborator's edit can remove the field at any time.
-    return this.frame.evaluate((selector) => document.querySelector(selector)?.textContent ?? null, SELECTORS[field])
+    return this.frame.evaluate(
+      (selector) => document.querySelector(selector)?.textContent?.replaceAll('\u200b', '') ?? null,
+      SELECTORS[field],
+    )
   }
 
   /** Click inside a field, `x` pixels from its left edge on its first line. */
@@ -244,7 +254,7 @@ export class Editor {
   blocks(): Promise<string[]> {
     return this.frame.evaluate(() =>
       [...document.querySelectorAll('#quarto-document-content > :not(header)')].map(
-        (el) => `${el.tagName.toLowerCase()}: ${el.textContent}`,
+        (el) => `${el.tagName.toLowerCase()}: ${el.textContent?.replaceAll('\u200b', '')}`,
       ),
     )
   }
@@ -252,7 +262,7 @@ export class Editor {
   /** The text of each of the body's editable paragraphs. */
   paragraphs(): Promise<string[]> {
     return this.frame.evaluate(
-      (selector) => [...document.querySelectorAll(selector)].map((el) => el.textContent ?? ''),
+      (selector) => [...document.querySelectorAll(selector)].map((el) => (el.textContent ?? '').replaceAll('\u200b', '')),
       PARAGRAPH,
     )
   }
@@ -269,7 +279,7 @@ export class Editor {
           const tag = el.parentElement?.matches('blockquote, ol')
             ? el.parentElement.tagName.toLowerCase()
             : el.tagName.toLowerCase()
-          return `${tag}: ${el.textContent ?? ''}`
+          return `${tag}: ${(el.textContent ?? '').replaceAll('\u200b', '')}`
         }),
       LINE,
     )
@@ -337,7 +347,7 @@ export class Editor {
       prefix.setEnd(node, selection.focusOffset)
       return {
         index: [...document.querySelectorAll(selector)].indexOf(paragraph),
-        offset: prefix.toString().length,
+        offset: prefix.toString().replaceAll('\u200b', '').length,
       }
     }, selector)
   }
@@ -362,12 +372,12 @@ export class Editor {
       const prefix = document.createRange()
       prefix.selectNodeContents(field.el)
       prefix.setEnd(range.startContainer, range.startOffset)
-      const start = prefix.toString().length
+      const start = prefix.toString().replaceAll('\u200b', '').length
       const rects = range.getClientRects()
       return {
         field: field.name,
         start,
-        end: start + range.toString().length,
+        end: start + range.toString().replaceAll('\u200b', '').length,
         x: rects.length > 0 ? rects[0].left : null,
       }
     }, SELECTORS)
@@ -384,7 +394,7 @@ export class Editor {
         const prefix = document.createRange()
         prefix.selectNodeContents(field)
         prefix.setEnd(node, offset)
-        return { field: name, offset: prefix.toString().length }
+        return { field: name, offset: prefix.toString().replaceAll('\u200b', '').length }
       }
       const s = document.getSelection()!
       const anchor = at(s.anchorNode, s.anchorOffset)
@@ -437,6 +447,36 @@ export class Editor {
   /** The toolbar's quote button. */
   quoteButton() {
     return this.toolbar().getByRole('button', { name: 'Quote' })
+  }
+
+  /** The toolbar's button for a format: `Bold`, `Italic`, `Underline` or `Highlight`. */
+  formatButton(name: 'Bold' | 'Italic' | 'Underline' | 'Highlight') {
+    return this.toolbar().getByRole('button', { name, exact: true })
+  }
+
+  /** The toolbar's link button. */
+  linkButton() {
+    return this.toolbar().getByRole('button', { name: 'Link', exact: true })
+  }
+
+  /** The popover of a link (its address, Edit and Remove), in the document's frame. */
+  linkPopover() {
+    return this.frame.locator('.qe-linkbar')
+  }
+
+  /** The form that makes or edits a link, in the document's frame. */
+  linkForm() {
+    return this.frame.locator('.qe-linkform form')
+  }
+
+  /** The body's `index`th editable line. */
+  line(index: number) {
+    return this.frame.locator(LINE).nth(index)
+  }
+
+  /** The caret's horizontal position, as drawn. */
+  async caretX(): Promise<number | null> {
+    return (await this.caret()).x
   }
 
   /** The row of "+" items above the title block. */

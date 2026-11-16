@@ -45,28 +45,51 @@ import {
   deleteBackward,
   deleteForward,
   enter,
+  fromPage,
   insertText,
   paste,
   select,
   selectAllStep,
   setLinePrefixes,
+  setLink as setLinkCommand,
+  stepCaret,
+  toggleMark as toggleMarkCommand,
 } from './commands.ts'
 import {
   edge,
   fieldElements,
   fieldOf,
+  HOLDER,
   markIslands,
   pointOnLine,
   positionAt,
   readMouseSelection,
   readSelection,
+  renderText,
+  restoreText,
   selectionOutside,
   shownRange,
+  takeSelectionLost,
   targetRange,
   writeSelection,
+  type MarkView,
 } from './dom.ts'
+import { bestStop, marksIn, naturalStyle, scan, stopAt, withoutMarks } from './marks.ts'
+import { diff } from './rebase.ts'
 import { apply, createEditor, fieldChanges, redo, settle, undo, type ApplyOptions, type Editor } from './editor.ts'
-import { ATOM, caret, documentChanged, VOID, linePrefix, presentFields, selectedText, type Schema, type State } from './model.ts'
+import {
+  ATOM,
+  caret,
+  documentChanged,
+  VOID,
+  linePrefix,
+  presentFields,
+  selectedText,
+  type Position,
+  type Schema,
+  type Selection,
+  type State,
+} from './model.ts'
 import { rebaseHistory } from './rebase.ts'
 import type { FieldSource } from './source.ts'
 
@@ -82,12 +105,18 @@ export interface FieldProps {
   /** For one line of a field: where the line starts in the field's text. */
   start?: number
   id?: string
+  /** How formatted text is shown (see `marks.ts`); without it, the field's text is shown as it is. */
+  view?: MarkView
+  /** A collapsed caret in the field's (or line's) text, where it is in it. */
+  caret?: number
 }
 
 /**
  * One field. React never renders its children: its text is written to the
  * DOM only when it differs from the model, so the browser's own text
- * (during IME composition) is left alone.
+ * (during IME composition) is left alone. Formatted text is shown in the
+ * elements of its formats, with a holder for the caret where it needs one
+ * (see `renderText`).
  *
  * Text ending in a line break gets a trailing `<br>`: without one, the
  * browser draws no empty last line, so the caret can't sit on it until
@@ -97,19 +126,15 @@ export interface FieldProps {
  * between the title and the body, say). So an empty field isn't `:empty`;
  * it has `data-empty`, for styling its placeholder.
  */
-export function Field({ name, text, placeholder, className, as = 'span', start, id }: FieldProps) {
+export function Field({ name, text, placeholder, className, as = 'span', start, id, view, caret }: FieldProps) {
   const ref = useRef<HTMLElement | null>(null)
   useLayoutEffect(() => {
     const el = ref.current
     if (!el || text === undefined) return
-    const wantsBreak = text.endsWith('\n') || text === ''
-    const hasBreak = el.lastChild?.nodeName === 'BR'
-    if (el.textContent === text && hasBreak === wantsBreak) return
-    el.replaceChildren(...(text === '' ? [] : [text]))
-    if (wantsBreak) el.append(el.ownerDocument.createElement('br'))
+    renderText(el, text, view, caret)
     // `as`: another element type is a new, empty element (a heading whose
     // level changed), even when the text is the same.
-  }, [text, start, as])
+  }, [text, start, as, view, caret])
   if (text === undefined) return null
   return createElement(as, {
     ref,
@@ -118,7 +143,7 @@ export function Field({ name, text, placeholder, className, as = 'span', start, 
     'data-field': name,
     'data-start': start,
     'data-placeholder': placeholder,
-    'data-empty': text === '' ? '' : undefined,
+    'data-empty': withoutMarks(text) === '' ? '' : undefined,
   })
 }
 
@@ -141,6 +166,10 @@ export interface LinesProps {
   renderAtom: (index: number) => ReactNode
   /** What to show for a line that can be removed but not edited (`VOID`). */
   renderVoid?: () => ReactNode
+  /** How formatted text is shown (see `Field`). */
+  view?: MarkView
+  /** A collapsed caret in the field's text, where it is in it. */
+  caret?: number
 }
 
 /** How a line of a multi-line field is rendered (see `LinesProps.lineElement`). */
@@ -161,7 +190,7 @@ export interface LineElement {
  * edited are rendered by the caller, and get no caret. A line's prefix
  * isn't shown: it chooses the line's element, whose text starts after it.
  */
-export function Lines({ name, text, className, as = 'p', lineElement, renderAtom, renderVoid }: LinesProps) {
+export function Lines({ name, text, className, as = 'p', lineElement, renderAtom, renderVoid, view, caret }: LinesProps) {
   if (text === undefined) return null
   // Each line's element, with the lines next to each other that share a
   // parent together under the first's key.
@@ -177,6 +206,8 @@ export function Lines({ name, text, className, as = 'p', lineElement, renderAtom
     }
     const prefix = linePrefix(line, 0)
     const element = prefix === '' ? undefined : lineElement?.(prefix, i)
+    const textStart = at + prefix.length
+    const here = caret !== undefined && caret >= textStart && caret <= at + line.length ? caret - textStart : undefined
     const field = (
       <Field
         key={i}
@@ -184,8 +215,10 @@ export function Lines({ name, text, className, as = 'p', lineElement, renderAtom
         text={line.slice(prefix.length)}
         className={[className, element?.className].filter(Boolean).join(' ') || undefined}
         as={element?.as ?? as}
-        start={at + prefix.length}
+        start={textStart}
         id={element?.id}
+        view={view}
+        caret={here}
       />
     )
     const parent = element?.parent
@@ -217,6 +250,16 @@ export interface FieldEditor {
    * the one it has (see `setLinePrefixes`): an edit of its own.
    */
   setPrefixes(prefixFor: (prefix: string) => string): void
+  /** Turn a format on or off (see `toggleMark`): an edit of its own. */
+  toggleMark(format: number): void
+  /**
+   * Make the text from `from` to `to` a link to `url` (none: no link), its
+   * text replaced by `text` if given (see `setLink`), with the caret after
+   * it and the focus in the document.
+   */
+  setLink(target: { from: Position; to: Position }, url: string | null, text?: string): void
+  /** Put the focus in the document, with `selection`. */
+  focusAt(selection: Selection): void
 }
 
 /** How the caret left the fields before the first one. */
@@ -350,6 +393,33 @@ export function useFieldEditor(
     [schema, source, commit],
   )
 
+  const toggleMark = useCallback(
+    (format: number) => {
+      if (!source.writable()) return
+      const h = latest.current
+      commit(apply(h, toggleMarkCommand(schema, h.present, format), { schema, inputType: 'formatInline' }), true)
+    },
+    [schema, source, commit],
+  )
+
+  const setLink = useCallback(
+    (target: { from: Position; to: Position }, url: string | null, text?: string) => {
+      if (!source.writable()) return
+      const h = latest.current
+      const next = setLinkCommand(schema, { ...h.present, selection: { anchor: target.from, focus: target.to } }, target, url, text)
+      commit(apply(h, next, { schema, inputType: 'formatInline' }), true)
+    },
+    [schema, source, commit],
+  )
+
+  const focusAt = useCallback(
+    (selection: Selection) => {
+      const h = latest.current
+      commit(apply(h, select(schema, h.present, selection), { schema }), true)
+    },
+    [schema, commit],
+  )
+
   const focusStart = useCallback(() => {
     const h = latest.current
     const [first] = presentFields(schema, h.present.fields)
@@ -371,7 +441,9 @@ export function useFieldEditor(
   useLayoutEffect(() => {
     if (!root) return
     markIslands(root)
-    if (!restore.current) return
+    // A line rebuilt under the page's selection (a holder came or went) loses it.
+    const lost = takeSelectionLost() && root.ownerDocument.activeElement === root
+    if (!restore.current && !lost) return
     restore.current = false
     const selection = editor.present.selection
     if (selection) writeSelection(root, selection)
@@ -385,9 +457,16 @@ export function useFieldEditor(
     let dragging = false
     let byMouse = false
 
-    /** The page's selection in model terms, snapped the way it was made. */
+    /**
+     * The page's selection in model terms, snapped the way it was made, and
+     * on the model's side of a format's edge where it's at the same place.
+     */
     const currentSelection = () =>
-      byMouse ? readMouseSelection(root) : readSelection(root, latest.current.present.selection)
+      fromPage(
+        schema,
+        latest.current.present,
+        byMouse ? readMouseSelection(root) : readSelection(root, latest.current.present.selection),
+      )
 
     /** Apply a command to the state with the page's current selection. */
     const edit = (command: (state: State) => State, options: Omit<ApplyOptions, 'before'> = {}) => {
@@ -476,19 +555,19 @@ export function useFieldEditor(
       composing.current = false
       // The browser has already changed the field's text; read it back.
       const h = latest.current
-      const selection = readSelection(root)
-      const field = selection?.focus.field
       const el = fieldOf(root, root.ownerDocument.getSelection()?.focusNode ?? null)
-      if (selection && field && el) {
+      const field = el?.dataset.field
+      if (el && field) {
         // The element shows all of the field's text, or one line of it.
         const was = h.present.fields[field] ?? ''
         const shown = shownRange(el, was)
-        const text = was.slice(0, shown.start) + (el.textContent ?? '') + was.slice(shown.end)
-        if (text !== was) {
+        const composed = composedText(schema, was.slice(shown.start, shown.end), (el.textContent ?? '').replaceAll(HOLDER, ''), h.present.selection, field, shown.start)
+        if (composed) {
+          const text = was.slice(0, shown.start) + composed.text + was.slice(shown.end)
           if (source.writable()) {
             let edited = apply(
               h,
-              { fields: { ...h.present.fields, [field]: text }, selection },
+              { fields: { ...h.present.fields, [field]: text }, selection: caret(field, shown.start + composed.caret) },
               { inputType: 'insertText', schema },
             )
             // A change to the document that arrived meanwhile: make it to
@@ -503,7 +582,7 @@ export function useFieldEditor(
             commit(edited, true)
           } else {
             // Not accepted: put the element's text back.
-            el.textContent = was.slice(shown.start, shown.end)
+            restoreText(el)
           }
         }
       }
@@ -562,6 +641,18 @@ export function useFieldEditor(
       }
       const granularity = arrowGranularity(e, key.vertical)
       if (!granularity) return false
+      if (granularity === 'character' && !key.vertical && !e.shiftKey && selection.isCollapsed) {
+        // In formatted text: across the edge of code, and over what the
+        // page doesn't show, in the model (see `stepCaret`).
+        const h = latest.current
+        const at = select(schema, h.present, currentSelection())
+        const stepped = stepCaret(schema, at, key.forward ? 1 : -1)
+        if (stepped) {
+          e.preventDefault()
+          flushSync(() => commit(apply(h, stepped, { schema }), true))
+          return true
+        }
+      }
       e.preventDefault()
 
       const saved = {
@@ -709,7 +800,40 @@ export function useFieldEditor(
     }
   }, [root, schema, source, commit, followDocument])
 
-  return { state: editor.present, editor, writable, add, focusStart, setPrefixes }
+  return { state: editor.present, editor, writable, add, focusStart, setPrefixes, toggleMark, setLink, focusAt }
+}
+
+/**
+ * The text of a field's element (`line`, marks and all) after a
+ * composition made what it shows `shown`: the composed text goes in where
+ * the shown text changed, in the caret's style if it's at the caret, and
+ * the marks of what it replaced stay. Where the caret goes in it, too.
+ * Null when nothing changed.
+ */
+function composedText(
+  schema: Schema,
+  line: string,
+  shown: string,
+  selection: Selection | null,
+  field: string,
+  start: number,
+): { text: string; caret: number } | null {
+  const scanned = scan(line)
+  const change = diff(withoutMarks(line), shown)
+  if (!change) return null
+  const { chars } = scanned
+  const twoSided = schema.marks?.twoSided ?? 0
+  const at = selection?.focus.field === field ? selection.focus.offset - start : -1
+  const caretStop = at >= 0 && at <= line.length ? stopAt(scanned, at) : undefined
+  const from =
+    caretStop && caretStop.index === change.start
+      ? caretStop.offset
+      : bestStop(scanned, change.start, naturalStyle(scanned, change.start, twoSided, 'before'), twoSided).offset
+  const to = change.removed > 0 ? chars[change.start + change.removed - 1].offset + 1 : from
+  return {
+    text: line.slice(0, from) + change.inserted + marksIn(line.slice(from, to)) + line.slice(to),
+    caret: from + change.inserted.length,
+  }
 }
 
 /** Keys that move the selection: after one, it is no longer the mouse's. */
@@ -750,7 +874,7 @@ function atStart(field: HTMLElement, node: Node, offset: number): boolean {
   const range = field.ownerDocument.createRange()
   range.selectNodeContents(field)
   range.setEnd(node, offset)
-  return range.toString() === ''
+  return range.toString().replaceAll(HOLDER, '') === ''
 }
 
 /** Whether a caret at a DOM point is on `field`'s first line. */
