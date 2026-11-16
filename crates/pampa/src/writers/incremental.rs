@@ -84,6 +84,21 @@ pub fn incremental_write(
     new_ast: &Pandoc,
     plan: &ReconciliationPlan,
 ) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    // A document with nothing in it has nothing to keep: write the new one
+    // whole. (Padded and assembled, it would start with a blank line.)
+    if original_qmd.trim().is_empty() {
+        let mut buf = Vec::new();
+        qmd::write(new_ast, &mut buf)?;
+        return String::from_utf8(buf).map_err(|e| {
+            vec![
+                quarto_error_reporting::DiagnosticMessageBuilder::error("UTF-8 error during write")
+                    .with_code("Q-3-2")
+                    .problem(format!("Writer produced invalid UTF-8: {}", e))
+                    .build(),
+            ]
+        });
+    }
+
     // The QMD reader internally pads input with '\n' when it doesn't end with
     // one, producing source spans relative to the padded input. We must use the
     // same padded string so that block source spans are valid byte indices.

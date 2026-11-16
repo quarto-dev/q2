@@ -444,6 +444,18 @@ fn roundtrip_remove_first_paragraph() {
     assert_roundtrip("First.\n\nSecond.\n\nThird.\n", "Second.\n\nThird.\n");
 }
 
+/// An empty document has nothing to keep: what's added is written as the
+/// writer writes it, with no blank line before it.
+#[test]
+fn add_paragraph_to_empty_document() {
+    let new_ast = parse_qmd("Hi\n");
+    let original_ast = parse_qmd("");
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+    let result = writers::incremental::incremental_write("", &original_ast, &new_ast, &plan)
+        .expect("incremental_write failed");
+    assert_eq!(result, "Hi\n");
+}
+
 /// Removing every block of a document without front matter leaves it empty.
 #[test]
 fn roundtrip_remove_only_paragraph() {
