@@ -63,6 +63,20 @@ q2 render ch1.qmd --to typst -M book-scope:book
 The options on `q2 preview` apply to the rendered preview, the PDF pane
 and the downloads. They do not change how code is executed.
 
+## Choosing where outputs come from
+
+No render option controls where the outputs of code cells come from. Set the
+`execute: record-sources` key instead, in a document or for one run with `-M`.
+Quote a value that has a comma, and keep the braces:
+
+```bash
+q2 render report.qmd -M 'execute:{record-sources: "q2,engine"}'
+```
+
+The key lets a render show outputs from a saved
+[execution record](../authoring/execution-records.qmd#choosing-where-records-come-from)
+instead of running the code. Without it, `q2 render` runs the code.
+
 ## `--profile`
 
 `--profile a,b` (or `--profile a --profile b`) activates profiles exactly

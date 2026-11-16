@@ -284,6 +284,18 @@ The other cell options that affect knitr's cache, such as `cache.path`,
 on [cache invalidation](https://yihui.org/en/2018/06/cache-invalidation/)
 explains how knitr decides that a cache is out of date.
 
+A cached chunk is part of the document's
+[execution record](execution-records.qmd), like any other chunk. Quarto saves
+the chunk's output next to knitr's cache when knitr runs the chunk, and reads
+it back when knitr takes the chunk from the cache, so a cache hit presents the
+same output as the run that filled the cache. The output is as current as
+knitr's cache: when knitr treats the cache as valid, so does the record.
+
+Two cases leave a cached chunk out of the record, without a warning, and
+Quarto shows knitr's own markdown for the chunk instead: a cache entry that
+knitr wrote while Quarto was not building a record, and a cached chunk with
+`include: false` that knitr takes from the cache.
+
 ::: {.callout-note}
 ## Migrating from Quarto 1
 

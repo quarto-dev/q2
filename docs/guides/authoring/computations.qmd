@@ -29,10 +29,22 @@ q2 render report.qmd --no-execute
 ```
 
 Each cell is shown as code with no output, and no engine is started, so
-this works on a machine without R, Python or Julia installed. Use it to
+this works on a machine without R, Python, or Julia installed. Use it to
 check a layout quickly, or to render a document whose cells are slow or
 currently failing. A Jupyter notebook (`.ipynb`) still shows the outputs
 stored in it; see [Notebooks](notebooks.qmd).
+
+A document that has a saved [execution record](execution-records.qmd) can show
+that record's outputs instead. Set `execute: record-sources` to `q2`, and the
+render presents the saved outputs, with no engine started:
+
+```bash
+q2 render report.qmd --no-execute -M 'execute:{record-sources: q2}'
+```
+
+If the record is out of date, the render shows the code without output and
+warns. [Choosing where records come from](execution-records.qmd#choosing-where-records-come-from)
+describes the key.
 
 `--execute` is the default, and it means "execute as the documents ask".
 It exists to cancel an earlier `--no-execute` on the same command line
@@ -227,6 +239,41 @@ keeps those defaults. The new option lets Julia cells interleave. It also lets
 knitr cells hold all of their output, without choosing between `results: hold`
 and `fig.show: hold`.
 :::
+
+## Showing and hiding code and output
+
+The options `echo`, `include`, `output`, `warning`, `message`, and `prompt` work
+in every engine, but how far each one reaches depends on what the engine
+reports about a cell. Knitr and Julia report where each expression in a cell
+starts, and which outputs are warnings. Jupyter reports neither, so Quarto
+treats the code of a Jupyter cell as a single expression.
+
+| Option | Knitr | Julia | Jupyter |
+|---|---|---|---|
+| `echo: false`, `include: false`, `output: false` | Hide the code, the cell, or the output | Same | Same |
+| `echo: [2]` (numbers) | Shows the listed expressions | Shows the listed expressions | Ignored |
+| `prompt: true` | Marks the start of each expression | Marks the start of each expression | Marks the whole cell as one expression |
+| `warning: false` | Hides warnings and messages | Hides warnings; other `stderr` output stays | Hides all `stderr` output |
+| `message: false` | Hides messages | No effect | No effect |
+
+For example, this Julia cell shows only its second expression, `c = b + 1`, and
+the value `3`:
+
+````markdown
+```{julia}
+#| echo: [2]
+b = 2
+c = b + 1
+```
+````
+
+In a Jupyter cell, `prompt: true` puts `>` before the first line of code and `+`
+before the lines that follow, because Quarto cannot tell where the next
+expression begins. The same cell in knitr or Julia puts `>` before each
+expression.
+
+marimo documents use marimo's own rules for these options, and the table does
+not describe them.
 
 ## Inline expressions
 

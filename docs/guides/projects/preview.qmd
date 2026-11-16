@@ -155,28 +155,34 @@ renders, downloads and imports: those requests use the host's `pandoc`
 and `typst` and read the host's project, and an import uploads the file
 to the host (up to 25 MB), where it is converted by a sandboxed `pandoc`.
 A guest can also re-run the document's code, but only when `engine` is in
-`--records` and `preview.engine` is not `off` (see
-[Execution records](../authoring/execution-records.qmd)). With
-`preview.engine: auto` (from `_quarto.yml` or `-M`), a guest's edit to a
+the host's `execute: record-sources` list and `preview.engine` is not `off`
+(see
+[Execution records](../authoring/execution-records.qmd#choosing-where-records-come-from)).
+With `preview.engine: auto` (from `_quarto.yml` or `-M`), a guest's edit to a
 document runs that document's code on your machine, and the preview prints a
 warning at startup. Treat the join string like a password, as the `--share`
 help says.
 
 ### Outputs from an imported record
 
-`--records positron`, or a directory of Positron cache files, shows the outputs
-Positron saved for a document without starting a kernel or an engine. Those
-outputs appear in the viewer like any other cell output, but they are marked as
-generated: you cannot edit them in place, and a cell that holds them has no
+Setting `execute: record-sources` to `positron`, or to a directory of Positron
+cache files, shows the outputs Positron saved for a document without starting a
+kernel or an engine. Those outputs appear in the viewer like any other cell
+output, but they are marked as generated: you cannot edit them in place, and a cell that holds them has no
 edit handle. Edit the code instead.
 
 When you change a cell's code, its saved output no longer belongs to the code,
 so the page is marked stale. The viewer shows its Re-execute control, and in
 the editor UI the status bar reads "Showing executed output · code changed".
-Re-execute runs the code only when `engine` is in `--records` and
+Re-execute runs the code only when `engine` is in `execute: record-sources` and
 `preview.engine` is not `off`; otherwise the request is refused and the page
 says so. A cell that Positron never ran is shown as source, and that alone
 does not mark the page stale.
+
+A preview shows a stale record with this marking so that you can re-run it.
+`q2 render` makes the opposite choice: it treats a stale record as not
+supplied, so a finished page never shows outputs that belong to different code.
+See [Execution records](../authoring/execution-records.qmd#what-q2-render-does-with-the-list).
 
 Quarto finds the cache file from the document's location. If that fails, it
 falls back to the cache file that shares the most cells with the document. In
@@ -259,11 +265,12 @@ preview:
   engine: off
 ```
 
-This is the same key the default preview uses. With it, no cell or engine code
-runs, and re-run requests from the editor or from a shared guest are refused; a
-`--records` source such as `cache` or `positron` can still supply saved
-outputs. The document's filters and shortcodes, and the project's pre-render
-scripts, still run.
+This is the same key the default preview uses, and only the preview reads it:
+`q2 render` ignores `preview.engine`. With this setting, no cell or engine
+code runs, and re-run requests from the editor or from a shared guest are
+refused; a source in `execute: record-sources`, such as `cache` or `positron`,
+can still supply saved outputs. The document's filters and shortcodes, and the
+project's pre-render scripts, still run.
 
 ### Defaults in `_quarto.yml`
 

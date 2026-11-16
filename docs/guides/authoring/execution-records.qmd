@@ -7,21 +7,24 @@ title: Execution records
 When Quarto runs the code in a document, it can keep what the code
 produced --- each cell's outputs and each inline expression's value --- as an
 **execution record**. A record lets Quarto present the document again
-without running anything: `q2 preview` and hub use
-this to show an up-to-date page while you edit prose.
+without running anything. `q2 preview` and hub use
+this to show an up-to-date page while you edit prose, and `q2 render` can use
+it to produce a page on a machine that cannot run the code.
 
 A record is an ordinary Jupyter notebook file (`.ipynb`), whichever engine ran
 the code, so other tools can read it. Each cell of the notebook is one
 **unit** of the document: a code cell, or an inline expression.
 
 ::: callout-note
-## Opt-in for now
+## Quarto writes a record only when you ask
 
-A plain `q2 render` writes nothing under `.quarto/`. The preview keeps the
-records it needs on its own. `record: true`, shown below, asks for a copy of
-the record under the project's `.quarto/` directory. Hub uploads from
-`q2 provide-hub` still use the older format unless you set the environment
-variable `QUARTO_ENGINE_RECORD_WRITE` to `1`, while the feature is rolled out.
+A plain `q2 render` of a Julia or knitr document builds the record in
+memory, presents the output from it, and writes nothing under `.quarto/`.
+The preview keeps the records it needs on its own. `record: true`, shown
+below, asks for a copy of the record under the project's `.quarto/`
+directory. Hub uploads from `q2 provide-hub` still use the older format
+unless you set the environment variable `QUARTO_ENGINE_RECORD_WRITE` to `1`,
+while the feature is rolled out.
 :::
 
 ## Keeping a copy of the record
@@ -77,10 +80,10 @@ extra information in it is dropped; it is named after a hash of the document's
 location, which Quarto cannot reproduce; and it carries a timestamp that
 changes on every write, so its bytes are never stable.
 
-`q2 render` does not read Positron's cache. Only a preview or `q2 provide-hub`
-does, and only when you ask for it with `--records positron` (or a directory
-of Positron cache files), described next. Quarto never writes to or deletes
-Positron's cache. Output shown from it is marked as generated, so the viewer
+Quarto reads Positron's cache only when you list `positron` (or a directory of
+Positron cache files) in `execute: record-sources`, described
+[next](#choosing-where-records-come-from). No command's default list includes
+it. Quarto never writes to or deletes Positron's cache. Output shown from it is marked as generated, so the viewer
 does not offer to edit it; see
 [Outputs from an imported record](../projects/preview.qmd#outputs-from-an-imported-record).
 
@@ -99,11 +102,35 @@ q2 preview report.qmd -M 'execute: {record: true}'
 The copy is then written at the path above each time the preview runs the
 document. Turning `record` on or off does not make a record out of date.
 
-## Choosing where a preview gets records
+## Choosing where records come from
 
-`q2 preview` and `q2 provide-hub` take `--records`, a list of the places to
-look for a document's record, in order. The first place that has a record for
-the document wins; records are never merged.
+The `execute: record-sources` key lists the places where Quarto looks for a
+document's record, in order. The first place that has a usable record wins;
+Quarto never merges records. `q2 render`, `q2 preview`, `q2 convert`, and
+`q2 provide-hub` all read the key.
+
+Set the key in a document's front matter, in a directory's `_metadata.yml`, or
+in `_quarto.yml`:
+
+``` {.yaml filename="report.qmd"}
+execute:
+  record-sources: q2,engine
+```
+
+The value is one comma-separated string, not a YAML list. To set it for a
+single run, pass it with `-M`:
+
+``` {.bash filename="Terminal"}
+q2 render report.qmd -M 'execute:{record-sources: "q2,engine"}'
+```
+
+Keep the braces, because `-M` does not expand dotted keys. Quote a value that
+contains a comma. Without the quotes, YAML ends the value at the comma and
+reads the rest as a separate key, which changes the document's settings and
+makes its record look out of date. A value from `-M` overrides the document's
+own.
+
+### Entries and defaults
 
 | Entry | Where the record comes from |
 |---|---|
@@ -113,34 +140,94 @@ the document wins; records are never merged.
 | a directory path | a directory of Positron-format cache files |
 | `engine` | run the code |
 
-Write the list with commas (`--records cache,q2,engine`) or repeat the flag.
-A directory path needs a path separator or a leading `./`, `../`, `/` or `~`;
-a bare word that is not one of the names is an error, so write `./notes` for a
-directory called `notes`. A directory must exist when the command starts, a
-relative path is taken from the directory you run the command in, and a path
-that contains a comma cannot be given.
+Each command accepts some of the entries and has a default list:
 
-The defaults differ. `q2 preview` uses `cache,q2,engine`: it reuses an earlier
-run, then a saved record, and runs the code only if neither has one.
-`q2 provide-hub` uses `engine` alone, which is a fresh run each time, after you
-approve it. Leave `engine` out and the command never runs code: a preview shows
-only the records it finds, and says on the page why each place had none.
-`--records` cannot be combined with `--join`, `--static` or `--no-project`, and
-`cache` is not available for `provide-hub`.
+| Command | Accepts | Default |
+|---|---|---|
+| `q2 render` | `q2`, `positron`, `engine`, a directory | `engine` |
+| `q2 preview` | `cache`, `q2`, `positron`, `engine`, a directory | `cache,q2,engine` |
+| `q2 convert` | `q2`, `engine` | `q2,engine` |
+| `q2 provide-hub` | `q2`, `positron`, `engine` | `engine` |
 
-"Never run code" means no code cell, inline expression or engine process runs.
-Your document's filters, shortcodes and includes still run, as in any preview,
-and so do the project's pre-render scripts, once, when the preview starts. A
-guest of a shared preview can re-run code only when `engine` is in the list and
-`preview.engine` is not `off` (under `off`, `engine` in the list is ignored with
-a warning).
+A command ignores a valid entry that it cannot use and prints a note. An
+unknown entry is an error that names the valid choices.
 
-Two things to know about `provide-hub`. A record from `q2`, `positron` or a
-directory is published to everyone viewing the hub document **without** the
-approval prompt, because no code runs; naming the source is how you choose to
-share those outputs. And until the hosted hub can read records, publishing one
-needs `QUARTO_ENGINE_RECORD_WRITE=1` in the environment; without it the record
-is refused with a message that names the variable.
+A directory entry must be inside the project. A relative path is relative to
+the file that sets the key, and a leading `/` means the project root. An
+absolute path, a path that starts with `~`, or a path outside the project is
+an error, as is a directory that does not exist. To use a Positron cache from
+outside the project, list `positron`, or copy or link the cache into the
+project. A bare word that is not one of the names is an error, so write
+`./notes` for a directory called `notes`. A path that contains a comma cannot be
+given.
+
+Quarto reads the key separately for each document, so one project can mix
+lists. For example, a `_metadata.yml` that sets `record-sources: q2` makes every
+document in its directory use saved records, and the rest of the project keeps
+the default.
+
+Because an entry that finds nothing passes the document to the next entry, the
+output can depend on whose machine renders it. With `q2,engine`, a machine that
+has the saved record shows its outputs, and a machine that does not has to run
+the code.
+
+### What `q2 render` does with the list
+
+`q2 render` only reads records. It never writes one; `record: true` does that.
+With the default list, `engine`, a render runs the code, as it always has.
+
+When you list other entries first, `q2 render` takes the first record that is
+current. It counts a record as not supplied when the document's code or options
+changed after Quarto recorded it, or when Quarto recorded it for a different
+output format, and it moves on to the next entry.
+
+If no entry supplies a record and `engine` is not in the list, `q2 render`
+warns, shows the code cells without output, and starts no engine. With
+`--strict`, the warning is an error. A document with no code cells gets no
+warning.
+
+`--no-execute` removes `engine` from the list. With `q2` in the list, a render
+with `--no-execute` still shows the saved outputs and starts no engine:
+
+``` {.bash filename="Terminal"}
+q2 render report.qmd --no-execute -M 'execute:{record-sources: q2}'
+```
+
+A `--replay` render ignores the key.
+
+::: callout-note
+## A preview and a render treat a stale record differently
+
+`q2 preview` shows a stale record, and marks the page stale so that you can
+re-run it. `q2 render` treats a stale record as not supplied, because a
+finished page must not show outputs that belong to different code.
+:::
+
+### What `q2 preview` and `q2 provide-hub` do with the list
+
+`q2 preview` uses `cache,q2,engine` by default: it reuses an earlier run, then a
+saved record, and runs the code only if neither has one. `q2 provide-hub` uses
+`engine` alone, which is a fresh run each time, after you approve it. Leave
+`engine` out and the command never runs code: a preview shows only the records
+it finds, and says on the page why each place had none.
+
+"Never run code" means no code cell, inline expression, or engine process runs.
+Your document's filters, shortcodes, and includes still run, as in any preview,
+and so do the project's pre-render scripts, once, when the preview starts.
+
+A shared preview (`--share`) and `q2 provide-hub` treat the host's list as a
+ceiling: the list that you set with `-M`, or the command's default. A shared
+document can reorder or narrow that list, but it cannot add an entry. The host sees a warning for each entry that the ceiling
+rejects. A guest of a shared preview can re-run code only when `engine` is in
+the host's list and `preview.engine` is not `off`. Under `off`, `engine` in the
+list is ignored with a warning.
+
+Two things to know about `provide-hub`. A record from `q2` or `positron` is
+published to everyone viewing the hub document **without** the approval prompt,
+because no code runs; naming the source is how you choose to share those
+outputs. And until the hosted hub can read records, publishing one needs
+`QUARTO_ENGINE_RECORD_WRITE=1` in the environment; without it the record is
+refused with a message that names the variable.
 
 The preview reads its sources when it starts, not again when a file changes. A
 Positron cache written after the preview started, or a new `.qmd` file, is not
@@ -154,6 +241,9 @@ list again.
 - A document that uses an engine that builds no execution record is stored in
   the older format. Every output is still shown, but features that read
   records may not work with it.
+- A single-file book render does not use `execute: record-sources`. A chapter
+  that sets the key to anything other than `engine` gets a warning, and Quarto
+  runs the chapter's code.
 - A preview that keeps its data with `--data-dir` stores execution records
   there. If you later open that directory with an older version of `q2`, the
   page shows "Failed to parse capture". Use a new `--data-dir`, or delete the
