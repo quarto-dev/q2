@@ -37,4 +37,7 @@ helper) and `custom/dashboard/DashboardDocument.tsx`.
 - [x] Preview mirrors and their vitest expectations
 - [x] Smoke fixture `q2-preview/body-classes-override.qmd` asserted the old replace behaviour; updated
 - [x] Follow-up filed: bd-mlfmu9pk (`docs/` landing page workaround for the old behaviour)
-- [x] Verify (nextest, clippy, Windows cross clippy, vitest, tsc, eslint, xtask lint, notes render)
+- [x] Verify: nextest, host clippy, vitest, tsc, xtask lint, notes render.
+  Not run: Windows cross clippy (`aws-lc-sys` C build fails from macOS),
+  ESLint (no config covers `ts-packages/preview-renderer`), the
+  Playwright smoke fixture (left to CI's `q2-preview-spa-e2e`).
