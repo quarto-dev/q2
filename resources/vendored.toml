@@ -1034,7 +1034,7 @@ title = "KaTeX (html-math-method: katex)"
 paths = ["crates/quarto-core/src/stage/stages/math_js.rs"]
 policy = "track"
 group = "cdn"
-version = "0.19.0"
+version = "0.19.1"
 version_sources = [
   { kind = "file-regex", file = "crates/quarto-core/src/stage/stages/math_js.rs", regex = 'npm/katex@([0-9.]+)/dist/";' },
   { kind = "file-regex", file = "package.json", regex = '"katex": "\^?([0-9.]+)"' },
@@ -1042,7 +1042,7 @@ version_sources = [
 upstream = { kind = "npm", package = "katex" }
 guards = ["quarto-core katex_cdn_version_matches_npm_pin"]
 license = "MIT"
-last_reviewed = "2026-10-21"
+last_reviewed = "2026-11-16"
 notes = '''
 Pinned to the npm `katex` the preview bundles, so render and preview agree;
 bump the npm pins (root and hub-client/quarto-hub-sandboxed-preview) in the
