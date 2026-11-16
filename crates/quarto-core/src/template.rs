@@ -198,13 +198,14 @@ $endfor$
 ///   exists (same transform); gates the `<header>` emission
 /// - `$date$` - publication date
 /// - `$abstract$` - document abstract (rendered as HTML blocks)
-/// - `$body-classes$` - CSS classes for body element. A top-level
-///   `body-classes` supplied by the author or a filter is kept
-///   wholesale and suppresses the compose below. Otherwise
+/// - `$body-classes$` - CSS classes for body element.
 ///   `render_with_compiled_template` accumulates: the structural base
 ///   from `rendered.navigation.body-classes` (written by
-///   `SidebarRenderTransform`, e.g. `nav-sidebar docked`), then
-///   `fullcontent` when nothing occupies the right margin, then
+///   `SidebarRenderTransform`, e.g. `nav-sidebar docked`), then a
+///   top-level `body-classes` supplied by the author or a filter
+///   (added to the computed classes, not replacing them, as in Q1 —
+///   GH #1218), then `fullcontent` when nothing occupies the right
+///   margin, then
 ///   `nav-fixed` when a navbar is rendered, then the color-mode class.
 ///   `fullcontent` shrinks the right margin to near-nothing (to
 ///   `0.14*margin-width` per segment without a sidebar; to zero in the
@@ -1227,20 +1228,23 @@ pub fn render_with_compiled_template(
 
     // Compute the body class as an accumulating list (bd-ersobfbt
     // refactored the old single-`String` replace into this compose).
-    // Order of precedence for the structural base:
+    // The structural base:
     //
-    //   1. user-supplied `body-classes` (e.g. set in metadata) — kept
-    //      as-is, wholesale: the compose below (including the
-    //      `nav-fixed` append) is skipped entirely.
-    //   2. `rendered.navigation.body-classes` (written by
-    //      `SidebarRenderTransform`, e.g. `"nav-sidebar floating"`) —
-    //      promoted to the top-level template variable. See bd-mgoh.
-    //   3. no sidebar → empty base. The body falls through to the
-    //      default (no-class) wide grid, whose right margin column is
-    //      `minmax(0.3*mw, 0.58*mw)` and has room for a TOC.
+    //   - `rendered.navigation.body-classes` (written by
+    //     `SidebarRenderTransform`, e.g. `"nav-sidebar floating"`) —
+    //     promoted to the top-level template variable. See bd-mgoh.
+    //   - no sidebar → empty base. The body falls through to the
+    //     default (no-class) wide grid, whose right margin column is
+    //     `minmax(0.3*mw, 0.58*mw)` and has room for a TOC.
     //
     // Onto the structural base, in order:
     //
+    //   - the user-supplied top-level `body-classes` (metadata or a
+    //     filter). It adds to the computed classes and never replaces
+    //     them (GH #1218): Q1's template writes it on `<body>` and its
+    //     postprocessors `classList.add` the layout classes on top, so
+    //     the theme's `nav-fixed` / `fullcontent` / `quarto-light`
+    //     selectors keep working on pages that add a class of their own.
     //   - `fullcontent` when nothing occupies the right margin
     //     (bd-no-toc-reserves-margin-column-s8nonx0w). How much it
     //     reclaims depends on the variant: without a sidebar,
@@ -1370,7 +1374,7 @@ pub fn render_with_compiled_template(
         ctx.insert("main-column", TemplateValue::String(column.to_string()));
     }
 
-    if ctx.get("body-classes").is_none() {
+    {
         let mut classes: Vec<String> = Vec::new();
         if let Some(base) = meta
             .get_path(&["rendered", "navigation", "body-classes"])
@@ -1378,6 +1382,13 @@ pub fn render_with_compiled_template(
             .filter(|s| !s.is_empty())
         {
             classes.push(base);
+        }
+        if let Some(user) = meta
+            .get("body-classes")
+            .and_then(|v| v.as_plain_text())
+            .filter(|s| !s.is_empty())
+        {
+            classes.push(user);
         }
         // Q1: `!hasRightContent && !hasMarginContent && !hasToc`. Under
         // `page-layout: full` the main-column suggestion above is the
@@ -1392,8 +1403,16 @@ pub fn render_with_compiled_template(
         if navbar_rendered {
             classes.push("nav-fixed".to_string());
         }
-        let body_classes =
-            append_color_mode_class(&classes.join(" "), dark_theme_default.unwrap_or(false));
+        // A class the author repeats (e.g. `body-classes: nav-fixed`)
+        // appears once, at its first position.
+        let mut seen = std::collections::HashSet::new();
+        let joined = classes
+            .iter()
+            .flat_map(|c| c.split_whitespace())
+            .filter(|tok| seen.insert(*tok))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let body_classes = append_color_mode_class(&joined, dark_theme_default.unwrap_or(false));
         ctx.insert("body-classes", TemplateValue::String(body_classes));
     }
 
@@ -3406,16 +3425,17 @@ mod tests {
         assert!(pos("BELOW") < pos("</header>"));
     }
 
-    /// bd-ersobfbt: an explicit user-supplied top-level `body-classes`
-    /// still wins wholesale (bd-mtzry contract) — the compose step,
-    /// including the `nav-fixed` append, is skipped entirely.
+    /// GH #1218: a user-supplied top-level `body-classes` is added to
+    /// the computed layout classes, as in Q1, instead of replacing them:
+    /// the theme's CSS and JS select on `nav-fixed`, `fullcontent` and
+    /// `quarto-light`.
     #[test]
-    fn test_full_template_user_body_classes_suppress_nav_fixed() {
+    fn test_full_template_user_body_classes_add_to_computed_classes() {
         let template = full_html_template().unwrap();
         let mut meta = ConfigValue::null(dummy_source_info());
         meta.insert_path(
             &["body-classes"],
-            ConfigValue::new_string("custom-layout", dummy_source_info()),
+            ConfigValue::new_string("my-page", dummy_source_info()),
         );
         meta.insert_path(
             &["rendered", "navigation", "navbar"],
@@ -3426,13 +3446,36 @@ mod tests {
             render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
 
         assert!(
-            html.contains("<body class=\"custom-layout\">"),
-            "explicit body-classes must be kept as-is; got: {}",
+            html.contains("<body class=\"my-page fullcontent nav-fixed quarto-light\">"),
+            "user body-classes must join the computed classes; got: {}",
             &html[..html.len().min(800)]
         );
+    }
+
+    /// GH #1218: the user classes sit after the sidebar's structural
+    /// base, and a class the user repeats from the computed list is
+    /// emitted once.
+    #[test]
+    fn test_full_template_user_body_classes_with_sidebar_dedup() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["body-classes"],
+            ConfigValue::new_string("doc-reference fullcontent", dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "body-classes"],
+            ConfigValue::new_string("nav-sidebar docked", dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
         assert!(
-            !html.contains("nav-fixed"),
-            "explicit body-classes suppresses the nav-fixed append; got: {}",
+            html.contains(
+                "<body class=\"nav-sidebar docked doc-reference fullcontent quarto-light\">"
+            ),
+            "expected sidebar base, then user classes, deduplicated; got: {}",
             &html[..html.len().min(800)]
         );
     }

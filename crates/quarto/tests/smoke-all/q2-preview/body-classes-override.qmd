@@ -1,5 +1,5 @@
 ---
-title: Body classes override
+title: Body classes added to computed classes
 format: q2-preview
 body-classes: custom-cls
 _quarto:
@@ -9,10 +9,10 @@ _quarto:
     q2-preview:
       ensureHtmlElements:
         -
-          - 'body.custom-cls'
-        -
-          - 'body.fullcontent'
+          - 'body.custom-cls.fullcontent.quarto-light'
+        - []
 ---
 
-A paragraph; the iframe body carries the user `body-classes` override
-and does NOT also carry the literal `fullcontent` default.
+A paragraph; the iframe body carries the user `body-classes` on top of
+the computed classes (`fullcontent`, `quarto-light`), as in Quarto 1
+(GH #1218).
