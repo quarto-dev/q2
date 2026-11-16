@@ -147,7 +147,8 @@ struct OpenDoc {
     /// Something it may depend on changed; re-validate on the next flush
     /// (which skips buffers that are not documents).
     stale: bool,
-    published: Option<Vec<quarto_lsp_core::Diagnostic>>,
+    /// What was last published, and for which buffer version.
+    published: Option<(i32, Vec<quarto_lsp_core::Diagnostic>)>,
 }
 
 #[derive(Default)]
@@ -358,8 +359,15 @@ impl Workspace {
                 continue;
             };
             doc.stale = false;
-            if doc.published.as_ref() != Some(&result.diagnostics) {
-                doc.published = Some(result.diagnostics.clone());
+            // Publish for every new version of the document itself (LSP
+            // clients expect diagnostics per version, even unchanged ones),
+            // and otherwise only when a dependency changed its diagnostics.
+            let unchanged = doc
+                .published
+                .as_ref()
+                .is_some_and(|(v, d)| *v == version && d == &result.diagnostics);
+            if !unchanged {
+                doc.published = Some((version, result.diagnostics.clone()));
                 out.push(Output::Diagnostics {
                     client,
                     uri,

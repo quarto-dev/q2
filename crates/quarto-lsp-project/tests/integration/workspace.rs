@@ -111,6 +111,10 @@ fn a_document_outside_any_project_gets_a_single_file_session_and_no_walk() {
     assert_eq!(ws.session_roots(), [root.join("missing")]);
     // Unchanged on the next flush: nothing re-published.
     assert!(published(&ws.flush()).is_empty());
+    // A new version of the document is always re-published, even when its
+    // diagnostics are the same.
+    change(&mut ws, C1, &doc_uri, "# Alone, edited\n", 2);
+    assert_eq!(published(&ws.flush()), [&doc_uri]);
 }
 
 #[test]

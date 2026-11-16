@@ -696,6 +696,53 @@ impl Workspace {
 - **Gates:** `cargo xtask verify`, which includes the WASM build that
   `quarto-lsp-project` must pass.
 
+### As built (C3)
+
+These are the commits on `braid/bd-ojsx06at-…`.
+
+1. **One project-root walk.**
+   `quarto_core::project::discovery::find_project_root` replaces the
+   three copies. It found a gap: `OverlayRuntime` now overlays
+   `path_exists` as well, so an unsaved `_quarto.yml` counts.
+2. **One analysis pipeline (R3).** `build_analysis_pipeline` is now the
+   head + unwrap + sugar + analysis transforms.
+3. **`quarto_lsp_core::analyze_in_project`.** One run returns symbols,
+   folding ranges, diagnostics, the profile and the authored metadata.
+4. **Primitives.** `SessionRuntime::still_matches` does pull validation.
+   `quarto_project_files::classify` classifies one path; the walk now
+   uses it too.
+5. **The new crate `quarto-lsp-project`.** It holds `Workspace`,
+   sessions, `DocUri`, jobs and pull-validated caching, and it builds
+   for wasm32.
+6. **`quarto-lsp` on `lsp-server`.** tower-lsp and tokio are removed.
+   `serve(Connection)` can be driven in process, and
+   `initializationOptions` takes `{ profile, sweep }`.
+
+Decisions made while building:
+
+- **Diagnostics are published per document version.** A new version of
+  a document always republishes, even with identical diagnostics,
+  because clients expect it and the existing
+  `test_diagnostics_on_document_change` relies on it. A document
+  re-validated only because a dependency changed republishes only if
+  its diagnostics changed.
+- **Only documents are analysed.** That means `.qmd`, `.md` and pathless
+  buffers. An open `_quarto.yml` or `_metadata.yml` shadows the disk for
+  the documents that read it, but gets no diagnostics, and
+  `Workspace::document` returns `None` for it.
+- **Single-file sessions are not watched.** Their reads that fall
+  through to disk are re-hashed on the next validation. A disk change to
+  a lone document's include shows up at its next edit or request, not
+  pushed. Watching single-file sessions (non-recursively) is a possible
+  follow-up.
+- **The project index is not kept yet.** Sweep results are cached
+  profiles, and F1 builds `ProjectIndex` from them.
+- **Watching uses the client when it can.** If the client supports
+  dynamic registration of `workspace/didChangeWatchedFiles`, the host
+  registers a `RelativePattern` watcher (`**/*` under each root).
+  Otherwise it runs `notify` (200 ms debounce). Either way, events are
+  classified by `quarto_project_files::classify`.
+
 ### Questions for review (decided 2026-11-16: all as recommended)
 
 R4 resolution: carry both `lsp-types` versions until F3. R5 resolution:
