@@ -46,8 +46,8 @@ unchecked boxes.
 
 | Plan | Item | State | Blocker | Who |
 |---|---|---|---|---|
-| `opr-8-docs-and-end-to-end` | All 10 boxes (docs, embedded docs, end-to-end, preview chain, gates, epic reconcile) | Open. Doing it first in this session. | None | Agent |
-| epic file, line 5 | Status says "ready to run" with two open decisions | Stale. Proposed text: "OPR-0..7 and 9a-9g complete and merged to main; 7d cancelled, superseded by 9g; OPR-8 the only open plan". Edit as OPR-8's last box. | OPR-8 | Agent |
+| `opr-8-docs-and-end-to-end` | All 10 boxes | **Done 2026-11-16** on `epic-closeout` (commit below). Jupyter, a browser look at the live viewer, and `--replay` with a key were not run. | None | Done |
+| epic file, line 5 and the OPR-8 table row | Status says "ready to run" with two open decisions | **Fixed** with OPR-8. | None | Done |
 | `opr-4d`, line 64 | Multi-expression, plot, and error cells | Done, unchecked. The parity corpus has `julia/plot-*` cases, and 7c and 7h ran them. | None | Agent |
 | `opr-4d`, line 68 | `warning: false` flip without a re-run | Partly open. By-kind hiding was checked end to end. An engine-agnostic test exists at `knitr_inputs.rs:894`. No Julia-specific test. | None | Agent (one test, or close with a note) |
 | `opr-7c`, line 71 | Gates for fixes | Stale. Later plans 7g, 9e, 9f, and 9g ran clippy and nextest on the same crates. | None | Agent (tick with a pointer) |
@@ -60,6 +60,14 @@ Local leftovers: `backup/one-presenter-*`, `history/feature/one-presenter`, and
 
 Not verified: whether a strand exists for the 4d runner bug, where
 `display("shown")` before a throw is missing from the runner\'s notebook.
+
+### Found while doing OPR-8
+
+- **`-M` with a comma-separated list is unsafe unquoted.** `-M 'execute:{record-sources: q2,engine}'` silently turns `engine` into a null sibling key, and the record then reads stale. The docs now say to quote the value. A fix in the early reader would be better (OPR-5 finding 1). Needs a decision on whether to fix the reader. Gordon (decision), then an agent.
+- **`execute: enabled: false` does not veto the record.** It is part of the record hash, so it makes a record stale. The OPR-8 plan listed it as a veto, and the docs mention only `--no-execute`. Same decision applies.
+- **`figures.qmd` "Subcaptions"** still shows static Quarto 1 images and promises cross-referenceable computed subcaptions, while OPR-7j found q2 numbers later figures differently. It needs its own docs pass. Agent, after Gordon agrees on the wording of the limitation.
+- **A fresh worktree\'s `node_modules` goes stale.** `cargo xtask build-q2-preview-spa` failed on `@viz-js/viz` until `npm install`, and `npm install` rewrote `package-lock.json` (703 lines removed). I restored the lockfile. Gordon may want to check whether `main`\'s lockfile is out of step with its `package.json`.
+- **Julia and runner forks:** `quarto-julia-engine` (`q2/node-port`) has no unpushed commits. The runner fork has `q2/opr-expression-facts` on `origin`. Whether upstream QuartoNotebookRunner took the change was not checked.
 
 ## RFU
 
@@ -171,7 +179,7 @@ fallback counter, and the date of the JOL-2b alias-table deletion follow-up.
 
 | File | Says | Should say |
 |---|---|---|
-| `2026-11-07-one-presenter-path-epic.md:5` | ready to run, two open decisions | OPR-8 the only open plan (see OPR) |
+| `2026-11-07-one-presenter-path-epic.md:5` | ready to run, two open decisions | **Fixed** in the OPR-8 commit |
 | `2026-10-30-knitr-execution-records-epic.md:5` and its "Status (2026-11-05)" paragraph | not merged to main, next KNR-3, KNR-7 next | merged (PR #1077); KNR-1 to 6 and 2b done |
 | `2026-10-30-knr-03-...md` | in progress | complete |
 | `2026-10-30-knr-04-...md` | done | done, except the `spans` retirement (KNR-8) |
@@ -203,7 +211,7 @@ fallback counter, and the date of the JOL-2b alias-table deletion follow-up.
 
 ## Checklist
 
-- [ ] OPR-8 (in progress)
+- [x] OPR-8 (done 2026-11-16; see its notes)
 - [ ] Reconcile stale boxes and status lines (after OPR-8)
 - [ ] Investigate `check-presenter-goldens-unchanged.sh` failure
 - [ ] Small agent tests and the `.gitattributes` pin

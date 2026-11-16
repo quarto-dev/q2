@@ -2,7 +2,7 @@
 title: 'OPR-8: user docs, embedded-docs refresh and end-to-end checks'
 date: 2026-11-08
 description: 'The last plan of the one-presenter epic. Writes the user-facing changes inside the existing docs pages (no page about differences), refreshes the embedded docs once, and runs the end-to-end checks for the whole epic, which merges as a single pull request.'
-status: ready
+status: complete  # 2026-11-16 on branch epic-closeout; not pushed
 depends-on: [opr-1b, opr-2, opr-5, opr-6, opr-9g, opr-4d, rfu-8]
 lane: D
 ---
@@ -81,29 +81,29 @@ it for each page you edit.
 
 ## Checklist (every box is `[unattended]`)
 
-- [ ] Read each page, the landed plans\' "Notes from the run", and OPR-0c, OPR-0d and OPR-4a notes. Draft the changes
+- [x] Read each page, the landed plans\' "Notes from the run", and OPR-0c, OPR-0d and OPR-4a notes. Draft the changes
       as sentences first and list them in "Notes from the run".
-- [ ] Edit the pages with the `/reader-expectations-prose` skill. Render: `target/debug/q2 render docs/` and fix
+- [x] Edit the pages with the `/reader-expectations-prose` skill. Render: `target/debug/q2 render docs/` and fix
       every warning your edits caused.
-- [ ] `git grep -n -e '--records' -e '--execution-records'` outside `claude-notes/` prints nothing.
-- [ ] **Embedded docs, once:** `cargo xtask build-agents-docs` then `cargo build --bin q2`; confirm with
+- [x] `git grep -n -e '--records' -e '--execution-records'` outside `claude-notes/` prints nothing.
+- [x] **Embedded docs, once:** `cargo xtask build-agents-docs` then `cargo build --bin q2`; confirm with
       `target/debug/q2 docs llms --embed-info`. (It renders the docs with the `q2` you just built, so run it after a
       Rust build.)
-- [ ] **End-to-end for the whole epic**, through the real binary, recording each invocation and what you saw (say
+- [x] **End-to-end for the whole epic**, through the real binary, recording each invocation and what you saw (say
       which were seen by a person and which were automated): `q2 render` plain on Jupyter, Julia, knitr and a LaTeX
       target; `q2 render -M 'execute:{record-sources: q2}'` with a prior record; `-M 'execute:{record-sources: q2,engine}'` with a
       stale record; `-M 'execute:{record-sources: q2}' --no-execute`; the key in front matter instead of `-M`; `q2 preview`
       of the same documents; `q2 render` of a project of several documents with a different key in each.
-- [ ] The preview chain: `cd hub-client && npm run build:wasm`, `cargo xtask build-q2-preview-spa`,
+- [x] The preview chain: `cd hub-client && npm run build:wasm`, `cargo xtask build-q2-preview-spa`,
       `cargo build --bin q2`, then confirm the preview.
-- [ ] `cargo xtask lint`; `cargo clippy` on the crates the epic touched (`quarto`, `quarto-core`, `quarto-preview`,
+- [x] `cargo xtask lint`; `cargo clippy` on the crates the epic touched (`quarto`, `quarto-core`, `quarto-preview`,
       `quarto-hub-provider`); `target/debug/q2 render --strict claude-notes/plans/2026-11-07-one-presenter-path-epic.md`
       and each OPR plan and note.
-- [ ] **Do not run the workspace nextest or `cargo xtask verify`.** Write the pre-push recommendation in
+- [x] **Do not run the workspace nextest or `cargo xtask verify`.** Write the pre-push recommendation in
       "Notes from the run": run `cargo xtask verify` (full, because `quarto-core` and the WASM leg changed) and say
       which dependents of `quarto-core` to run (`cargo tree -i quarto-core`).
-- [ ] If anything under `hub-client/` changed in the epic, the two-commit changelog rule in AGENTS.md applies.
-- [ ] Reconcile the epic: re-read it, verify each plan\'s status and exit criteria against the integration branch, and
+- [x] If anything under `hub-client/` changed in the epic, the two-commit changelog rule in AGENTS.md applies.
+- [x] Reconcile the epic: re-read it, verify each plan\'s status and exit criteria against the integration branch, and
       list the **companions** still owed to Gordon (pushes to the Julia engine and runner forks; the Positron
       fork\'s work (RFU-7); any push of this epic\'s branch and the rebase onto `main`).
 
@@ -115,4 +115,93 @@ it for each page you edit.
 
 ## Notes from the run
 
-(Fill in at landing.)
+Run 2026-11-16, one agent, branch `epic-closeout` (cut from `main` at `a3cb3e2de`). The plan\'s "Branch and land"
+steps (`opr/8-docs-and-end-to-end`, `workspace-6`, `feature/one-presenter`) were obsolete: the integration branch is
+already an ancestor of `main`, so the work sits on `epic-closeout` and is not pushed. I wrote the prose with the
+`/reader-expectations-prose` skill (Gopen and Swan: topic and stress position, old before new) and the Google developer
+documentation style guide (GDDSG) together. The skill governed structure and GDDSG governed wording and mechanics.
+
+**Pages changed (5 files, no snapshot files).**
+
+- `docs/guides/authoring/execution-records.qmd`: the opt-in callout (a plain render of Julia and knitr builds the record
+  in memory and writes nothing); the Positron paragraph; the whole `--records` section replaced by "Choosing where records
+  come from" (the key, the `-M` spelling with braces and the quoting rule, entries, a per-command accepts-and-defaults table,
+  in-project directories, per-document resolution, fall-through, what `q2 render` does, the preview-versus-render stale
+  difference, the `--share` and `provide-hub` ceiling); one Limits bullet (single-file books).
+- `docs/guides/authoring/computations.qmd`: the `--no-execute` paragraph (a saved record can supply outputs with
+  `record-sources: q2`), and a new section "Showing and hiding code and output" with the per-engine table.
+- `docs/guides/projects/preview.qmd`: every `--records` mention renamed; the stale-versus-render difference; `preview.engine`
+  is preview-only.
+- `docs/guides/projects/render-options.qmd`: a section that points at `execute: record-sources` and the `-M` spelling.
+- `docs/guides/authoring/knitr.qmd`: caching (a cached chunk is recorded on a miss and a hit; the two quiet exclusions).
+
+**Findings that changed the wording.**
+
+1. `-M 'execute:{record-sources: q2,engine}'` (the spelling in the plan) is **not safe**: YAML ends the value at the comma,
+   `engine` becomes a null sibling key under `execute`, and the record then reads stale (observed: "the record is stale").
+   The docs say to quote: `-M 'execute:{record-sources: "q2,engine"}'`. A fix in the reader is a better answer than a docs
+   rule (OPR-5 finding 1); not done here.
+2. `execute: enabled: false` is part of the record hash, so setting it makes a record stale instead of vetoing the engine. I
+   documented `--no-execute` only. The plan listed both.
+3. A render with `record: true` and `engine` in the list rewrites the record, so a probe that changes `execute:` rewrites the
+   record it then tries to read (this explained one stale result while checking).
+4. Julia figure file names did not change on the recorded route (OPR-7f keeps the plain route\'s rule), so the docs need no
+   sentence about them. `fig-format` is unchanged (OPR-0c).
+5. Not documented, per the plan: unresolved subfigure-group references (`bd-gbaykhth`). `figures.qmd` "Subcaptions" still
+   shows static Quarto 1 images and says computed subcaptions are cross-referenceable; OPR-7j recorded that q2 numbers later
+   figures differently. That needs a separate docs pass (the page is not in this plan\'s list).
+6. Julia `warning: false` hides only warnings (an `@info` and a raw `println(stderr, ...)` stayed); Jupyter hides all
+   `stderr`; knitr hides warnings and messages. The table states this.
+
+**What I ran** (`target/debug/q2`, scratch directory in the session scratchpad, R 4.x with knitr, Julia 1.12; HTML read with
+`grep` for the sentinel outputs `KNITR-OUT` and `JULIA-OUT`; **automated, not seen by a person**):
+
+| Invocation | Observed |
+|---|---|
+| `q2 render k.qmd` and `q2 render j.qmd` (knitr, Julia) | Output present (source and output lines); `.quarto/` holds only `render-manifest.json` |
+| `q2 render rk.qmd` and `rj.qmd` with `execute: {record: true}` | `.quarto/execution-records/rk.ipynb` and `rj.ipynb` written |
+| `PATH=/usr/bin:/bin q2 render rk.qmd -M 'execute:{record-sources: q2}'` (and `rj`) | `KNITR-OUT` and `JULIA-OUT` presented with no engine on `PATH` |
+| the same with the value unquoted, `q2,engine` | `Warning: No execution record ... (q2: the record is stale ...)` |
+| the same with the value quoted, `"q2,engine"` | no warning, output present |
+| edited cell, `-M 'execute:{record-sources: q2}'` | warning "record is stale"; code without output |
+| edited cell, `-M 'execute:{record-sources: "q2,engine"}'` | the engine ran; output present |
+| `-M 'execute:{record-sources: q2}' --no-execute` with a fresh record | output present, engine hidden |
+| `q2 render rk.qmd --no-execute` | code only |
+| key in front matter (`fj.qmd`), no engine on `PATH` | `JULIA-OUT` presented |
+| `-M 'execute:{record-sources: positron}'`, no record | warning names `positron: no record`; with `--strict` it is an error |
+| `-M 'execute:{record-sources: bogus}'` | error listing `cache`, `q2`, `positron`, `engine` and the directory rule |
+| `-M 'execute:{record-sources: "cache,q2"}'` | `Info: ... cache is ignored; q2 render cannot use it` |
+| directory `../../outside` in a project | error: "outside the project" |
+| `q2 render` of a project of three documents (a different key in each directory) | two per-document warnings, three files rendered |
+| `q2 render k.qmd --to pptx` and `--to typst` | rendered with knitr\'s own lines only |
+| Julia cell with `prompt: true`, `echo: [2]`, `warning: false` | prompts per expression; only `c = b + 1` shown; `@warn` hidden, `@info` and raw stderr kept |
+| `q2 preview rk.qmd --static -M 'execute:{record-sources: q2}'`, `curl` of `rk.html` | recorded output served, no engine |
+| `q2 preview rk.qmd --no-browser` (live viewer) | HTTP 200 on `/`; the viewer page was **not looked at in a browser** |
+
+**Not run.** Jupyter (no `jupyter_client` here: `Engine 'jupyter' is registered but its runtime is not available`), so the
+Jupyter columns of the new table rest on the presenter unit tests (`prompt_without_starts_treats_the_code_as_one_expression`)
+and the OPR-2 audit, not a live run. A LaTeX target (`pdf` is not supported by the binary; `pptx` and `typst` stand in).
+`--replay` with a key (the sentence "a `--replay` render ignores the key" rests on decision D6 and the OPR-6 unit test).
+The live viewer in a browser, `--share` against a live tunnel, and the Windows run.
+
+**Gates.** `cargo xtask build-agents-docs` then `cargo build --bin q2`: `q2 docs llms --embed-info` prints `source: real`,
+`pages: 430`, commit `9ff0122b1 (dirty)`; `q2 docs llms guides/authoring/execution-records.md` contains `record-sources`
+(7 hits). `q2 render docs/`: 430 files, 33 warnings, none from the five edited pages (the existing Q-5-6, Q-13-4, Q-2-50 and
+Q-16-5 ones). `git grep -n -e '--records' -e '--execution-records' -- docs` prints nothing; outside `claude-notes/` the option
+still appears only in two negative tests (`crates/quarto/src/main.rs`, `convert_positron_cli.rs`), which must spell it.
+Preview chain: `npm run build:wasm` succeeded; `cargo xtask build-q2-preview-spa` first failed on `@viz-js/viz` (a dependency
+added to `main` after this worktree\'s `node_modules` was installed) and succeeded after `npm install` from the repo root (I
+restored `package-lock.json`, which `npm install` had rewritten); then `cargo build --bin q2`. `cargo xtask lint`: all checks
+passed (1688 files). `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub-provider --all-targets -- -D
+warnings`: clean. No Rust, hub-client or snapshot file changed in this branch, so nextest and the changelog two-commit rule do
+not apply.
+
+**Pre-push recommendation (for Gordon).** This branch changes docs and plans only. The epic code is already on `main`, so the
+useful wider check is the one the epic never had as a whole: `cargo xtask verify` (full, because `quarto-core` and the WASM leg
+changed across the epic), plus `cargo nextest run` on the direct dependents of `quarto-core` (`cargo tree -i quarto-core`).
+
+**Companions still owed to Gordon.** The Julia engine fork (`quarto-julia-engine`, `q2/node-port`) has no unpushed commits (in
+step with `origin`). The runner fork has `q2/opr-expression-facts` on `origin`; whether upstream QuartoNotebookRunner took the
+`emitUnits` change was not checked. The Positron fork work (RFU-7) sits on the local branch `q2/rfu-7-demo-followups` in
+`external-sources/positron` and needs Gordon to push it. Rebasing onto `main` is moot: the integration branch is already
+merged. The Windows run (RFU-6) is still Gordon\'s.

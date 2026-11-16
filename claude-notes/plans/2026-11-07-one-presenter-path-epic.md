@@ -2,7 +2,7 @@
 title: 'Epic: one presenter path for every engine'
 date: 2026-11-07
 description: 'Every recorded cell goes through one presenter that reads what a cell supplies, not which engine made it. Plain render of Julia and knitr joins the recorded route, Julia gains the capture facts knitr has (subject to a spike), and the execution-records source list is one metadata key, execute: record-sources, read by one early reader in preview, provide-hub, convert and the new q2 render (no command-line option). Nineteen plans, plus the eight of the RIU follow-up epic, in four lanes on one integration branch, written to be run by agents with no orchestrator.'
-status: 'plans written 2026-11-08; ready to run; integration branch feature/one-presenter in workspace-1; two decisions still open (the retained fallback and an opt-out; Julia spike scope: OPR-4a done 2026-11-09, all three facts feasible, Gordon chooses the scope for OPR-4b); R5 decided 2026-11-09: the list moves into metadata and the command-line option is removed'
+status: 'OPR-0 to OPR-7 and OPR-9a to OPR-9g complete and merged to main (feature/one-presenter is an ancestor of main); OPR-7d cancelled, superseded by OPR-9g; OPR-8 (docs and end-to-end) complete on branch epic-closeout, not yet merged; the two decisions that were open on 2026-11-08 are closed (retained fallback, no opt-out; Julia scope: all three facts, OPR-4b); R5 decided 2026-11-09: the list moves into metadata and the command-line option is removed'
 ---
 
 **Follows from:** the RIU follow-up (its Item 7; its Item 9 folded into OPR-5), and
@@ -170,7 +170,7 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | [OPR-9e](2026-11-10-opr-9e-julia-non-html-targets.md) | OPR | Julia on non-HTML targets: fixture, five parity classes, a target allowlist in `offers_presentation` | 9a, 9b, 9d | D | ready |
 | [OPR-9f](2026-11-10-opr-9f-run-the-gate.md) | OPR | Run the gate before the flip: four interleaving entries proposed, report attached, Gordon signs | 7a, 7b, 7c, 7f, 7g, 7h, 7i, 7j, 9b, 9c, 9d, 9e | D | ready |
 | [OPR-9g](2026-11-10-opr-9g-flip-plain-render.md) | OPR | Switch plain render of Julia and knitr to the recorded route (the old 7d goal) | 9f, Gordon\'s signature | D | blocked-on-gordon |
-| [OPR-8](2026-11-08-opr-8-docs-and-end-to-end.md) | OPR | Docs, embedded-docs refresh, end-to-end | 1b, 2, 5, 6, 9g, 4d resolved, RFU-8 | D | ready |
+| [OPR-8](2026-11-08-opr-8-docs-and-end-to-end.md) | OPR | Docs, embedded-docs refresh, end-to-end | 1b, 2, 5, 6, 9g, 4d resolved, RFU-8 | D | complete (on epic-closeout) |
 | [RFU-1](2026-11-08-rfu-1-convert-command.md) | RFU | `q2 convert` replaces `q2 record export-positron` | nothing | C | ready |
 | [RFU-2](2026-11-08-rfu-2-knitr-export-and-import-gate.md) | RFU | knitr cells export; import gate by declared kernel equivalence | RFU-1, OPR-3 | B | ready |
 | [RFU-3](2026-11-08-rfu-3-positron-splice-tests.md) | RFU | EXR-16 sweep and the labeled-cell `fig-cap` splice test | OPR-1b | A | ready |
