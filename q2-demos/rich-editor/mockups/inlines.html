@@ -1,0 +1,1349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inline formatting mockups</title>
+<style>
+:root { --ink:#212529; --muted:#6c757d; --faint:#adb5bd; --line:#dee2e6; --accent:#2780e3; --chrome:#f6f7f9;
+  --chip:#eef0f3; --chip-hover:#e2e6ea; --sel:#9ec5f0; --sel-bg:#e7f1fc; --sel-ink:#145ca8; }
+* { box-sizing: border-box; }
+body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:#fff; }
+.app { display:grid; grid-template-columns: 280px 1fr 320px; height:100vh; }
+aside { background:var(--chrome); border-right:1px solid var(--line); padding:16px; overflow:auto; font-size:14px; }
+aside h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:18px 0 8px; }
+aside h2:first-child { margin-top:0; }
+.opt { display:block; padding:8px 10px; border-radius:6px; cursor:pointer; margin-bottom:4px; }
+.opt:hover { background:#eceef1; }
+.opt.on { background:#fff; box-shadow:0 0 0 1px var(--line); }
+.opt b { display:block; font-weight:600; }
+.opt span { color:var(--muted); font-size:12.5px; line-height:1.35; display:block; margin-top:2px; }
+.opt span.why { font-style:italic; color:#8a6d00; }
+details.archived { margin-top:22px; border-top:1px solid var(--line); padding-top:12px; }
+details.archived summary { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); cursor:pointer; margin-bottom:8px; }
+.reset { margin-top:12px; font:inherit; font-size:13px; padding:4px 10px; border:1px solid var(--line); background:#fff; border-radius:5px; cursor:pointer; }
+
+/* Toolbar, as in the editor (and block-annotations.html). */
+.toolbar { display:flex; gap:3px; align-items:center; padding:7px 16px; border-bottom:1px solid var(--line); background:#fff; position:relative; }
+.toolbar button, .bubble button { font:13px system-ui, sans-serif; border:1px solid transparent; background:none; padding:4px 9px; border-radius:5px; cursor:pointer; color:#343a40; display:inline-flex; align-items:center; gap:6px; }
+.toolbar button:hover:not(:disabled), .bubble button:hover { background:#f1f3f5; }
+.toolbar button:disabled { color:var(--faint); cursor:default; }
+.toolbar button[aria-pressed="true"], .bubble button[aria-pressed="true"] { background:var(--sel-bg); border-color:#c5dcf5; color:var(--sel-ink); }
+.toolbar .style { width:150px; justify-content:space-between; border-color:var(--line); }
+.toolbar .style svg { width:8px; height:8px; }
+button.icon { padding:4px !important; position:relative; color:#444746; }
+button.icon svg { width:20px; height:20px; display:block; }
+.toolbar button.icon::after { content:attr(data-tip); position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%);
+  background:#343a40; color:#fff; font:12px/1 system-ui, sans-serif; padding:5px 7px; border-radius:4px; white-space:nowrap;
+  pointer-events:none; visibility:hidden; z-index:20; }
+.toolbar button.icon:hover::after { visibility:visible; transition:visibility 0s .35s; }
+.toolbar .sep { width:1px; height:20px; background:var(--line); margin:0 6px; }
+.menu { position:absolute; top:100%; background:#fff; border:1px solid var(--line); border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,.12); padding:4px; z-index:30; display:flex; flex-direction:column; min-width:190px; }
+.menu button { justify-content:space-between; }
+.menu kbd { color:var(--muted); font:12px system-ui, sans-serif; }
+
+.center { display:flex; flex-direction:column; min-width:0; min-height:0; }
+.scroller { flex:1; overflow:auto; }
+.tips { max-width:760px; margin:16px auto 0; padding:9px 14px; background:#fff8e1; border:1px solid #f3e1a6; border-radius:6px; font-size:13px; color:#5c4b00; line-height:1.6; }
+.tips kbd { font:11.5px ui-monospace, Menlo, monospace; border:1px solid #d9c98f; border-bottom-width:2px; border-radius:3px; padding:0 4px; background:#fffdf3; }
+.source { border-left:1px solid var(--line); background:var(--chrome); padding:16px; overflow:auto; }
+.source h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; }
+.source div { font:12.5px/1.5 ui-monospace, Menlo, monospace; white-space:pre-wrap; margin:0 0 12px; padding:1px 4px; border-radius:3px; min-height:1lh; overflow-wrap:anywhere; }
+.source .cur { background:var(--sel-bg); }
+
+/* The document. */
+.page { position:relative; max-width:800px; margin:0 auto; padding:36px 40px 200px; }
+.body { outline:none; font-size:17px; line-height:1.5; white-space:pre-wrap; }
+.body > :first-child { margin-top:0; }
+.body p { margin:0 0 17px; min-height:1lh; }
+.body h2 { font-size:1.6rem; font-weight:600; line-height:1.2; margin:1.8rem 0 .75rem; border-bottom:1px solid var(--line); padding-bottom:.25rem; }
+.body code { font:.875em ui-monospace, Menlo, monospace; color:#7d12ba; background:#f1f3f5; padding:.125em .3em; border-radius:3px; }
+.body a { color:var(--accent); text-decoration:underline; cursor:text; }
+.body .ro { cursor:default; }
+
+/* Inlines that can't be edited: chips. */
+.atom { border-radius:3px; cursor:default; white-space:nowrap; }
+.atom:hover { background:var(--chip); }
+.atom.sel { background:var(--sel-bg); box-shadow:0 0 0 1.5px var(--sel); }
+.atom.math { font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", Georgia, serif; font-style:italic; padding:0 2px; }
+.atom.math sup { font-size:.7em; }
+.atom.cite { color:#5c636a; }
+.atom.note { color:var(--accent); font-size:.75em; vertical-align:super; padding:0 1px; }
+.atom.image { display:inline-flex; align-items:center; gap:4px; font:12px system-ui, sans-serif; color:var(--muted); border:1px solid var(--line); background:#f8f9fa; padding:1px 6px; vertical-align:baseline; }
+.atom.image svg { width:14px; height:14px; }
+.ro .atom:hover { background:none; }
+
+/* A link shown with its source, while the caret is in it. */
+.dim { color:var(--faint); font:.85em ui-monospace, Menlo, monospace; user-select:none; }
+.dim input { font:inherit; color:var(--muted); border:0; border-bottom:1px dotted var(--faint); background:none; outline:none; padding:0; min-width:7ch; field-sizing:content; }
+.dim input:focus { border-bottom:1px solid var(--accent); color:var(--ink); }
+
+/* Popovers, laid over the page. */
+.overlay { position:absolute; inset:0; pointer-events:none; z-index:3; }
+.bubble { position:absolute; pointer-events:auto; background:#fff; border:1px solid var(--line); border-radius:7px; box-shadow:0 4px 14px rgba(0,0,0,.12);
+  padding:4px 6px; display:flex; align-items:center; gap:2px; font-size:13px; white-space:nowrap; }
+.bubble .url { color:var(--accent); max-width:260px; overflow:hidden; text-overflow:ellipsis; padding:0 6px; }
+.bubble a:focus, .bubble button:focus { outline:2px solid var(--accent); outline-offset:-1px; border-radius:5px; }
+.bubble .none { color:var(--faint); padding:0 6px; }
+.bubble .bsep { width:1px; height:18px; background:var(--line); margin:0 4px; }
+.bubble code { font:12px ui-monospace, Menlo, monospace; padding:0 6px; }
+.bubble .hint { color:var(--muted); padding:0 6px 0 2px; }
+.bubble.form { flex-direction:column; align-items:stretch; gap:6px; padding:10px; width:300px; white-space:normal; }
+.bubble.form label { display:grid; grid-template-columns:38px 1fr; align-items:center; color:var(--muted); font-size:12px; }
+.bubble.form input { font:13px system-ui, sans-serif; padding:4px 7px; border:1px solid var(--line); border-radius:4px; outline:none; }
+.bubble.form input:focus { border-color:var(--accent); }
+.bubble.form .row { display:flex; justify-content:flex-end; gap:4px; }
+.bubble.form .apply { background:var(--accent); color:#fff; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside id="options"></aside>
+  <div class="center">
+    <div class="toolbar" id="toolbar"></div>
+    <div class="scroller">
+      <div class="tips">
+        <kbd>⌘B</kbd> bold · <kbd>⌘I</kbd> italic · <kbd>⌘U</kbd> underline · <kbd>⌘⇧X</kbd> strikethrough · <kbd>⌘E</kbd> code · <kbd>⌘K</kbd> link · <kbd>⌘Z</kbd> undo.
+        The choices on the left change how the document behaves; the address keeps them, so a link to this page shows what you chose.
+      </div>
+      <div class="page" id="page">
+        <div class="body" id="editor" contenteditable="true" spellcheck="false"></div>
+        <div class="overlay" id="overlay"></div>
+      </div>
+    </div>
+  </div>
+  <div class="source"><h2>Source (qmd)</h2><div id="source-blocks" style="all:unset"></div></div>
+</div>
+
+<script>
+// ---------------------------------------------------------------- options
+const GROUPS = [
+  { key: 'edge', title: 'At the edge of formatting', options: [
+    ['continue', 'Carry on', 'Typing at the end of bold, italic or code continues it; ⌘B / ⌘E or the toolbar turns it off. As in Word and Google Docs.'],
+    ['code', 'Arrow out of code', 'Bold and italic carry on, but code has an inside and an outside at each end: → at the end of code steps out of it without moving. As in Notion and Slack.'],
+    ['all', 'Arrow out of everything', 'Every format has an inside and an outside at each end.', 'An extra arrow press at every edge of bold and italic, where nothing shows which side the caret is on.'],
+  ]},
+  { key: 'md', title: 'Typing markdown', options: [
+    ['on', 'Converts as you type', '**bold**, *italic* (or __bold__, _italic_), ~~strike~~, `code` and [text](url) become formatting when closed. Backspace right after gives the characters back.'],
+    ['early', 'Converts as you start', 'Bold and italic turn on at the first character after ** or * (or __ or _), so the stars never sit in the text; typing them again turns the format off. A closing underscore shows until the word ends, since it may be inside a name like snake_case. The rest convert when closed.'],
+    ['off', 'Stays as typed', 'A typed * is a *, as today.'],
+  ]},
+  { key: 'links', title: 'Links', options: [
+    ['popover', 'Popover', 'The caret in a link, or the mouse over one, shows its address under it, with Edit and Remove. Tab moves into it: Enter on the address opens the link, Tab again reaches Edit and Remove, and Escape or a last Tab returns to the text. Escape in the text puts the popover away until the caret or the mouse comes back to the link. ⌘K opens a small form. As in Google Docs.'],
+    ['inline', 'Source in place', 'A link with the caret in it shows as [text](url), the address editable right there (click it, or ⌘K). As in Typora and Obsidian.'],
+  ]},
+  { key: 'atoms', title: "Inlines the editor can't edit yet", options: [
+    ['chip', 'A chip in the line', 'Math, citations, footnotes and images are one read-only unit each; the text around them is edited as usual. Click one to see its source. Backspace selects it, then deletes it.'],
+    ['ro', 'Read-only paragraph', 'A paragraph with any of them in it can\'t be edited at all, as today.'],
+  ]},
+  { key: 'toolbar', title: 'Toolbar', options: [
+    ['full', 'All buttons', 'Bold, italic, underline, strikethrough, code and link, after the style box.'],
+    ['compact', 'Bold, italic, link, and more', 'The rest are in a "⋯" menu.'],
+  ]},
+  { key: 'bubble', title: 'Selection bubble', options: [
+    ['off', 'None', 'Formatting is in the toolbar only.'],
+    ['on', 'Over the selection', 'Selecting text shows the formatting buttons right above it. As in Notion and Medium.'],
+  ]},
+]
+const opts = Object.fromEntries(GROUPS.map((g) => [g.key, g.options[0][0]]))
+opts.edge = 'code'
+for (const [k, v] of new URLSearchParams(location.hash.slice(1))) if (k in opts) opts[k] = v
+
+function renderOptions() {
+  const aside = document.getElementById('options')
+  aside.replaceChildren()
+  // An option with a fourth entry was decided against: it's kept, with that
+  // reason, under "Archived".
+  const card = (g, [value, name, why, archived], into) => {
+    const el = document.createElement('label')
+    el.className = 'opt' + (opts[g.key] === value ? ' on' : '')
+    el.innerHTML = '<b></b><span></span>'
+    el.children[0].textContent = name
+    el.children[1].textContent = why
+    if (archived) {
+      el.children[0].textContent = `${g.title}: ${name}`
+      el.append(Object.assign(document.createElement('span'), { className: 'why', textContent: archived }))
+    }
+    el.onclick = () => {
+      opts[g.key] = value
+      history.replaceState(null, '', '#' + new URLSearchParams(opts))
+      renderOptions()
+      closeForm()
+      render()
+    }
+    into.append(el)
+  }
+  for (const g of GROUPS) {
+    const h = document.createElement('h2')
+    h.textContent = g.title
+    aside.append(h)
+    for (const o of g.options) if (!o[3]) card(g, o, aside)
+  }
+  const reset = document.createElement('button')
+  reset.className = 'reset'
+  reset.textContent = 'Reset the document'
+  reset.onclick = () => { start(); editor.focus(); render() }
+  aside.append(reset)
+  const archive = document.createElement('details')
+  archive.className = 'archived'
+  archive.innerHTML = '<summary>Archived</summary>'
+  for (const g of GROUPS) for (const o of g.options) if (o[3]) { card(g, o, archive); if (opts[g.key] === o[0]) archive.open = true }
+  aside.append(archive)
+}
+
+// ------------------------------------------------------------------ model
+// A block is a run of cells: one character each, with its formats (`m`, a
+// bit set) and its link's address (`h`, or null). A cell with `a` is an
+// inline that can't be edited.
+const B = 1, I = 2, S = 4, C = 8, U = 16
+const cells = (text, m = 0, h = null) => text.split('').map((c) => ({ c, m, h }))
+const atom = (kind, src) => [{ c: '￼', m: 0, h: null, a: { kind, src } }]
+const block = (tag, ...parts) => ({ tag, cells: parts.flatMap((p) => (typeof p === 'string' ? cells(p) : p)) })
+
+let doc, sel, pending, ruled, hist, form
+function start() {
+  doc = [
+    block('h2', 'Formatting'),
+    block('p', 'Put the caret at the end of ', cells('bold text', B), ' and type, then at its start. Do the same with ', cells('italic text', I),
+      ', and try ⌘B with nothing selected. Formats ', cells('can ', B), cells('nest', B | I), cells(' inside', B), ' each other.'),
+    block('p', 'Code is where the edge matters most: get the caret out of ', cells('renderDocument()', C), ' and keep typing, here and at the end of a line: ', cells('q2 render', C)),
+    block('p', 'Type markdown here, a word between two pairs of asterisks, say: '),
+    block('h2', 'Links'),
+    block('p', 'A paragraph with ', cells('a link to Quarto', 0, 'https://quarto.org'), ' in it. Put the caret in the link, change its address, remove it. Then select a few words and press ⌘K.'),
+    block('h2', "Things the editor can't edit yet"),
+    block('p', 'The area is ', atom('math', '$\\pi r^2$'), ', as shown by ', atom('cite', '@knuth1984'), ', with a footnote', atom('note', '^[A note.]'),
+      ' and a picture ', atom('image', '![chart](chart.png)'), ' in the line. Edit the words around them, and Backspace into one.'),
+    block('p', 'An ordinary paragraph after it.'),
+  ]
+  sel = { a: { b: 1, o: 37 }, f: { b: 1, o: 37 }, aff: 'L' }
+  pending = null   // the formats of what's typed next, when toggled with no selection
+  ruled = null     // the state before a typing rule applied: Backspace goes back to it
+  hist = { past: [], future: [], kind: null, at: 0 }
+  form = null
+}
+
+const cmp = (p, q) => p.b - q.b || p.o - q.o
+const collapsed = () => cmp(sel.a, sel.f) === 0
+const range = () => (cmp(sel.a, sel.f) <= 0 ? { from: sel.a, to: sel.f } : { from: sel.f, to: sel.a })
+const cellAt = (b, o) => doc[b].cells[o]
+const marksOf = (cell) => (cell && !cell.a ? cell.m : 0)
+const isEditable = (b) => !(opts.atoms === 'ro' && doc[b].cells.some((c) => c.a))
+const setCaret = (b, o, aff = 'L') => { sel = { a: { b, o }, f: { b, o }, aff } }
+
+/** The formats that have an inside and an outside at their edges. */
+const twoStop = () => (opts.edge === 'continue' ? 0 : opts.edge === 'code' ? C : B | I | S | C | U)
+const isBoundary = (b, o) => ((marksOf(cellAt(b, o - 1)) ^ marksOf(cellAt(b, o))) & twoStop()) !== 0
+
+/** The formats of what's typed at the caret. */
+function typingMarks() {
+  if (pending !== null) return pending
+  const { b, o } = sel.f
+  const L = cellAt(b, o - 1), R = cellAt(b, o)
+  const t = twoStop()
+  // Formats that carry on: those of the character before (at the start of a line, after).
+  const carried = marksOf(L ?? R) & ~t
+  const sided = marksOf(sel.aff === 'R' ? R : L) & t
+  return carried | sided
+}
+
+/** The link typed text joins: only when it's strictly inside one. */
+function inheritedLink(from, to) {
+  const L = cellAt(from.b, from.o - 1), R = cellAt(to.b, to.o)
+  if (L && R && L.h !== null && L.h === R.h) return L.h
+  if (from.b === to.b && to.o > from.o) {
+    const first = cellAt(from.b, from.o), last = cellAt(to.b, to.o - 1)
+    if (first.h !== null && first.h === last.h) return first.h
+  }
+  return null
+}
+
+/** The link the selection is in (or at an end of). */
+function currentLink() {
+  const { from, to } = range()
+  if (from.b !== to.b || !isEditable(from.b)) return null
+  const cs = doc[from.b].cells
+  const at = collapsed() ? (cs[from.o - 1]?.h != null ? from.o - 1 : from.o) : from.o
+  const h = cs[at]?.h
+  if (h == null) return null
+  let s = at, e = at + 1
+  while (s > 0 && cs[s - 1].h === h) s--
+  while (e < cs.length && cs[e].h === h) e++
+  return to.o <= e ? { b: from.b, start: s, end: e, h } : null
+}
+
+function selectedCells() {
+  const { from, to } = range()
+  const out = []
+  for (let b = from.b; b <= to.b; b++) {
+    if (!isEditable(b)) continue
+    const cs = doc[b].cells
+    out.push(...cs.slice(b === from.b ? from.o : 0, b === to.b ? to.o : cs.length))
+  }
+  return out
+}
+
+function activeMarks() {
+  if (collapsed()) return typingMarks()
+  const cs = selectedCells().filter((c) => !c.a)
+  return cs.length === 0 ? 0 : cs.reduce((m, c) => m & c.m, 15)
+}
+
+// ---------------------------------------------------------------- history
+const snapshot = () => JSON.stringify({ doc, sel })
+function restore(s) {
+  ;({ doc, sel } = JSON.parse(s))
+  pending = null
+  hist.kind = null
+}
+function record(kind) {
+  const now = Date.now()
+  const merge = kind !== 'edit' && hist.kind === kind && now - hist.at < 1500
+  hist.at = now
+  hist.kind = kind
+  if (merge) return
+  hist.past.push(snapshot())
+  hist.future = []
+}
+function undo() { if (hist.past.length) { hist.future.push(snapshot()); restore(hist.past.pop()) } }
+function redo() { if (hist.future.length) { hist.past.push(snapshot()); restore(hist.future.pop()) } }
+
+// ------------------------------------------------------------------ edits
+function deleteRange(from, to) {
+  if (from.b === to.b) doc[from.b].cells.splice(from.o, to.o - from.o)
+  else {
+    doc[from.b].cells = doc[from.b].cells.slice(0, from.o).concat(doc[to.b].cells.slice(to.o))
+    doc.splice(from.b + 1, to.b - from.b)
+  }
+  setCaret(from.b, from.o)
+}
+
+function insertText(text) {
+  const { from, to } = range()
+  let m
+  const h = inheritedLink(from, to)
+  if (collapsed()) {
+    m = typingMarks()
+    record('type')
+  } else {
+    // Typing over a selection takes the formats of its first character.
+    m = pending ?? marksOf(cellAt(from.b, from.o))
+    record('edit')
+    deleteRange(from, to)
+  }
+  const add = text.split('').map((c) => ({ c, m, h }))
+  doc[from.b].cells.splice(from.o, 0, ...add)
+  setCaret(from.b, from.o + add.length)
+  pending = null
+}
+
+const RULES = [
+  [/(?<![*\\])\*\*([^*\s](?:[^*]*[^*\s])?)\*\*$/, B, 2],
+  [/(?<![*\\])\*([^*\s](?:[^*]*[^*\s])?)\*$/, I, 1],
+  [/(?<![\w\\])__([^_\s](?:[^_]*[^_\s])?)__$/, B, 2],
+  [/(?<![\w\\])_([^_\s](?:[^_]*[^_\s])?)_$/, I, 1],
+  [/~~([^~\s](?:[^~]*[^~\s])?)~~$/, S, 2],
+  [/`([^`\s](?:[^`]*[^`\s])?)`$/, C, 1],
+]
+/** Markdown typed out and just closed becomes formatting. */
+/**
+ * Bold and italic that convert as soon as they start: the first character
+ * typed after ** or * takes the format and the stars go, and stars typed
+ * right after a word in that format turn it off. Returns whether it applied.
+ */
+/** The formats that `n` stars or underscores turn off, of those in `m`. */
+const closedBy = (n, m) => [I, B, B | I][n - 1] & m
+
+/**
+ * Enter after underscores that would turn a format off: they do, as if a
+ * space had followed.
+ */
+function settleUnderscores() {
+  if (opts.md !== 'early' || !collapsed()) return
+  const { b, o } = sel.f
+  const cs = doc[b].cells
+  const under = (c) => c && !c.a && c.c === '_' && !(c.m & C)
+  let n = 0
+  while (under(cs[o - 1 - n])) n++
+  const prev = cs[o - n - 1]
+  if (n === 0 || n > 3 || !prev || prev.a || /\s/.test(prev.c)) return
+  const m = cs[o - n].m
+  const bit = closedBy(n, m)
+  if (!bit) return
+  record('edit')
+  cs.splice(o - n, n)
+  setCaret(b, o - n)
+  pending = m & ~bit
+}
+
+function earlyRule() {
+  const { b, o } = sel.f
+  const cs = doc[b].cells
+  const typed = cs[o - 1]
+  if (!typed || typed.a || typed.m & C) return false
+  // The stars (or underscores) up to the caret, or up to the character just typed.
+  const mark = (c) => c && !c.a && (c.c === '*' || c.c === '_')
+  const end = mark(typed) ? o : o - 1
+  const star = (c) => mark(c) && c.c === cs[end - 1].c
+  let n = 0
+  while (star(cs[end - 1 - n])) n++
+  if (n === 0 || n > 3) return false
+  const prev = cs[end - n - 1]
+  const m = cs[end - n].m
+  const before = snapshot()
+  // Closing: stars right after a word, in the format they'd close.
+  const closes = prev && !prev.a && !/\s/.test(prev.c)
+  if (star(typed)) {
+    if (!closes) return false
+    // In bold italic, one star may be the first of two: what follows decides.
+    const bit = n === 1 && (m & (B | I)) === I ? I : n === 2 && m & B ? B : 0
+    if (!bit) return false
+    // An underscore may be inside a word (snake_case): it stays as typed
+    // until what follows shows it isn't.
+    if (typed.c === '_') return false
+    cs.splice(end - n, n)
+    setCaret(b, end - n)
+    pending = m & ~bit
+  } else if (closes) {
+    // That one star, now that something else follows it. Or underscores,
+    // now that it's the end of the word.
+    const under = cs[end - 1].c === '_'
+    if (under && /[\p{L}\p{N}_]/u.test(typed.c)) return false
+    const bit = under ? closedBy(n, m) : n === 1 && m & I ? I : 0
+    if (!bit) return false
+    typed.m &= ~bit
+    cs.splice(end - n, n)
+    setCaret(b, o - n)
+  } else {
+    // Opening: stars after a space (or at the start), then a character.
+    if (/\s/.test(typed.c) || (prev && !prev.a && !/[\s(\[{"'“‘—–-]/.test(prev.c))) return false
+    const bits = [I, B, B | I][n - 1]
+    if ((m & bits) === bits) return false
+    typed.m |= bits
+    cs.splice(end - n, n)
+    setCaret(b, o - n)
+  }
+  ruled = before
+  return true
+}
+
+function typingRule() {
+  const { b, o } = sel.f
+  const cs = doc[b].cells
+  let s = o
+  while (s > 0 && !cs[s - 1].a) s--
+  const text = cs.slice(s, o).map((c) => c.c).join('')
+  const link = /\[([^\]]+)\]\(([^)\s]*)\)$/.exec(text)
+  if (link) {
+    const before = snapshot()
+    const at = s + link.index
+    const outer = cs[at].m
+    const inner = cs.slice(at + 1, at + 1 + link[1].length).map((c) => ({ ...c, h: link[2] }))
+    cs.splice(at, link[0].length, ...inner)
+    setCaret(b, at + inner.length)
+    pending = outer
+    ruled = before
+    return
+  }
+  for (const [re, bit, d] of RULES) {
+    const m = re.exec(text)
+    if (!m) continue
+    const before = snapshot()
+    const at = s + m.index
+    const outer = cs[at].m
+    const n = m[1].length
+    for (let i = at + d; i < at + d + n; i++) cs[i].m |= bit
+    cs.splice(at + d + n, d)
+    cs.splice(at, d)
+    setCaret(b, at + n)
+    // What's typed next is as it was before the opening mark.
+    pending = outer
+    ruled = before
+    return
+  }
+}
+
+function backspace() {
+  if (!collapsed()) { record('edit'); const { from, to } = range(); deleteRange(from, to); return }
+  const { b, o } = sel.f
+  if (o === 0) {
+    const p = b - 1
+    if (p < 0 || !isEditable(p)) return
+    record('edit')
+    const at = doc[p].cells.length
+    doc[p].cells.push(...doc[b].cells)
+    doc.splice(b, 1)
+    setCaret(p, at)
+    return
+  }
+  // A chip is selected first, then deleted.
+  if (cellAt(b, o - 1).a) { sel = { a: { b, o: o - 1 }, f: { b, o }, aff: 'L' }; return }
+  const m = typingMarks()
+  const gone = marksOf(cellAt(b, o - 1))
+  record('delete')
+  doc[b].cells.splice(o - 1, 1)
+  setCaret(b, o - 1)
+  pending = keptMarks(m, gone)
+}
+
+/**
+ * The pending formats after deleting backward. Deleting the last bold
+ * character leaves bold on for what's typed next; otherwise the caret takes
+ * the formats of what it now follows, so Backspace into bold types bold.
+ */
+function keptMarks(typing, gone) {
+  const { b, o } = sel.f
+  const L = cellAt(b, o - 1)
+  return !L || (gone & ~marksOf(L)) ? typing : null
+}
+
+function deleteForward() {
+  if (!collapsed()) { record('edit'); const { from, to } = range(); deleteRange(from, to); return }
+  const { b, o } = sel.f
+  const cs = doc[b].cells
+  if (o === cs.length) {
+    if (!doc[b + 1] || !isEditable(b + 1)) return
+    record('edit')
+    cs.push(...doc[b + 1].cells)
+    doc.splice(b + 1, 1)
+    return
+  }
+  if (cs[o].a) { sel = { a: { b, o }, f: { b, o: o + 1 }, aff: 'L' }; return }
+  record('delete')
+  cs.splice(o, 1)
+}
+
+// Option+Backspace, Cmd+Backspace and their forward twins: the model works
+// out how far to delete, since the browser's range can end in the caret's
+// holder node.
+function deleteSpan(dir, unit) {
+  if (!collapsed()) { record('edit'); const { from, to } = range(); deleteRange(from, to); return }
+  const { b, o } = sel.f
+  const cs = doc[b].cells
+  // At the paragraph's edge, or next to a chip, it's the one-character case.
+  if (o === (dir < 0 ? 0 : cs.length) || cs[dir < 0 ? o - 1 : o].a) return dir < 0 ? backspace() : deleteForward()
+  let e = o
+  const next = () => cs[dir < 0 ? e - 1 : e]
+  if (unit === 'line') e = dir < 0 ? 0 : cs.length
+  else {
+    const kind = (c) => !c || c.a ? 'edge' : /\s/.test(c.c) ? 'space' : /[\p{L}\p{N}_]/u.test(c.c) ? 'word' : 'punct'
+    while (kind(next()) === 'space') e += dir
+    const k = kind(next())
+    if (k !== 'edge') while (kind(next()) === k) e += dir
+  }
+  const m = typingMarks()
+  const gone = marksOf(cs[o - 1])
+  record('edit')
+  deleteRange({ b, o: Math.min(o, e) }, { b, o: Math.max(o, e) })
+  if (dir < 0) pending = keptMarks(m, gone)
+}
+
+function enter() {
+  record('edit')
+  if (!collapsed()) { const { from, to } = range(); deleteRange(from, to) }
+  const m = typingMarks()
+  const { b, o } = sel.f
+  const rest = doc[b].cells.splice(o)
+  const tag = doc[b].tag !== 'p' && rest.length === 0 ? 'p' : doc[b].tag
+  doc.splice(b + 1, 0, { tag, cells: rest })
+  setCaret(b + 1, 0)
+  // Bold goes on to the new line; code doesn't.
+  pending = m & ~C
+}
+
+function toggle(bit) {
+  if (collapsed()) { pending = typingMarks() ^ bit; return }
+  const cs = selectedCells().filter((c) => !c.a)
+  if (cs.length === 0) return
+  record('edit')
+  const all = cs.every((c) => c.m & bit)
+  for (const c of cs) c.m = all ? c.m & ~bit : c.m | bit
+}
+
+/** Left and Right. At the edge of a format with two sides, the first press changes side. */
+function moveH(dir, shift) {
+  if (!shift && !collapsed()) { const { from, to } = range(); const p = dir < 0 ? from : to; setCaret(p.b, p.o); pending = null; return }
+  const f = sel.f
+  if (!shift && pending === null && isBoundary(f.b, f.o)) {
+    if (dir > 0 && sel.aff === 'L') { sel.aff = 'R'; return }
+    if (dir < 0 && sel.aff === 'R') { sel.aff = 'L'; return }
+  }
+  pending = null
+  let b = f.b, o = f.o + dir
+  if (o < 0 || o > doc[b].cells.length) {
+    let nb = b + dir
+    while (doc[nb] && !isEditable(nb)) nb += dir
+    if (!doc[nb]) return
+    b = nb
+    o = dir > 0 ? 0 : doc[nb].cells.length
+  }
+  if (shift) sel = { a: sel.a, f: { b, o }, aff: 'L' }
+  else setCaret(b, o, dir < 0 ? 'R' : 'L')
+}
+
+/** Where the caret is drawn for a point in the page. */
+function caretRect(node, offset) {
+  const r = document.createRange()
+  if (node.nodeType === 3 && node.length) {
+    // The side of a neighbouring character: an empty range has no box in every browser.
+    const after = offset < node.length
+    r.setStart(node, after ? offset : offset - 1)
+    r.setEnd(node, after ? offset + 1 : offset)
+    const boxes = r.getClientRects()
+    const box = after ? boxes[0] : boxes[boxes.length - 1]
+    if (box) return { x: after ? box.left : box.right, top: box.top, bottom: box.bottom }
+  }
+  const child = node.nodeType === 1 && (node.childNodes[offset] ?? node.childNodes[offset - 1])
+  const el = child && child.nodeType === 1 ? child : node.nodeType === 1 ? node : node.parentElement
+  const box = el.getBoundingClientRect()
+  const atEnd = child && child === node.childNodes[offset - 1]
+  return { x: atEnd ? box.right : box.left, top: box.top, bottom: box.bottom }
+}
+
+function pointFrom(x, y) {
+  if (document.caretPositionFromPoint) {
+    const p = document.caretPositionFromPoint(x, y)
+    return p && [p.offsetNode, p.offset]
+  }
+  const r = document.caretRangeFromPoint(x, y)
+  return r && [r.startContainer, r.startOffset]
+}
+
+/**
+ * Up and Down. The caret keeps its horizontal place in the text as it's
+ * drawn: `goalX` is where it was when the run of Up and Down presses began,
+ * so a short line on the way doesn't pull it left for good. The browser's own
+ * Up and Down forget that place each time the line is redrawn.
+ */
+let goalX = null
+function moveV(dir, shift) {
+  const here = caretRect(...locate(sel.f))
+  const x = goalX ?? here.x
+  const bounds = editor.getBoundingClientRect()
+  const px = Math.min(Math.max(x, bounds.left + 1), bounds.right - 1)
+  const mid = (here.top + here.bottom) / 2
+  let found = null
+  for (let y = dir > 0 ? here.bottom + 2 : here.top - 2; y > bounds.top && y < bounds.bottom; y += dir * 4) {
+    const point = pointFrom(px, y)
+    const at = point && pointToModel(...point)
+    if (!at) continue
+    // On another line, not further along this one.
+    const there = caretRect(...locate(at))
+    if (!(dir > 0 ? there.top > mid : there.bottom < mid)) continue
+    // The probe may have been in the gap between two lines, which gives a
+    // line's start or end: ask again at the line's own height.
+    const again = pointFrom(px, (there.top + there.bottom) / 2)
+    found = (again && pointToModel(...again)) ?? at
+    break
+  }
+  if (!found) {
+    // No line that way: the start or the end of this paragraph.
+    found = { b: sel.f.b, o: dir > 0 ? doc[sel.f.b].cells.length : 0 }
+  }
+  pending = null
+  if (shift) sel = { a: sel.a, f: found, aff: 'L' }
+  else setCaret(found.b, found.o)
+  goalX = x
+}
+
+// ------------------------------------------------------------------ links
+function setLink(b, s, e, h) { for (let i = s; i < e; i++) doc[b].cells[i].h = h }
+
+function removeLink() {
+  const link = currentLink()
+  if (!link) return
+  record('edit')
+  setLink(link.b, link.start, link.end, null)
+}
+
+/** ⌘K, or the link button. */
+function linkCommand() {
+  const link = currentLink()
+  const { from, to } = range()
+  if (from.b !== to.b || !isEditable(from.b)) return
+  if (opts.links === 'popover') {
+    const s = link ? link.start : from.o, e = link ? link.end : to.o
+    form = { b: from.b, start: s, end: e, text: doc[from.b].cells.slice(s, e).map((c) => c.c).join(''), url: link ? link.h : '' }
+    return
+  }
+  if (!link) {
+    record('edit')
+    if (collapsed()) {
+      // A new link: its text selected, to type over.
+      const m = typingMarks()
+      doc[from.b].cells.splice(from.o, 0, ...cells('link', m, ''))
+      sel = { a: { b: from.b, o: from.o }, f: { b: from.b, o: from.o + 4 }, aff: 'L' }
+      return
+    }
+    setLink(from.b, from.o, to.o, '')
+  }
+  focusUrl = true
+}
+let focusUrl = false
+
+function applyForm(text, url) {
+  const { b, start, end } = form
+  const cs = doc[b].cells
+  const was = cs.slice(start, end)
+  text = text || url
+  form = null
+  if (!text) return
+  record('edit')
+  const m = was.length ? was[0].m : typingMarks()
+  const next = was.map((c) => c.c).join('') === text ? was.map((c) => ({ ...c, h: url })) : cells(text, m, url)
+  cs.splice(start, end - start, ...next)
+  setCaret(b, start + next.length)
+}
+function closeForm() { form = null }
+
+// ----------------------------------------------------------------- render
+const editor = document.getElementById('editor')
+const overlay = document.getElementById('overlay')
+const page = document.getElementById('page')
+let leaves = []      // per block: the text nodes and chips, with where they start
+let holder = null    // the empty text node the caret sits in, at the edge of a format
+let blockEls = []
+
+function wrap(m, node) {
+  let el = node
+  for (const [bit, tag] of [[S, 's'], [U, 'u'], [I, 'em'], [B, 'strong'], [C, 'code']]) {
+    if (!(m & bit)) continue
+    const outer = document.createElement(tag)
+    outer.append(el)
+    el = outer
+  }
+  return el
+}
+
+const IMAGE_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4.86 8.86-3 3.87L9 13.14 6 17h12l-3.86-5.14z"/></svg>'
+const ATOM_HTML = {
+  math: 'πr<sup>2</sup>',
+  cite: '(Knuth 1984)',
+  note: '1',
+  image: IMAGE_ICON + 'chart',
+}
+
+function renderBlock(blk, b) {
+  const el = document.createElement(blk.tag)
+  el.dataset.b = b
+  const editable = isEditable(b)
+  if (!editable) { el.contentEditable = 'false'; el.className = 'ro' }
+  const cs = blk.cells
+  const own = []
+  leaves[b] = own
+  const caret = collapsed() && sel.f.b === b && editable ? sel.f.o : -1
+  const { from, to } = range()
+  const selected = (o) => !collapsed() && cmp(from, { b, o }) <= 0 && cmp({ b, o: o + 1 }, to) <= 0
+  const edge = (o) => o === 0 || o === cs.length || cs[o - 1].a || cs[o].a || cs[o - 1].m !== cs[o].m || cs[o - 1].h !== cs[o].h
+
+  // The line in pieces: runs of text in one format, chips, and the caret's holder.
+  const pieces = []
+  for (let o = 0; o <= cs.length; ) {
+    if (o === caret && (pending !== null || edge(o)) && !pieces.some((p) => p.holder)) {
+      holder = document.createTextNode('​')
+      const m = typingMarks()
+      pieces.push({ holder: true, h: inheritedLink(sel.f, sel.f), node: wrap(m & ~C, holder), code: Boolean(m & C) })
+      continue
+    }
+    if (o === cs.length) break
+    const c = cs[o]
+    if (c.a) {
+      const chip = document.createElement('span')
+      chip.className = `atom ${c.a.kind}${selected(o) ? ' sel' : ''}`
+      chip.contentEditable = 'false'
+      chip.title = c.a.src
+      chip.innerHTML = ATOM_HTML[c.a.kind]
+      chip.dataset.o = o
+      own.push({ el: chip, start: o, len: 1 })
+      pieces.push({ h: null, node: chip })
+      o++
+      continue
+    }
+    let e = o + 1
+    while (e < cs.length && !cs[e].a && cs[e].m === c.m && cs[e].h === c.h && !(e === caret && pending !== null)) e++
+    const text = document.createTextNode(cs.slice(o, e).map((x) => x.c).join(''))
+    own.push({ node: text, start: o, len: e - o })
+    pieces.push({ h: c.h, node: wrap(c.m & ~C, text), start: o, code: Boolean(c.m & C) })
+    o = e
+  }
+
+  // Code next to code is one box, whatever else differs inside it and
+  // wherever the caret is.
+  for (let i = 0; i < pieces.length; i++) {
+    if (!pieces[i].code) continue
+    const first = pieces[i]
+    const code = document.createElement('code')
+    let n = 0
+    while (pieces[i + n]?.code && pieces[i + n].h === first.h) code.append(pieces[i + n++].node)
+    pieces.splice(i, n, { h: first.h, start: first.start, node: code })
+  }
+
+  // Pieces of one link next to each other are in one <a>.
+  const link = currentLink()
+  for (let i = 0; i < pieces.length; ) {
+    const h = pieces[i].h
+    if (h === null) { el.append(pieces[i++].node); continue }
+    const a = document.createElement('a')
+    const s = pieces[i].start
+    a.dataset.s = s
+    while (i < pieces.length && pieces[i].h === h) a.append(pieces[i++].node)
+    if (opts.links === 'inline' && link && link.b === b && link.start === (s ?? link.start)) {
+      const open = document.createElement('span')
+      open.className = 'dim'
+      open.contentEditable = 'false'
+      open.textContent = '['
+      const close = document.createElement('span')
+      close.className = 'dim'
+      close.contentEditable = 'false'
+      const input = document.createElement('input')
+      input.value = h
+      input.placeholder = 'address'
+      close.append('](', input, ')')
+      wireUrlInput(input, link)
+      el.append(open, a, close)
+    } else el.append(a)
+  }
+  if (cs.length === 0 && caret < 0) el.append(document.createElement('br'))
+  return el
+}
+
+/** The DOM point of a model position. */
+function locate({ b, o }) {
+  const el = blockEls[b]
+  if (holder && collapsed() && sel.f.b === b && sel.f.o === o && el.contains(holder)) return [holder, 1]
+  const own = leaves[b]
+  for (const leaf of own) {
+    if (leaf.node) { if (o >= leaf.start && o <= leaf.start + leaf.len) return [leaf.node, o - leaf.start] }
+    else if (o === leaf.start) return [leaf.el.parentNode, [...leaf.el.parentNode.childNodes].indexOf(leaf.el)]
+  }
+  const last = own[own.length - 1]
+  if (last?.el) return [last.el.parentNode, [...last.el.parentNode.childNodes].indexOf(last.el) + 1]
+  return [el, 0]
+}
+
+/** The model offset of a DOM point in block `b`. */
+function offsetIn(b, node, offset) {
+  if (node === holder) return sel.f.o
+  const upTo = document.createRange()
+  upTo.setStart(blockEls[b], 0)
+  upTo.setEnd(node, offset)
+  let at = 0
+  for (const leaf of leaves[b]) {
+    if (leaf.node === node) return leaf.start + Math.min(offset, leaf.len)
+    const [n, o] = leaf.node ? [leaf.node, leaf.node.length] : [leaf.el.parentNode, [...leaf.el.parentNode.childNodes].indexOf(leaf.el) + 1]
+    if (upTo.comparePoint(n, o) > 0) break
+    at = leaf.start + leaf.len
+  }
+  return at
+}
+
+function pointToModel(node, offset) {
+  const el = (node.nodeType === 1 ? node : node.parentElement)?.closest('[data-b]')
+  if (!el || !editor.contains(el)) return null
+  const b = Number(el.dataset.b)
+  return isEditable(b) ? { b, o: offsetIn(b, node, offset) } : null
+}
+
+function readSelection() {
+  const s = getSelection()
+  if (!s.anchorNode || !s.focusNode) return null
+  const a = pointToModel(s.anchorNode, s.anchorOffset)
+  const f = pointToModel(s.focusNode, s.focusOffset)
+  return a && f ? { a, f } : null
+}
+
+function writeSelection() {
+  const [an, ao] = locate(sel.a)
+  const [fn, fo] = locate(sel.f)
+  getSelection().setBaseAndExtent(an, ao, fn, fo)
+}
+
+function render() {
+  const focused = document.activeElement === editor
+  holder = null
+  leaves = []
+  blockEls = doc.map(renderBlock)
+  editor.replaceChildren(...blockEls)
+  if (focused) writeSelection()
+  renderToolbar()
+  renderSource()
+  renderOverlay()
+  if (focusUrl) {
+    focusUrl = false
+    editor.querySelector('.dim input')?.focus()
+  }
+}
+
+function wireUrlInput(input, link) {
+  let recorded = false
+  input.addEventListener('input', () => {
+    if (!recorded) { record('edit'); recorded = true }
+    setLink(link.b, link.start, link.end, input.value)
+    link.h = input.value
+    renderSource()
+  })
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation()
+    if (e.key !== 'Enter' && e.key !== 'Escape' && e.key !== 'Tab') return
+    e.preventDefault()
+    setCaret(link.b, link.end)
+    editor.focus()
+    render()
+  })
+  input.addEventListener('beforeinput', (e) => e.stopPropagation())
+  input.addEventListener('mousedown', (e) => e.stopPropagation())
+}
+
+// ---------------------------------------------------------------- toolbar
+const ICONS = {
+  bold: 'M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z',
+  italic: 'M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z',
+  underline: 'M12 17c3.31 0 6-2.69 6-6V3h-2.5v8c0 1.93-1.57 3.5-3.5 3.5S8.5 12.93 8.5 11V3H6v8c0 3.31 2.69 6 6 6zm-7 2v2h14v-2H5z',
+  strike: 'M10 19h4v-3h-4v3zM5 4v3h5v3h4V7h5V4H5zM3 14h18v-2H3v2z',
+  code: 'M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z',
+  link: 'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z',
+  more: 'M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z',
+  bullets: 'M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 19h14v-2H7v2zm0-6h14v-2H7v2zm0-8v2h14V5H7z',
+  numbers: 'M2 17h2v.5H3v1h1v.5H2v1h3v-4H2v1zm1-9h1V4H2v1h1v3zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2v1zm5-6v2h14V5H7zm0 14h14v-2H7v2zm0-6h14v-2H7v2z',
+  quote: 'M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z',
+}
+const FORMATS = [
+  { name: 'Bold', icon: 'bold', bit: B, keys: '⌘B' },
+  { name: 'Italic', icon: 'italic', bit: I, keys: '⌘I' },
+  { name: 'Underline', icon: 'underline', bit: U, keys: '⌘U' },
+  { name: 'Strikethrough', icon: 'strike', bit: S, keys: '⌘⇧X' },
+  { name: 'Code', icon: 'code', bit: C, keys: '⌘E' },
+]
+let menuOpen = false
+
+/** Do `action` from a button, keeping the caret in the document. */
+function run(action) {
+  ruled = null
+  action()
+  editor.focus()
+  render()
+}
+
+function iconButton(name, icon, pressed, action, tip = name) {
+  const button = document.createElement('button')
+  button.className = 'icon'
+  button.dataset.tip = tip
+  button.setAttribute('aria-label', name)
+  if (pressed !== null) button.setAttribute('aria-pressed', String(pressed))
+  button.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="${ICONS[icon]}"/></svg>`
+  button.onmousedown = (e) => e.preventDefault()
+  if (action) button.onclick = action
+  else button.disabled = true
+  return button
+}
+
+function formatButtons(formats, withLink) {
+  const active = activeMarks()
+  const buttons = formats.map((f) => iconButton(f.name, f.icon, Boolean(active & f.bit), () => run(() => toggle(f.bit)), `${f.name} (${f.keys})`))
+  if (withLink) buttons.push(iconButton('Link', 'link', currentLink() !== null, () => run(linkCommand), 'Link (⌘K)'))
+  return buttons
+}
+
+function renderToolbar() {
+  const bar = document.getElementById('toolbar')
+  const sep = () => Object.assign(document.createElement('span'), { className: 'sep' })
+  const style = document.createElement('button')
+  style.className = 'style'
+  style.disabled = true
+  style.innerHTML = `<span>${doc[sel.f.b]?.tag === 'h2' ? 'Heading 2' : 'Paragraph'}</span><svg viewBox="0 0 8 8"><path d="M1 2.5 4 5.5 7 2.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`
+  bar.replaceChildren(style, sep())
+  if (opts.toolbar === 'full') bar.append(...formatButtons(FORMATS, true))
+  else {
+    bar.append(...formatButtons(FORMATS.slice(0, 2), true))
+    const more = iconButton('More formatting', 'more', menuOpen || Boolean(activeMarks() & (S | C)), () => { menuOpen = !menuOpen; renderToolbar() })
+    bar.append(more)
+    if (menuOpen) {
+      const menu = document.createElement('div')
+      menu.className = 'menu'
+      menu.onmousedown = (e) => e.preventDefault()
+      for (const f of FORMATS.slice(2)) {
+        const item = document.createElement('button')
+        item.setAttribute('aria-pressed', String(Boolean(activeMarks() & f.bit)))
+        item.innerHTML = `<span>${f.name}</span><kbd>${f.keys}</kbd>`
+        item.onclick = () => { menuOpen = false; run(() => toggle(f.bit)) }
+        menu.append(item)
+      }
+      bar.append(menu)
+      menu.style.left = more.offsetLeft + 'px'
+    }
+  }
+  bar.append(sep(), iconButton('Bulleted list', 'bullets', null, null), iconButton('Numbered list', 'numbers', null, null), iconButton('Quote', 'quote', null, null))
+}
+
+// ----------------------------------------------------------------- source
+function toQmd(blk) {
+  const cs = blk.cells.map((c) => ({ ...c }))
+  // Markdown can't format the spaces at the ends of a run: they go outside it.
+  for (const bit of [B, I, S, U]) {
+    for (let i = 0; i < cs.length; ) {
+      if (!(marksOf(cs[i]) & bit)) { i++; continue }
+      let j = i
+      while (j < cs.length && marksOf(cs[j]) & bit) j++
+      let s = i, e = j
+      while (s < e && cs[s].c === ' ') cs[s++].m &= ~bit
+      while (e > s && cs[e - 1].c === ' ') cs[--e].m &= ~bit
+      i = j
+    }
+  }
+  // Formats nest, the one that runs furthest outermost (code always
+  // innermost). Bold or italic inside the other is written with underscores,
+  // as q2 writes it: qmd doesn't read three stars in a row.
+  const emit = (i, j, open) => {
+    let out = ''
+    while (i < j) {
+      const rest = marksOf(cs[i]) & ~open
+      if (cs[i].a || !rest) { out += cs[i].a ? cs[i].a.src : cs[i].c; i++; continue }
+      let bit = C, end = i
+      for (const t of [B, I, S, U]) {
+        if (!(rest & t)) continue
+        let e = i
+        while (e < j && marksOf(cs[e]) & t) e++
+        if (e > end) { bit = t; end = e }
+      }
+      if (bit === C) while (end < j && marksOf(cs[end]) & C && (marksOf(cs[end]) & ~open) === rest) end++
+      const inner = open & (B | I)
+      const d = bit === B ? (inner ? '__' : '**') : bit === I ? (inner ? '_' : '*') : bit === S ? '~~' : '`'
+      // Underline has no mark of its own in qmd: it's a span with a class.
+      out += bit === U ? `[${emit(i, end, open | bit)}]{.underline}` : d + emit(i, end, open | bit) + d
+      i = end
+    }
+    return out
+  }
+  let out = ''
+  for (let i = 0; i < cs.length; ) {
+    let j = i + 1
+    while (j < cs.length && cs[j].h === cs[i].h) j++
+    out += cs[i].h === null ? emit(i, j, 0) : `[${emit(i, j, 0)}](${cs[i].h})`
+    i = j
+  }
+  return (blk.tag === 'h2' ? '## ' : '') + out
+}
+
+function renderSource() {
+  document.getElementById('source-blocks').replaceChildren(
+    ...doc.map((blk, b) => {
+      const el = document.createElement('div')
+      el.textContent = toQmd(blk)
+      if (b === sel.f.b) el.className = 'cur'
+      return el
+    }),
+  )
+}
+
+// ---------------------------------------------------------------- overlay
+function place(el, rect, where) {
+  overlay.append(el)
+  const origin = page.getBoundingClientRect()
+  const left = Math.max(8, Math.min(rect.left - origin.left, origin.width - el.offsetWidth - 8))
+  el.style.left = left + 'px'
+  el.style.top = (where === 'above' ? rect.top - origin.top - el.offsetHeight - 8 : rect.bottom - origin.top + 6) + 'px'
+}
+
+function bubbleButton(label, action) {
+  const button = document.createElement('button')
+  button.textContent = label
+  button.onmousedown = (e) => e.preventDefault()
+  button.onclick = action
+  return button
+}
+
+let dismissed = null   // the link whose popover Escape put away
+let hovered = null     // the link under the mouse
+const sameLink = (p, q) => Boolean(p && q && p.b === q.b && p.start === q.start)
+function linkAt(b, start) {
+  const cs = doc[b]?.cells
+  const h = cs?.[start]?.h
+  if (h == null || !isEditable(b) || cs[start - 1]?.h === h) return null
+  let end = start + 1
+  while (end < cs.length && cs[end].h === h) end++
+  return { b, start, end, h }
+}
+function renderOverlay() {
+  // Not while the keyboard is in the link's popover.
+  if (overlay.querySelector('.linkbar')?.contains(document.activeElement)) return
+  overlay.replaceChildren()
+  const caretLink = currentLink()
+  // A popover put away with Escape stays away while the caret stays in its link.
+  if (dismissed && !sameLink(caretLink, dismissed)) dismissed = null
+  // The link under the mouse shows its popover, wherever the caret is;
+  // otherwise it's the link the caret is in.
+  const hoverLink = hovered && linkAt(hovered.b, hovered.start)
+  if (!hoverLink) hovered = null
+  const focused = document.activeElement === editor
+  const link = form ? caretLink : hoverLink ?? (focused && !dismissed ? caretLink : null)
+  const linkEl = link && blockEls[link.b].querySelector(`a[data-s="${link.start}"]`)
+  const rects = linkEl ? [...linkEl.getClientRects()] : []
+
+  if (form) {
+    const el = document.createElement('div')
+    el.className = 'bubble form'
+    el.innerHTML = `<label>Text<input name="text"></label><label>Link<input name="url" placeholder="Paste or type an address"></label><div class="row"><button type="button">Cancel</button><button type="button" class="apply">Apply</button></div>`
+    const [text, url] = el.querySelectorAll('input')
+    text.value = form.text
+    url.value = form.url
+    // Cancel goes back to where the form was opened from: the popover's
+    // Edit button, or the text.
+    const fromEdit = form.fromEdit
+    const cancel = () => {
+      closeForm(); editor.focus(); render()
+      if (fromEdit) [...overlay.querySelectorAll('.linkbar button')].find((x) => x.textContent === 'Edit')?.focus()
+    }
+    const apply = () => { applyForm(text.value, url.value); editor.focus(); render() }
+    el.querySelectorAll('button')[0].onclick = cancel
+    el.querySelectorAll('button')[1].onclick = apply
+    el.onkeydown = (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter') { e.preventDefault(); apply() }
+      if (e.key === 'Escape') { e.preventDefault(); cancel() }
+    }
+    const [node, offset] = locate({ b: form.b, o: form.end })
+    const at = document.createRange()
+    at.setStart(node, offset)
+    const rect = rects[rects.length - 1] ?? at.getClientRects()[0] ?? blockEls[form.b].getBoundingClientRect()
+    place(el, rect, 'below')
+    ;(form.text ? url : text).focus()
+    return
+  }
+  if (link && opts.links === 'popover' && rects.length > 0) {
+    const el = document.createElement('div')
+    el.className = 'bubble linkbar'
+    // Tab and Escape in the text are for the popover of the caret's own link.
+    if (focused && sameLink(link, caretLink)) el.dataset.caret = ''
+    // Edit and Remove work on the caret's link: the caret goes into this one first.
+    const here = (action) => () => {
+      if (!sameLink(link, currentLink())) { setCaret(link.b, link.start + 1); pending = null }
+      hovered = null
+      action()
+    }
+    // The address is a real link: Enter on it (or a click) opens it.
+    const url = document.createElement(link.h ? 'a' : 'span')
+    url.className = link.h ? 'url' : 'none'
+    url.textContent = link.h || 'No address'
+    if (link.h) Object.assign(url, { href: link.h, target: '_blank', rel: 'noopener' })
+    // Once it's opened, the keyboard is back in the text for the return.
+    url.onclick = () => setTimeout(() => editor.focus())
+    // Tab in the document comes here; Tab past either end, or Escape, goes back.
+    el.onkeydown = (e) => {
+      const stops = [...el.querySelectorAll('a[href], button')]
+      const at = stops.indexOf(document.activeElement)
+      if (e.key !== 'Escape' && e.key !== 'Tab') return
+      e.preventDefault()
+      // Moved by hand: Safari's Tab skips buttons and links.
+      const next = e.key === 'Tab' && stops[at + (e.shiftKey ? -1 : 1)]
+      ;(next || editor).focus()
+    }
+    const sep = document.createElement('span')
+    sep.className = 'bsep'
+    el.append(url, sep, bubbleButton('Edit', here(() => { run(linkCommand); if (form) form.fromEdit = true })), bubbleButton('Remove', here(() => run(removeLink))))
+    place(el, rects[rects.length - 1], 'below')
+  }
+  if (!focused) return
+
+  // One chip selected: its source.
+  const { from, to } = range()
+  const chip = from.b === to.b && to.o === from.o + 1 ? cellAt(from.b, from.o) : null
+  if (chip?.a) {
+    const el = document.createElement('div')
+    el.className = 'bubble'
+    const code = document.createElement('code')
+    code.textContent = chip.a.src
+    const hint = document.createElement('span')
+    hint.className = 'hint'
+    hint.textContent = '· edit in the source'
+    el.append(code, hint)
+    place(el, blockEls[from.b].querySelector(`.atom[data-o="${from.o}"]`).getBoundingClientRect(), 'below')
+  } else if (opts.bubble === 'on' && !collapsed() && !mouseDown) {
+    const s = getSelection()
+    if (s.rangeCount > 0) {
+      const el = document.createElement('div')
+      el.className = 'bubble'
+      el.append(...formatButtons(FORMATS, true))
+      place(el, s.getRangeAt(0).getClientRects()[0] ?? s.getRangeAt(0).getBoundingClientRect(), 'above')
+    }
+  }
+}
+
+// ----------------------------------------------------------------- events
+let mouseDown = false
+
+editor.addEventListener('beforeinput', (e) => {
+  if (e.isComposing || e.inputType === 'insertCompositionText') return
+  e.preventDefault()
+  const type = e.inputType
+  hovered = null   // typing puts the hovered link's popover away
+  settle(null)
+  const wasRuled = ruled
+  ruled = null
+  const target = () => {
+    const [r] = e.getTargetRanges()
+    const a = r && pointToModel(r.startContainer, r.startOffset)
+    const f = r && pointToModel(r.endContainer, r.endOffset)
+    if (a && f) sel = { a, f, aff: 'L' }
+  }
+  if (type === 'insertText') {
+    insertText(e.data ?? '')
+    if (opts.md === 'on' || (opts.md === 'early' && !earlyRule())) typingRule()
+  } else if (type === 'insertReplacementText') {
+    target()
+    insertText(e.dataTransfer?.getData('text/plain') ?? e.data ?? '')
+  } else if (type === 'insertParagraph' || type === 'insertLineBreak') { settleUnderscores(); enter() }
+  else if (type === 'deleteContentBackward') {
+    if (wasRuled) restore(wasRuled)
+    else backspace()
+  } else if (type === 'deleteContentForward') deleteForward()
+  else if (type === 'deleteWordBackward') deleteSpan(-1, 'word')
+  else if (type === 'deleteWordForward') deleteSpan(1, 'word')
+  else if (type === 'deleteSoftLineBackward' || type === 'deleteHardLineBackward') deleteSpan(-1, 'line')
+  else if (type === 'deleteSoftLineForward' || type === 'deleteHardLineForward') deleteSpan(1, 'line')
+  else if (type.startsWith('delete')) {
+    target()
+    if (!collapsed()) { record('edit'); const { from, to } = range(); deleteRange(from, to) }
+  } else if (type === 'historyUndo') undo()
+  else if (type === 'historyRedo') redo()
+  else if (type === 'formatBold') toggle(B)
+  else if (type === 'formatItalic') toggle(I)
+  else if (type === 'formatUnderline') toggle(U)
+  render()
+})
+
+editor.addEventListener('paste', (e) => {
+  e.preventDefault()
+  ruled = null
+  insertText((e.clipboardData?.getData('text/plain') ?? '').replace(/\s*[\r\n]+\s*/g, ' '))
+  render()
+})
+
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform)
+editor.addEventListener('keydown', (e) => {
+  // On a Mac the shortcuts are Cmd only: Ctrl+E, Ctrl+B and Ctrl+K keep
+  // their text-editing meanings (end of line, back a character, delete to
+  // the end of the line).
+  const mod = IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey
+  const key = e.key.toLowerCase()
+  const vertical = (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.metaKey && !e.ctrlKey && !e.altKey
+  if (!vertical && !['Shift', 'Alt', 'Meta', 'Control'].includes(e.key)) goalX = null
+  const does = (action) => { e.preventDefault(); ruled = null; action(); hist.kind = null; render() }
+  if (mod && key === 'z') does(e.shiftKey ? redo : undo)
+  else if (mod && !e.shiftKey && key === 'b') does(() => toggle(B))
+  else if (mod && !e.shiftKey && key === 'i') does(() => toggle(I))
+  else if (mod && !e.shiftKey && key === 'u') does(() => toggle(U))
+  else if (mod && e.shiftKey && key === 'x') does(() => toggle(S))
+  else if (mod && !e.shiftKey && key === 'e') does(() => toggle(C))
+  else if (mod && !e.shiftKey && key === 'k') does(linkCommand)
+  else if (e.key === 'Escape' && overlay.querySelector('.linkbar')) {
+    // Put the link's popover away, until the caret comes back into the link
+    // or the mouse comes back over it.
+    e.preventDefault()
+    const link = currentLink()
+    if (link) dismissed = { b: link.b, start: link.start }
+    shunned = hovered ?? settling?.link ?? null
+    settle(null)
+    hovered = null
+    renderOverlay()
+  }
+  else if (e.key === 'Tab' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && overlay.querySelector('.linkbar[data-caret]')) {
+    // Into the link's popover: its address, then Edit, then Remove.
+    e.preventDefault()
+    overlay.querySelector('.linkbar a[href], .linkbar button').focus()
+  }
+  else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    does(() => moveH(e.key === 'ArrowLeft' ? -1 : 1, e.shiftKey))
+  } else if (vertical) does(() => moveV(e.key === 'ArrowUp' ? -1 : 1, e.shiftKey))
+})
+
+// The link under the mouse shows its popover, which stays while the mouse is
+// on the link or on the popover, and a moment longer to cross between them.
+// (The mouse moving, not `mouseover`: that also fires when the line is
+// redrawn under a still mouse.)
+let unhover = null
+let shunned = null
+let settling = null    // the link the mouse is on but hasn't rested on yet
+function settle(link) {
+  clearTimeout(settling?.timer)
+  settling = link && { link, timer: setTimeout(() => {
+    settling = null
+    hovered = link
+    dismissed = null
+    renderOverlay()
+  }, 250) }
+}
+document.addEventListener('mousemove', (e) => {
+  if (opts.links !== 'popover' || e.buttons || form) return
+  const a = e.target.closest?.('a[data-s]')
+  const over = a && editor.contains(a) ? { b: Number(a.closest('[data-b]').dataset.b), start: Number(a.dataset.s) } : null
+  if (over || e.target.closest?.('.linkbar')) {
+    clearTimeout(unhover)
+    unhover = null
+    // Not the link whose popover Escape put away, until the mouse has left it.
+    if (over && !sameLink(over, shunned)) shunned = null
+    if (!over) return
+    if (sameLink(over, hovered) || shunned) { settle(null); return }
+    // Only once the mouse has rested on the link a moment, so crossing it
+    // on the way somewhere else shows nothing.
+    if (sameLink(over, settling?.link)) return
+    settle(over)
+    return
+  }
+  settle(null)
+  if (shunned) shunned = null
+  else if (hovered && !unhover) {
+    unhover = setTimeout(() => { unhover = null; hovered = null; renderOverlay() }, 300)
+  }
+})
+
+editor.addEventListener('mousedown', (e) => {
+  const chip = e.target.closest?.('.atom')
+  if (chip && !chip.closest('.ro')) {
+    // A click on a chip selects it.
+    e.preventDefault()
+    const b = Number(chip.closest('[data-b]').dataset.b)
+    const o = Number(chip.dataset.o)
+    sel = { a: { b, o }, f: { b, o: o + 1 }, aff: 'L' }
+    pending = null
+    editor.focus()
+    render()
+    return
+  }
+  mouseDown = true
+  goalX = null
+})
+/** Take the page's selection into the model. Returns whether it moved. */
+function syncSelection() {
+  const read = readSelection()
+  if (!read || (cmp(read.a, sel.a) === 0 && cmp(read.f, sel.f) === 0)) return false
+  sel = { ...read, aff: 'L' }
+  pending = null
+  ruled = null
+  hist.kind = null
+  menuOpen = false
+  return true
+}
+document.addEventListener('mouseup', () => {
+  if (!mouseDown) return
+  mouseDown = false
+  if (document.activeElement !== editor) return
+  // The click's selection may not have been announced yet.
+  syncSelection()
+  render()
+})
+
+document.addEventListener('selectionchange', () => {
+  if (document.activeElement !== editor || !syncSelection()) return
+  // Not while the mouse is selecting: rebuilding the line would stop it.
+  if (mouseDown) { renderToolbar(); renderSource() } else render()
+})
+// Not for a click: the caret goes where the click was.
+editor.addEventListener('focus', () => setTimeout(() => !mouseDown && render()))
+editor.addEventListener('blur', () => setTimeout(() => document.activeElement !== editor && renderOverlay()))
+
+start()
+renderOptions()
+editor.focus()
+render()
+</script>
+</body>
+</html>

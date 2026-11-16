@@ -6,8 +6,8 @@ First paragraph.
 
 Second paragraph.
 
-## *Results*
+## *Results*^[A note.]
 
-Some *emphasised* text.
+Some *emphasised* text.^[A note.]
 
 Last paragraph.

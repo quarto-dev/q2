@@ -15,7 +15,8 @@
  * is written as an empty value (`subtitle: ""`), and is removed only when
  * it's written as undefined. Spaces that qmd doesn't keep (at the ends of a
  * line, or more than one in a row) aren't written. In the body, only the
- * paragraphs whose text changed are written.
+ * paragraphs whose text changed are written. An edit whose document
+ * wouldn't parse once written isn't written.
  */
 
 import type { RustQmdJson } from '@quarto/pandoc-types'
@@ -23,7 +24,7 @@ import type { EditorContentChange } from '@quarto/quarto-sync-client'
 import type { Fields } from '../engine/model.ts'
 import type { FieldChanges, FieldSource } from '../engine/source.ts'
 import { diffToChange } from '../quarto-synced-file/diff.ts'
-import { incrementalWriteQmd } from '../quarto-synced-file/wasm.ts'
+import { incrementalWriteQmd, parseQmdContent } from '../quarto-synced-file/wasm.ts'
 import { bodyText, editBody, kept as keptLine, words } from './body.ts'
 import { metaText, type Meta } from './meta.ts'
 
@@ -109,7 +110,15 @@ export function createMetaFieldSource(
       else meta[key] = { t: 'MetaInlines', c: words(lines[0]) } as Meta[string]
     }
     if (!changed) return
-    const change = diffToChange(text, incrementalWriteQmd(text, { ...ast, meta, blocks }))
+    const written = incrementalWriteQmd(text, { ...ast, meta, blocks })
+    // Never write what can't be read back: the document would stop being
+    // editable. (The qmd writer writes italic inside bold as `**a_b_**`,
+    // which doesn't read back when the italic is inside a word.)
+    if (parseQmdContent(written) === null) {
+      console.warn('[rich-editor] Not written: the edited document would not parse.')
+      return
+    }
+    const change = diffToChange(text, written)
     if (change) file.applyEdits([change])
   }
 

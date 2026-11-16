@@ -2,7 +2,8 @@
  * Headings of plain text in the body are edited in place, like
  * paragraphs. A heading is made by typing `#`s and a space at the start of
  * a paragraph, as in qmd, and Backspace at the start of its text makes it
- * a paragraph again. A heading with formatting can't be edited yet.
+ * a paragraph again. Its text can be formatted (see `inlines.spec.ts`). A
+ * heading with a note or math in it can't be edited yet.
  */
 
 import { expect, fixture, openEditor, test } from './helpers.ts'
@@ -48,14 +49,14 @@ test.describe('editing a heading', () => {
     await editor.document.expectSource(headings.replace('### Details', '### Details!'))
   })
 
-  test('markdown characters are typed as text', async ({ page }) => {
+  test('markdown characters that close nothing are typed as text', async ({ page }) => {
     const editor = await openEditor(page, 'headings')
     await editor.placeCaretInLine(3, 7)
 
-    await page.keyboard.type(' *now*')
+    await page.keyboard.type(' *now')
 
-    await editor.document.expectSource(headings.replace('### Details', '### Details \\*now\\*'))
-    expect((await editor.lines())[3]).toBe('h3: Details *now*')
+    await editor.document.expectSource(headings.replace('### Details', '### Details \\*now'))
+    expect((await editor.lines())[3]).toBe('h3: Details *now')
   })
 
   test('the caret can\'t go before the heading\'s text', async ({ page }) => {

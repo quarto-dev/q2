@@ -21,9 +21,11 @@ import {
 } from './body.ts'
 
 const para = (text: string): Node => ({ t: 'Para', c: words(text) })
-// A heading with formatting, which can't be edited.
-const heading: Node = { t: 'Header', c: [2, ['', [], []], [{ t: 'Emph', c: words('Results') }]] }
-const formatted: Node = { t: 'Para', c: [{ t: 'Emph', c: words('really') }] }
+// Math, which the editor can't edit yet.
+const math: Node = { t: 'Math', c: [{ t: 'InlineMath' }, 'x^2'] }
+// A heading with math, which can't be edited.
+const heading: Node = { t: 'Header', c: [2, ['', [], []], [...words('Results '), math]] }
+const formatted: Node = { t: 'Para', c: [...words('really '), math] }
 const empty: Node = { t: 'Para', c: [{ t: 'Str', c: '\u00a0' }] }
 const blocks = [para('One.'), heading, para('Two.'), formatted, para('Three.')]
 
@@ -127,8 +129,8 @@ describe('headings', () => {
   it('an empty heading is a line of only its prefix', () => {
     expect(bodyText([h(2, '')])).toBe(H2)
   })
-  it('a heading with formatting can\'t be edited', () => {
-    const formattedHeading: Node = { t: 'Header', c: [2, ['', [], []], [{ t: 'Emph', c: words('Results') }]] }
+  it('a heading with math can\'t be edited', () => {
+    const formattedHeading: Node = { t: 'Header', c: [2, ['', [], []], [...words('Results '), math]] }
     expect(bodyText([formattedHeading])).toBe(ATOM)
     expect(readOnlyBlocks([formattedHeading, auto])).toEqual([formattedHeading])
   })
@@ -264,7 +266,7 @@ describe('bullet lists', () => {
   })
   it('any other list can\'t be edited', () => {
     const others = [
-      list([{ t: 'Plain', c: [{ t: 'Emph', c: words('One') }] }]),
+      list([{ t: 'Plain', c: [...words('One '), math] }]),
       list([para('Loose.')], [para('List.')]),
       list([...plain('One.'), list(plain('Nested.'))]),
     ]

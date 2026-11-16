@@ -9,9 +9,9 @@
  *
  * The title, subtitle and abstract are edited in place, and so are the
  * body's paragraphs, headings, one-paragraph quotes and tight bullet and
- * numbered lists of plain text, and its horizontal rules can be made and
- * removed; the rest of the body (formatted text, other lists, code) is
- * shown and can't be edited yet. A
+ * numbered lists of text, formatted or not, and its horizontal rules can
+ * be made and removed; the rest of the body (text with math, notes or
+ * images, other lists, code) is shown and can't be edited yet. A
  * document has only the title-block fields its author adds, with the "+"
  * row above the title block (`TitleBlockWidget`); an added field stays,
  * empty, until Backspace in it removes it. Every edit is
@@ -21,7 +21,10 @@
  * editing itself is the generic engine in `engine/`; `editing/` connects
  * it to the qmd file. Nothing can be edited while the source doesn't
  * parse. Above the document, a toolbar (`Toolbar`) shows and changes the
- * style of the caret's line.
+ * style of the caret's line and the formatting of the selection. The
+ * body's text can be formatted (bold, italic, underline, strikethrough,
+ * highlight, code, links); a link's popover and the form that makes links
+ * are `LinkPopover`.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react'
@@ -29,7 +32,11 @@ import { createPortal } from 'react-dom'
 import { PreviewTitleBlock, type TitleBlockField } from '@quarto/preview-renderer/title-block'
 import { compileDefaultThemeCss, deriveTitleBlockMeta } from './quarto-synced-file/index.ts'
 import { Field, Lines, useFieldEditor, type LeaveStart } from './engine/react.tsx'
-import type { Fields, Schema } from './engine/model.ts'
+import { isCollapsed, ordered, selectedText, type Fields, type Schema } from './engine/model.ts'
+import { activeMarks, linkAround } from './engine/commands.ts'
+import type { MarkView } from './engine/dom.ts'
+import { CODE, EMPH, formatElement, HIGHLIGHT, inlineRule, LEAF, STRIKEOUT, STRONG, TWO_SIDED, UNDERLINE } from './editing/inlines.ts'
+import { LinkPopover, type LinkForm } from './LinkPopover.tsx'
 import {
   blocksOfLines,
   bodyInputRule,
@@ -79,7 +86,49 @@ li.qe-field { display: list-item; }
   position: absolute;
   pointer-events: none;
   color: #adb5bd;
-}`
+}
+.qe-field a { cursor: text; }
+.qe-bubble {
+  position: absolute; z-index: 10; display: flex; align-items: center; gap: 2px;
+  padding: 4px 6px; background: #fff; border: 1px solid #dee2e6; border-radius: 7px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); font: 13px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  white-space: nowrap; color: #212529;
+}
+.qe-bubble button {
+  font: inherit; border: 1px solid transparent; background: none; padding: 4px 9px; border-radius: 5px;
+  cursor: pointer; color: #343a40;
+}
+.qe-bubble button:hover { background: #f1f3f5; }
+.qe-bubble a:focus, .qe-bubble button:focus { outline: 2px solid #2780e3; outline-offset: -1px; border-radius: 5px; }
+.qe-bubble .qe-url { color: #2780e3; max-width: 260px; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; }
+.qe-bubble .qe-none { color: #adb5bd; padding: 0 6px; }
+.qe-bubble .qe-bsep { width: 1px; height: 18px; background: #dee2e6; margin: 0 4px; }
+.qe-linkform form { display: flex; flex-direction: column; gap: 6px; width: 300px; padding: 6px 4px; white-space: normal; }
+.qe-linkform label { display: grid; grid-template-columns: 38px 1fr; align-items: center; color: #6c757d; font-size: 12px; }
+.qe-linkform input { font: 13px system-ui, sans-serif; padding: 4px 7px; border: 1px solid #dee2e6; border-radius: 4px; outline: none; }
+.qe-linkform input:focus { border-color: #2780e3; }
+.qe-linkform .qe-row { display: flex; justify-content: flex-end; gap: 4px; }
+.qe-linkform .qe-apply { background: #2780e3; color: #fff; }
+.qe-linkform .qe-apply:hover { background: #1f6ab8; }`
+
+/** How the body's formatting is shown: as `q2 render` writes it. */
+const MARK_VIEW: MarkView = { element: formatElement, twoSided: TWO_SIDED, leaf: LEAF }
+
+/**
+ * The formatting shortcuts (with ⌘ on a Mac, Ctrl elsewhere), as in
+ * Google Docs: ⌘B bold, ⌘I italic, ⌘U underline, ⌘⇧X strikethrough, ⌘E
+ * code and ⌘⇧H highlight. (⌘K, the link form, is handled on its own.)
+ */
+const SHORTCUTS: { key: string; shift: boolean; format: number }[] = [
+  { key: 'b', shift: false, format: STRONG },
+  { key: 'i', shift: false, format: EMPH },
+  { key: 'u', shift: false, format: UNDERLINE },
+  { key: 'x', shift: true, format: STRIKEOUT },
+  { key: 'e', shift: false, format: CODE },
+  { key: 'h', shift: true, format: HIGHLIGHT },
+]
+
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 
 /** The title block's editable fields, in reading order. */
 const TITLE_BLOCK = ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[]
@@ -96,6 +145,10 @@ const TITLE_BLOCK = ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[
  * `> ` a quote, `- ` a list item and `1. ` a numbered one, and they're
  * copied with their `#`s, `>`, `-` and `1.`. Enter in an item starts
  * another, and on an empty one ends the list. `---` there makes a horizontal rule, which is copied as `---`.
+ * The body's lines can be formatted (bold, italic, underline,
+ * strikethrough, highlight, code and links: see `editing/inlines.ts`), and
+ * markdown typed out and closed there becomes formatting. Code has a
+ * caret position inside and one outside at each edge.
  */
 const SCHEMA: Schema = {
   order: [...TITLE_BLOCK, 'body'],
@@ -107,6 +160,8 @@ const SCHEMA: Schema = {
   voidText: '---',
   keepEmpty: TITLE_BLOCK,
   backspaceStops: ['body'],
+  marks: { fields: ['body'], twoSided: TWO_SIDED, leaf: LEAF },
+  inlineRule: (field, line, caret) => (field === 'body' ? inlineRule(line, caret) : null),
 }
 
 const PLACEHOLDERS: Record<TitleBlockField, string> = {
@@ -164,7 +219,50 @@ export function VisualEditor({ file }: VisualEditorProps) {
   // Where the focus goes in the "+" row when the caret leaves the fields for it.
   const [widgetFocus, setWidgetFocus] = useState<WidgetFocus | null>(null)
   const onLeaveStart = useCallback((how: LeaveStart) => setWidgetFocus({ field: how.removed, x: how.x }), [])
-  const { state, editor, writable, add, focusStart, setPrefixes, undo, redo } = useFieldEditor(root, SCHEMA, source, { autoFocus: true, onLeaveStart })
+  const { state, editor, writable, add, focusStart, setPrefixes, undo, redo, toggleMark, setLink, focusAt } = useFieldEditor(root, SCHEMA, source, {
+    autoFocus: true,
+    onLeaveStart,
+  })
+  const marks = writable ? activeMarks(SCHEMA, state) : null
+  const caretLink = linkAround(SCHEMA, state)
+  const [linkForm, setLinkForm] = useState<LinkForm | null>(null)
+
+  // ⌘K and the toolbar's link button: the form for the caret's link, or for
+  // making the selected text (in one line) a link.
+  const openLinkForm = useCallback(() => {
+    const selection = state.selection
+    if (!selection || !writable || marks === null) return
+    if (caretLink) {
+      const text = selectedText(SCHEMA, state.fields, { anchor: caretLink.from, focus: caretLink.to })
+      setLinkForm({ from: caretLink.from, to: caretLink.to, text, url: caretLink.url, selection })
+      return
+    }
+    const { from, to } = ordered(SCHEMA, selection)
+    const text = isCollapsed(selection) ? '' : selectedText(SCHEMA, state.fields, selection)
+    if (from.field !== to.field || text.includes('\n')) return
+    setLinkForm({ from, to, text, url: '', selection })
+  }, [state, writable, marks, caretLink])
+
+  // The formatting shortcuts, while the caret is in the document.
+  useEffect(() => {
+    if (!frameDoc || !root) return
+    const onKey = (e: KeyboardEvent) => {
+      if (frameDoc.activeElement !== root) return
+      const primary = IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey
+      if (!primary || e.altKey) return
+      const key = e.key.toLowerCase()
+      const shortcut = SHORTCUTS.find((s) => s.key === key && s.shift === e.shiftKey)
+      if (shortcut) {
+        e.preventDefault()
+        toggleMark(shortcut.format)
+      } else if (key === 'k' && !e.shiftKey) {
+        e.preventDefault()
+        openLinkForm()
+      }
+    }
+    frameDoc.addEventListener('keydown', onKey)
+    return () => frameDoc.removeEventListener('keydown', onKey)
+  }, [frameDoc, root, toggleMark, openLinkForm])
   const present = useMemo(() => new Set(TITLE_BLOCK.filter((f) => state.fields[f] !== undefined)), [state.fields])
   const caretInTitleBlock = TITLE_BLOCK.some((f) => state.selection?.focus.field === f)
   const empty = present.size === 0 && !state.fields.body
@@ -227,6 +325,10 @@ export function VisualEditor({ file }: VisualEditorProps) {
           canRedo={editor.future.length > 0}
           undo={undo}
           redo={redo}
+          marks={marks}
+          toggleMark={toggleMark}
+          inLink={caretLink !== null}
+          onLink={openLinkForm}
         />
         <iframe
           className="visual-frame"
@@ -274,10 +376,25 @@ export function VisualEditor({ file }: VisualEditorProps) {
               lineElement={lineElement}
               renderAtom={renderAtom}
               renderVoid={renderRule}
+              view={MARK_VIEW}
+              caret={state.selection && isCollapsed(state.selection) && state.selection.focus.field === 'body' ? state.selection.focus.offset : undefined}
             />
           </>,
           mount,
         )}
+      {root && frameDoc && (
+        <LinkPopover
+          doc={frameDoc}
+          root={root}
+          schema={SCHEMA}
+          state={state}
+          writable={writable}
+          form={linkForm}
+          setForm={setLinkForm}
+          setLink={setLink}
+          focusAt={focusAt}
+        />
+      )}
     </div>
   )
 }

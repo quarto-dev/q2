@@ -1,0 +1,9 @@
+---
+title: Formatting
+---
+
+Some **bold text**, *italic text*, [underlined]{.underline}, ~~struck~~, [highlighted]{.mark}, `code` and [a link](https://quarto.org).
+
+Code at the end: `q2 render`
+
+Plain words.

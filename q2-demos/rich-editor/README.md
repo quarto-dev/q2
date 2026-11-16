@@ -26,13 +26,13 @@ source holds it all along as an empty value (`subtitle: ""`). Enter never
 adds a field.
 
 The title, subtitle and abstract are editable in place, and so are the body's
-paragraphs and headings of plain text: Enter splits a paragraph, and
+paragraphs and headings of text: Enter splits a paragraph, and
 Backspace at its start joins it to the one before. Typing one to six `#` and
 a space at the start of a paragraph makes it a heading (Backspace or undo
 right after gives back the `#`s as text), and Backspace at the start of a
 heading's text makes it a paragraph again. Block quotes of one paragraph
-of plain text are edited the same way, made by typing `>` and a space.
-So are bullet lists whose items are each one line of plain text (tight
+of text are edited the same way, made by typing `>` and a space.
+So are bullet lists whose items are each one line of text (tight
 lists), with a line per item: typing `-`, `*` or `+` and a space makes an
 item, Enter at the end of an item starts another, Enter on an empty item
 ends the list, and the items of lines next to each other are one list.
@@ -44,13 +44,39 @@ Typing `---` (or `***` or `___`) at the start of a paragraph puts a
 horizontal rule before it; Backspace at the start of the line after a
 rule, Delete at the end of the line before it, or deleting a selection
 across it, removes it.
+
+The body's text can be formatted: bold, italic, underline,
+strikethrough, highlight (`[text]{.mark}`), code and links, in any
+combination, shown as `q2 render` shows them. Its design is
+`mockups/inlines.html`, with "Arrow out of code", "Converts as you type"
+and "Popover" chosen. Typing at the end of bold or italic carries it on,
+and at its start doesn't. Code has an inside and an outside at each
+edge: Right at the end of code steps out of it without moving on, and
+Left at its start too, so text can be typed just outside it. A caret put
+somewhere by a click or the browser takes the formats of the character
+before it. Cmd+B, I, U, Shift+X, E and Shift+H (Ctrl elsewhere) turn
+bold, italic, underline, strikethrough, code and highlight on or off over
+the selection, or, with nothing selected, for what's typed next; Enter
+carries the formats (but code) on to the line it starts. Markdown typed
+out and closed (`**bold**`, `*italic*`, `__bold__`, `_italic_`,
+`~~strike~~`, `` `code` ``, `[text](url)`) becomes formatting, and
+Backspace right after gives the characters back; an underscore inside a
+word stays one. The caret in a link, or the mouse resting on one, shows a
+popover under it with the link's address, Edit and Remove (`src/LinkPopover.tsx`);
+Tab moves into it and Escape puts it away. Cmd+K opens a small form to
+make or edit a link. Copy takes the plain text.
+
 A toolbar above the document (`src/Toolbar.tsx`) follows the caret, as
 in a word processor: its style box shows the style of the caret's line
 (Paragraph, Heading 1 to 4) and its menu changes it, its bulleted and
 numbered list buttons are pressed while the caret is on an item of their
 kind and make the line one (from an item of the other kind too) or a
 paragraph again, and its quote button is pressed while the
-caret is in a quote and quotes or unquotes the line.
+caret is in a quote and quotes or unquotes the line. Its bold, italic,
+underline and highlight buttons, after the style box, are pressed for
+the formats of what's selected (or of what typing at the caret gives)
+and turn them on or off; its link button, after them, is pressed in a
+link and opens the link form.
 With a selection, they change every line it is on, as one undo step, and
 the caret stays on its text. A heading can't be in a quote yet, so neither
 can be made into the other from the toolbar, and nor can a list item be
@@ -58,14 +84,15 @@ made a heading or a quote, or a heading or a quote an item; outside the body, it
 redo buttons, first in it, work wherever the caret is, as the keyboard's
 undo and redo do, and are disabled while there's nothing to undo or redo. Its design is the toolbar of `mockups/block-annotations.html`
 with nothing in the margin and no breadcrumb.
-The rest of the body (paragraphs, headings, quotes and lists with
-formatting, quotes of more than one paragraph, lists with blank lines
+The rest of the body (paragraphs, headings, quotes and lists with math,
+a citation, a note, an image or a span of another kind in their text,
+quotes of more than one paragraph, lists with blank lines
 between items or lists in items, example lists (`(@)`), code) is shown by
 `src/ReadOnlyBlock.tsx` and can't be edited yet; no edit removes it or
 changes its source. The document is one
 `contenteditable` surface run by a small editing engine in `src/engine/`:
 the browser moves the caret and selection (so selections can span fields),
-and the engine intercepts every edit, applies it to a model of plain-text
+and the engine intercepts every edit, applies it to a model of text
 fields, and renders it back. Its rules (Enter moves to the next field,
 fields are never joined or split, an empty field disappears when left
 unless it's one that stays when empty) and
@@ -102,6 +129,30 @@ inside an element of its own, as a quote's paragraph is in a
 are in one `ul` (or `ol`, with the list's start number). An edited heading keeps
 its written attributes (`{#id .class}`), and only its text is rewritten in
 the source.
+
+Formatting is text too (`src/engine/marks.ts`): a format is on from an
+open mark to a close mark, characters from the Unicode private use area
+that the engine keeps out of sight, and a link's address is part of its
+opening mark. So making text bold, undoing it and following a
+collaborator who bolds a word are text edits like any other. A line's
+marks are kept canonical, and where two characters' formats differ, the
+caret can be at each offset between the marks there, each giving typed
+text formats of its own: that's how code has a caret position inside and
+one outside at each edge, and how a format turned on at the caret is
+held (in an empty run, between marks that open and close at once) until
+something is typed or the caret leaves. Deleting text keeps its marks, so
+what follows keeps its formats. The page shows the formats as the
+elements `q2 render` writes, and where the caret is at a place no text
+stands for (outside code at the end of a line), the line holds a
+zero-width space for the caret to be drawn in (`renderText` in
+`src/engine/dom.ts`). `src/editing/inlines.ts` reads a block's inlines
+into a line with marks, and writes one back: spaces at the ends of
+bold (and the like) go outside it, as markdown needs.
+
+The qmd writer writes italic inside bold with underscores (`**a_b_**`),
+which doesn't read back when the italic is inside a word. An edit whose
+document wouldn't parse once written isn't written (`fieldSource.ts`), so
+such formatting is shown but never reaches the source.
 
 Every edit is written to the file's source text as it's made, so
 collaborators see it at once, whether they use this editor or a source
@@ -254,7 +305,8 @@ reason.
 
 The specs are: `title-block.spec.ts`, `cross-field.spec.ts`,
 `body.spec.ts`, `headings.spec.ts`, `quotes.spec.ts`, `lists.spec.ts`,
-`numbered-lists.spec.ts` and `rules.spec.ts`
+`numbered-lists.spec.ts`, `rules.spec.ts`, `inlines.spec.ts` (formatting)
+and `links.spec.ts` (links, their popover and form)
 (editing),
 `title-block-widget.spec.ts` (adding and removing title-block fields),
 `toolbar.spec.ts` (the toolbar's undo and redo buttons, style box and quote button), `keys.spec.ts` (moving and
@@ -318,15 +370,24 @@ editor has to keep:
   title-block field, and one for each editable line of the body (a direct
   child of `#quarto-document-content`, or, for a quote, the `p` in a
   `blockquote` that is one, or, for a list item, an `li` in a `ul` or `ol`
-  that is one). An empty field's placeholder is
+  that is one). Formatted text in a line is in the elements `q2 render`
+  writes for it (`strong`, `em`, `u`, `del`, `span.mark`, `code`,
+  `a[href]`), and the line may hold a zero-width space (U+200B) where the
+  caret is drawn, which the specs leave out of its text and offsets. An
+  empty field's placeholder is
   its `::before` content. A horizontal rule is an `hr` among the body's
   blocks. A block the editor doesn't know is a
   `.qe-unknown` box, and the row that adds title-block fields is
   `.qe-widget`.
 - The toolbar is found by its roles: a `toolbar` named "Formatting",
   holding a "Text style" button that opens a "Text style" `menu` of
-  `menuitemradio`s, "Undo" and "Redo" buttons, and "Bulleted list",
-  "Numbered list" and "Quote" buttons with `aria-pressed`.
+  `menuitemradio`s, "Undo" and "Redo" buttons, and "Bold", "Italic",
+  "Underline", "Highlight", "Link", "Bulleted list", "Numbered list" and
+  "Quote" buttons with `aria-pressed`.
+- A link's popover is `.qe-linkbar`, holding its address as a link and
+  "Edit" and "Remove" buttons, and the link form is the `form` in
+  `.qe-linkform`, with `text` and `url` inputs; both are in the document's
+  frame.
 
 ### What no spec covers
 

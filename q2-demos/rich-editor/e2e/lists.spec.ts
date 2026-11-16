@@ -5,7 +5,8 @@
  * `-`, `*` or `+` and a space at the start of a paragraph, as in qmd, and
  * Backspace at the start of its text makes it a paragraph again. Enter at
  * the end of an item starts another, and Enter on an empty item ends the
- * list. A list of anything else (formatting, items of more than one
+ * list. Items' text can be formatted (see `inlines.spec.ts`). A list of
+ * anything else (a note or math in an item, items of more than one
  * paragraph, blank lines between items, lists in items) can't be edited
  * yet.
  */
@@ -38,7 +39,7 @@ test.describe('showing lists', () => {
     await expect(list.locator('> li')).toHaveText(['One.', 'Two, wrapped over two lines.', 'Three.'])
   })
 
-  test('a list with formatting, or with blank lines between its items, is shown and can\'t be edited', async ({
+  test('a list with a note in an item, or with blank lines between its items, is shown and can\'t be edited', async ({
     page,
   }) => {
     const editor = await openEditor(page, 'lists')
@@ -83,14 +84,14 @@ test.describe('editing an item', () => {
     await editor.document.expectSource(lists.replace('* Two, wrapped\n', '* Two, wrapped,\n'))
   })
 
-  test('markdown characters are typed as text', async ({ page }) => {
+  test('markdown characters that close nothing are typed as text', async ({ page }) => {
     const editor = await openEditor(page, 'lists')
     await editor.placeCaretInLine(1, 4)
 
-    await page.keyboard.type(' *now*')
+    await page.keyboard.type(' *now')
 
-    await editor.document.expectSource(lists.replace('* One.', '* One. \\*now\\*'))
-    expect((await editor.lines())[1]).toBe('li: One. *now*')
+    await editor.document.expectSource(lists.replace('* One.', '* One. \\*now'))
+    expect((await editor.lines())[1]).toBe('li: One. *now')
   })
 
   test('the caret can\'t go before the item\'s text', async ({ page }) => {

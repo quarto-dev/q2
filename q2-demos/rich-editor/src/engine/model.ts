@@ -1,9 +1,12 @@
 /**
- * The editor's model: a fixed sequence of plain-text fields, some of which
- * may be absent, and a selection over them.
+ * The editor's model: a fixed sequence of text fields, some of which may
+ * be absent, and a selection over them. A field's text can hold
+ * formatting, as marks the editor keeps out of sight (see `marks.ts`).
  *
  * Offsets count UTF-16 code units, like the DOM's.
  */
+
+import { canonical, hasMarks, LINK_OPEN, LINK_TEXT, withoutMarks } from './marks.ts'
 
 /**
  * A line of a multi-line field that holds only this character stands for
@@ -62,6 +65,20 @@ export function linePrefix(text: string, offset: number): string {
 
 /** Each field's text, or undefined when the field is absent. */
 export type Fields = Readonly<Record<string, string | undefined>>
+
+/** Inline formatting (see `marks.ts`). */
+export interface MarksSchema {
+  /** Fields whose lines can be formatted. */
+  readonly fields: readonly string[]
+  /**
+   * Formats with two caret positions at each edge, inside and outside (a
+   * bit for each): an arrow key at the edge moves from one to the other
+   * before it moves on. They don't carry on to a line Enter starts.
+   */
+  readonly twoSided?: number
+  /** Formats that hold only text, innermost (code): a bit for each. */
+  readonly leaf?: number
+}
 
 export interface Position {
   readonly field: string
@@ -124,6 +141,22 @@ export interface Schema {
    * one that's empty removes it. Adding or removing one is an edit.
    */
   readonly keepEmpty?: readonly string[]
+  /** Inline formatting, in the fields it's given for (none unless given). */
+  readonly marks?: MarksSchema
+  /**
+   * What typing turns into inside a line that can be formatted (markdown
+   * that becomes formatting, say): given a field, the caret's line (its
+   * prefix included) and where the caret is in it, just after something
+   * was typed, the line to replace it with and where the caret goes in
+   * it, or null to leave it. Applied as an undo step of its own, after
+   * `inputRule` (when that gives nothing).
+   */
+  readonly inlineRule?: (field: string, line: string, caret: number) => { line: string; caret: number } | null
+}
+
+/** Whether `field`'s lines can be formatted. */
+export function isMarked(schema: Schema, field: string): boolean {
+  return schema.marks?.fields.includes(field) ?? false
 }
 
 /** Whether `field` stays when it's empty (see `Schema.keepEmpty`). */
@@ -143,13 +176,21 @@ export function range(anchorField: string, anchorOffset: number, focusField: str
   }
 }
 
-/** `position`, moved past the prefix of its line if it's before the end of it. */
+/**
+ * `position`, moved past the prefix of its line if it's before the end of
+ * it, and out of a link's address (to the start of its opening mark).
+ */
 export function pastPrefix(fields: Fields, position: Position): Position {
   const text = fields[position.field]
   if (text === undefined) return position
   const start = lineStartOf(text, position.offset)
   const end = start + linePrefix(text, position.offset).length
-  return position.offset < end ? { field: position.field, offset: end } : position
+  if (position.offset < end) return { field: position.field, offset: end }
+  const open = text.lastIndexOf(LINK_OPEN, position.offset - 1)
+  if (open >= start && position.offset > open && text.indexOf(LINK_TEXT, open) >= position.offset) {
+    return { field: position.field, offset: open }
+  }
+  return position
 }
 
 /** `selection` with neither end before a line's prefix. */
@@ -189,10 +230,31 @@ export function presentFields(schema: Schema, fields: Fields): string[] {
   return schema.order.filter((f) => fields[f] !== undefined)
 }
 
-/** Whether any field's text differs, counting an absent field as empty. */
+/**
+ * Whether any field's text differs, counting an absent field as empty.
+ * Marks that format nothing (an empty run, where a format was turned on
+ * at the caret) aren't content.
+ */
 export function contentChanged(a: Fields, b: Fields): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)])
-  return [...keys].some((k) => (a[k] ?? '') !== (b[k] ?? ''))
+  return [...keys].some((k) => {
+    const x = a[k] ?? ''
+    const y = b[k] ?? ''
+    return x !== y && (!hasMarks(x + y) || canonicalText(x) !== canonicalText(y))
+  })
+}
+
+/** `text` with each line's marks canonical (see `canonical`), and no empty runs. */
+export function canonicalText(text: string): string {
+  if (!hasMarks(text)) return text
+  return text
+    .split('\n')
+    .map((line) => {
+      if (!hasMarks(line)) return line
+      const prefix = linePrefix(line, 0)
+      return prefix + canonical(line.slice(prefix.length))
+    })
+    .join('\n')
 }
 
 /**
@@ -224,5 +286,5 @@ export function selectedText(schema: Schema, fields: Fields, selection: Selectio
     const text = value.slice(start, i === last ? to.offset : value.length)
     lines.push(text.replace(/(^|\n)([\uFDD0-\uFDEF]+)/g, (_, start: string, prefix: string) => start + (schema.prefixText?.(prefix) ?? '')))
   }
-  return withoutPrefixes(lines.join('\n')).replaceAll(VOID, schema.voidText ?? '')
+  return withoutMarks(withoutPrefixes(lines.join('\n'))).replaceAll(VOID, schema.voidText ?? '')
 }

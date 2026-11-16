@@ -2,8 +2,9 @@
  * A block quote of one paragraph of plain text is edited in place, like a
  * paragraph. A quote is made by typing `>` and a space at the start of a
  * paragraph, as in qmd, and Backspace at the start of its text makes it a
- * paragraph again. A quote of anything else (formatting, more than one
- * paragraph) can't be edited yet.
+ * paragraph again. Its text can be formatted (see `inlines.spec.ts`). A
+ * quote of anything else (a note or math in it, more than one paragraph)
+ * can't be edited yet.
  */
 
 import { expect, fixture, openEditor, test } from './helpers.ts'
@@ -30,7 +31,7 @@ test.describe('showing quotes', () => {
     await expect(editor.frame.locator('main > blockquote:not([class]) > p.qe-field').first()).toHaveText('A quote.')
   })
 
-  test('a quote with formatting, or of more than one paragraph, is shown and can\'t be edited', async ({ page }) => {
+  test('a quote with a note, or of more than one paragraph, is shown and can\'t be edited', async ({ page }) => {
     const editor = await openEditor(page, 'quotes')
 
     const readOnly = editor.frame.locator('main > blockquote:not(:has(.qe-field))')
@@ -60,14 +61,14 @@ test.describe('editing a quote', () => {
     await editor.document.expectSource(quotes.replace('> Wrapped quote\n', '> Wrapped quote,\n'))
   })
 
-  test('markdown characters are typed as text', async ({ page }) => {
+  test('markdown characters that close nothing are typed as text', async ({ page }) => {
     const editor = await openEditor(page, 'quotes')
     await editor.placeCaretInLine(1, 8)
 
-    await page.keyboard.type(' *now*')
+    await page.keyboard.type(' *now')
 
-    await editor.document.expectSource(quotes.replace('> A quote.', '> A quote. \\*now\\*'))
-    expect((await editor.lines())[1]).toBe('blockquote: A quote. *now*')
+    await editor.document.expectSource(quotes.replace('> A quote.', '> A quote. \\*now'))
+    expect((await editor.lines())[1]).toBe('blockquote: A quote. *now')
   })
 
   test('the caret can\'t go before the quote\'s text', async ({ page }) => {
