@@ -350,11 +350,21 @@ const RULES = [
  * typed after ** or * takes the format and the stars go, and stars typed
  * right after a word in that format turn it off. Returns whether it applied.
  */
-function earlyRule() {
+let unclosed = null   // the underscores that last turned a format off, and where
+function earlyRule(last) {
   const { b, o } = sel.f
   const cs = doc[b].cells
   const typed = cs[o - 1]
   if (!typed || typed.a || typed.m & C) return false
+  // An underscore inside a word is only an underscore: if a letter follows
+  // the ones that just turned a format off, they come back and it stays on.
+  const un = unclosed
+  if (un && un.snap === last && un.b === b && un.o === o - 1 && /[\p{L}\p{N}]/u.test(typed.c)) {
+    typed.m = un.m
+    cs.splice(o - 1, 0, ...'_'.repeat(un.n).split('').map((c) => ({ c, m: un.m, h: typed.h })))
+    setCaret(b, o + un.n)
+    return true
+  }
   // The stars (or underscores) up to the caret, or up to the character just typed.
   const mark = (c) => c && !c.a && (c.c === '*' || c.c === '_')
   const end = mark(typed) ? o : o - 1
@@ -372,10 +382,13 @@ function earlyRule() {
     // In bold italic, one star may be the first of two: what follows decides.
     const bit = n === 1 && (m & (B | I)) === I ? I : n === 2 && m & B ? B : 0
     if (!bit) return false
+    if (typed.c === '_') unclosed = { snap: before, b, o: end - n, n, m }
     cs.splice(end - n, n)
     setCaret(b, end - n)
     pending = m & ~bit
   } else if (closes) {
+    // (An underscore before a letter is inside a word.)
+    if (cs[end - 1].c === '_' && /[\p{L}\p{N}]/u.test(typed.c)) return false
     // That one star, now that something else follows it.
     if (n !== 1 || !(m & I)) return false
     typed.m &= ~I
@@ -1116,7 +1129,7 @@ editor.addEventListener('beforeinput', (e) => {
   }
   if (type === 'insertText') {
     insertText(e.data ?? '')
-    if (opts.md === 'on' || (opts.md === 'early' && !earlyRule())) typingRule()
+    if (opts.md === 'on' || (opts.md === 'early' && !earlyRule(wasRuled))) typingRule()
   } else if (type === 'insertReplacementText') {
     target()
     insertText(e.dataTransfer?.getData('text/plain') ?? e.data ?? '')
