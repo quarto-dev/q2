@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Undo and redo icons</title>
+<style>
+  body {
+    margin: 0;
+    padding: 32px 24px 64px;
+    background: #f8f9fa;
+    color: #212529;
+    font: 14px system-ui, sans-serif;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .intro { margin: 0 0 28px; color: #6c757d; max-width: 70ch; }
+  .option {
+    display: grid;
+    grid-template-columns: 220px auto 1fr;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 20px;
+  }
+  .label b { display: block; font-size: 15px; }
+  .label span { color: #6c757d; font-size: 12.5px; }
+  .zoom { display: flex; gap: 10px; color: #444746; }
+  .zoom svg { width: 60px; height: 60px; padding: 6px; background: #fff; border: 1px solid #dee2e6; border-radius: 6px; }
+
+  /* The toolbar, copied from src/index.css. */
+  .visual-box { border: 1px solid #ccc; border-radius: 4px; background: #fff; width: max-content; }
+  .qe-toolbar { display: flex; align-items: center; gap: 3px; padding: 6px 8px; }
+  .qe-toolbar button {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px;
+    border: 1px solid transparent; border-radius: 5px; background: none;
+    color: #343a40; font: 13px system-ui, sans-serif; cursor: pointer;
+  }
+  .qe-toolbar button:hover:not(:disabled) { background: #f1f3f5; }
+  .qe-toolbar button:disabled { color: #adb5bd; cursor: default; }
+  .qe-toolbar .qe-style { width: 150px; justify-content: space-between; border-color: #dee2e6; }
+  .qe-style svg { width: 8px; height: 8px; }
+  .qe-toolbar .qe-icon { padding: 4px; color: #444746; }
+  .qe-toolbar .qe-icon:disabled { color: #adb5bd; }
+  .qe-icon svg { display: block; width: 20px; height: 20px; }
+  .qe-sep { width: 1px; height: 20px; margin: 0 6px; background: #dee2e6; }
+</style>
+</head>
+<body>
+<h1>Undo and redo icons</h1>
+<p class="intro">Each option in the full toolbar: undo enabled, redo disabled (the usual state while editing),
+then both enlarged. Redo is undo mirrored in every option. The other toolbar icons are Material Icons (filled).</p>
+<div id="options"></div>
+
+<script>
+const stroke = (w) => `fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"`
+const OPTIONS = [
+  {
+    name: 'A. Material Icons "undo"',
+    note: 'Filled, short and flat (the first version)',
+    attrs: 'fill="currentColor"',
+    body: '<path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>',
+  },
+  {
+    name: 'B. Long arc',
+    note: 'A wide, shallow sweep with an open corner head',
+    attrs: stroke(2),
+    body: '<path d="M20 16c-1.4-4.6-4.9-7.5-9-7.5-2.9 0-5.3 1.4-6.8 3.7"/><path d="M4 6.5V12.5h6"/>',
+  },
+  {
+    name: 'C. Lucide "undo"',
+    note: 'A rounder, deeper arc',
+    attrs: stroke(2),
+    body: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>',
+  },
+  {
+    name: 'D. U-turn (Lucide "undo-2"), chosen',
+    note: 'The arrow turns back on itself',
+    attrs: stroke(2),
+    body: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  },
+  {
+    name: 'E. U-turn, light (Heroicons)',
+    note: 'Thinner stroke, larger turn',
+    attrs: stroke(1.6),
+    body: '<path d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3"/>',
+  },
+  {
+    name: 'F. Circular (Feather "rotate-ccw")',
+    note: 'Nearly a full circle; reads close to "refresh"',
+    attrs: stroke(2),
+    body: '<path d="M2 4v6h6"/><path d="M4.5 15a9 9 0 1 0 2.1-9.4L2 10"/>',
+  },
+]
+
+const svg = (o, mirror) =>
+  `<svg viewBox="0 0 24 24" ${o.attrs} aria-hidden="true">${mirror ? `<g transform="matrix(-1 0 0 1 24 0)">${o.body}</g>` : o.body}</svg>`
+
+const BULLET = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 19h14v-2H7v2zm0-6h14v-2H7v2zm0-8v2h14V5H7z"/></svg>'
+const NUMBERED = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 17h2v.5H3v1h1v.5H2v1h3v-4H2v1zm1-9h1V4H2v1h1v3zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2v1zm5-6v2h14V5H7zm0 14h14v-2H7v2zm0-6h14v-2H7v2z"/></svg>'
+const QUOTE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>'
+const CHEVRON = '<svg viewBox="0 0 8 8"><path d="M1 2.5 4 5.5 7 2.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>'
+
+document.getElementById('options').innerHTML = OPTIONS.map((o) => `
+  <div class="option">
+    <div class="label"><b>${o.name}</b><span>${o.note}</span></div>
+    <div class="visual-box"><div class="qe-toolbar">
+      <button class="qe-icon" title="Undo">${svg(o, false)}</button>
+      <button class="qe-icon" title="Redo" disabled>${svg(o, true)}</button>
+      <span class="qe-sep"></span>
+      <button class="qe-style"><span>Paragraph</span>${CHEVRON}</button>
+      <span class="qe-sep"></span>
+      <button class="qe-icon">${BULLET}</button>
+      <button class="qe-icon">${NUMBERED}</button>
+      <button class="qe-icon">${QUOTE}</button>
+    </div></div>
+    <div class="zoom">${svg(o, false)}${svg(o, true)}</div>
+  </div>`).join('')
+</script>
+</body>
+</html>
