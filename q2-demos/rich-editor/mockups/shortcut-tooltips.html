@@ -264,10 +264,10 @@
   <button type="button" data-platform="pc" aria-pressed="false">Windows and Linux</button>
 </div>
 
-<h2>Chosen: I2 and G3</h2>
-<p class="intro">The whole toolbar as it is now. Three shades: the label, then the Markdown, then the shortcut.
-  Bold, italic and link show their Markdown around the label; underline and highlight have no Markdown that
-  converts as you type, so they show none.</p>
+<h2>Chosen</h2>
+<p class="intro">The whole toolbar: light tooltips with the name and a more muted shortcut, and the style menu
+  with its shortcuts right-aligned (F). No Markdown: it read badly around the inline buttons’ names
+  (<code>**Bold**</code>), so a cheat sheet of it can come later instead.</p>
 <div id="chosen"></div>
 
 <h2>Tooltips</h2>
@@ -596,17 +596,20 @@ const MENUS = [
 ]
 const STYLES = ['Paragraph', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4'].map((name, level) => ({ name, level }))
 
-const g3Item = (s) =>
-  `<span>${s.level ? `<span class="md md-lead">${'#'.repeat(s.level)}</span>` : ''}${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`
+// The chosen tooltip: I2's light style, without its Markdown.
+const CHOSEN_TIP = {
+  cls: 'tip-plain',
+  render: (b) => `${b.label}${b.keys ? `<span class="sc">${keysText(b.keys)}</span>` : ''}`,
+}
 
 function render() {
   const chosen = document.getElementById('chosen')
-  const g3Menu = `<div class="qe-menu">${STYLES.map((s) =>
-    `<button class="qe-item qe-item-${s.level} with-keys" role="menuitemradio" aria-checked="${s.level === 0}">${g3Item(s)}</button>`).join('')}</div>`
+  const chosenMenu = `<div class="qe-menu">${STYLES.map((s) =>
+    `<button class="qe-item qe-item-${s.level} with-keys" role="menuitemradio" aria-checked="${s.level === 0}">${MENUS[0].item(s)}</button>`).join('')}</div>`
   chosen.innerHTML = `
-    <div class="option"><div class="label"><b>Tooltips (I2)</b><span>Hover the buttons.</span></div>${toolbar('', true)}</div>
-    <div class="option menu-option"><div class="label"><b>Text style menu (G3)</b></div><div class="menu-wide">${toolbar(g3Menu, true)}</div></div>`
-  wireTips(chosen.querySelector('.option'), MD_TIPS.find((o) => o.name.startsWith('I2')), 'bold')
+    <div class="option"><div class="label"><b>Tooltips</b><span>Hover the buttons.</span></div>${toolbar('', true)}</div>
+    <div class="option menu-option"><div class="label"><b>Text style menu (F)</b></div>${toolbar(chosenMenu, true)}</div>`
+  wireTips(chosen.querySelector('.option'), CHOSEN_TIP, 'bold')
   chosen.querySelector('.option').show()
 
   const tips = document.getElementById('tips')
