@@ -222,13 +222,24 @@ describe('q2-preview nav-fixed body class (bd-ersobfbt)', () => {
         expect(document.body.className).not.toContain('nav-fixed');
     });
 
-    it('user top-level body-classes wins wholesale — no nav-fixed append', () => {
+    it('user top-level body-classes joins the computed classes (GH #1218)', () => {
         mount({
             'body-classes': ms('custom-layout'),
             ...navMeta({ navbar: ms(NAVBAR_HTML) }),
         });
-        expect(document.body.className).not.toContain('nav-fixed');
-        expect(document.body.className).toContain('custom-layout');
+        expect(document.body.className).toBe(
+            'custom-layout fullcontent nav-fixed quarto-light',
+        );
+    });
+
+    it('user body-classes repeating a computed class emits it once', () => {
+        mount({
+            'body-classes': ms('nav-fixed my-page'),
+            ...navMeta({ navbar: ms(NAVBAR_HTML) }),
+        });
+        expect(document.body.className).toBe(
+            'nav-fixed my-page fullcontent quarto-light',
+        );
     });
 });
 
