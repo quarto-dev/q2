@@ -170,6 +170,8 @@ export interface LinesProps {
   view?: MarkView
   /** A collapsed caret in the field's text, where it is in it. */
   caret?: number
+  /** Shown, faintly, on its one line while the field is empty (see `Field`). */
+  placeholder?: string
 }
 
 /** How a line of a multi-line field is rendered (see `LinesProps.lineElement`). */
@@ -190,7 +192,7 @@ export interface LineElement {
  * edited are rendered by the caller, and get no caret. A line's prefix
  * isn't shown: it chooses the line's element, whose text starts after it.
  */
-export function Lines({ name, text, className, as = 'p', lineElement, renderAtom, renderVoid, view, caret }: LinesProps) {
+export function Lines({ name, text, className, as = 'p', lineElement, renderAtom, renderVoid, view, caret, placeholder }: LinesProps) {
   if (text === undefined) return null
   // Each line's element, with the lines next to each other that share a
   // parent together under the first's key.
@@ -219,6 +221,7 @@ export function Lines({ name, text, className, as = 'p', lineElement, renderAtom
         id={element?.id}
         view={view}
         caret={here}
+        placeholder={text === '' ? placeholder : undefined}
       />
     )
     const parent = element?.parent

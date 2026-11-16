@@ -356,7 +356,7 @@ test.describe('splitting and joining paragraphs', () => {
     await document.expectSource('')
   })
 
-  test('the only paragraph, emptied, is gone from the source, and from the page when the caret leaves it', async ({
+  test('the only paragraph, emptied, is gone from the source, and stays on the page as a line that says "Start writing…"', async ({
     page,
   }) => {
     const editor = await openEditor(page)
@@ -369,7 +369,15 @@ test.describe('splitting and joining paragraphs', () => {
 
     await page.keyboard.press('ArrowUp')
     expect((await editor.caret()).field).toBe('subtitle')
-    expect(await editor.blocks()).toEqual([])
+    expect(await editor.blocks()).toEqual(['p: '])
+    await expect(editor.frame.locator('#quarto-document-content > p.qe-field')).toHaveAttribute('data-placeholder', 'Start writing…')
+  })
+
+  test('only the body\'s only line says "Start writing…": an empty paragraph among others says nothing', async ({ page }) => {
+    const document = await createDocument('---\ntitle: T\n---\n\nOne.\n\n&nbsp;\n')
+    const editor = await document.open(page)
+
+    await expect(editor.frame.locator('[data-placeholder="Start writing…"]')).toHaveCount(0)
   })
 
   test('an empty paragraph in the source is an empty line', async ({ page }) => {
@@ -730,14 +738,16 @@ test.describe('a document without a title block', () => {
 test.describe('a document without a body', () => {
   const source = '---\ntitle: Notes\nsubtitle: Rough\n---\n'
 
-  test('Enter in the last field of the title block starts the body, with the caret in it', async ({ page }) => {
+  test('has one empty line that says "Start writing…", and Enter in the last field of the title block puts the caret in it', async ({
+    page,
+  }) => {
     const document = await createDocument(source)
     const editor = await document.open(page)
-    expect(await editor.blocks()).toEqual([])
+    expect(await editor.blocks()).toEqual(['p: '])
+    await expect(editor.frame.locator('#quarto-document-content > p.qe-field')).toHaveAttribute('data-placeholder', 'Start writing…')
     await editor.placeCaret('subtitle', 5)
 
     await page.keyboard.press('Enter')
-    expect(await editor.blocks()).toEqual(['p: '])
     expect(document.source()).toBe(source)
 
     await page.keyboard.type('Hello')
@@ -746,31 +756,29 @@ test.describe('a document without a body', () => {
     await expect.poll(() => document.source()).toMatch(/^---\ntitle: Notes\nsubtitle: Rough\n---\n\n?Hello\n$/)
   })
 
-  test('a body started and left empty goes away', async ({ page }) => {
+  test('its empty line stays when the caret leaves it, and the source still has no body', async ({ page }) => {
     const document = await createDocument(source)
     const editor = await document.open(page)
     await editor.placeCaret('subtitle', 5)
     await page.keyboard.press('Enter')
-    expect(await editor.blocks()).toEqual(['p: '])
 
     await page.keyboard.press('ArrowUp')
 
     expect((await editor.caret()).field).toBe('subtitle')
-    expect(await editor.blocks()).toEqual([])
+    expect(await editor.blocks()).toEqual(['p: '])
     expect(document.source()).toBe(source)
   })
 
-  test('Backspace in a body just started goes back to the title block, and the body goes away', async ({ page }) => {
+  test('Backspace on its empty line goes back to the title block, and the line stays', async ({ page }) => {
     const document = await createDocument(source)
     const editor = await document.open(page)
     await editor.placeCaret('subtitle', 5)
     await page.keyboard.press('Enter')
-    expect(await editor.blocks()).toEqual(['p: '])
 
     await page.keyboard.press('Backspace')
 
     await editor.expectCaret('subtitle', 5)
-    expect(await editor.blocks()).toEqual([])
+    expect(await editor.blocks()).toEqual(['p: '])
     expect(document.source()).toBe(source)
   })
 })

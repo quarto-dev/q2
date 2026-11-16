@@ -166,6 +166,7 @@ const SCHEMA: Schema = {
   continued: isItem,
   voidText: '---',
   keepEmpty: TITLE_BLOCK,
+  always: ['body'],
   backspaceStops: ['body'],
   marks: { fields: ['body'], twoSided: TWO_SIDED, leaf: LEAF },
   inlineRule: (field, line, caret) => (field === 'body' ? inlineRule(line, caret) : null),
@@ -400,6 +401,7 @@ export function VisualEditor({ file, devTools }: VisualEditorProps) {
               renderAtom={renderAtom}
               renderVoid={renderRule}
               view={MARK_VIEW}
+              placeholder="Start writing…"
               caret={state.selection && isCollapsed(state.selection) && state.selection.focus.field === 'body' ? state.selection.focus.offset : undefined}
             />
           </>,

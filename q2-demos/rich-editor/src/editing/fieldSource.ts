@@ -67,8 +67,8 @@ export function createMetaFieldSource(
           return text || (text !== undefined && keepEmpty.includes(key)) ? [[key, text]] : []
         }),
       )
-      const text = body === undefined || !ast ? '' : bodyText(ast.blocks as Node[])
-      if (body !== undefined && text) next[body] = text
+      // The body is there whenever the document is, empty or not.
+      if (body !== undefined && ast) next[body] = bodyText(ast.blocks as Node[])
       // The same object while no field changes, however else the file does.
       if ([...keys, ...(body === undefined ? [] : [body])].some((key) => next[key] !== fields[key])) fields = next
     }

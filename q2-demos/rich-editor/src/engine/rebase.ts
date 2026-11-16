@@ -16,7 +16,7 @@
  * the end of the variant's replacement.
  */
 
-import { keepsEmpty, ordered, pastPrefixes, type Fields, type Position, type Schema, type Selection, type State } from './model.ts'
+import { isAlways, keepsEmpty, ordered, pastPrefixes, type Fields, type Position, type Schema, type Selection, type State } from './model.ts'
 import type { History } from './history.ts'
 
 /** Replace `removed` characters at `start` with `inserted`. */
@@ -192,7 +192,7 @@ export function rebaseState(schema: Schema, state: State, base: Fields, source: 
     selection = selection && mapSelection(schema, selection, field, splices)
     const held = selection !== null && (selection.anchor.field === field || selection.focus.field === field)
     fields ??= { ...state.fields }
-    if (text !== '' || held || (kept && source[field] !== undefined)) fields[field] = text
+    if (text !== '' || held || isAlways(schema, field) || (kept && source[field] !== undefined)) fields[field] = text
     else delete fields[field]
   }
   if (!fields) return state

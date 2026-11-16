@@ -15,6 +15,8 @@ You can also type the markdown: `**bold**`, `*italic*` or a pair of backticks tu
 
 Select some words and press ⌘K to make them a [link](https://quarto.org). Put the caret in a link to see where it goes, and to edit or remove it. Press Tab to reach its buttons from the keyboard.
 
+You can also type the markdown: `[text](https://quarto.org)` turns into a link as you finish it.
+
 ## Headings, lists and quotes
 
 Use the style box at the left of the toolbar to make a line a heading, or ⌥⌘1 to ⌥⌘4.
@@ -26,4 +28,4 @@ Use the style box at the left of the toolbar to make a line a heading, or ⌥⌘
 
 ## Under the hood
 
-The page is the same document as its qmd source. The Developer tools button at the right end of the toolbar shows that source next to the editor: edit either one, and the other follows.
+The page is the same document as its qmd source. The Show source button at the right end of the toolbar shows that source next to the editor: edit either one, and the other follows.

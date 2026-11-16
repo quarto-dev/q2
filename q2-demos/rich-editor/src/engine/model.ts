@@ -141,6 +141,12 @@ export interface Schema {
    * one that's empty removes it. Adding or removing one is an edit.
    */
   readonly keepEmpty?: readonly string[]
+  /**
+   * Fields that are always there, empty or not, never removed (a
+   * document's body: an empty one is one empty line to type in). Empty,
+   * one is written as nothing.
+   */
+  readonly always?: readonly string[]
   /** Inline formatting, in the fields it's given for (none unless given). */
   readonly marks?: MarksSchema
   /**
@@ -162,6 +168,11 @@ export function isMarked(schema: Schema, field: string): boolean {
 /** Whether `field` stays when it's empty (see `Schema.keepEmpty`). */
 export function keepsEmpty(schema: Schema, field: string): boolean {
   return schema.keepEmpty?.includes(field) ?? false
+}
+
+/** Whether `field` is always there (see `Schema.always`). */
+export function isAlways(schema: Schema, field: string): boolean {
+  return schema.always?.includes(field) ?? false
 }
 
 export function caret(field: string, offset: number): Selection {

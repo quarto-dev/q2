@@ -110,18 +110,29 @@ test.describe('while the source does not parse', () => {
 })
 
 test.describe('an empty document', () => {
-  // What it should offer instead (a title to type, a first paragraph) is
-  // being designed: see `mockups/untitled-doc.html`.
-  test('is an empty page, and takes no typing', async ({ page }) => {
+  test('is one empty line that says "Start writing…", with the caret in it, and what is typed is its body', async ({ page }) => {
     const document = await createDocument('')
-    const editor = await document.open(page, { shows: 'nothing' })
+    const editor = await document.open(page)
+    const line = editor.frame.locator('#quarto-document-content > p.qe-field')
+    await expect(line).toHaveCount(1)
+    await expect(line).toHaveAttribute('data-placeholder', 'Start writing…')
+    await expect(line).toHaveAttribute('data-empty', '')
 
-    await editor.frame.locator('body').click()
     await page.keyboard.type('Hello')
-    await page.keyboard.press('Enter')
 
-    expect(await editor.frame.locator('#quarto-document-content').innerText()).toBe('')
-    expect(document.source()).toBe('')
+    await document.expectSource('Hello\n')
+    await expect(line).toHaveText('Hello')
+    await expect(line).not.toHaveAttribute('data-empty')
+  })
+
+  test('takes a click on its line', async ({ page }) => {
+    const document = await createDocument('')
+    const editor = await document.open(page)
+    await editor.frame.locator('#quarto-document-content > p.qe-field').click()
+
+    await page.keyboard.type('Hi')
+
+    await document.expectSource('Hi\n')
   })
 
   test('shows what a collaborator writes, and it can be edited then', async ({ page }) => {

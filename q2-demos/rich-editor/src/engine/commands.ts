@@ -66,6 +66,7 @@ import {
   isCollapsed,
   isMarked,
   isPrefix,
+  isAlways,
   keepsEmpty,
   lineStartOf,
   linePrefix,
@@ -520,7 +521,7 @@ function atomsApart(text: string, offset: number): { text: string; offset: numbe
 /** Remove the empty fields that don't hold an end of `selection` (and don't stay when empty). */
 function removeEmpty(schema: Schema, fields: Fields, selection: Selection | null): Fields {
   const keep = new Set(selection ? [selection.anchor.field, selection.focus.field] : [])
-  const empty = schema.order.filter((f) => fields[f] === '' && !keep.has(f) && !keepsEmpty(schema, f))
+  const empty = schema.order.filter((f) => fields[f] === '' && !keep.has(f) && !keepsEmpty(schema, f) && !isAlways(schema, f))
   if (empty.length === 0) return fields
   const next = { ...fields }
   for (const f of empty) delete next[f]
