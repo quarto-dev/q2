@@ -82,6 +82,15 @@ test.describe('the "+" row', () => {
     expect(row.y + row.height).toBeLessThanOrEqual(title.y + 1)
   })
 
+  test('is all on the page, not cut off by its top edge', async ({ page }) => {
+    const editor = await openEditor(page, 'no-subtitle')
+    await editor.clickAt('title', 60)
+
+    const row = (await editor.widget().boundingBox())!
+    const frame = (await page.locator('iframe.visual-frame').boundingBox())!
+    expect(row.y).toBeGreaterThanOrEqual(frame.y + 2)
+  })
+
   test('is not part of the document: the source never mentions it', async ({ page }) => {
     const editor = await openEditor(page, 'no-subtitle')
     await editor.clickAt('title', 60)

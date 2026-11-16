@@ -145,18 +145,28 @@ async function expectLayoutParity(page: Page, name: string) {
  * (other than the editor's own, which a field renders in place of its
  * text), with its box to the nearest half pixel.
  *
+ * Boxes are measured from the body's content box, not the frame: the
+ * editor leaves a little room above the page (padding on the body) for the
+ * title block's add-field row, which isn't part of the rendered page.
+ *
  * Runs in the page; it must not refer to anything outside itself.
  */
 function boxes(body: HTMLElement) {
   const main = body.querySelector('main')
   if (!main) return null
   const half = (n: number) => Math.round(n * 2) / 2
+  const b = body.getBoundingClientRect()
+  const s = getComputedStyle(body)
+  const origin = {
+    x: b.x + parseFloat(s.borderLeftWidth) + parseFloat(s.paddingLeft),
+    y: b.y + parseFloat(s.borderTopWidth) + parseFloat(s.paddingTop),
+  }
   return [main, ...main.querySelectorAll('*')]
     .filter((el) => !el.matches('span.qe-field, .qe-field > br'))
     .map((el) => {
       const r = el.getBoundingClientRect()
       const classes = [...el.classList].filter((c) => c !== 'qe-field').join('.')
-      return `${el.tagName.toLowerCase()}${classes && '.' + classes} ${half(r.x)},${half(r.y)} ${half(r.width)}x${half(r.height)}`
+      return `${el.tagName.toLowerCase()}${classes && '.' + classes} ${half(r.x - origin.x)},${half(r.y - origin.y)} ${half(r.width)}x${half(r.height)}`
     })
 }
 
