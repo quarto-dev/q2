@@ -103,7 +103,7 @@ button.icon svg { width:20px; height:20px; display:block; }
     <div class="toolbar" id="toolbar"></div>
     <div class="scroller">
       <div class="tips">
-        <kbd>⌘B</kbd> bold · <kbd>⌘I</kbd> italic · <kbd>⌘⇧X</kbd> strikethrough · <kbd>⌘E</kbd> code · <kbd>⌘K</kbd> link · <kbd>⌘Z</kbd> undo.
+        <kbd>⌘B</kbd> bold · <kbd>⌘I</kbd> italic · <kbd>⌘U</kbd> underline · <kbd>⌘⇧X</kbd> strikethrough · <kbd>⌘E</kbd> code · <kbd>⌘K</kbd> link · <kbd>⌘Z</kbd> undo.
         The choices on the left change how the document behaves; the address keeps them, so a link to this page shows what you chose.
       </div>
       <div class="page" id="page">
@@ -137,7 +137,7 @@ const GROUPS = [
     ['ro', 'Read-only paragraph', 'A paragraph with any of them in it can\'t be edited at all, as today.'],
   ]},
   { key: 'toolbar', title: 'Toolbar', options: [
-    ['full', 'All buttons', 'Bold, italic, strikethrough, code and link, after the style box.'],
+    ['full', 'All buttons', 'Bold, italic, underline, strikethrough, code and link, after the style box.'],
     ['compact', 'Bold, italic, link, and more', 'The rest are in a "⋯" menu.'],
   ]},
   { key: 'bubble', title: 'Selection bubble', options: [
@@ -195,7 +195,7 @@ function renderOptions() {
 // A block is a run of cells: one character each, with its formats (`m`, a
 // bit set) and its link's address (`h`, or null). A cell with `a` is an
 // inline that can't be edited.
-const B = 1, I = 2, S = 4, C = 8
+const B = 1, I = 2, S = 4, C = 8, U = 16
 const cells = (text, m = 0, h = null) => text.split('').map((c) => ({ c, m, h }))
 const atom = (kind, src) => [{ c: '￼', m: 0, h: null, a: { kind, src } }]
 const block = (tag, ...parts) => ({ tag, cells: parts.flatMap((p) => (typeof p === 'string' ? cells(p) : p)) })
@@ -231,7 +231,7 @@ const isEditable = (b) => !(opts.atoms === 'ro' && doc[b].cells.some((c) => c.a)
 const setCaret = (b, o, aff = 'L') => { sel = { a: { b, o }, f: { b, o }, aff } }
 
 /** The formats that have an inside and an outside at their edges. */
-const twoStop = () => (opts.edge === 'continue' ? 0 : opts.edge === 'code' ? C : B | I | S | C)
+const twoStop = () => (opts.edge === 'continue' ? 0 : opts.edge === 'code' ? C : B | I | S | C | U)
 const isBoundary = (b, o) => ((marksOf(cellAt(b, o - 1)) ^ marksOf(cellAt(b, o))) & twoStop()) !== 0
 
 /** The formats of what's typed at the caret. */
@@ -705,7 +705,7 @@ let blockEls = []
 
 function wrap(m, node) {
   let el = node
-  for (const [bit, tag] of [[S, 's'], [I, 'em'], [B, 'strong'], [C, 'code']]) {
+  for (const [bit, tag] of [[S, 's'], [U, 'u'], [I, 'em'], [B, 'strong'], [C, 'code']]) {
     if (!(m & bit)) continue
     const outer = document.createElement(tag)
     outer.append(el)
@@ -897,6 +897,7 @@ function wireUrlInput(input, link) {
 const ICONS = {
   bold: 'M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z',
   italic: 'M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z',
+  underline: 'M12 17c3.31 0 6-2.69 6-6V3h-2.5v8c0 1.93-1.57 3.5-3.5 3.5S8.5 12.93 8.5 11V3H6v8c0 3.31 2.69 6 6 6zm-7 2v2h14v-2H5z',
   strike: 'M10 19h4v-3h-4v3zM5 4v3h5v3h4V7h5V4H5zM3 14h18v-2H3v2z',
   code: 'M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z',
   link: 'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z',
@@ -908,6 +909,7 @@ const ICONS = {
 const FORMATS = [
   { name: 'Bold', icon: 'bold', bit: B, keys: '⌘B' },
   { name: 'Italic', icon: 'italic', bit: I, keys: '⌘I' },
+  { name: 'Underline', icon: 'underline', bit: U, keys: '⌘U' },
   { name: 'Strikethrough', icon: 'strike', bit: S, keys: '⌘⇧X' },
   { name: 'Code', icon: 'code', bit: C, keys: '⌘E' },
 ]
@@ -976,7 +978,7 @@ function renderToolbar() {
 function toQmd(blk) {
   const cs = blk.cells.map((c) => ({ ...c }))
   // Markdown can't format the spaces at the ends of a run: they go outside it.
-  for (const bit of [B, I, S]) {
+  for (const bit of [B, I, S, U]) {
     for (let i = 0; i < cs.length; ) {
       if (!(marksOf(cs[i]) & bit)) { i++; continue }
       let j = i
@@ -996,7 +998,7 @@ function toQmd(blk) {
       const rest = marksOf(cs[i]) & ~open
       if (cs[i].a || !rest) { out += cs[i].a ? cs[i].a.src : cs[i].c; i++; continue }
       let bit = C, end = i
-      for (const t of [B, I, S]) {
+      for (const t of [B, I, S, U]) {
         if (!(rest & t)) continue
         let e = i
         while (e < j && marksOf(cs[e]) & t) e++
@@ -1005,7 +1007,8 @@ function toQmd(blk) {
       if (bit === C) while (end < j && marksOf(cs[end]) & C && (marksOf(cs[end]) & ~open) === rest) end++
       const inner = open & (B | I)
       const d = bit === B ? (inner ? '__' : '**') : bit === I ? (inner ? '_' : '*') : bit === S ? '~~' : '`'
-      out += d + emit(i, end, open | bit) + d
+      // Underline has no mark of its own in qmd: it's a span with a class.
+      out += bit === U ? `[${emit(i, end, open | bit)}]{.underline}` : d + emit(i, end, open | bit) + d
       i = end
     }
     return out
@@ -1179,6 +1182,7 @@ editor.addEventListener('beforeinput', (e) => {
   else if (type === 'historyRedo') redo()
   else if (type === 'formatBold') toggle(B)
   else if (type === 'formatItalic') toggle(I)
+  else if (type === 'formatUnderline') toggle(U)
   render()
 })
 
@@ -1202,6 +1206,7 @@ editor.addEventListener('keydown', (e) => {
   if (mod && key === 'z') does(e.shiftKey ? redo : undo)
   else if (mod && !e.shiftKey && key === 'b') does(() => toggle(B))
   else if (mod && !e.shiftKey && key === 'i') does(() => toggle(I))
+  else if (mod && !e.shiftKey && key === 'u') does(() => toggle(U))
   else if (mod && e.shiftKey && key === 'x') does(() => toggle(S))
   else if (mod && !e.shiftKey && key === 'e') does(() => toggle(C))
   else if (mod && !e.shiftKey && key === 'k') does(linkCommand)
