@@ -129,7 +129,7 @@ const GROUPS = [
     ['off', 'Stays as typed', 'A typed * is a *, as today.'],
   ]},
   { key: 'links', title: 'Links', options: [
-    ['popover', 'Popover', 'The caret in a link shows its address under it, with Edit and Remove. Tab moves into it: Enter on the address opens the link, Tab again reaches Edit and Remove, and Escape or a last Tab returns to the text. ⌘K opens a small form. As in Google Docs.'],
+    ['popover', 'Popover', 'The caret in a link shows its address under it, with Edit and Remove. Tab moves into it: Enter on the address opens the link, Tab again reaches Edit and Remove, and Escape or a last Tab returns to the text. Escape in the text puts the popover away until the caret or the mouse comes back to the link. ⌘K opens a small form. As in Google Docs.'],
     ['inline', 'Source in place', 'A link with the caret in it shows as [text](url), the address editable right there (click it, or ⌘K). As in Typora and Obsidian.'],
   ]},
   { key: 'atoms', title: "Inlines the editor can't edit yet", options: [
@@ -1048,6 +1048,7 @@ function bubbleButton(label, action) {
   return button
 }
 
+let dismissed = null   // the link whose popover Escape put away
 function renderOverlay() {
   // Not while the keyboard is in the link's popover.
   if (overlay.querySelector('.linkbar')?.contains(document.activeElement)) return
@@ -1055,6 +1056,8 @@ function renderOverlay() {
   const link = currentLink()
   const linkEl = link && blockEls[link.b].querySelector(`a[data-s="${link.start}"]`)
   const rects = linkEl ? [...linkEl.getClientRects()] : []
+  // A popover put away with Escape stays away while the caret stays in its link.
+  if (dismissed && !(link && link.b === dismissed.b && link.start === dismissed.start)) dismissed = null
 
   if (form) {
     const el = document.createElement('div')
@@ -1088,7 +1091,7 @@ function renderOverlay() {
   }
   if (document.activeElement !== editor) return
 
-  if (link && opts.links === 'popover' && rects.length > 0) {
+  if (link && opts.links === 'popover' && rects.length > 0 && !dismissed) {
     const el = document.createElement('div')
     el.className = 'bubble'
     el.className = 'bubble linkbar'
@@ -1202,6 +1205,14 @@ editor.addEventListener('keydown', (e) => {
   else if (mod && e.shiftKey && key === 'x') does(() => toggle(S))
   else if (mod && !e.shiftKey && key === 'e') does(() => toggle(C))
   else if (mod && !e.shiftKey && key === 'k') does(linkCommand)
+  else if (e.key === 'Escape' && overlay.querySelector('.linkbar')) {
+    // Put the link's popover away, until the caret comes back into the link
+    // or the mouse is over it.
+    e.preventDefault()
+    const link = currentLink()
+    dismissed = { b: link.b, start: link.start }
+    renderOverlay()
+  }
   else if (e.key === 'Tab' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && overlay.querySelector('.linkbar')) {
     // Into the link's popover: its address, then Edit, then Remove.
     e.preventDefault()
@@ -1210,6 +1221,14 @@ editor.addEventListener('keydown', (e) => {
   else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.metaKey && !e.ctrlKey && !e.altKey) {
     does(() => moveH(e.key === 'ArrowLeft' ? -1 : 1, e.shiftKey))
   } else if (vertical) does(() => moveV(e.key === 'ArrowUp' ? -1 : 1, e.shiftKey))
+})
+
+// (The mouse moving, not `mouseover`: that also fires when the line is redrawn under a still mouse.)
+editor.addEventListener('mousemove', (e) => {
+  const a = e.target.closest?.('a[data-s]')
+  if (!dismissed || !a || Number(a.dataset.s) !== dismissed.start || Number(a.closest('[data-b]').dataset.b) !== dismissed.b) return
+  dismissed = null
+  renderOverlay()
 })
 
 editor.addEventListener('mousedown', (e) => {
