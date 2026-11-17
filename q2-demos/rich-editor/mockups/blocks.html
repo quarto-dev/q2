@@ -61,6 +61,14 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 .body.no-caret figcaption { caret-color:auto; }
 .body > :first-child { margin-top:0; }
 .body p { margin:0 0 17px; min-height:1lh; white-space:pre-wrap; }
+/* The title block: its fields are lines of text; the byline (authors, date)
+   can't be edited here, and the caret never stops on it. */
+.body h1.title { font-size:2.2rem; font-weight:600; line-height:1.2; margin:0 0 .3rem; white-space:pre-wrap; }
+.body p.subtitle { font-size:1.25rem; color:#5c636a; margin:0; white-space:pre-wrap; }
+.body [data-field] { position:relative; }
+.body [data-field].empty::before { position:absolute; content:attr(data-placeholder); color:var(--faint); pointer-events:none; }
+.body [data-byline]::after { content:attr(data-byline); display:block; font-size:.85rem; color:var(--muted); margin-top:14px; user-select:none; }
+.body [data-field].last { padding-bottom:20px; border-bottom:1px solid var(--line); margin-bottom:24px; }
 .body h2 { font-size:1.6rem; font-weight:600; line-height:1.2; margin:1.8rem 0 .75rem; border-bottom:1px solid var(--line); padding-bottom:.25rem; white-space:pre-wrap; }
 
 /* A figure: an image on a line of its own. It can't be edited as text; its
@@ -210,6 +218,7 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
       <div class="tips">
         How figures sit in the text, as lines of it. Click beside a figure for a caret in its line: type to put text there, Enter to split it off; Backspace and Delete join lines across it. Arrow through it (before it, its caption, after it), and Shift and an arrow to select through it.
         Drag an image to move it: into a line of text, or between lines. ⌘C, ⌘X and typing work on a selection with figures in it.
+        The title block is lines too, but its own: Enter and the arrows move through its fields, and nothing joins a field to another or to the body, or puts an image in one.
         The choices on the left change how the document behaves; the address keeps them. The figure itself (its bar, menus, resizing) is in <a href="figure.html">figure.html</a>.
       </div>
       <div class="page" id="page">
@@ -228,6 +237,10 @@ const GROUPS = [
   { key: 'place', title: 'With the caret in a line of text', options: [
     ['block', 'Its own block', 'A new image always goes on a line of its own, splitting the paragraph at the caret. An image in a line of text from the source is still shown in the line. As in Notion.'],
     ['inline', 'In the line', 'A new image goes where the caret is: in a line of text it sits in the line like a word; in an empty paragraph it\'s a figure. As in Google Docs and Word ("In line with text").'],
+  ]},
+  { key: 'bodyStart', title: 'Backspace at the start of the body', options: [
+    ['stay', 'Stays put', 'Deletes nothing and doesn\'t move: the body can\'t join the title block, so there\'s nothing to do. As the editor does now. Delete at the end of the last field is the same.'],
+    ['move', 'Goes to the end of the title block', 'Deletes nothing, but moves to the end of its last field, as Backspace does from one field to the one before. Delete at the end of the last field goes to the start of the body.'],
   ]},
   { key: 'through', title: '→ through a figure', options: [
     ['around', 'Before, its caption, after', 'Before the image, through its caption, then after the figure: "after" is after everything in it.'],
@@ -311,6 +324,15 @@ const toInline = (f) => ({ k: f.k, src: f.src, alt: f.caption, figAlt: f.alt, id
 const toFigure = (x) => ({ kind: 'fig', k: x.k, src: x.src, caption: x.alt, alt: x.figAlt ?? '', id: x.id ?? null, width: x.width ?? null, height: x.height ?? null, align: x.align ?? 'center' })
 const para = (tag, ...parts) => ({ kind: 'text', tag, items: parts.flatMap((p) => (typeof p === 'string' ? text(p) : [p])) })
 const figure = (src, f = {}) => ({ kind: 'fig', k: key(), src, alt: '', caption: '', id: null, width: null, align: 'center', ...f })
+// The title block's fields come first: text blocks of their own (tag 'title',
+// 'subtitle'), always there, empty or not. Each is one line of plain text. The
+// byline is the front matter's too, but isn't edited here.
+const field = (tag, s) => ({ kind: 'text', tag, field: true, items: text(s) })
+const PLACEHOLDERS = { title: 'Title', subtitle: 'Subtitle' }
+const BYLINE = { author: 'Ana Lima', date: '2026-11-17' }
+/** The number of fields: the index of the body's first block. */
+const bodyStart = () => doc.findIndex((blk) => !blk.field)
+const isField = (b) => Boolean(doc[b]?.field)
 
 let doc, sel, hist, panel
 // `sel` is where the caret or selection is: { caret: {b, o} }, a text range
@@ -321,18 +343,20 @@ function start() {
   files = { 'images/sales.svg': SALES, 'images/mountains.svg': MOUNTAINS, 'images/logo.svg': LOGO }
   nextKey = 1
   doc = [
-    para('h2', 'Figures'),
-    para('p', 'A figure is an image on a line of its own. Click one to select it, then resize it, align it, or change its caption.'),
-    figure('images/sales.svg', { caption: 'Sales by quarter', id: 'fig-sales', width: 75, alt: 'Bar chart of sales by quarter, rising each quarter from about 30 to about 85.' }),
-    para('p', 'Put the caret at the start of this paragraph and press Backspace, or select the picture below and press Delete. It has no caption and no alt text yet.'),
+    field('title', 'Quarterly report'),
+    field('subtitle', 'Third quarter'),
     figure('images/mountains.svg', { width: 50 }),
+    para('h2', 'Figures'),
+    para('p', 'The body starts with a figure, right under the title block. A figure is an image on a line of its own. Click one to select it, then resize it, align it, or change its caption.'),
+    figure('images/sales.svg', { caption: 'Sales by quarter', id: 'fig-sales', width: 75, alt: 'Bar chart of sales by quarter, rising each quarter from about 30 to about 85.' }),
+    para('p', 'Put the caret at the start of this paragraph and press Backspace, or select the chart above and press Delete.'),
     para('h2', 'Images in a line'),
     para('p', 'The ', inline('images/logo.svg', 'Quarto', '1.4em'), ' logo sits in the line like a word. Put the caret in the middle of this sentence and add an image to see where it goes.'),
     para('h2', 'A missing image'),
     figure('images/diagram.png', { caption: 'How the parts fit together', alt: 'A diagram of the system.' }),
     para('p', 'Its file isn\'t in the project: it shows where it was, with a way to replace it.'),
   ]
-  sel = { caret: { b: 1, o: 0 } }
+  sel = { caret: { b: 0, o: 0 } }
   hist = { past: [], future: [], typing: false, at: 0 }
   panel = null
 }
@@ -381,6 +405,12 @@ let lastState = null
 function insertImage(src, at = sel.caret) {
   record()
   panel = null
+  if (at && isField(at.b)) {
+    // Not in the title block: at the top of the body.
+    const fig = figure(src)
+    doc.splice(bodyStart(), 0, fig)
+    return selectFigure(fig.k, true)
+  }
   if (!at) {
     // No caret: after the selected figure, or at the end.
     const b = sel.fig ? figIndex(sel.fig) + 1 : doc.length
@@ -425,7 +455,7 @@ function removeImage() {
   if (img.fig) {
     const b = figIndex(img.fig.k)
     doc.splice(b, 1)
-    if (!doc.some((blk) => blk.kind === 'text')) doc.push(para('p'))
+    if (!doc.some((blk) => blk.kind === 'text' && !blk.field)) doc.push(para('p'))
     // The caret where the figure was: the start of what followed it.
     const next = doc.findIndex((blk, i) => i >= b && blk.kind === 'text')
     const prev = doc.findLastIndex((blk, i) => i < b && blk.kind === 'text')
@@ -525,6 +555,16 @@ function renderImage(src) {
 }
 
 function renderBlock(blk, b, nums) {
+  if (blk.field) {
+    const el = document.createElement(blk.tag === 'title' ? 'h1' : 'p')
+    el.className = blk.tag + (isField(b + 1) ? '' : ' last')
+    el.dataset.field = blk.tag
+    el.dataset.placeholder = PLACEHOLDERS[blk.tag]
+    if (!isField(b + 1)) el.dataset.byline = `${BYLINE.author}  ·  ${new Date(BYLINE.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}`
+    el.append(blk.items.join(''))
+    if (blk.items.length === 0) { el.classList.add('empty'); el.replaceChildren(document.createElement('br')) }
+    return el
+  }
   if (blk.kind === 'text') {
     const el = document.createElement(blk.tag)
     for (const x of blk.items) {
@@ -665,7 +705,7 @@ function caretOffset(el, node, offset) {
 function readCaret() {
   const s = getSelection()
   if (!s.rangeCount || !s.focusNode) return null
-  const el = (s.focusNode.nodeType === 1 ? s.focusNode : s.focusNode.parentElement)?.closest('#editor > p, #editor > h2')
+  const el = (s.focusNode.nodeType === 1 ? s.focusNode : s.focusNode.parentElement)?.closest('#editor > p, #editor > h2, #editor > h1')
   if (!el) return null
   const b = [...editor.children].indexOf(el)
   return { b, o: caretOffset(el, s.focusNode, s.focusOffset), collapsed: s.isCollapsed }
@@ -719,12 +759,20 @@ function readDocument() {
       if (f) out.push(f)
       continue
     }
+    if (el.dataset.field) {
+      // A field's text, as one line: no images, no breaks.
+      out.push({ kind: 'text', tag: el.dataset.field, field: true, items: readText(el, []).filter((x) => typeof x === 'string').map((x) => (x === '\n' ? ' ' : x)) })
+      continue
+    }
     if (el.nodeName !== 'P' && el.nodeName !== 'H2') tidy = false
     out.push({ kind: 'text', tag: el.nodeName === 'H2' ? 'h2' : 'p', items: readText(el, old) })
   }
   // Text typed straight into the editor, outside any block.
   if ([...editor.childNodes].some((n) => n.nodeType === 3 && n.data.trim())) tidy = false
-  if (out.length === 0) out.push(para('p'))
+  // The fields stay, whatever the browser did to them; the body has a line.
+  const fields = old.filter((blk) => blk.field)
+  for (const [i, f] of fields.entries()) if (out[i]?.tag !== f.tag) out.splice(i, 0, { ...f, items: [] })
+  if (!out.some((blk) => !blk.field)) out.push(para('p'))
   doc = out
   return tidy
 }
@@ -751,9 +799,11 @@ function renderToolbar() {
   style.className = 'style'
   style.disabled = true
   const at = sel.caret ? doc[sel.caret.b] : null
-  const label = sel.fig ? 'Figure' : at?.tag === 'h2' ? 'Heading 2' : 'Paragraph'
+  const label = sel.fig ? 'Figure' : at?.field ? PLACEHOLDERS[at.tag] : at?.tag === 'h2' ? 'Heading 2' : 'Paragraph'
   style.innerHTML = `<span>${label}</span><svg viewBox="0 0 8 8"><path d="M1 2.5 4 5.5 7 2.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`
-  imageButton = iconButton('Image', 'image', panel?.kind === 'insert', imageCommand, 'Image')
+  // No image in the title block, nor bold or links: its fields are plain text.
+  const inField = Boolean(at?.field)
+  imageButton = iconButton('Image', 'image', panel?.kind === 'insert', inField ? null : imageCommand, 'Image')
   const img = selectedImage()
   if (opts.controls === 'toolbar' && img) {
     // The image's controls in place of the text's, as a tab of their own.
@@ -1084,6 +1134,17 @@ function arriveHorizontal(n, dir) {
   else sel = hasCaption(blk) && opts.through === 'sides' ? { fig: blk.k, caption: true, capAt: 'end' } : { gap: blk.k, side: 'after' }
   return true
 }
+/**
+ * Backspace at the start of the body (dir -1), or Delete at the end of the
+ * title block (dir 1): never a join, across that edge. As opts.bodyStart says,
+ * nothing, or a move across it.
+ */
+function acrossTitleBlock(dir) {
+  if (opts.bodyStart !== 'move') return
+  const n = bodyStart()
+  if (dir < 0) sel = { caret: { b: n - 1, o: doc[n - 1].items.length } }
+  else arriveHorizontal(n, 1)
+}
 /** Lines b and b + 1 as one, the caret where they met. */
 function joinLines(b) {
   const one = doc[b], two = doc[b + 1]
@@ -1320,6 +1381,26 @@ function sliceBlocks(start, end) {
 /** Delete between two positions; the caret where they were. */
 function deleteBetween(start, end) {
   record()
+  const n = bodyStart(), sb = start.edge ?? start.b
+  if (sb < n) {
+    // From the title block: each field trimmed, none joined to another or to
+    // the body; the body keeps what's after the end.
+    const after = (b) => (end.edge != null ? end.edge > b : end.b > b)
+    for (let b = sb; b < n; b++) {
+      const f = doc[b]
+      const from = b === start.b && start.edge == null ? start.o : 0
+      const to = end.edge == null && end.b === b ? end.o : after(b) ? f.items.length : null
+      if (to != null) f.items = [...f.items.slice(0, from), ...f.items.slice(to)]
+    }
+    const eb = end.edge ?? end.b
+    if (eb >= n) {
+      const rest = end.edge != null ? doc.slice(end.edge) : [{ ...doc[end.b], items: doc[end.b].items.slice(end.o) }, ...doc.slice(end.b + 1)]
+      doc = [...doc.slice(0, n), ...rest]
+      if (!doc.some((blk) => !blk.field)) doc.push(para('p'))
+    }
+    sel = { caret: { b: sb, o: start.edge == null ? start.o : 0 } }
+    return
+  }
   const head = doc.slice(0, start.edge ?? start.b)
   const tail = doc.slice(end.edge != null ? end.edge : end.b + 1)
   const headItems = start.edge == null ? doc[start.b].items.slice(0, start.o) : null
@@ -1331,13 +1412,21 @@ function deleteBetween(start, end) {
   doc = [...head, { kind: 'text', tag, items }, ...tail]
   sel = { caret: { b: head.length, o: headItems?.length ?? 0 } }
 }
-/** Keys with a selection that holds an image and more: Backspace, typing, copying. */
+/** Whether the selection runs out of a field: the browser would join what it deletes across. */
+function crossesField() {
+  if (!sel.anchorPos || !sel.focusPos) return false
+  const a = sel.anchorPos.edge ?? sel.anchorPos.b, f = sel.focusPos.edge ?? sel.focusPos.b
+  const [lo, hi] = a <= f ? [sel.anchorPos, sel.focusPos] : [sel.focusPos, sel.anchorPos]
+  const sb = lo.edge ?? lo.b, eb = hi.edge != null ? hi.edge - 1 : hi.b
+  return sb < bodyStart() && (lo.edge != null || hi.edge != null || sb !== eb)
+}
+/** Keys with a selection that holds an image and more, or crosses a field: Backspace, typing, copying. */
 function rangeKey(e) {
   const mod = e.metaKey || e.ctrlKey, key = e.key
   const [start, end] = cmpPos(sel.anchorPos, sel.focusPos) <= 0 ? [sel.anchorPos, sel.focusPos] : [sel.focusPos, sel.anchorPos]
   if (mod && (key === 'c' || key === 'x')) {
     // As Markdown: the editor's own copy of a stretch with images in it.
-    const md = sliceBlocks(start, end).map(toQmd).join('\n\n')
+    const md = blocksQmd(sliceBlocks(start, end))
     navigator.clipboard.writeText(md).then(() => toast(key === 'x' ? 'Cut, as Markdown' : 'Copied, as Markdown'), () => toast("The browser didn't let the editor copy"))
     if (key === 'c') return true
   } else if (mod || e.altKey) return false
@@ -1357,6 +1446,7 @@ function rangeKey(e) {
   deleteBetween(start, end)
   const { b, o } = sel.caret
   if (key.length === 1) { doc[b].items.splice(o, 0, key); sel = { caret: { b, o: o + 1 } } }
+  else if (key === 'Enter' && doc[b].field) arriveHorizontal(b + 1, 1)
   else if (key === 'Enter') { const rest = doc[b].items.splice(o); doc.splice(b + 1, 0, { kind: 'text', tag: 'p', items: rest }); sel = { caret: { b: b + 1, o: 0 } } }
   render()
   return true
@@ -1390,7 +1480,7 @@ function gapKey(e) {
   else if (key === 'ArrowUp') arriveVertical(b - 1, -1, gapX())
   // Towards the image, Backspace and Delete select it first, as in a line.
   else if ((key === 'Delete' && before) || (key === 'Backspace' && !before)) sel = { fig: k }
-  else if (key === 'Backspace') { if (b > 0) joinLines(b - 1) }
+  else if (key === 'Backspace') { if (b === bodyStart()) acrossTitleBlock(-1); else if (b > 0) joinLines(b - 1) }
   else if (key === 'Delete') joinLines(b)
   else if (key === 'Escape') sel = { fig: k }
   else return false
@@ -1882,11 +1972,28 @@ function toQmd(blk) {
   return (blk.tag === 'h2' ? '## ' : '') + out
 }
 
+/** The title block's fields (and the byline) as front matter. */
+function frontMatter(fields) {
+  const yaml = (s) => (/^[\w][\w .,'-]*$/.test(s) && !/:\s|\s$/.test(s) ? s : q(s))
+  const lines = fields.map((f) => `${f.tag}: ${f.items.length ? yaml(f.items.join('')) : '""'}`)
+  return ['---', ...lines, `author: ${BYLINE.author}`, `date: ${BYLINE.date}`, '---'].join('\n')
+}
+/** Blocks as qmd: a whole title block as front matter, part of one as its text. */
+function blocksQmd(blocks) {
+  const fields = blocks.filter((blk) => blk.field), whole = fields.length === bodyStart() && fields.every((f, i) => f.items.length === doc[i].items.length)
+  const body = blocks.filter((blk) => !blk.field).map(toQmd)
+  if (!fields.length) return body.join('\n\n')
+  return [whole ? frontMatter(fields) : fields.map((f) => f.items.join('')).filter(Boolean).join('\n\n'), ...body].filter(Boolean).join('\n\n')
+}
 function renderSource() {
   const current = sel.caret?.b ?? (sel.fig || sel.gap ? figIndex(sel.fig || sel.gap) : sel.inl ? inlineByKey(sel.inl)?.b : -1)
-  document.getElementById('source-blocks').replaceChildren(...doc.map((blk, b) => {
+  const n = bodyStart()
+  const head = document.createElement('div')
+  head.className = 'blk' + (current >= 0 && current < n ? ' cur' : '')
+  head.textContent = frontMatter(doc.slice(0, n))
+  document.getElementById('source-blocks').replaceChildren(head, ...doc.slice(n).map((blk, i) => {
     const el = document.createElement('div')
-    el.className = 'blk' + (b === current ? ' cur' : '')
+    el.className = 'blk' + (i + n === current ? ' cur' : '')
     el.textContent = toQmd(blk)
     return el
   }))
@@ -1922,8 +2029,11 @@ editor.addEventListener('input', (e) => {
   const tidy = readDocument()
   lastState = snapshot()
   if (caret) sel = { caret }
-  // Markdown for an image, just closed, becomes the image.
-  if (caret && caret.collapsed && doc[caret.b]?.kind === 'text') {
+  // A field's placeholder shows only while it's empty.
+  for (const el of editor.querySelectorAll('[data-field]')) el.classList.toggle('empty', !el.textContent)
+  // Markdown for an image, just closed, becomes the image (not in a field:
+  // that's text).
+  if (caret && caret.collapsed && doc[caret.b]?.kind === 'text' && !doc[caret.b].field) {
     const items = doc[caret.b].items
     let s = caret.o
     while (s > 0 && typeof items[s - 1] === 'string') s--
@@ -1956,9 +2066,10 @@ editor.addEventListener('keydown', (e) => {
   if (mod && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'v') { e.preventDefault(); pastePlain(); return }
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return }
   if (e.key === 'Escape' && panel) { e.preventDefault(); panel = null; render(); return }
+  if (mod && !e.shiftKey && e.key.toLowerCase() === 'a' && !e.target.closest?.('figcaption')) { e.preventDefault(); selectAll(); return }
 
   if (e.shiftKey && !mod && !e.altKey && e.key.startsWith('Arrow') && extendSelection(e)) return
-  if (sel.range && sel.held?.length && !sel.only && rangeKey(e)) return
+  if (sel.range && ((sel.held?.length && !sel.only) || crossesField()) && rangeKey(e)) return
 
   // In a caption.
   const cap = e.target.closest?.('figcaption')
@@ -2050,6 +2161,7 @@ editor.addEventListener('keydown', (e) => {
   if (!caret) return
   const { b, o } = caret
   let blk = doc[b]
+  if (blk?.field && fieldKey(e, caret)) return
   if (e.key === 'Enter') {
     e.preventDefault()
     if (!caret.collapsed) { document.execCommand('delete'); return }
@@ -2064,6 +2176,7 @@ editor.addEventListener('keydown', (e) => {
     return
   }
   if (!caret.collapsed) return
+  if (e.key === 'Backspace' && o === 0 && b === bodyStart()) { e.preventDefault(); acrossTitleBlock(-1); render(); return }
   if (e.key === 'Backspace' && o === 0 && b > 0) {
     e.preventDefault()
     const prev = doc[b - 1]
@@ -2106,6 +2219,53 @@ editor.addEventListener('keydown', (e) => {
   else arriveHorizontal(b - 1, -1)
   render()
 })
+
+/**
+ * Keys in a field of the title block. Enter goes on, to the next field or the
+ * body; Backspace and Delete at its ends move across, never joining; Tab
+ * types nothing. ⌘A selects the field, then (again) everything.
+ */
+function fieldKey(e, caret) {
+  const { b, o } = caret, blk = doc[b], mod = e.metaKey || e.ctrlKey
+  const last = !isField(b + 1)
+  if (mod || e.altKey) return false
+  if (e.key === 'Tab' || (e.key === 'Enter' && e.shiftKey)) { e.preventDefault(); return true }
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    if (!caret.collapsed) document.execCommand('delete')
+    arriveHorizontal(b + 1, 1)
+    render()
+    return true
+  }
+  if (!caret.collapsed) return false
+  if (e.key === 'Backspace' && o === 0) { e.preventDefault(); if (b > 0) { sel = { caret: { b: b - 1, o: doc[b - 1].items.length } }; render() } return true }
+  if (e.key === 'Delete' && o === blk.items.length) {
+    e.preventDefault()
+    if (!last) sel = { caret: { b: b + 1, o: 0 } }
+    else acrossTitleBlock(1)
+    render()
+    return true
+  }
+  return false
+}
+
+/**
+ * ⌘A, as in the editor: in a field, the field; in the body, the body; then
+ * (again) the whole document.
+ */
+function selectAll() {
+  const n = bodyStart(), whole = [{ b: 0, o: 0 }, { edge: doc.length }]
+  const ends = selectionEnds()
+  const b = ends ? (ends[1].edge != null ? Math.min(ends[1].edge, doc.length - 1) : ends[1].b) : n
+  const scope = b < n ? [{ b, o: 0 }, { b, o: doc[b].items.length }] : [doc[n].kind === 'fig' ? { edge: n } : { b: n, o: 0 }, { edge: doc.length }]
+  const same = (p, q) => p && q && cmpPos(p, q) === 0
+  const has = (r) => ends && same(ends[0], r[0]) && same(ends[1], r[1])
+  // An empty field has nothing to select: the whole document.
+  const to = has(scope) || has(whole) || (b < n && !doc[b].items.length) ? whole : scope
+  if (sel.fig || sel.inl || sel.gap) sel = { caret: null }
+  moved = true
+  select(...to)
+}
 
 /** Whether the caret is on the first (dir < 0) or last line of `el`. */
 function atEdge(el, dir) {
@@ -2202,6 +2362,15 @@ document.addEventListener('mousedown', (e) => {
 
 // Paste and drop: image files go in where the caret (or the drop) is.
 editor.addEventListener('paste', async (e) => {
+  // A field is a line of text: its lines run together, and an image can't go in.
+  const inField = readCaret() && isField(readCaret().b)
+  if (inField) {
+    e.preventDefault()
+    const t = e.clipboardData?.getData('text/plain')
+    if (t && !parseImageMarkdown(t)) document.execCommand('insertText', false, t.replace(/\s*\n\s*/g, ' ').trim())
+    else toast('A title is text only: put the image in the body')
+    return
+  }
   // An image copied from the editor: all of it (⌘⇧V, the picture alone, is
   // pastePlain).
   const html = e.clipboardData?.getData('text/html')
@@ -2353,6 +2522,12 @@ function parseImageMarkdown(text) {
 /** ⌘⇧V: a copied image as the picture alone; anything else as plain text. */
 async function pastePlain() {
   try {
+    if (readCaret() && isField(readCaret().b)) {
+      const t = await navigator.clipboard.readText()
+      if (t && !parseImageMarkdown(t)) document.execCommand('insertText', false, t.replace(/\s*\n\s*/g, ' ').trim())
+      else toast('A title is text only: put the image in the body')
+      return
+    }
     for (const item of await navigator.clipboard.read()) {
       if (item.types.includes('text/html')) {
         const html = await (await item.getType('text/html')).text()
@@ -2390,6 +2565,7 @@ function dropPoint(e) {
   const p = document.caretPositionFromPoint ? document.caretPositionFromPoint(e.clientX, e.clientY) : document.caretRangeFromPoint(e.clientX, e.clientY)
   const node = p && (p.offsetNode ?? p.startContainer), offset = p && (p.offset ?? p.startOffset)
   const el = node && (node.nodeType === 1 ? node : node.parentElement)?.closest('#editor > p, #editor > h2')
+  if (el?.dataset.field) return { b: bodyStart(), o: 0, top: true }
   if (el) return { b: [...editor.children].indexOf(el), o: caretOffset(el, node, offset), node, offset }
   // Over a figure: after it.
   const fig = document.elementFromPoint(e.clientX, e.clientY)?.closest('#editor > figure')
@@ -2400,7 +2576,8 @@ editor.addEventListener('dragover', (e) => {
   if (![...e.dataTransfer.types].includes('Files')) return
   e.preventDefault()
   dragging = true
-  markDrop(dropPoint(e), opts.place === 'block')
+  const at = dropPoint(e)
+  markDrop(at, opts.place === 'block' || Boolean(at?.top))
 })
 /** Where a dropped image would go: a bar for a line of its own, else a caret. */
 function markDrop(at, ownLine) {
@@ -2448,7 +2625,8 @@ editor.addEventListener('drop', async (e) => {
   e.preventDefault()
   const at = dropPoint(e)
   const path = await addFile(file)
-  if (at?.after) { sel = { fig: doc[at.b].k }; insertImage(path, null) }
+  if (at?.top) { record(); const fig = figure(path); doc.splice(at.b, 0, fig); selectFigure(fig.k, true) }
+  else if (at?.after) { sel = { fig: doc[at.b].k }; insertImage(path, null) }
   else insertImage(path, at ? { b: at.b, o: at.o } : null)
   render()
 })
@@ -2521,6 +2699,8 @@ function movePoint(e) {
     if (!best || d < best.d) best = { b, el, r, d, over: false }
   }
   if (!best) return null
+  // Not into the title block: over it, the top of the body.
+  if (isField(best.b)) return { b: bodyStart(), edge: 'before' }
   const { b, el, r } = best
   const nearer = e.clientY < (r.top + r.bottom) / 2 ? 'before' : 'after'
   if (!best.over || el.nodeName === 'FIGURE') return { b, edge: nearer }
