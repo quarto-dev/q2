@@ -1176,14 +1176,23 @@ pub fn build_analysis_transform_pipeline() -> TransformPipeline {
 ///
 /// ## Stages
 ///
-/// 1. [`ParseDocumentStage`] — QMD → Pandoc AST
-/// 2. [`MetadataMergeStage`] — merge project / directory / document /
-///    runtime metadata into `pandoc.meta`
+/// 1. The head ([`build_head_stages`]): ingest (source conversion, parse,
+///    metadata merge), the authored-metadata checkpoint, enrich (language
+///    terms, include expansion and resolution, listing autofill), the
+///    [`DocumentProfileStage`] checkpoint and the Pass-1 analyses. Exactly
+///    what a render and Pass 1 run, so an analysis sees the same document
+///    (bd-ojsx06at, decision R3; this used to be its own hand-copied list).
+/// 2. [`UnwrapProfileStage`] — leaves the profile in
+///    `StageContext::document_profile` and continues with the AST
+///    (`DocumentAst::authored_meta` rides along).
 /// 3. [`PreEngineSugaringStage`] — seed the [`RefTypeRegistry`] from
 ///    `crossref.custom` metadata, seed a [`CrossrefIndex`], desugar
 ///    code-block shorthand
 /// 4. [`AstTransformsStage`] with the [`build_analysis_transform_pipeline`]
 ///    subset — apply sugaring + crossref indexing
+///
+/// One run therefore yields the profile, the authored metadata, the
+/// outline-ready AST and every diagnostic.
 ///
 /// After this pipeline runs, the AST is in its outline-ready state:
 /// cross-referenceable blocks are `CustomNode`s with
@@ -1195,19 +1204,12 @@ pub fn build_analysis_transform_pipeline() -> TransformPipeline {
 /// [`RefTypeRegistry`]: crate::crossref::RefTypeRegistry
 /// [`CrossrefIndex`]: crate::crossref::CrossrefIndex
 pub fn build_analysis_pipeline() -> Pipeline {
-    let stages: Vec<Box<dyn PipelineStage>> = vec![
-        Box::new(ParseDocumentStage::new()),
-        Box::new(MetadataMergeStage::new()),
-        // Localized-term resolution — keeps analysis-path transforms in
-        // sync with the render pipelines once they consume terms
-        // (bd-llhlzd7p).
-        Box::new(LanguageResolveStage::new()),
-        Box::new(IncludeExpansionStage::new()),
-        Box::new(PreEngineSugaringStage::new()),
-        Box::new(AstTransformsStage::with_pipeline(
-            build_analysis_transform_pipeline(),
-        )),
-    ];
+    let mut stages = build_head_stages();
+    stages.push(Box::new(UnwrapProfileStage::new()));
+    stages.push(Box::new(PreEngineSugaringStage::new()));
+    stages.push(Box::new(AstTransformsStage::with_pipeline(
+        build_analysis_transform_pipeline(),
+    )));
 
     Pipeline::new(stages).expect("analysis pipeline stages should be compatible")
 }
@@ -4173,9 +4175,9 @@ mod tests {
         use crate::stage::PipelineDataKind;
 
         let pipeline = build_analysis_pipeline();
-        // Parse + MetadataMerge + LanguageResolve + IncludeExpansion +
-        // PreEngineSugaring + AstTransforms(analysis subset)
-        assert_eq!(pipeline.len(), 6);
+        // The head + UnwrapProfile + PreEngineSugaring + AstTransforms
+        // (analysis subset), bd-ojsx06at.
+        assert_eq!(pipeline.len(), build_head_stages().len() + 3);
         assert_eq!(pipeline.expected_input(), PipelineDataKind::LoadedSource);
         assert_eq!(pipeline.expected_output(), PipelineDataKind::DocumentAst);
     }

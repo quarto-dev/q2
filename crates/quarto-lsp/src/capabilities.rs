@@ -1,6 +1,6 @@
 //! LSP capability negotiation.
 
-use tower_lsp::lsp_types::{
+use lsp_types::{
     OneOf, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
     TextDocumentSyncOptions,
 };

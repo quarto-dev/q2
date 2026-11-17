@@ -47,7 +47,7 @@ pub mod tokens;
 pub mod types;
 
 // Re-export main types and functions for convenience
-pub use analysis::analyze_document;
+pub use analysis::{ProjectAnalysis, analyze_document, analyze_in_project};
 pub use diagnostics::get_diagnostics;
 pub use document::Document;
 pub use symbols::{get_folding_ranges, get_symbols};

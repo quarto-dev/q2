@@ -299,6 +299,28 @@ fn test_initialize() {
     );
 }
 
+#[test]
+fn test_exit_while_stdin_stays_open() {
+    // q2 hub-lsp found that a tower-lsp server never exits when the client
+    // sends `exit` but keeps the pipe open. lsp-server's reader thread
+    // stops on `exit` itself (bd-ojsx06at).
+    let mut harness = LspTestHarness::new();
+    harness.initialize();
+    harness.notify("exit", serde_json::Value::Null);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Some(status) = harness.child.try_wait().expect("try_wait") {
+            assert!(status.success(), "exit status {status}");
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "q2 lsp did not exit while stdin stayed open"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
 // =============================================================================
 // Diagnostic Tests
 // =============================================================================

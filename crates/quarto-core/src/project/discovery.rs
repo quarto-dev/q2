@@ -197,6 +197,37 @@ pub const DEFAULT_RENDER_PATTERN: &str = "**/*.qmd";
 /// (`_quarto-<profile>.yml`) on its own is not a marker.
 pub const PROJECT_CONFIG_FILENAMES: [&str; 2] = ["_quarto.yml", "_quarto.yaml"];
 
+/// The project root for `start`: the nearest directory at or above it
+/// that holds a project config ([`PROJECT_CONFIG_FILENAMES`], checked in
+/// that order), with the config file's path. `None` when the walk reaches
+/// the filesystem root without finding one.
+///
+/// Every check goes through `runtime` (`path_exists`), so the answer
+/// reflects whatever the runtime layers: the disk for `q2 render`, open
+/// editor buffers over the disk for the language server. It never lists
+/// a directory. This is the one copy of the upward walk:
+/// `ProjectContext::discover` parses the config it finds, and the
+/// `render`/`preview` commands and the LSP use it to locate a project
+/// cheaply (bd-ojsx06at; there used to be three copies).
+pub fn find_project_root(
+    start: &Path,
+    runtime: &dyn SystemRuntime,
+) -> quarto_system_runtime::RuntimeResult<Option<(PathBuf, PathBuf)>> {
+    let mut current = start.to_path_buf();
+    loop {
+        for name in PROJECT_CONFIG_FILENAMES {
+            let candidate = current.join(name);
+            if runtime.path_exists(&candidate, None)? {
+                return Ok(Some((current, candidate)));
+            }
+        }
+        match current.parent() {
+            Some(parent) => current = parent.to_path_buf(),
+            None => return Ok(None),
+        }
+    }
+}
+
 /// Discover the render list for a project.
 ///
 /// Returned paths are **absolute** (joined with `project_dir`) and
@@ -876,6 +907,56 @@ mod tests {
     use quarto_system_runtime::NativeRuntime;
     use std::fs;
     use tempfile::TempDir;
+
+    // ── find_project_root (bd-ojsx06at) ────────────────────────────────
+
+    #[test]
+    fn find_project_root_takes_the_nearest_config_upward() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        fs::write(root.join("_quarto.yml"), "project: {}\n").unwrap();
+        fs::create_dir_all(root.join("a/b")).unwrap();
+        fs::write(root.join("a/_quarto.yaml"), "project: {}\n").unwrap();
+        let rt = NativeRuntime::new();
+
+        let found = find_project_root(&root.join("a/b"), &rt).unwrap();
+        assert_eq!(found, Some((root.join("a"), root.join("a/_quarto.yaml"))));
+        let found = find_project_root(&root, &rt).unwrap();
+        assert_eq!(found, Some((root.clone(), root.join("_quarto.yml"))));
+    }
+
+    #[test]
+    fn find_project_root_prefers_yml_over_yaml_in_one_directory() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        fs::write(root.join("_quarto.yaml"), "").unwrap();
+        fs::write(root.join("_quarto.yml"), "").unwrap();
+        let found = find_project_root(&root, &NativeRuntime::new()).unwrap();
+        assert_eq!(found, Some((root.clone(), root.join("_quarto.yml"))));
+    }
+
+    #[test]
+    fn find_project_root_sees_an_unsaved_config_through_an_overlay() {
+        // How the language server finds a session root: the client's open
+        // buffers overlaid on the disk, so an unsaved `_quarto.yml` counts.
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        fs::create_dir_all(root.join("sub")).unwrap();
+        let native = std::sync::Arc::new(NativeRuntime::new());
+        let on_disk = find_project_root(&root.join("sub"), native.as_ref()).unwrap();
+        assert!(
+            on_disk
+                .as_ref()
+                .is_none_or(|(dir, _)| !dir.starts_with(&root)),
+            "no config on disk under the temp root: {on_disk:?}"
+        );
+
+        let mut files = std::collections::HashMap::new();
+        files.insert(root.join("_quarto.yml"), b"project: {}\n".to_vec());
+        let rt = crate::overlay_runtime::OverlayRuntime::new(native, files);
+        let found = find_project_root(&root.join("sub"), &rt).unwrap();
+        assert_eq!(found, Some((root.clone(), root.join("_quarto.yml"))));
+    }
 
     fn native() -> NativeRuntime {
         NativeRuntime::new()

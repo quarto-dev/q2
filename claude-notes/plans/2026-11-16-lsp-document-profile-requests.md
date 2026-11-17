@@ -494,6 +494,284 @@ inside the browser's WASM. That is out of scope here, but sessions
 should not depend on anything LSP-specific that would stop the preview
 from reading them.
 
+## C3 design (bd-ojsx06at) — for review
+
+This section turns "The analysis worker" and "Toward a `q2` server
+manager" into concrete decisions for C3. **Status: reviewed 2026-11-16;
+R1–R5 accepted as recommended** (see the end of this section).
+
+### Facts found while designing
+
+- **The LSP analyses each document twice per edit.**
+  - Native diagnostics come from `get_diagnostics`, which parses with
+    the qmd reader only.
+  - The outline comes from `analyze_document`, which runs
+    `build_analysis_pipeline`. That builder keeps a hand-copied stage
+    list: Parse, Merge, LanguageResolve, IncludeExpansion, sugar and
+    transforms. It skips source conversion, the authored-metadata
+    checkpoint, include resolution and the profile checkpoint.
+
+  The book `StaticProjectAnalyzer` uses the same builder.
+- **One run can give everything.** `UnwrapProfileStage` leaves the
+  profile in `StageContext::document_profile`, and
+  `DocumentAst::authored_meta` survives to the end of the pipeline. So
+  a pipeline of *head* + unwrap + sugar + analysis transforms returns
+  the profile, the authored metadata, the post-transform AST (for
+  symbols and folding) and every diagnostic, from one parse.
+- **The existing LSP tests use URIs of files that do not exist**
+  (`file:///test/valid.qmd`), as an untitled-buffer client would. A
+  session must never walk a directory just because a document sits in
+  it.
+
+### Crates and the host boundary (D9)
+
+| Crate | Role | Targets |
+| --- | --- | --- |
+| `quarto-lsp-core` (exists) | Per-document analysis: symbols, folding, tokens, diagnostic conversion. Gains one entry point that runs the unified analysis pipeline over a caller-supplied runtime, project, format and bytes. `analyze_document` (hub-client) keeps its signature. | native + WASM |
+| `quarto-lsp-project` (new) | `Workspace`, `ProjectSession`, `Mount`, analysis cache, the wire schema (C4), and the query API. **No I/O, no threads, no JSON-RPC.** | native + WASM |
+| `quarto-lsp` (exists) | The native LSP host: the `lsp-server` loop, the JSON-RPC ↔ `Workspace` adapter, file watching and the rayon pool. Replaces tower-lsp. | native |
+
+**The `Workspace` is a sans-IO state machine with a typed query API.**
+It is not shaped like LSP. That is the boundary a server manager, the
+preview, or the browser would host against:
+
+```rust
+// quarto-lsp-project, sketch
+pub struct Workspace { /* sessions, per-client editor layers, config */ }
+
+pub enum Input {
+    Client(ClientId, ClientEvent),   // open/change/close buffer, folders changed, config
+    Files(SessionId, Vec<FileChange>), // from a feeder: changed / added / removed (rel paths)
+    JobDone(JobId, JobOutput),       // a background job the host ran
+}
+pub enum Output {
+    Diagnostics(ClientId, DocUri, Vec<Diagnostic>), // push to a client
+    DocumentsChanged(ClientId, ProjectId, Vec<DocUri>), // hub-lsp's notification (F1)
+    Spawn(Job),                      // run `job.run()` anywhere, then feed JobDone back
+    Watch(SessionId, PathBuf) | Unwatch(SessionId),     // the disk feeder's roots
+}
+
+impl Workspace {
+    pub fn handle(&mut self, input: Input) -> Vec<Output>;
+    /// Called by the host when its input queue is momentarily empty:
+    /// analyse what is dirty (debounce = drain-then-flush).
+    pub fn flush(&mut self) -> Vec<Output>;
+    // Queries (all synchronous; may analyse on demand):
+    pub fn document_symbols(&mut self, client: ClientId, uri: &DocUri) -> Option<Vec<Symbol>>;
+    pub fn document_profile(&mut self, …) -> …;   // C4
+    pub fn document_metadata(&mut self, …) -> …;  // C4
+}
+```
+
+- **The LSP host is an adapter.** It decodes JSON-RPC, feeds `Input`,
+  answers requests through the query API, and encodes `Output`.
+  - `lsp-server` gives an in-order message channel. The host loop drains
+    every queued message, calls `flush()`, and then blocks. That gives
+    debouncing for free and keeps the order of edits and requests.
+  - `exit` ends the loop even while stdin is open.
+- **Several clients.** Every event and output carries a `ClientId`.
+  Each client has its own `EditorLayer` per session.
+  - A cached result is shared between clients only if its read log
+    holds no `Buffer` key. Otherwise it belongs to the client whose
+    buffers it read.
+  - v1 hosts exactly one client, but nothing assumes it.
+- **Jobs.** Whole-project sweeps are `Spawn(Job)`. A `Job` is a `Send`
+  closure that owns a `SessionRuntime` snapshot. The native host runs
+  jobs on rayon, and a browser host runs them inline. Each document's
+  `?Send` pipeline future lives entirely inside the job, under
+  `pollster::block_on`, as in `pass_one_dispatch_parallel`.
+  Re-analysing one document after an edit runs inline in `flush()`
+  (under 50 ms, per D1).
+
+### Sessions
+
+- **Finding the root.** Look upward from the document for a project
+  config (`_quarto.yml` / `_quarto.yaml`). Check the client's open
+  buffers first, then the inner runtime. Never walk a directory to find
+  it.
+  - **One shared walk.** Before C3 there were three copies of the
+    upward walk:
+    - `ProjectContext::find_project_config` (private, and it also
+      parses the config);
+    - `find_project_root_upward` in `commands/render.rs`, which called
+      itself "the cheap half" of the first;
+    - `find_project_root_above` in `commands/preview.rs`, which used
+      `std` I/O.
+
+    C3 replaces all three with `quarto_core::project::discovery::find_project_root(start, runtime)`.
+    The LSP calls it through an `OverlayRuntime` of the client's open
+    buffers over the inner runtime, so an unsaved `_quarto.yml` counts.
+  - **Project found:** a disk session at the canonical root, with
+    `VfsBaseLayer::load_from_disk` and an eager Pass-1 sweep (a `Job`)
+    of the render list.
+  - **No project:** a **single-file session** rooted at the document's
+    directory. Its base holds only that document, and nothing walks the
+    directory. In disk mode, other reads (includes) fall through.
+  - **Non-`file:` URI** (`untitled:`): a single-file session with a
+    synthetic root, in attached mode, so it never touches the disk.
+- **Project context.** `ProjectContext::discover_with_profile` runs
+  over the session's `SessionRuntime`. Profiles come from
+  `initializationOptions.profile`, then `QUARTO_PROFILE`.
+- **Format.** By default each document uses the format `q2 render`
+  would pick (`resolve_document_format`), which fixes bd-5d7frwlo for
+  the LSP. Results are cached per format.
+- **Non-QMD inputs** are refused (D6). Sessions carry
+  `supports_source_conversion: false` in v1.
+
+### Analysis and caching
+
+- **One pipeline.** `build_analysis_pipeline()` becomes
+  `build_head_stages()` + `UnwrapProfileStage` + `PreEngineSugaring` +
+  `AstTransforms(analysis subset)`. Its own stage list is gone, and so
+  is the last hand-copied prefix of the head. `StaticProjectAnalyzer`
+  gets the same pipeline; its tests decide whether that is acceptable.
+- **Results.** A document's `AnalysisResult` holds the profile, the
+  authored metadata and `ASTContext`, the symbols, folding ranges and
+  diagnostics, and the **read log** from its `SessionRuntime`. No ASTs
+  are kept (D1).
+- **Pull validation, not push invalidation.** A cached result is
+  current iff every `(path, VersionKey)` in its read log still matches
+  the layers:
+  - a buffer's version;
+  - the base's content hash;
+  - for disk fall-through files, a re-hash, or `Stat` for on-demand
+    files.
+
+  This needs no dependency graph and covers includes, `_metadata.yml`
+  layers and files that appear (`Absent`).
+- **Push is only for notifications.** When the feeder reports changes,
+  the session re-validates open documents, then publishes diagnostics
+  and (F1) `documentsChanged`. A `_quarto.yml` change rebuilds the
+  session, and an added or removed file rebuilds `ProjectContext.files`.
+- **The project index** (`ProjectIndex`) is built from the profiles of
+  current results and rebuilt when any profile changes. F1 uses it; C3
+  only keeps it.
+
+### The disk feeder (native host)
+
+- **Initial load:** `VfsBaseLayer::load_from_disk(root)`.
+- **Watching.**
+  - If the client supports dynamic `workspace/didChangeWatchedFiles`
+    registration, the host registers a `**/*` watcher under each
+    session root and translates events.
+  - Otherwise it runs `notify`, debounced, like quarto-hub's
+    `watch.rs`. The classification filter comes from
+    `quarto-project-files`, so the LSP ignores what the hub ignores
+    (`_site`, `.quarto`, hidden directories).
+- **Applying events.** Each event becomes `Input::Files`. The
+  `Workspace` updates the `VfsBaseLayer` (reload text, re-stat on-demand
+  entries, add or remove), then validates.
+
+### Behaviour changes users will see
+
+1. **Diagnostics broaden** from parse-only to the whole analysis
+   pipeline: metadata and schema warnings, include errors,
+   language-file errors. They now match what hub-client shows (R1).
+2. **Diagnostics and the outline use the real project and format.**
+   `_quarto.yml`, `_metadata.yml` and `format: typst` documents now
+   behave as they do in `q2 render` (bd-5d7frwlo).
+3. **Unsaved edits to an included file or to `_metadata.yml`** update
+   the diagnostics and outline of every open document that depends on
+   them.
+
+### Tests
+
+- **`quarto-lsp-project` unit tests** drive `Workspace` with synthetic
+  `Input`s and assert on `Output`s and queries. They do no I/O beyond
+  temp-dir fixtures and are deterministic. They cover:
+  - root finding: a project, a single file, a non-existent path,
+    `untitled:`;
+  - pull validation through an include and through `_metadata.yml`;
+  - result sharing across clients;
+  - session rebuild on a `_quarto.yml` change;
+  - refusing `.ipynb`.
+- **`quarto-lsp` integration tests:**
+  - every existing test unchanged, with diagnostic expectations
+    reviewed per R1;
+  - `exit` while stdin stays open;
+  - project-aware diagnostics (a `_metadata.yml` key changes the
+    outline or diagnostics);
+  - a change on disk to an included file republishes diagnostics for
+    its open includer.
+- **Gates:** `cargo xtask verify`, which includes the WASM build that
+  `quarto-lsp-project` must pass.
+
+### As built (C3)
+
+These are the commits on `braid/bd-ojsx06at-…`.
+
+1. **One project-root walk.**
+   `quarto_core::project::discovery::find_project_root` replaces the
+   three copies. It found a gap: `OverlayRuntime` now overlays
+   `path_exists` as well, so an unsaved `_quarto.yml` counts.
+2. **One analysis pipeline (R3).** `build_analysis_pipeline` is now the
+   head + unwrap + sugar + analysis transforms.
+3. **`quarto_lsp_core::analyze_in_project`.** One run returns symbols,
+   folding ranges, diagnostics, the profile and the authored metadata.
+4. **Primitives.** `SessionRuntime::still_matches` does pull validation.
+   `quarto_project_files::classify` classifies one path; the walk now
+   uses it too.
+5. **The new crate `quarto-lsp-project`.** It holds `Workspace`,
+   sessions, `DocUri`, jobs and pull-validated caching, and it builds
+   for wasm32.
+6. **`quarto-lsp` on `lsp-server`.** tower-lsp and tokio are removed.
+   `serve(Connection)` can be driven in process, and
+   `initializationOptions` takes `{ profile, sweep }`.
+
+Decisions made while building:
+
+- **Diagnostics are published per document version.** A new version of
+  a document always republishes, even with identical diagnostics,
+  because clients expect it and the existing
+  `test_diagnostics_on_document_change` relies on it. A document
+  re-validated only because a dependency changed republishes only if
+  its diagnostics changed.
+- **Only documents are analysed.** That means `.qmd`, `.md` and pathless
+  buffers. An open `_quarto.yml` or `_metadata.yml` shadows the disk for
+  the documents that read it, but gets no diagnostics, and
+  `Workspace::document` returns `None` for it.
+- **Single-file sessions are not watched.** Their reads that fall
+  through to disk are re-hashed on the next validation. A disk change to
+  a lone document's include shows up at its next edit or request, not
+  pushed. Watching single-file sessions (non-recursively) is a possible
+  follow-up.
+- **The project index is not kept yet.** Sweep results are cached
+  profiles, and F1 builds `ProjectIndex` from them.
+- **Watching uses the client when it can.** If the client supports
+  dynamic registration of `workspace/didChangeWatchedFiles`, the host
+  registers a `RelativePattern` watcher (`**/*` under each root).
+  Otherwise it runs `notify` (200 ms debounce). Either way, events are
+  classified by `quarto_project_files::classify`.
+
+### Questions for review (decided 2026-11-16: all as recommended)
+
+R4 resolution: carry both `lsp-types` versions until F3. R5 resolution:
+keep the eager sweep. It may need to change later, but it is better to
+have it now and build the rest of the infrastructure on it.
+
+- **R1. Broader diagnostics.** Native diagnostics would broaden to the
+  whole analysis pipeline, matching the browser. Recommended. The
+  alternative is to keep parse-only diagnostics natively, which keeps
+  the two parses and the mismatch with the browser.
+- **R2. A library API, not an LSP-shaped core.** `quarto-lsp-project`
+  exposes typed queries and events, and only `quarto-lsp` knows
+  JSON-RPC. Recommended, because a server manager or the preview can
+  then use sessions without speaking LSP. The cost is a translation
+  layer in `quarto-lsp`.
+- **R3. One pipeline for the LSP and the book static analyzer.**
+  `build_analysis_pipeline` becomes the head plus the analysis tail,
+  for both. The book analyzer would gain source conversion, include
+  resolution and listing autofill per chapter, which is slightly more
+  work per sibling chapter. Recommended. The alternative is two
+  builders, one of them still hand-copying the head.
+- **R4. Two `lsp-types` versions for a while.** `lsp-server` 0.10 pairs
+  with `lsp-types` 0.97, which uses `fluent-uri`, while hub-lsp's
+  tower-lsp stays on 0.94 until F3 folds it in. Acceptable as a
+  temporary state, or should C3 pin 0.94?
+- **R5. Eager sweep on start for disk sessions.** On by default, with
+  `initializationOptions.sweep: false` to turn it off. On claude-notes
+  the first sweep takes about 0.7 s across 16 threads.
+
 ## Children
 
 Execution order is top to bottom.

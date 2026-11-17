@@ -30,11 +30,11 @@
 //!
 //! ## Pipeline reuse
 //!
-//! Each sibling runs through [`build_analysis_pipeline`] — Parse +
-//! MetadataMerge + LanguageResolve + IncludeExpansion + PreEngineSugaring +
-//! AstTransforms bounded to Normalization+Crossref — the same
-//! LSP-precedented, pre-engine subset `quarto-lsp-core`'s
-//! `analyze_document_async` already uses for single-file analysis. Only
+//! Each sibling runs through [`build_analysis_pipeline`] — the render
+//! head (ingest, authored-metadata checkpoint, enrich, profile checkpoint)
+//! + PreEngineSugaring + AstTransforms bounded to Normalization+Crossref —
+//! the same pre-engine pipeline `quarto-lsp-core`'s analysis uses
+//! (bd-ojsx06at, R3: one pipeline for both). Only
 //! syntactically-visible crossref targets are resolvable pre-engine anyway
 //! (single-file crossref design D2/D6), so nothing deeper is needed.
 //!
