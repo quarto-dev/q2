@@ -671,24 +671,35 @@ async fn execute_blocks_inner(
                 // unless something opts in.
                 let allow_errors = resolved_flag(resolved.as_ref(), "error", false);
 
-                let exec_result = session.execute(&cell.code).await?;
+                // GH #1247: `eval: false` keeps the cell but never sends it
+                // to the kernel; it presents as its code with no output (Q1's
+                // `cell_execute` in notebook.py skips it the same way).
+                if !resolved_flag(resolved.as_ref(), "eval", true) {
+                    CellResult {
+                        status: ExecuteStatus::Ok,
+                        outputs: Vec::new(),
+                        execution_count: None,
+                    }
+                } else {
+                    let exec_result = session.execute(&cell.code).await?;
 
-                // Error policy (bd-ohvl879u, knitr/Q1 parity): a raising cell
-                // aborts the render unless the cell or the document allows
-                // errors in output.
-                if !allow_errors && let Some((ename, evalue)) = first_cell_error(&exec_result) {
-                    let at = describe_location(&body_source, 0, ctx)
-                        .map(|l| format!(" at {l}"))
-                        .unwrap_or_default();
-                    return Err(JupyterError::CellExecutionFailed {
-                        message: format!(
-                            "code cell{at} raised {ename}: {evalue}\n\
-                             Use `#| error: true` on the cell (or `execute: error: true` in the \
-                             document metadata) to show the error in the output instead."
-                        ),
-                    });
+                    // Error policy (bd-ohvl879u, knitr/Q1 parity): a raising cell
+                    // aborts the render unless the cell or the document allows
+                    // errors in output.
+                    if !allow_errors && let Some((ename, evalue)) = first_cell_error(&exec_result) {
+                        let at = describe_location(&body_source, 0, ctx)
+                            .map(|l| format!(" at {l}"))
+                            .unwrap_or_default();
+                        return Err(JupyterError::CellExecutionFailed {
+                            message: format!(
+                                "code cell{at} raised {ename}: {evalue}\n\
+                                 Use `#| error: true` on the cell (or `execute: error: true` in the \
+                                 document metadata) to show the error in the output instead."
+                            ),
+                        });
+                    }
+                    exec_result
                 }
-                exec_result
             }
         };
 
