@@ -323,6 +323,7 @@ mod tests {
             level,
             number: None,
             children,
+            source_info: None,
         }
     }
 
