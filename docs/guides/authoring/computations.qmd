@@ -309,6 +309,11 @@ They are left exactly as written in these places:
 
 - any fenced code block, whether braced (a `{r}` cell) or not, and whatever
   its language;
+- a code span with two or more backtick delimiters that holds a span, as in
+  [Writing about an inline expression](#writing-about-an-inline-expression);
+- a document with no executable cell and no engine key, where nothing runs (see
+  [Documents that contain only inline
+  expressions](#documents-that-contain-only-inline-expressions));
 - HTML comments;
 - project-level metadata: `_quarto.yml`, `_metadata.yml`, and extension or
   format defaults. A span in `_quarto.yml` is **not** evaluated, even though
@@ -398,8 +403,8 @@ Today is `{python} __import__("datetime").date.today().year`.
 matter: `engine:` in `_quarto.yml` does not make a page without cells run its
 spans, as in Quarto 1. A page with at least one executable cell needs no key.
 
-To show a span as code instead of running it, wrap it in a `markdown` code
-block, as in
+To show a span as code instead of running it, wrap it in a code span with two or
+more backticks, or in a `markdown` code block, as in
 [Writing about an inline expression](#writing-about-an-inline-expression).
 Doubling the braces is not an escape: `` `{{python}} x` `` is left alone, but
 it is displayed with both pairs of braces.
@@ -437,6 +442,18 @@ The rule is that a code span with two or more backtick delimiters, whose content
 contains an inline expression, is displayed. This holds in headings, links,
 captions, footnotes, table cells, callouts, and the document's own `title:`
 and other front-matter values.
+
+The classic spelling works the same way: `` `r release_version` `` is displayed,
+not run.
+
+The content must hold the span with its own backticks. A double-backtick code
+span with no backtick inside, such as ` ``{r} x`` `, is an ordinary code span
+that holds the text `{r} x`, and Quarto 2 runs it.
+
+On a page with no executable cell and no `engine:` or `jupyter:` key in its own
+front matter, nothing runs, so every span is left as written. Once the page
+gains a cell, its spans run. The code span above works in both cases, so write
+examples that way if the page might gain a cell later.
 
 To show a whole line of prose, or several expressions together, use the rule
 from [Displaying code cells without running
