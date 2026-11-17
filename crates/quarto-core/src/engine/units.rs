@@ -817,6 +817,10 @@ mod tests {
             let text = format!("see `{{{lang}}} 1 + 1` here\n");
             assert_eq!(spans(&text).len(), 1, "{lang}");
             assert!(mask.is_match(&text), "{lang}");
+            // The nested spelling: the span as the text of a code span. The
+            // mask pattern must match the inner span.
+            let nested = format!("see `` `{{{lang}}} 1 + 1` `` here\n");
+            assert!(mask.is_match(&nested), "nested {lang}");
         }
     }
 

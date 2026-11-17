@@ -423,10 +423,25 @@ it is displayed with both pairs of braces.
 
 ### Writing about an inline expression
 
-The rule is the one from [Displaying code cells without running
-them](#displaying-code-cells-without-running-them), and nothing about it
-changes for inline expressions: write it inside a `markdown` block and it is
-displayed rather than run.
+To show an inline expression in running prose, wrap it in a code span that uses
+two or more backticks, and put a space inside each end. The inner span is
+displayed as written, and nothing runs:
+
+````markdown
+Write `` `{r} release_version` `` to show the current release.
+````
+
+which renders as: Write `` `{r} release_version` `` to show the current release.
+
+The rule is that a code span with two or more backtick delimiters, whose content
+contains an inline expression, is displayed. This holds in headings, links,
+captions, footnotes, table cells, callouts, and the document's own `title:`
+and other front-matter values.
+
+To show a whole line of prose, or several expressions together, use the rule
+from [Displaying code cells without running
+them](#displaying-code-cells-without-running-them): write it inside a `markdown`
+block and it is displayed rather than run.
 
 ````markdown
 ```markdown
@@ -457,7 +472,13 @@ label that tells readers (and highlighters) what the block contains.
 
 Quarto 1 had a doubled-brace escape for inline expressions too: `` `{{r}} x` ``
 was displayed as `` `{r} x` ``. Quarto 2 drops it for the same reason it drops
-the doubled-brace escape for cells --- the `markdown` code block above does the
-job, and leaving doubled braces alone is what lets Jinja and Mustache templates
-render correctly.
+the doubled-brace escape for cells --- the code span above and the `markdown`
+code block do the job, and leaving doubled braces alone is what lets Jinja and
+Mustache templates render correctly.
+
+The two versions differ in which code spans are displayed. With Jupyter,
+Quarto 1 evaluates the nested form `` `{python} 1+1` `` and leaves
+` ``{python} 1+1`` ` and ` `` {python} 1+1 `` ` as written. Quarto 2 displays
+the nested form, and evaluates both of the others, because it reads each as a
+plain `{python} 1+1` code span.
 :::
