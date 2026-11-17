@@ -900,6 +900,7 @@ export default function PreviewApp() {
         const connectWithPreviewOptions = async () => {
           const currentDocId = await fetchIndexDocId();
           return connect(wsUrl, currentDocId, undefined, undefined, undefined, {
+            peerTimeoutMs: Infinity,
             storage: 'memory',
           });
         };
