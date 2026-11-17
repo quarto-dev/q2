@@ -130,6 +130,7 @@ pub(crate) mod image_alt_normalize;
 // npm `hephaestus-svg-wasm` client — see the module docs.
 #[cfg(not(target_arch = "wasm32"))]
 mod hephaestus;
+mod html_columns;
 mod secondary_nav_render;
 // Fixed-header JS shipping (bd-ersobfbt). Native-only: the preview
 // excludes ApplyTemplateStage (no <script> emission) and injects the
@@ -205,6 +206,7 @@ pub use graphviz::{GRAPHVIZ_VERSION, GraphvizRenderTransform, VIZ_VERSION};
 pub use heading_id::{HeadingIdTransform, rederive_stale_heading_ids};
 #[cfg(not(target_arch = "wasm32"))]
 pub use hephaestus::HephaestusRenderTransform;
+pub use html_columns::HtmlColumnsTransform;
 pub use image_alt_normalize::ImageAltNormalizeTransform;
 pub use lightbox::LightboxTransform;
 // Only `hephaestus-render` (native-only, see above) calls it.

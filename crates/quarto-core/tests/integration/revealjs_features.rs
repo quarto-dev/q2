@@ -33,8 +33,8 @@ fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_else(|e| panic!("read {}: {}", path.display(), e))
 }
 
-/// Render `contents` as a single-file revealjs deck, returning the HTML.
-fn render_revealjs(contents: &str) -> String {
+/// Render `contents` as a single file to `format`, returning the HTML.
+fn render_as(contents: &str, format: &str) -> String {
     let temp = tempfile::TempDir::new().unwrap();
     let qmd_path = temp.path().join("talk.qmd");
     write_file(&qmd_path, contents);
@@ -43,9 +43,41 @@ fn render_revealjs(contents: &str) -> String {
         ..Default::default()
     };
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(&qmd_path, format, &options, runtime)
+        .unwrap_or_else(|e| panic!("{format} render failed: {e:?}"));
+    read(&result.output_path)
+}
+
+/// Render `contents` as a single-file revealjs deck, returning the HTML.
+fn render_revealjs(contents: &str) -> String {
+    render_as(contents, "revealjs")
+}
+
+/// Render a minimal deck and return the text of the `quarto-reveal.css` it
+/// links (Quarto's layer over reveal.js; written beside the deck, not inlined).
+fn rendered_quarto_reveal_css() -> String {
+    let temp = tempfile::TempDir::new().unwrap();
+    let qmd_path = temp.path().join("talk.qmd");
+    write_file(&qmd_path, "---\nformat: revealjs\n---\n\n## S\n\nBody.\n");
+    let options = RenderToFileOptions {
+        quiet: true,
+        ..Default::default()
+    };
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let result =
         render_to_file(&qmd_path, "revealjs", &options, runtime).expect("revealjs render failed");
-    read(&result.output_path)
+    let html = read(&result.output_path);
+    let href_end = html
+        .find("quarto-reveal.css\"")
+        .expect("the deck links quarto-reveal.css")
+        + "quarto-reveal.css".len();
+    let href_start = html[..href_end].rfind('"').expect("href opening quote") + 1;
+    let css_path = result
+        .output_path
+        .parent()
+        .expect("output dir")
+        .join(&html[href_start..href_end]);
+    read(&css_path)
 }
 
 /// Whitespace-insensitive containment.
@@ -524,5 +556,169 @@ fn video_reveal_auto_stretch_false_no_r_stretch() {
     assert!(
         !iframe.contains("r-stretch"),
         "reveal video must NOT be stretched when `auto-stretch: false`; iframe:\n{iframe}"
+    );
+}
+
+// ── absolute positioning ─────────────────────────────────────────────────
+
+/// The `<img …>` tag whose `src` names `file`.
+fn img_tag(html: &str, file: &str) -> String {
+    let needle = format!("src=\"{file}\"");
+    let at = html
+        .find(&needle)
+        .unwrap_or_else(|| panic!("no <img> for {file} in:\n{}", body_markup(html)));
+    let start = html[..at].rfind("<img").expect("img tag start");
+    let end = at + html[at..].find('>').expect("img tag end");
+    html[start..=end].to_string()
+}
+
+#[test]
+fn absolute_image_position_becomes_style() {
+    let html = render_revealjs(
+        "---\nformat: revealjs\n---\n\n## S\n\n\
+         ![](a.png){.absolute top=200 left=400 width=\"100\"}\n\nBody.\n",
+    );
+    let img = img_tag(&html, "a.png");
+    assert!(
+        img.contains("style=\"top: 200px; left: 400px; width: 100px;\""),
+        "position attributes of an `.absolute` image must become an inline style \
+         with `px` on bare numbers (Quarto 1 `applyPosition`); img: {img}"
+    );
+    assert!(img.contains("class=\"absolute\""), "class kept; img: {img}");
+    assert!(
+        !img.contains("data-top") && !img.contains("data-left") && !img.contains(" width=\"100\""),
+        "the raw position attributes must be gone; img: {img}"
+    );
+}
+
+#[test]
+fn absolute_div_and_span_position_becomes_style() {
+    let html = render_revealjs(
+        "---\nformat: revealjs\n---\n\n## S\n\n\
+         ::: {.absolute bottom=20 right=\"10%\"}\nBoxed.\n:::\n\n\
+         Text [pinned]{.absolute top=0 left=\"2em\"} here.\n",
+    );
+    let body = body_markup(&html);
+    assert!(
+        body.contains("<div class=\"absolute\" style=\"bottom: 20px; right: 10%;\">"),
+        "an `.absolute` div gets the style, and a value with a unit passes through; body:\n{body}"
+    );
+    assert!(
+        body.contains("<span class=\"absolute\" style=\"top: 0px; left: 2em;\">pinned</span>"),
+        "an `.absolute` span gets the style; body:\n{body}"
+    );
+    assert!(
+        !body.contains("data-bottom") && !body.contains("data-right") && !body.contains("data-top"),
+        "no position attribute may leak as `data-*`; body:\n{body}"
+    );
+}
+
+#[test]
+fn absolute_rule_ships_with_the_deck() {
+    let css = rendered_quarto_reveal_css();
+    assert!(
+        compact(&css).contains(".reveal.slidessection.absolute{position:absolute;display:block;}"),
+        "the deck stylesheet must carry the `.absolute` rule (Quarto 1 `styles.html`); css:\n{css}"
+    );
+}
+
+/// Auto-stretch must keep skipping an `.absolute` image now that its `width`
+/// and `height` have moved into `style`: the image stays in its paragraph and
+/// gets no `r-stretch`.
+#[test]
+fn absolute_image_is_not_stretched() {
+    let html = render_revealjs(
+        "---\nformat: revealjs\n---\n\n## S\n\n![](a.png){.absolute top=10 left=10}\n",
+    );
+    let img = img_tag(&html, "a.png");
+    assert!(
+        !img.contains("r-stretch"),
+        "an `.absolute` image must not be stretched; img: {img}"
+    );
+    assert!(
+        compact(&body_markup(&html)).contains("<p><imgsrc=\"a.png\""),
+        "an `.absolute` image stays inside its paragraph"
+    );
+}
+
+/// The rewrite is revealjs-only, as in Quarto 1 (`reveal.lua` returns no
+/// filter for other formats).
+#[test]
+fn absolute_attributes_untouched_in_html() {
+    let html = render_as(
+        "---\nformat: html\n---\n\n## S\n\n::: {.absolute top=200}\nBoxed.\n:::\n",
+        "html",
+    );
+    assert!(
+        html.contains("<div class=\"absolute\" data-top=\"200\">"),
+        "`format: html` must leave `.absolute` attributes alone; html:\n{}",
+        body_markup(&html)
+    );
+}
+
+// ── aside placement ──────────────────────────────────────────────────────
+//
+// An aside is `position: absolute; bottom: 20px`, so it reaches the bottom of
+// the slide only when the slide's `<section>` is as tall as the deck. These
+// rules are CSS-only; where the aside lands was measured in a browser against
+// Quarto 1 (claude-notes/plans/2026-11-13-layout-gaps-revealjs-absolute-aside-html-columns.md).
+
+/// Quarto 1: `.reveal .slide:not(.center) { height: 100%; }` (`styles.html`).
+/// q2 sections have no `slide` class and stack wrappers are sections too, so
+/// leaf slides are picked out with reveal's run-time `stack` class; a centered
+/// deck is recognised on the `.reveal` wrapper, where reveal puts `center`.
+#[test]
+fn leaf_slides_are_full_height() {
+    let css = compact(&rendered_quarto_reveal_css());
+    assert!(
+        css.contains(".reveal:not(.center).slidessection:not(.stack):not(.center){height:100%;}"),
+        "leaf slides of a top-aligned deck must be full height so a bottom aside \
+         reaches the slide bottom"
+    );
+}
+
+/// Quarto 1: `.reveal .slide.scrollable { overflow-y: auto; }` and, for its
+/// aside, `position: relative; margin-top: 1em` so the aside follows the
+/// scrolled content instead of covering it.
+#[test]
+fn scrollable_slide_scrolls_and_its_aside_follows_the_content() {
+    let css = compact(&rendered_quarto_reveal_css());
+    assert!(
+        css.contains(".reveal.slidessection.scrollable{overflow-y:auto;}"),
+        "a `.scrollable` slide must scroll"
+    );
+    assert!(
+        css.contains(
+            ".reveal.slidessection.scrollableaside.aside{position:relative;margin-top:1em;}"
+        ),
+        "the aside of a `.scrollable` slide must be in the flow"
+    );
+}
+
+/// Quarto 1: `.reveal.center .slide aside { position: initial; }`.
+#[test]
+fn centered_deck_aside_is_not_pinned() {
+    let css = compact(&rendered_quarto_reveal_css());
+    assert!(
+        css.contains(".reveal.center.slidesaside.aside{position:initial;}"),
+        "in a centered deck the aside must stay in the flow"
+    );
+}
+
+/// The classes the rules above key on reach the slide `<section>`.
+#[test]
+fn scrollable_and_center_classes_reach_the_section() {
+    let html = render_revealjs(
+        "---\nformat: revealjs\n---\n\n## One {.scrollable}\n\nBody.\n\n\
+         ## Two {.center}\n\nBody.\n",
+    );
+    let body = body_markup(&html);
+    assert!(
+        body.contains("<section id=\"one\" class=\"section scrollable\">"),
+        "`.scrollable` on the slide heading must land on its section; body:\n{body}"
+    );
+    assert!(
+        body.contains("<section id=\"two\" class=\"section center\">"),
+        "`.center` on the slide heading must land on its section; body:\n{body}"
     );
 }
