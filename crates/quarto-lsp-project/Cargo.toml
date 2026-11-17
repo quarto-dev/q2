@@ -13,6 +13,9 @@ pollster = { workspace = true }
 quarto-core = { workspace = true }
 quarto-lsp-core = { workspace = true }
 quarto-pandoc-types = { workspace = true }
+quarto-source-map = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 quarto-system-runtime = { workspace = true }
 tracing = { workspace = true }
 

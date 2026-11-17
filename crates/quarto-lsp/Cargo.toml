@@ -36,6 +36,7 @@ anyhow.workspace = true
 tracing.workspace = true
 
 # Local crates
+pampa = { workspace = true }
 quarto-core = { workspace = true }
 quarto-lsp-core = { workspace = true }
 quarto-lsp-project = { workspace = true }

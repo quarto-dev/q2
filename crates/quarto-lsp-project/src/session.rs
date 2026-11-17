@@ -27,8 +27,8 @@ pub(crate) enum SessionKind {
     /// and other files (includes) are read through to disk.
     SingleFile { rel: PathBuf },
     /// A document with no path (`untitled:`). Synthetic root, attached
-    /// source: it never touches the disk.
-    Untitled { rel: PathBuf },
+    /// source: it never touches the disk. `uri` is how the client names it.
+    Untitled { rel: PathBuf, uri: String },
 }
 
 /// What one analysis run of one document produced, minus anything that
@@ -41,6 +41,9 @@ pub struct DocumentResult {
     pub folding_ranges: Vec<quarto_lsp_core::FoldingRange>,
     pub diagnostics: Vec<quarto_lsp_core::Diagnostic>,
     pub profile: Option<quarto_core::document_profile::DocumentProfile>,
+    /// The profile as clients see it, with spans resolved to locations
+    /// while the run's `SourceContext` was at hand (C4).
+    pub wire_profile: Option<crate::wire::WireProfile>,
     pub authored_meta: Option<quarto_pandoc_types::ConfigValue>,
     pub ast_context: Option<pampa::pandoc::ASTContext>,
 }
@@ -56,6 +59,8 @@ pub(crate) struct Cached {
     /// The session's structure counter when the run started (files added or
     /// removed since then invalidate it: listings are not in the read log).
     pub structure: u64,
+    /// The format the client asked for (`None`: the document's own).
+    pub requested_format: Option<String>,
     pub result: Arc<DocumentResult>,
 }
 
@@ -104,6 +109,15 @@ impl RunInputs {
         ))
     }
 
+    /// The URI clients know an absolute path by: the session's own
+    /// `untitled:` URI for its document, a `file:` URI otherwise.
+    pub fn uri_for(&self, path: &Path) -> Option<String> {
+        if let SessionKind::Untitled { rel, uri } = &self.kind {
+            return (path == self.root.join(rel)).then(|| uri.clone());
+        }
+        crate::DocUri::from_file_path(path).map(|u| u.as_str().to_string())
+    }
+
     /// The project context, as seen through `rt` (whose read log then
     /// includes the config files discovery read).
     pub fn discover(&self, rt: &SessionRuntime, doc: &Path) -> Result<ProjectContext, String> {
@@ -139,6 +153,7 @@ pub(crate) fn analyse(
     inputs: &RunInputs,
     rel: &Path,
     project: Option<&ProjectContext>,
+    requested_format: Option<&str>,
 ) -> (BTreeMap<PathBuf, VersionKey>, DocumentResult) {
     let rt = inputs.runtime();
     let doc = inputs.root.join(rel);
@@ -159,7 +174,7 @@ pub(crate) fn analyse(
                 &doc,
                 Some(&text),
                 &ScopeRequest::chapter(),
-                None,
+                requested_format,
                 rt.as_ref(),
             )
             .key_or("html")
@@ -173,12 +188,22 @@ pub(crate) fn analyse(
                 &DocumentInfo::from_path(&doc),
                 &text,
             ));
+            let uri_for = |p: &Path| inputs.uri_for(p);
+            let wire_profile = analysis.profile.as_ref().map(|profile| {
+                crate::wire::wire_profile(
+                    profile,
+                    &analysis.analysis.source_context,
+                    &project.dir,
+                    &uri_for,
+                )
+            });
             DocumentResult {
                 format: format_key,
                 symbols: analysis.analysis.symbols,
                 folding_ranges: analysis.analysis.folding_ranges,
                 diagnostics: analysis.analysis.diagnostics,
                 profile: analysis.profile,
+                wire_profile,
                 authored_meta: analysis.authored_meta,
                 ast_context: analysis.ast_context,
             }
@@ -193,6 +218,7 @@ pub(crate) fn analyse(
                 format!("project discovery failed: {message}"),
             )],
             profile: None,
+            wire_profile: None,
             authored_meta: None,
             ast_context: None,
         },

@@ -27,11 +27,12 @@
 
 mod session;
 mod uri;
+pub mod wire;
 mod workspace;
 
 pub use session::{DocumentResult, SessionId};
 pub use uri::DocUri;
 pub use workspace::{
-    BaseLoader, ClientEvent, ClientId, FileChange, Input, Job, JobOutput, Output, Workspace,
-    WorkspaceConfig,
+    BaseLoader, ClientEvent, ClientId, FileChange, Input, Job, JobOutput, MetadataAnswer, Output,
+    ProfileAnswer, QueryError, Workspace, WorkspaceConfig,
 };

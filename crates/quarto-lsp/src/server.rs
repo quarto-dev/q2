@@ -219,6 +219,8 @@ impl Host {
                     None => invalid_params(req.id, "missing textDocument.uri"),
                 }
             }
+            DOCUMENT_PROFILE => self.document_profile(req.id, &req.params),
+            DOCUMENT_METADATA => self.document_metadata(req.id, &req.params),
             _ => Response::new_err(
                 req.id,
                 ErrorCode::MethodNotFound as i32,
@@ -226,6 +228,86 @@ impl Host {
             ),
         };
         self.send(response.into());
+    }
+
+    /// `quarto/documentProfile` (C4): the wire profile of a document.
+    fn document_profile(&mut self, id: RequestId, params: &Value) -> Response {
+        let Some(uri) = text_document_uri(params) else {
+            return invalid_params(id, "missing textDocument.uri");
+        };
+        let format = params.get("format").and_then(Value::as_str);
+        match self.workspace.document_profile(CLIENT, &uri, format) {
+            Ok(answer) => {
+                let mut profile = serde_json::to_value(&answer.profile).unwrap_or(Value::Null);
+                if let (Some(fields), Value::Object(map)) =
+                    (params.get("fields").and_then(Value::as_array), &mut profile)
+                {
+                    let keep: Vec<&str> = fields.iter().filter_map(Value::as_str).collect();
+                    map.retain(|k, _| keep.contains(&k.as_str()));
+                }
+                let diagnostics: Vec<lsp_types::Diagnostic> = answer
+                    .diagnostics
+                    .iter()
+                    .map(convert::diagnostic_to_lsp)
+                    .collect();
+                Response::new_ok(
+                    id,
+                    serde_json::json!({
+                        "uri": uri.as_str(),
+                        "version": answer.version,
+                        "format": answer.format,
+                        "schemaVersion": quarto_lsp_project::wire::WIRE_SCHEMA_VERSION,
+                        "profile": profile,
+                        "diagnostics": diagnostics,
+                    }),
+                )
+            }
+            Err(e) => query_error(id, e),
+        }
+    }
+
+    /// `quarto/documentMetadata` (C4, D7): the authored merged metadata, as
+    /// `q2 get-config` reports it.
+    fn document_metadata(&mut self, id: RequestId, params: &Value) -> Response {
+        let Some(uri) = text_document_uri(params) else {
+            return invalid_params(id, "missing textDocument.uri");
+        };
+        let format = params.get("format").and_then(Value::as_str);
+        let path = params.get("path").and_then(Value::as_str).unwrap_or("");
+        let output = match params.get("output").and_then(Value::as_str) {
+            None | Some("value") => pampa::config_json::ProseMode::Value,
+            Some("pandoc") => pampa::config_json::ProseMode::Pandoc,
+            Some(other) => {
+                return invalid_params(
+                    id,
+                    &format!("output must be \"value\" or \"pandoc\", not {other:?}"),
+                );
+            }
+        };
+        match self
+            .workspace
+            .document_metadata(CLIENT, &uri, path, output, format)
+        {
+            Ok(answer) => {
+                let mut result = serde_json::json!({
+                    "uri": uri.as_str(),
+                    "version": answer.version,
+                    "format": answer.format,
+                    "found": answer.found,
+                    "value": answer.value,
+                });
+                if !answer.diagnostics.is_empty() {
+                    let diagnostics: Vec<lsp_types::Diagnostic> = answer
+                        .diagnostics
+                        .iter()
+                        .map(convert::diagnostic_to_lsp)
+                        .collect();
+                    result["diagnostics"] = serde_json::to_value(diagnostics).unwrap_or_default();
+                }
+                Response::new_ok(id, result)
+            }
+            Err(e) => query_error(id, e),
+        }
     }
 
     fn notification(&mut self, n: Notification) {
@@ -389,6 +471,31 @@ fn watched_file_changes(params: &Value) -> Vec<FileChange> {
             })
         })
         .collect()
+}
+
+/// The `quarto/*` protocol extensions (C4).
+const DOCUMENT_PROFILE: &str = "quarto/documentProfile";
+const DOCUMENT_METADATA: &str = "quarto/documentMetadata";
+
+/// A query that could not be answered: `InvalidParams`, with
+/// `data.kind` naming why (`unknownDocument`, `unsupportedInput`).
+fn query_error(id: RequestId, error: quarto_lsp_project::QueryError) -> Response {
+    use quarto_lsp_project::QueryError;
+    let (kind, message) = match error {
+        QueryError::UnknownDocument => ("unknownDocument", "no such document"),
+        QueryError::UnsupportedInput => (
+            "unsupportedInput",
+            "not a document this server analyses (only .qmd and .md)",
+        ),
+    };
+    Response {
+        id,
+        response_result: Err(lsp_server::ResponseError {
+            code: ErrorCode::InvalidParams as i32,
+            message: message.to_string(),
+            data: Some(serde_json::json!({ "kind": kind })),
+        }),
+    }
 }
 
 fn invalid_params(id: RequestId, message: &str) -> Response {

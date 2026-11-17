@@ -15,6 +15,42 @@ use crate::session::{
 };
 use crate::uri::DocUri;
 
+/// Why a `quarto/*` query could not be answered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueryError {
+    /// No such document: a pathless URI that is not open, or a path with no
+    /// directory.
+    UnknownDocument,
+    /// Not a document this server analyses: a config file, or a non-QMD
+    /// input that needs source conversion (decision D6).
+    UnsupportedInput,
+}
+
+/// The answer to `quarto/documentProfile`.
+#[derive(Debug, Clone)]
+pub struct ProfileAnswer {
+    /// The buffer version the answer reflects; `None` when the document
+    /// came from the project's files rather than an open buffer.
+    pub version: Option<i32>,
+    pub format: String,
+    /// `None` when the document failed before the profile checkpoint; the
+    /// diagnostics say why.
+    pub profile: Option<crate::wire::WireProfile>,
+    pub diagnostics: Vec<quarto_lsp_core::Diagnostic>,
+}
+
+/// The answer to `quarto/documentMetadata`.
+#[derive(Debug, Clone)]
+pub struct MetadataAnswer {
+    pub version: Option<i32>,
+    pub format: String,
+    /// Whether `path` exists in the metadata.
+    pub found: bool,
+    pub value: serde_json::Value,
+    /// Set only when the metadata could not be computed at all.
+    pub diagnostics: Vec<quarto_lsp_core::Diagnostic>,
+}
+
 /// Identifies a client connection (an editor, a hub host). v1 hosts have
 /// exactly one; nothing assumes it.
 pub type ClientId = u32;
@@ -119,7 +155,7 @@ pub struct Job {
 
 impl Job {
     pub fn run(self) -> JobOutput {
-        let (reads, result) = analyse(&self.inputs, &self.rel, Some(&self.project));
+        let (reads, result) = analyse(&self.inputs, &self.rel, Some(&self.project), None);
         JobOutput {
             session: self.session,
             rel: self.rel,
@@ -317,11 +353,12 @@ impl Workspace {
             return;
         }
         let entries = session.results.entry(output.rel).or_default();
-        entries.retain(|c| c.owner.is_some());
+        entries.retain(|c| c.owner.is_some() || c.requested_format.is_some());
         entries.push(Cached {
             reads: output.reads,
             owner: None,
             structure: output.structure,
+            requested_format: None,
             result: Arc::new(output.result),
         });
     }
@@ -350,7 +387,7 @@ impl Workspace {
             else {
                 continue;
             };
-            let result = self.result_for(client, session, &rel);
+            let result = self.result_for(client, session, &rel, None);
             let Some(doc) = self
                 .clients
                 .get_mut(&client)
@@ -390,17 +427,84 @@ impl Workspace {
     /// an open `_quarto.yml` or `_metadata.yml` is a buffer that shadows the
     /// disk, never a document, so it gets `None` here and no diagnostics.
     pub fn document(&mut self, client: ClientId, uri: &DocUri) -> Option<Arc<DocumentResult>> {
+        self.document_in_format(client, uri, None).ok()
+    }
+
+    /// [`Self::document`], analysed for `format` instead of the document's
+    /// own (the `format` parameter of the `quarto/*` requests).
+    pub fn document_in_format(
+        &mut self,
+        client: ClientId,
+        uri: &DocUri,
+        format: Option<&str>,
+    ) -> Result<Arc<DocumentResult>, QueryError> {
         let (session, rel) = match self.clients.get(&client).and_then(|c| c.docs.get(uri)) {
             Some(doc) => (doc.session, doc.rel.clone()),
             None => {
                 let mut ignored = Vec::new();
-                self.resolve(client, uri, None, &mut ignored)?
+                self.resolve(client, uri, None, &mut ignored)
+                    .ok_or(QueryError::UnknownDocument)?
             }
         };
         if !is_document(uri, &rel) {
-            return None;
+            return Err(QueryError::UnsupportedInput);
         }
-        Some(self.result_for(client, session, &rel))
+        Ok(self.result_for(client, session, &rel, format))
+    }
+
+    /// The buffer version `client` has open for `uri`, if any.
+    fn open_version(&self, client: ClientId, uri: &DocUri) -> Option<i32> {
+        self.clients
+            .get(&client)
+            .and_then(|c| c.docs.get(uri))
+            .map(|d| d.version)
+    }
+
+    /// `quarto/documentProfile`: the wire profile of `uri` (C4).
+    pub fn document_profile(
+        &mut self,
+        client: ClientId,
+        uri: &DocUri,
+        format: Option<&str>,
+    ) -> Result<ProfileAnswer, QueryError> {
+        let result = self.document_in_format(client, uri, format)?;
+        Ok(ProfileAnswer {
+            version: self.open_version(client, uri),
+            format: result.format.clone(),
+            profile: result.wire_profile.clone(),
+            diagnostics: result.diagnostics.clone(),
+        })
+    }
+
+    /// `quarto/documentMetadata`: the authored, merged metadata of `uri`,
+    /// or the value at `path` (dot-separated, numeric array indices) — what
+    /// `q2 get-config` reports (C4, decision D7).
+    pub fn document_metadata(
+        &mut self,
+        client: ClientId,
+        uri: &DocUri,
+        path: &str,
+        output: pampa::config_json::ProseMode,
+        format: Option<&str>,
+    ) -> Result<MetadataAnswer, QueryError> {
+        let result = self.document_in_format(client, uri, format)?;
+        let version = self.open_version(client, uri);
+        let value = match (&result.authored_meta, &result.ast_context) {
+            (Some(meta), Some(ctx)) => pampa::config_json::navigate(meta, path)
+                .map(|v| pampa::config_json::config_value_to_json(v, output, ctx)),
+            _ => None,
+        };
+        Ok(MetadataAnswer {
+            version,
+            format: result.format.clone(),
+            found: value.is_some(),
+            value: value.unwrap_or(serde_json::Value::Null),
+            diagnostics: if result.authored_meta.is_none() {
+                result.diagnostics.clone()
+            } else {
+                Vec::new()
+            },
+        })
     }
 
     /// Outline symbols for `uri`.
@@ -440,7 +544,13 @@ impl Workspace {
         }
     }
 
-    fn result_for(&mut self, client: ClientId, sid: SessionId, rel: &Path) -> Arc<DocumentResult> {
+    fn result_for(
+        &mut self,
+        client: ClientId,
+        sid: SessionId,
+        rel: &Path,
+        format: Option<&str>,
+    ) -> Arc<DocumentResult> {
         let Some(session) = self.sessions.get(&sid) else {
             return Arc::new(empty_result());
         };
@@ -450,6 +560,7 @@ impl Workspace {
         if let Some(hit) = session.results.get(rel).and_then(|entries| {
             entries.iter().find(|c| {
                 (c.owner.is_none() || c.owner == Some(client))
+                    && c.requested_format.as_deref() == format
                     && c.structure == structure
                     && current(&rt, &c.reads)
             })
@@ -483,17 +594,17 @@ impl Workspace {
                     }
                     Err(_) => {
                         // `analyse` reports the failure as a diagnostic.
-                        let (reads, result) = analyse(&inputs, rel, None);
-                        return self.store(sid, client, rel, structure, reads, result);
+                        let (reads, result) = analyse(&inputs, rel, None, format);
+                        return self.store(sid, client, rel, structure, format, reads, result);
                     }
                 }
             }
         };
-        let (mut reads, result) = analyse(&inputs, rel, Some(&project));
+        let (mut reads, result) = analyse(&inputs, rel, Some(&project), format);
         for (path, key) in project_reads {
             reads.entry(path).or_insert(key);
         }
-        self.store(sid, client, rel, structure, reads, result)
+        self.store(sid, client, rel, structure, format, reads, result)
     }
 
     fn store(
@@ -502,6 +613,7 @@ impl Workspace {
         client: ClientId,
         rel: &Path,
         structure: u64,
+        format: Option<&str>,
         reads: BTreeMap<PathBuf, quarto_core::session_runtime::VersionKey>,
         result: DocumentResult,
     ) -> Arc<DocumentResult> {
@@ -509,11 +621,12 @@ impl Workspace {
         let owner = owner_of(&reads, client);
         if let Some(session) = self.sessions.get_mut(&sid) {
             let entries = session.results.entry(rel.to_path_buf()).or_default();
-            entries.retain(|c| c.owner != owner);
+            entries.retain(|c| c.owner != owner || c.requested_format.as_deref() != format);
             entries.push(Cached {
                 reads,
                 owner,
                 structure,
+                requested_format: format.map(str::to_string),
                 result: result.clone(),
             });
         }
@@ -603,7 +716,10 @@ impl Workspace {
         let id = self.next_session;
         let root = PathBuf::from(format!("/__quarto_untitled__/{id}"));
         let sid = self.insert_session(
-            SessionKind::Untitled { rel: rel.clone() },
+            SessionKind::Untitled {
+                rel: rel.clone(),
+                uri: uri.as_str().to_string(),
+            },
             root,
             ProjectSource::Attached,
             VfsBaseLayer::new(),
@@ -741,6 +857,7 @@ fn empty_result() -> DocumentResult {
         folding_ranges: Vec::new(),
         diagnostics: Vec::new(),
         profile: None,
+        wire_profile: None,
         authored_meta: None,
         ast_context: None,
     }

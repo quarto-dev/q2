@@ -17,6 +17,11 @@ struct Client {
 
 impl Client {
     fn start(init_options: Value) -> Self {
+        Self::start_with(init_options).0
+    }
+
+    /// Start, also returning the `initialize` result.
+    fn start_with(init_options: Value) -> (Self, Value) {
         let (server_side, client_side) = Connection::memory();
         let server = thread::spawn(move || quarto_lsp::server::serve(server_side));
         let mut client = Self {
@@ -30,7 +35,7 @@ impl Client {
         );
         assert!(init.get("capabilities").is_some(), "{init}");
         client.notify("initialized", json!({}));
-        client
+        (client, init)
     }
 
     fn notify(&self, method: &str, params: Value) {
@@ -42,6 +47,16 @@ impl Client {
 
     /// Send a request and return its result, skipping other messages.
     fn request(&mut self, method: &str, params: Value) -> Value {
+        self.request_raw(method, params)
+            .expect("a successful response")
+    }
+
+    /// Send a request and return its result or error.
+    fn request_raw(
+        &mut self,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, lsp_server::ResponseError> {
         self.next_id += 1;
         let id = RequestId::from(self.next_id);
         self.conn
@@ -53,7 +68,7 @@ impl Client {
             let left = deadline.saturating_duration_since(Instant::now());
             match self.conn.receiver.recv_timeout(left).expect("a response") {
                 Message::Response(r) if r.id == id => {
-                    return r.response_result.expect("a successful response");
+                    return r.response_result;
                 }
                 _ => continue,
             }
@@ -174,4 +189,189 @@ fn exit_without_shutdown_stops_the_server() {
         thread::sleep(Duration::from_millis(20));
     }
     server.join().unwrap().unwrap();
+}
+
+// ── C4: quarto/documentMetadata and quarto/documentProfile ──────────────
+
+fn layered_project() -> (tempfile::TempDir, std::path::PathBuf) {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    write(
+        &root,
+        "_quarto.yml",
+        "project:\n  type: default\ndescription: from project\nformat:\n  html:\n    toc: true\n",
+    );
+    write(
+        &root,
+        "sub/_metadata.yml",
+        "description: from dir\nkeywords: [dir]\n",
+    );
+    write(
+        &root,
+        "sub/_child.qmd",
+        "Child text [>> a note from the child ]\n",
+    );
+    write(
+        &root,
+        "sub/doc.qmd",
+        "---\ntitle: On *disk*\n---\n\n# First\n\n{{< include _child.qmd >}}\n",
+    );
+    (tmp, root)
+}
+
+#[test]
+fn the_server_advertises_its_protocol_extensions() {
+    let (client, init) = Client::start_with(json!({ "sweep": false }));
+    assert_eq!(
+        init["capabilities"]["experimental"]["quarto"]["documentProfile"],
+        1
+    );
+    assert_eq!(
+        init["capabilities"]["experimental"]["quarto"]["documentMetadata"],
+        1
+    );
+    client.shutdown();
+}
+
+#[test]
+fn document_metadata_is_the_authored_merge_of_the_buffer() {
+    let (_tmp, root) = layered_project();
+    let doc = uri(&root.join("sub/doc.qmd"));
+    let mut client = Client::start(json!({ "sweep": false }));
+    client.open(
+        &doc,
+        "---\ntitle: In the *buffer*\nauthor: Ada\n---\n\n# First\n",
+    );
+
+    let all = client.request(
+        "quarto/documentMetadata",
+        json!({ "textDocument": { "uri": doc } }),
+    );
+    assert_eq!(all["version"], 1);
+    assert_eq!(all["format"], "html");
+    assert_eq!(all["found"], true);
+    let value = &all["value"];
+    assert_eq!(
+        value["title"], "In the *buffer*",
+        "markdown, from the unsaved buffer"
+    );
+    assert_eq!(
+        value["description"], "from dir",
+        "directory layer beats project"
+    );
+    assert_eq!(value["keywords"], json!(["dir"]));
+    assert_eq!(value["toc"], true, "format.html flattened");
+    assert!(value.get("quarto").is_none(), "no derived keys");
+
+    let one = client.request(
+        "quarto/documentMetadata",
+        json!({ "textDocument": { "uri": doc }, "path": "author" }),
+    );
+    assert_eq!(one["value"], "Ada");
+    let missing = client.request(
+        "quarto/documentMetadata",
+        json!({ "textDocument": { "uri": doc }, "path": "nope.deeper" }),
+    );
+    assert_eq!(
+        (missing["found"].clone(), missing["value"].clone()),
+        (json!(false), Value::Null)
+    );
+    let pandoc = client.request(
+        "quarto/documentMetadata",
+        json!({ "textDocument": { "uri": doc }, "path": "title", "output": "pandoc" }),
+    );
+    assert!(
+        !pandoc["value"].is_string(),
+        "a Pandoc fragment: {}",
+        pandoc["value"]
+    );
+    client.shutdown();
+}
+
+#[test]
+fn document_profile_resolves_spans_to_locations_including_included_files() {
+    let (_tmp, root) = layered_project();
+    let doc = uri(&root.join("sub/doc.qmd"));
+    let child = uri(&root.join("sub/_child.qmd"));
+    let mut client = Client::start(json!({ "sweep": false }));
+
+    // Not opened: read from the project's files, so no buffer version.
+    let answer = client.request(
+        "quarto/documentProfile",
+        json!({ "textDocument": { "uri": doc } }),
+    );
+    assert_eq!(answer["version"], Value::Null);
+    assert_eq!(answer["schemaVersion"], 1);
+    let profile = &answer["profile"];
+    assert_eq!(profile["sourcePath"], "sub/doc.qmd");
+    assert_eq!(profile["outputHref"], "sub/doc.html");
+    assert_eq!(
+        profile["title"],
+        json!({ "text": "On disk", "markdown": "On *disk*" })
+    );
+    let first = &profile["outline"][0];
+    assert_eq!(first["title"]["text"], "First");
+    assert_eq!(first["location"]["uri"], doc.as_str());
+    assert_eq!(
+        first["location"]["range"]["start"]["line"], 4,
+        "the heading's line"
+    );
+    let comment = &profile["comments"][0];
+    assert_eq!(comment["text"], "a note from the child");
+    assert_eq!(
+        comment["location"]["uri"],
+        child.as_str(),
+        "points into the include"
+    );
+    assert_eq!(profile["includes"][0]["path"], "sub/_child.qmd");
+    assert_eq!(profile["includes"][0]["uri"], child.as_str());
+    assert!(
+        profile.get("listingItem").is_none(),
+        "listings-only surfaces stay off the wire"
+    );
+
+    let filtered = client.request(
+        "quarto/documentProfile",
+        json!({ "textDocument": { "uri": doc }, "fields": ["title"] }),
+    );
+    let keys: Vec<&String> = filtered["profile"].as_object().unwrap().keys().collect();
+    assert_eq!(keys, ["title"]);
+    client.shutdown();
+}
+
+#[test]
+fn a_document_that_fails_pass_1_has_no_profile_and_says_why() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    let doc = uri(&root.join("doc.qmd"));
+    let mut client = Client::start(json!({ "sweep": false }));
+    client.open(&doc, "Text [>> half a comment\n");
+    let answer = client.request(
+        "quarto/documentProfile",
+        json!({ "textDocument": { "uri": doc } }),
+    );
+    assert_eq!(answer["profile"], Value::Null);
+    assert!(!answer["diagnostics"].as_array().unwrap().is_empty());
+    client.shutdown();
+}
+
+#[test]
+fn queries_say_why_they_cannot_answer() {
+    let (_tmp, root) = layered_project();
+    let mut client = Client::start(json!({ "sweep": false }));
+    let config = client
+        .request_raw(
+            "quarto/documentProfile",
+            json!({ "textDocument": { "uri": uri(&root.join("_quarto.yml")) } }),
+        )
+        .unwrap_err();
+    assert_eq!(config.data.unwrap()["kind"], "unsupportedInput");
+    let untitled = client
+        .request_raw(
+            "quarto/documentMetadata",
+            json!({ "textDocument": { "uri": "untitled:Untitled-9" } }),
+        )
+        .unwrap_err();
+    assert_eq!(untitled.data.unwrap()["kind"], "unknownDocument");
+    client.shutdown();
 }
