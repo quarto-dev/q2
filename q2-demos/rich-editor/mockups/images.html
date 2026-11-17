@@ -116,13 +116,13 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 .size-label { position:absolute; pointer-events:none; background:#343a40; color:#fff; font:12px/1 system-ui, sans-serif; padding:4px 6px; border-radius:4px; z-index:7; }
 
 /* The hover bar, its menus, and the viewer: as in Notion. */
-.hbar { position:absolute; pointer-events:auto; display:flex; align-items:center; gap:2px; background:#fff; border-radius:8px; padding:4px;
+.hbar { position:absolute; pointer-events:auto; display:flex; align-items:center; gap:2px; background:#fff; border-radius:7px; padding:3px;
   box-shadow:0 0 0 1px rgba(15,15,15,.06), 0 3px 10px rgba(15,15,15,.14); z-index:12; }
-.hbar button { width:32px; height:32px; display:grid; place-items:center; padding:0; border:0; background:none; border-radius:6px; cursor:pointer; color:#37352f; position:relative; }
+.hbar button { width:28px; height:28px; display:grid; place-items:center; padding:0; border:0; background:none; border-radius:6px; cursor:pointer; color:#37352f; position:relative; }
 .hbar button:hover:not(:disabled), .hbar button[aria-pressed="true"] { background:#efeeec; }
 .hbar button:disabled { color:var(--faint); cursor:default; }
-.hbar svg { width:21px; height:21px; display:block; }
-.hbar .vsep { width:1px; height:20px; background:var(--line); margin:0 4px; }
+.hbar svg { width:18px; height:18px; display:block; }
+.hbar .vsep { width:1px; height:18px; background:var(--line); margin:0 3px; }
 .hbar button[data-tip]::after, .viewer button[data-tip]::after { content:attr(data-tip); position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%);
   background:#343a40; color:#fff; font:12px/1 system-ui, sans-serif; padding:5px 7px; border-radius:4px; white-space:nowrap; pointer-events:none; visibility:hidden; z-index:40; }
 .hbar button[data-tip]:hover::after, .viewer button[data-tip]:hover::after { visibility:visible; transition:visibility 0s .5s; }
