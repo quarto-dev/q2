@@ -837,7 +837,10 @@ mod tests {
             arr(vec![s("index.qmd"), s("intro.qmd"), s("yamltitle.qmd")]),
         )]);
         let render_items = vec![
-            with_heading(chapter(BookRenderItemKind::Index, "index.qmd", None), "Preface"),
+            with_heading(
+                chapter(BookRenderItemKind::Index, "index.qmd", None),
+                "Preface",
+            ),
             with_heading(
                 chapter(BookRenderItemKind::Chapter, "intro.qmd", Some(1)),
                 "Introduction",

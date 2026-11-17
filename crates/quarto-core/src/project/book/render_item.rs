@@ -555,7 +555,11 @@ fn markdown_plain_text(markdown: &str) -> String {
         true,
         None,
     );
-    match parsed.ok().as_ref().map(|(ast, _, _)| ast.blocks.as_slice()) {
+    match parsed
+        .ok()
+        .as_ref()
+        .map(|(ast, _, _)| ast.blocks.as_slice())
+    {
         Some([Block::Paragraph(p)]) => inlines_to_plain_text(&p.content),
         Some([Block::Plain(p)]) => inlines_to_plain_text(&p.content),
         _ => markdown.trim().to_string(),
