@@ -68,7 +68,10 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 .body figure.right { align-items:flex-end; }
 .body figure .frame { position:relative; max-width:100%; line-height:0; border-radius:2px; cursor:default; }
 .body figure img { max-width:100%; display:block; }
-.body figure.sel .frame, .body .inl.sel { outline:2px solid var(--accent); outline-offset:2px; }
+/* Selected: a light blue wash over the image and a little past its edges,
+   as in Notion. See-through on purpose: it mustn't hide the image. */
+.body figure.sel .frame::after, .body .inl.sel::after { content:""; position:absolute; inset:-4px; border-radius:4px;
+  background:rgba(35,131,226,.16); pointer-events:none; }
 /* With the hover bar, its handles and bar show the image is live instead. */
 .body:not(.hover-bar) figure:not(.sel) .frame:hover { outline:2px solid var(--sel); outline-offset:2px; }
 .body figcaption { font-size:.9em; color:#5c636a; margin-top:8px; text-align:center; outline:none; min-width:12ch; line-height:1.4; user-select:text; white-space:pre-wrap; }
