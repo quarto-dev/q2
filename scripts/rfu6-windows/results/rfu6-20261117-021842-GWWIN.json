@@ -1,0 +1,211 @@
+﻿{
+    "run_id":  "20261117-021842-GWWIN",
+    "branch":  "feature/rfu-6-windows-tooling",
+    "commit":  "b237e8862bfa16cede63fa1fc3b19136438c48e2",
+    "host_triple":  "x86_64-pc-windows-msvc",
+    "os":  "Microsoft Windows 11 Pro",
+    "autocrlf":  "input",
+    "python3_with_ipykernel":  true,
+    "tools":  [
+                  {
+                      "tool":  "git",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Git.Git"
+                  },
+                  {
+                      "tool":  "rustc",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Rustlang.Rustup   (then: rustup default stable-x86_64-pc-windows-msvc)"
+                  },
+                  {
+                      "tool":  "cargo",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "comes with rustup"
+                  },
+                  {
+                      "tool":  "cargo-nextest",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "cargo install cargo-nextest --locked"
+                  },
+                  {
+                      "tool":  "link",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "Visual Studio Build Tools, \"Desktop development with C++\" (cargo finds link.exe itself, so absent from PATH is normal; install only if the build says \"linker not found\")"
+                  },
+                  {
+                      "tool":  "nasm",
+                      "required":  "maybe",
+                      "found":  false,
+                      "install":  "winget install NASM.NASM   (aws-lc-sys may want it; install only if the build fails in aws-lc-sys)"
+                  },
+                  {
+                      "tool":  "cmake",
+                      "required":  "maybe",
+                      "found":  true,
+                      "install":  "winget install Kitware.CMake  (same: only if aws-lc-sys fails)"
+                  },
+                  {
+                      "tool":  "node",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "fnm/nvm; Node major per .nvmrc (only some engine tests use it)"
+                  },
+                  {
+                      "tool":  "julia",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "optional: Julia tests skip cleanly without it"
+                  },
+                  {
+                      "tool":  "Rscript",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "optional: knitr tests skip cleanly without it"
+                  },
+                  {
+                      "tool":  "uv",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "only for -WithPython"
+                  }
+              ],
+    "items":  [
+                  {
+                      "id":  "b0",
+                      "title":  "build the test binaries for the six crates",
+                      "status":  "PASS",
+                      "reason":  "built",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "",
+                      "does_not_prove":  "",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\rfu6-windows\\results\\logs\\20261117-021842-GWWIN\\b0-build.log"
+                  },
+                  {
+                      "id":  "i1",
+                      "title":  "execute.rs canonicalize(): verbatim \\\\?\\ root vs capture-file prefix comparison",
+                      "status":  "PASS",
+                      "reason":  "31 tests ran and passed",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "A figure an engine reports under the canonicalized (on Windows: \\\\?\\C:\\...) materialization root is kept by collect_capture_files with a forward-slash relative path (the new probe, a_figure_reported_..., fails on macOS if canonicalize() is removed); a verbatim root works through ProjectContext::discover and the capture upload; the capture_files unit tests build their doc dir from canonicalize() too.",
+                      "does_not_prove":  "What a real engine (knitr, Jupyter) reports on Windows: knitr/R may print a plain C:\\ path or reject a \\\\?\\ path. If a real R run is wanted, render a knitr document by hand with q2 and look for dropped figures.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\rfu6-windows\\results\\logs\\20261117-021842-GWWIN\\i1.log"
+                  },
+                  {
+                      "id":  "i2",
+                      "title":  "positron_cache.rs: vscode_file_uri (drive letter, %3A, non-ASCII) and %APPDATA% rule",
+                      "status":  "PASS",
+                      "reason":  "18 tests ran and passed",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The URI encoder and the directory rules are internally consistent for Windows inputs (HostOs::Windows is a parameter, so these unit tests ran on macOS too): drive letter lower-cased, colon as %3A, spaces and non-ASCII as upper-case UTF-8 escapes, the %APPDATA% then %USERPROFILE%\\AppData\\Roaming fallback, normalize_location on all spellings.",
+                      "does_not_prove":  "That REAL Positron on Windows hashes the same URI (the expected strings come from the same port of uri.ts). Step i2b checks that against a real Positron cache file when you give -PositronDoc.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\rfu6-windows\\results\\logs\\20261117-021842-GWWIN\\i2.log"
+                  },
+                  {
+                      "id":  "i2b",
+                      "title":  "real Positron cache file name for a document (optional)",
+                      "status":  "SKIP",
+                      "reason":  "no -PositronDoc given",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "",
+                      "does_not_prove":  "",
+                      "output_tail":  "",
+                      "log":  ""
+                  },
+                  {
+                      "id":  "i4",
+                      "title":  "convert_positron_cli: python3 use and literal paths",
+                      "status":  "FAIL",
+                      "reason":  "exit code 100",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The q2 convert CLI end to end on Windows: exit codes, -o handling, and (only if no caveat is reported) the Python-engine tests that need python3 with ipykernel on PATH. Reading the file found no literal /some/dir path (the old one at line ~113 is gone).",
+                      "does_not_prove":  "The engine tests are skipped, silently, unless python3.exe with ipykernel is on PATH (a venv has python.exe, not python3.exe; Microsoft Store python3 is a stub). A PASS with a caveat means they skipped: rerun with -WithPython.",
+                      "output_tail":  "   Compiling quarto-navigation v0.45.0 (C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto-navigation)\n   Compiling pampa v0.0.0 (C:\\Users\\GordonWoodhull\\src\\q2\\crates\\pampa)\n   Compiling quarto-core v0.45.0 (C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto-core)\n   Compiling quarto-lsp-core v0.45.0 (C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto-lsp-core)\n   Compiling quarto-publish v0.45.0 (C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto-publish)\n   Compiling quarto-hub-provider v0.45.0 (C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto-hub-provider)\n   Compiling quarto-test v0.45.0 (C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto-test)\n   Compiling quarto-preview v0.45.0 (C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto-preview)\n   Compiling quarto-lsp v0.45.0 (C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto-lsp)\n   Compiling quarto v0.45.0 (C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto)\n    Finished `test` profile [optimized + debuginfo] target(s) in 3m 24s\n────────────\n Nextest run ID 02667cac-ff6d-4727-b2d7-795c45cea1f9 with nextest profile: default\n    Starting 22 tests across 2 binaries (853 tests skipped)\n        PASS [   0.406s] ( 1/22) quarto::integration convert_positron_cli::exit_code_table_is_stable_and_unique\n        PASS [   1.330s] ( 2/22) quarto::integration convert_positron_cli::q2_record_is_gone\n        PASS [   1.340s] ( 3/22) quarto::integration convert_positron_cli::an_ipynb_input_is_reserved_not_implemented\n        PASS [   1.344s] ( 4/22) quarto::integration convert_positron_cli::missing_to_is_a_usage_error\n        PASS [   1.347s] ( 5/22) quarto::integration convert_positron_cli::positron_ipynb_requires_an_output_path\n        PASS [   1.405s] ( 6/22) quarto::integration convert_positron_cli::records_is_gone_and_source_uri_is_only_for_positron_ipynb\n        PASS [   1.408s] ( 7/22) quarto::integration convert_positron_cli::an_unsupported_target_lists_the_supported_pairs\n        PASS [   2.558s] ( 8/22) quarto::integration convert_positron_cli::an_existing_output_is_overwritten_with_an_info_line_naming_it\n        PASS [   2.558s] ( 9/22) quarto::integration convert_positron_cli::exports_the_dot_quarto_copy_with_one_json_line_and_no_execution_notice\n        PASS [   2.562s] (10/22) quarto::integration convert_positron_cli::a_record_with_no_exportable_cells_exits_11_but_still_prints_the_json_line\n        PASS [   2.562s] (11/22) quarto::integration convert_positron_cli::an_unreadable_record_exits_12\n        PASS [   2.563s] (12/22) quarto::integration convert_positron_cli::a_record_with_a_cell_missing_its_hash_exits_12\n        PASS [   2.564s] (13/22) quarto::integration convert_positron_cli::dash_o_dash_writes_the_notebook_to_stdout_and_the_report_to_stderr\n        PASS [   2.565s] (14/22) quarto::integration convert_positron_cli::a_knitr_record_exports_with_cells_greater_than_zero\n        PASS [   2.149s] (15/22) quarto::integration convert_positron_cli::the_default_q2_engine_list_uses_the_copy_first\n        PASS [   2.574s] (16/22) quarto::integration convert_positron_cli::a_malformed_metadata_flag_is_a_usage_error_and_a_good_one_is_accepted\n        PASS [   2.575s] (17/22) quarto::integration convert_positron_cli::no_record_falls_back_to_the_engine_with_one_stderr_line_first\n        FAIL [   1.237s] (18/22) quarto::integration convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes\n  stdout ───\n\n    running 1 test\n    test convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes ... FAILED\n\n    failures:\n\n    failures:\n        convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes\n\n    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 566 filtered out; finished in 1.17s\n\n  stderr ───\n\n    thread \u0027convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes\u0027 (30924) panicked at crates\\quarto\\tests\\integration\\convert_positron_cli.rs:473:5:\n    assertion `left == right` failed\n      left: String(\"C:/Users/GordonWoodhull/AppData/Local/Temp/.tmpXrG0Ww/doc.qmd\")\n     right: \"//?/C:/Users/GordonWoodhull/AppData/Local/Temp/.tmpXrG0Ww/doc.qmd\"\n    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n        PASS [   2.752s] (19/22) quarto::integration convert_positron_cli::from_is_inferred_from_the_extension_and_an_unknown_extension_errors\n        PASS [   5.475s] (20/22) quarto::integration convert_positron_cli::a_raising_cell_without_error_true_exits_13_and_names_the_option\n        PASS [   5.516s] (21/22) quarto::integration convert_positron_cli::runs_the_engine_when_there_is_no_record_and_the_document_has_no_record_true\n        PASS [   7.279s] (22/22) quarto::integration convert_positron_cli::a_metadata_overlay_reaches_the_engine_run\n────────────\n     Summary [   7.288s] 22 tests run: 21 passed, 1 failed, 853 skipped\n        FAIL [   1.237s] (18/22) quarto::integration convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes\nerror: test run failed",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\rfu6-windows\\results\\logs\\20261117-021842-GWWIN\\i4.log"
+                  },
+                  {
+                      "id":  "i5",
+                      "title":  "julia_engine_e2e: kill/pgrep cannot run on Windows",
+                      "status":  "PASS",
+                      "reason":  "both unix-gate SKIP lines printed",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "Both tests that call kill/pgrep return at an `if !cfg!(unix)` guard before any process is started, so nothing is signalled on Windows (PASS means both SKIP lines were printed).",
+                      "does_not_prove":  "The helpers (kill, pgrep) compile on Windows (b0 proves that) but are never executed here.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\rfu6-windows\\results\\logs\\20261117-021842-GWWIN\\i5.log"
+                  },
+                  {
+                      "id":  "i6",
+                      "title":  "record sources: native-separator display and the capture_driver URI test",
+                      "status":  "PASS",
+                      "reason":  "84 tests ran and passed",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The record-source list parser, ~ expansion (accepting \\ after ~), is-a-directory checks and the diagnostics run on Windows paths; capture_driver builds the cache file URI with the same vscode_file_uri it later matches against, so the import test is self-consistent on Windows.",
+                      "does_not_prove":  "That the printed path in a diagnostic reads well (inspect one: render with -M \"execute.record-sources=C:\\nope\" and check the message shows C:\\nope with native separators), and that the URI equals Positron\u0027s (see i2b).",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\rfu6-windows\\results\\logs\\20261117-021842-GWWIN\\i6.log"
+                  },
+                  {
+                      "id":  "i7",
+                      "title":  "CRLF: positron-conformance/crlf.qmd and positron-cache/*.ipynb under autocrlf",
+                      "status":  "PASS",
+                      "reason":  "27 tests ran and passed",
+                      "caveat":  "core.autocrlf is input, not true: the CRLF-checkout case was not exercised. Reclone with: git clone -c core.autocrlf=true ... and rerun -Only i7",
+                      "known_unrelated":  false,
+                      "proves":  "The conformance, source and knitr-import tests hash the fixtures as checked out (crlf.qmd is a committed-CRLF case; the cache notebooks are LF in git). git core.autocrlf=input; fixtures containing CR bytes in this checkout: crlf.qmd=3",
+                      "does_not_prove":  "Anything under autocrlf=input/false: with autocrlf unset the LF fixtures stay LF and the checkout is not the stressing case. These fixtures are NOT pinned in .gitattributes (unlike pandoc-recordings), which is why this run matters.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\rfu6-windows\\results\\logs\\20261117-021842-GWWIN\\i7.log"
+                  },
+                  {
+                      "id":  "i8-clippy",
+                      "title":  "clippy -D warnings, six crates",
+                      "status":  "PASS",
+                      "reason":  "clean",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "",
+                      "does_not_prove":  "",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\rfu6-windows\\results\\logs\\20261117-021842-GWWIN\\i8-clippy.log"
+                  },
+                  {
+                      "id":  "i8-nextest",
+                      "title":  "nextest, six crates",
+                      "status":  "FAIL",
+                      "reason":  "91 failing: quarto::bin/q2 commands::render_dry_run::tests::would_render_lines_are_project_relative, quarto::integration convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes, quarto::integration lmd_snapshots::lmd_blog_project_renders_as_snapshotted, quarto::integration lmd_snapshots::lmd_fixtures_render_as_snapshotted, quarto::integration lmd_snapshots::lmd_html_fixtures_render_as_snapshotted, quarto::integration lmd_snapshots::lmd_project_renders_as_snapshotted, quarto::integration render_scripts_cli::explicit_interpreter_command_line_with_args, quarto::integration render_scripts_cli::list_form_runs_scripts_in_order, quarto::integration smoke_all::smoke_all, quarto-core book_download::tests::a_second_download_of_the_same_project_is_busy_until_the_first_ends, quarto-core extension::build::tests::file_aliases_resolve_relative_to_the_config_dir, quarto-core glob::expand::tests::a_literal_file_expands_to_itself, quarto-core glob::expand::tests::character_classes_expand, quarto-core glob::expand::tests::expands_a_glob_over_the_runtime, quarto-core glob::expand::tests::negation_subtracts, quarto-core glob::expand::tests::pruning_does_not_change_results, quarto-core glob::expand::tests::recursive_glob_crosses_directories, quarto-core glob::expand::tests::results_are_sorted_and_deduplicated, quarto-core metadata_layers::tests::deepest_directory_layer_comes_last_and_carries_its_file, quarto-core metadata_layers::tests::layered_value_returns_the_highest_layer_that_sets_the_path, quarto-core metadata_layers::tests::project_layer_carries_the_config_file, quarto-core metadata_layers::tests::single_file_project_reads_only_its_own_directory, quarto-core pandoc_filters::format_defaults::tests::test_reference_doc_path_forwarded, quarto-core pandoc_filters::params::tests::test_top_level_literals, quarto-core preview_out::tests::a_project_without_a_config_file_uses_the_document_directory, quarto-core preview_out::tests::creates_under_the_discovered_project_and_cleans_up_on_drop, quarto-core project::book::scope::tests::a_member_follows_the_request_on_a_consolidating_format, quarto-core project::book::scope::tests::a_member_is_a_chapter_on_a_format_with_no_whole_book_output, quarto-core record::source_key::tests::a_directory_resolves_against_the_declaring_layer, quarto-core record::source_key::tests::directories_outside_the_project_or_missing_are_errors, quarto-core transforms::hephaestus::tests::artifact_path_is_content_and_size_addressed, quarto-core::integration book_download::a_chapters_captures_are_spliced_and_its_plot_lands_in_the_request_directory, quarto-core::integration book_download::the_active_chapter_comes_from_the_editor_and_the_others_from_disk, quarto-core::integration book_refactor_guard::epub_basic, quarto-core::integration book_refactor_guard::epub_citations, quarto-core::integration book_refactor_guard::epub_partpage_image, quarto-core::integration book_refactor_guard::epub_rich, quarto-core::integration book_refactor_guard::typst_basic, quarto-core::integration book_refactor_guard::typst_caption_image, quarto-core::integration book_refactor_guard::typst_citations, quarto-core::integration book_refactor_guard::typst_citations_csl, quarto-core::integration book_refactor_guard::typst_citations_margin, quarto-core::integration book_refactor_guard::typst_missing_bibliography_message, quarto-core::integration book_refactor_guard::typst_missing_csl_message, quarto-core::integration book_refactor_guard::typst_partpage_image, quarto-core::integration book_refactor_guard::typst_rich, quarto-core::integration book_refactor_guard::typst_smoke_orange_book, quarto-core::integration book_refactor_guard::typst_smoke_orange_book_lang, quarto-core::integration book_refactor_guard::typst_smoke_orange_book_margin, quarto-core::integration book_refactor_guard::typst_smoke_override_orange_book, quarto-core::integration engine_record_stage::an_unwritable_record_location_warns_and_the_render_succeeds, quarto-core::integration filter_paths::missing_project_filter_names_the_declaration_resolved_path, quarto-core::integration format_resolution::the_scope_notices_are_emitted_once_on_both_dispatch_paths, quarto-core::integration front_matter_provenance::merged_front_matter_root_file_ids_identify_the_documents_own_keys, quarto-core::integration jupyter_markdown_goldens::jupyter_markdown_matches_goldens, quarto-core::integration jupyter_markdown_goldens::legacy_capture_payload_is_byte_identical_after_flip, quarto-core::integration metadata_layers::probe_in_the_project, quarto-core::integration orange_book_lua::orange_book_lua_loads_without_crashing_the_filter_chain, quarto-core::integration orange_book_lua::orange_book_lua_transforms_a_real_part_divider_via_pandocs_main_lua_chain, quarto-core::integration orange_book_lua::pre_render_entry_point_round_trips_through_pandocs_main_lua_chain, quarto-core::integration output_outside_source_images::typst_finds_source_images_in_the_request_directory, quarto-core::integration pandoc_request_books::a_book_below_the_vfs_root_keys_its_captures_from_that_root, quarto-core::integration pandoc_request_books::a_captured_figure_in_a_subdirectory_chapter_mounts_under_its_own_directory, quarto-core::integration pandoc_request_books::a_chapters_capture_shows_there_and_never_in_an_identical_cell_elsewhere, quarto-core::integration pandoc_request_books::a_path_key_that_is_not_a_chapter_is_ignored_and_a_corrupt_one_degrades_that_chapter, quarto-core::integration pandoc_request_books::chapter_scope_prefers_the_given_blob_and_falls_back_to_the_map, quarto-core::integration pandoc_request_books::engine_includes_in_a_capture_count_only_for_the_first_chapter, quarto-core::integration pandoc_request_books::the_resolver_reports_a_book_chapter_with_the_chapter_keys_in_book_order, quarto-core::integration pandoc_request_books::the_resolver_says_a_non_chapter_page_is_not_a_chapter_and_other_projects_have_no_book, quarto-core::integration pandoc_request_execute::execute_applies_dirs_files_share_tree_argv_and_env, quarto-core::integration pandoc_request_execute::stage_runs_the_prepared_request_through_the_native_executor, quarto-core::integration pandoc_request_extension_filters::real_pandoc_loads_the_filter_from_the_request_alone, quarto-core::integration pandoc_request_prepare::docx_request_matches_the_recorded_native_run, quarto-core::integration pandoc_request_prepare::epub_request_matches_the_recorded_native_run, quarto-core::integration pandoc_request_prepare::pptx_request_matches_the_recorded_native_run, quarto-core::integration pandoc_request_prepare::typst_request_matches_the_recorded_native_run, quarto-core::integration pandoc_request_projects::image_targets_equal_native_when_output_dir_differs, quarto-core::integration pandoc_request_projects::image_targets_equal_native_when_output_dir_is_the_project_dir, quarto-core::integration pandoc_request_projects::project_level_reference_doc_resolves_against_the_declaring_file, quarto-core::integration pandoc_shim::test_proof_missing_type_surfaces_lua_traceback, quarto-core::integration pipeline_temp_dir_cleanup::failed_pandoc_json_outlives_the_pipeline_temp_dir, quarto-core::integration pipeline_temp_dir_cleanup::lazy_temp_dir_is_removed_when_the_context_drops, quarto-core::integration render_overlay::overlay_file_is_read_in_place_of_the_disk_file, quarto-core::integration typst_render_foundations::typst_request_directory_renders_images_in_every_project_shape, quarto-hub storage::tests::test_storage_manager_prevents_double_lock, quarto-hub storage::tests::test_storage_manager_standalone_prevents_double_lock, quarto-preview route_tests::a_book_request_reaches_the_book_seam_with_every_capture, quarto-preview route_tests::pdf_is_inline_with_stats_and_the_typst_pdf_target, quarto-preview::integration book_downloads::a_chapters_recorded_plot_reaches_the_book, quarto-preview::integration live_reexecute::the_cache_does_not_answer_a_re_execute_under_engine_only_sources, quarto-preview::integration render_scripts_boot::pre_render_scripts_run_once_at_boot. Groups: capture_driver:: 56 passed, 0 failed; convert_positron_cli:: 21 passed, 1 failed; execute:: 196 passed, 3 failed; record::sources:: 28 passed, 0 failed; record_gate:: 5 passed, 0 failed; render_record_sources_cli:: 11 passed, 0 failed",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "",
+                      "does_not_prove":  "",
+                      "output_tail":  "        FAIL [   0.322s] ( 3066/10511) quarto-core glob::expand::tests::expands_a_glob_over_the_runtime\n        FAIL [   0.337s] ( 3068/10511) quarto-core glob::expand::tests::negation_subtracts\n        FAIL [   0.348s] ( 3069/10511) quarto-core glob::expand::tests::pruning_does_not_change_results\n        FAIL [   0.322s] ( 3070/10511) quarto-core glob::expand::tests::recursive_glob_crosses_directories\n        FAIL [   0.328s] ( 3071/10511) quarto-core glob::expand::tests::results_are_sorted_and_deduplicated\n        FAIL [   0.528s] ( 3225/10511) quarto-core metadata_layers::tests::deepest_directory_layer_comes_last_and_carries_its_file\n        FAIL [   0.615s] ( 3232/10511) quarto-core metadata_layers::tests::layered_value_returns_the_highest_layer_that_sets_the_path\n        FAIL [   0.631s] ( 3235/10511) quarto-core metadata_layers::tests::project_layer_carries_the_config_file\n        FAIL [   0.629s] ( 3236/10511) quarto-core metadata_layers::tests::single_file_project_reads_only_its_own_directory\n        FAIL [   0.433s] ( 3290/10511) quarto-core pandoc_filters::format_defaults::tests::test_reference_doc_path_forwarded\n        FAIL [   0.352s] ( 3336/10511) quarto-core pandoc_filters::params::tests::test_top_level_literals\n        FAIL [   0.603s] ( 3895/10511) quarto-core preview_out::tests::a_project_without_a_config_file_uses_the_document_directory\n        FAIL [   0.631s] ( 3898/10511) quarto-core preview_out::tests::creates_under_the_discovered_project_and_cleans_up_on_drop\n        FAIL [   1.195s] ( 4035/10511) quarto-core project::book::scope::tests::a_member_follows_the_request_on_a_consolidating_format\n        FAIL [   1.311s] ( 4044/10511) quarto-core project::book::scope::tests::a_member_is_a_chapter_on_a_format_with_no_whole_book_output\n        FAIL [   0.456s] ( 5075/10511) quarto-core record::source_key::tests::a_directory_resolves_against_the_declaring_layer\n        FAIL [   0.720s] ( 5092/10511) quarto-core record::source_key::tests::directories_outside_the_project_or_missing_are_errors\n        FAIL [   0.339s] ( 6663/10511) quarto-core transforms::hephaestus::tests::artifact_path_is_content_and_size_addressed\n        FAIL [   8.371s] ( 7561/10511) quarto-core::integration book_download::the_active_chapter_comes_from_the_editor_and_the_others_from_disk\n        FAIL [  10.577s] ( 7565/10511) quarto-core::integration book_download::a_chapters_captures_are_spliced_and_its_plot_lands_in_the_request_directory\n        FAIL [   8.887s] ( 7616/10511) quarto-core::integration book_refactor_guard::epub_basic\n        FAIL [   9.007s] ( 7618/10511) quarto-core::integration book_refactor_guard::epub_citations\n        FAIL [   6.234s] ( 7619/10511) quarto-core::integration book_refactor_guard::typst_missing_bibliography_message\n        FAIL [   6.426s] ( 7620/10511) quarto-core::integration book_refactor_guard::typst_missing_csl_message\n        FAIL [   9.772s] ( 7621/10511) quarto-core::integration book_refactor_guard::epub_partpage_image\n        FAIL [  10.136s] ( 7622/10511) quarto-core::integration book_refactor_guard::typst_basic\n        FAIL [  10.187s] ( 7623/10511) quarto-core::integration book_refactor_guard::typst_caption_image\n        FAIL [  10.166s] ( 7624/10511) quarto-core::integration book_refactor_guard::typst_citations\n        FAIL [  10.316s] ( 7625/10511) quarto-core::integration book_refactor_guard::typst_citations_csl\n        FAIL [  10.488s] ( 7626/10511) quarto-core::integration book_refactor_guard::typst_citations_margin\n        FAIL [  13.304s] ( 7629/10511) quarto-core::integration book_refactor_guard::epub_rich\n        FAIL [  11.537s] ( 7631/10511) quarto-core::integration book_refactor_guard::typst_partpage_image\n        FAIL [   9.387s] ( 7632/10511) quarto-core::integration book_refactor_guard::typst_smoke_orange_book_lang\n        FAIL [   8.847s] ( 7634/10511) quarto-core::integration book_refactor_guard::typst_smoke_override_orange_book\n        FAIL [  16.365s] ( 7639/10511) quarto-core::integration book_refactor_guard::typst_rich\n        FAIL [  19.014s] ( 7649/10511) quarto-core::integration book_refactor_guard::typst_smoke_orange_book\n        FAIL [  18.800s] ( 7667/10511) quarto-core::integration book_refactor_guard::typst_smoke_orange_book_margin\n        FAIL [   2.364s] ( 7917/10511) quarto-core::integration engine_record_stage::an_unwritable_record_location_warns_and_the_render_succeeds\n        FAIL [   4.756s] ( 8018/10511) quarto-core::integration filter_paths::missing_project_filter_names_the_declaration_resolved_path\n        FAIL [   1.481s] ( 8040/10511) quarto-core::integration front_matter_provenance::merged_front_matter_root_file_ids_identify_the_documents_own_keys\n        FAIL [   7.874s] ( 8064/10511) quarto-core::integration format_resolution::the_scope_notices_are_emitted_once_on_both_dispatch_paths\n        FAIL [  68.804s] ( 8548/10511) quarto-core::integration jupyter_markdown_goldens::legacy_capture_payload_is_byte_identical_after_flip\n        FAIL [  73.061s] ( 8553/10511) quarto-core::integration jupyter_markdown_goldens::jupyter_markdown_matches_goldens\n        FAIL [   5.259s] ( 8625/10511) quarto-core::integration metadata_layers::probe_in_the_project\n        FAIL [   1.284s] ( 8723/10511) quarto-core::integration orange_book_lua::orange_book_lua_loads_without_crashing_the_filter_chain\n        FAIL [   1.267s] ( 8724/10511) quarto-core::integration orange_book_lua::orange_book_lua_transforms_a_real_part_divider_via_pandocs_main_lua_chain\n        FAIL [   1.289s] ( 8725/10511) quarto-core::integration orange_book_lua::pre_render_entry_point_round_trips_through_pandocs_main_lua_chain\n        FAIL [   7.330s] ( 8738/10511) quarto-core::integration output_outside_source_images::typst_finds_source_images_in_the_request_directory\n        FAIL [   8.702s] ( 8804/10511) quarto-core::integration pandoc_request_books::a_book_below_the_vfs_root_keys_its_captures_from_that_root\n        FAIL [   8.279s] ( 8806/10511) quarto-core::integration pandoc_request_books::a_captured_figure_in_a_subdirectory_chapter_mounts_under_its_own_directory\n        FAIL [   8.289s] ( 8810/10511) quarto-core::integration pandoc_request_books::a_chapters_capture_shows_there_and_never_in_an_identical_cell_elsewhere\n        FAIL [   8.166s] ( 8812/10511) quarto-core::integration pandoc_request_books::a_path_key_that_is_not_a_chapter_is_ignored_and_a_corrupt_one_degrades_that_chapter\n        FAIL [   3.206s] ( 8815/10511) quarto-core::integration pandoc_request_books::chapter_scope_prefers_the_given_blob_and_falls_back_to_the_map\n        FAIL [   1.456s] ( 8820/10511) quarto-core::integration pandoc_request_books::the_resolver_reports_a_book_chapter_with_the_chapter_keys_in_book_order\n        FAIL [   1.438s] ( 8821/10511) quarto-core::integration pandoc_request_books::the_resolver_says_a_non_chapter_page_is_not_a_chapter_and_other_projects_have_no_book\n        FAIL [  10.928s] ( 8848/10511) quarto-core::integration pandoc_request_books::engine_includes_in_a_capture_count_only_for_the_first_chapter\n        FAIL [   1.400s] ( 8850/10511) quarto-core::integration pandoc_request_execute::execute_applies_dirs_files_share_tree_argv_and_env\n        FAIL [   2.682s] ( 8857/10511) quarto-core::integration pandoc_request_execute::stage_runs_the_prepared_request_through_the_native_executor\n        FAIL [   1.604s] ( 8872/10511) quarto-core::integration pandoc_request_extension_filters::real_pandoc_loads_the_filter_from_the_request_alone\n        FAIL [   1.370s] ( 8873/10511) quarto-core::integration pandoc_request_prepare::docx_request_matches_the_recorded_native_run\n        FAIL [   1.349s] ( 8876/10511) quarto-core::integration pandoc_request_prepare::epub_request_matches_the_recorded_native_run\n        FAIL [   1.533s] ( 8882/10511) quarto-core::integration pandoc_request_prepare::pptx_request_matches_the_recorded_native_run\n        FAIL [   1.496s] ( 8884/10511) quarto-core::integration pandoc_request_prepare::typst_request_matches_the_recorded_native_run\n        FAIL [   3.945s] ( 8896/10511) quarto-core::integration pandoc_request_projects::image_targets_equal_native_when_output_dir_differs\n        FAIL [   3.083s] ( 8897/10511) quarto-core::integration pandoc_request_projects::project_level_reference_doc_resolves_against_the_declaring_file\n        FAIL [   4.038s] ( 8901/10511) quarto-core::integration pandoc_request_projects::image_targets_equal_native_when_output_dir_is_the_project_dir\n        FAIL [   2.710s] ( 8949/10511) quarto-core::integration pandoc_shim::test_proof_missing_type_surfaces_lua_traceback\n        FAIL [   0.444s] ( 9055/10511) quarto-core::integration pipeline_temp_dir_cleanup::failed_pandoc_json_outlives_the_pipeline_temp_dir\n        FAIL [   0.340s] ( 9056/10511) quarto-core::integration pipeline_temp_dir_cleanup::lazy_temp_dir_is_removed_when_the_context_drops\n        FAIL [   3.923s] ( 9188/10511) quarto-core::integration render_overlay::overlay_file_is_read_in_place_of_the_disk_file\n        FAIL [   6.728s] ( 9457/10511) quarto-core::integration typst_render_foundations::typst_request_directory_renders_images_in_every_project_shape\n        FAIL [   0.171s] ( 9862/10511) quarto-hub storage::tests::test_storage_manager_prevents_double_lock\n        FAIL [   0.134s] ( 9868/10511) quarto-hub storage::tests::test_storage_manager_standalone_prevents_double_lock\n        FAIL [   1.618s] (10296/10511) quarto-preview route_tests::a_book_request_reaches_the_book_seam_with_every_capture\n        FAIL [   1.528s] (10325/10511) quarto-preview route_tests::pdf_is_inline_with_stats_and_the_typst_pdf_target\n        FAIL [  17.252s] (10420/10511) quarto-preview::integration book_downloads::a_chapters_recorded_plot_reaches_the_book\n        FAIL [   4.079s] (10492/10511) quarto-preview::integration render_scripts_boot::pre_render_scripts_run_once_at_boot\n        FAIL [  20.571s] (10510/10511) quarto-preview::integration live_reexecute::the_cache_does_not_answer_a_re_execute_under_engine_only_sources\n        FAIL [ 860.887s] (10511/10511) quarto::integration smoke_all::smoke_all\nerror: test run failed",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\rfu6-windows\\results\\logs\\20261117-021842-GWWIN\\i8-nextest.log"
+                  },
+                  {
+                      "id":  "i8-named",
+                      "title":  "record-sources (render, preview, provider) and convert integration tests",
+                      "status":  "FAIL",
+                      "reason":  "capture_driver:: 56 passed, 0 failed; convert_positron_cli:: 21 passed, 1 failed; execute:: 196 passed, 3 failed; record::sources:: 28 passed, 0 failed; record_gate:: 5 passed, 0 failed; render_record_sources_cli:: 11 passed, 0 failed",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "Which of the plan\u0027s named groups passed on Windows (they build paths with Path::join).",
+                      "does_not_prove":  "",
+                      "output_tail":  "quarto::integration convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\rfu6-windows\\results\\logs\\20261117-021842-GWWIN\\i8-nextest.log"
+                  }
+              ]
+}
