@@ -149,7 +149,9 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 .hmenu label { font-size:12px; color:var(--muted); padding:4px 6px 6px; }
 .hmenu input { margin:0 4px 4px; font:14px system-ui, sans-serif; padding:6px 8px; border:1px solid var(--line); border-radius:5px; outline:none; width:300px; }
 .hmenu input:focus { border-color:var(--accent); }
-.vhandle { position:absolute; width:8px; border-radius:4px; background:#fff; border:1px solid #37352f; box-shadow:0 0 0 1px #fff; cursor:ew-resize; pointer-events:auto; z-index:11; }
+/* As in Notion: dark and see-through, so the image shows through, with a
+   white edge to stand out on dark images too. */
+.vhandle { position:absolute; width:8px; border-radius:4px; background:rgba(15,15,15,.6); border:1px solid #fff; box-shadow:0 0 2px rgba(0,0,0,.35); cursor:ew-resize; pointer-events:auto; z-index:11; }
 .viewer { position:fixed; inset:0; z-index:100; background:rgba(15,15,15,.92); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; }
 .viewer img { max-width:90vw; max-height:82vh; background:#fff; box-shadow:0 8px 30px rgba(0,0,0,.4); }
 .viewer .cap { color:#e9e9e7; font-size:14px; }
