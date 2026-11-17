@@ -93,7 +93,7 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 @container (max-width: 200px) { .body .missing span, .body .missing code { display:none; } .body .missing svg { width:20px; height:20px; } }
 
 /* An image in a line of text. */
-.body .inl { display:inline-block; position:relative; vertical-align:middle; line-height:0; border-radius:2px; cursor:default; }
+.body .inl { display:inline-block; position:relative; vertical-align:baseline; line-height:0; border-radius:2px; cursor:default; }
 .body .inl img { display:block; max-width:100%; }
 .body:not(.hover-bar) .inl:not(.sel):hover { outline:2px solid var(--sel); outline-offset:2px; }
 
@@ -102,6 +102,8 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 .move-ghost { position:fixed; z-index:200; pointer-events:none; width:120px; max-height:90px; overflow:hidden; border-radius:4px;
   box-shadow:0 4px 14px rgba(0,0,0,.25); background:#fff; font:12px ui-monospace, Menlo, monospace; color:var(--muted); }
 .move-ghost img { width:100%; display:block; }
+.move-ghost::after { content:attr(data-as); display:block; font:12px system-ui, sans-serif; color:#343a40; padding:3px 6px; background:#fff; }
+.move-ghost[data-as=""]::after { display:none; }
 .body.moving, .body.moving * { cursor:grabbing !important; }
 .body .moving-from { opacity:.35; }
 .drop-caret { position:absolute; width:2px; background:var(--accent); pointer-events:none; z-index:5; }
@@ -199,7 +201,7 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
     <div class="toolbar" id="toolbar"></div>
     <div class="scroller" id="scroller">
       <div class="tips">
-        Click an image to select it, or drag it to move it. Paste or drop an image file into the text, or type <code>![a picture](images/sales.svg)</code>.
+        Click an image to select it, or drag it to move it: into a line of text, or between lines. Paste or drop an image file into the text, or type <code>![a picture](images/sales.svg)</code>.
         With an image selected: <kbd>⌫</kbd> removes it, <kbd>↵</kbd> starts a paragraph after it, arrows move off it, <kbd>⌘Z</kbd> undoes.
         No image file to hand? <button id="sample">Copy a sample image</button> and paste it.
         The choices on the left change how the document behaves; the address keeps them.
@@ -315,6 +317,13 @@ let nextKey = 1
 const key = () => nextKey++
 const text = (s) => s.split('')
 const inline = (src, alt, height = null) => ({ k: key(), src, alt, height })
+// An image is the same Markdown wherever it is: moved into a line or onto
+// its own, it keeps its text and attributes and only renders differently, as
+// q2 would. The text in its brackets is a figure's caption, and an image's
+// alt text in a line; fig-alt, the #fig- label, width, height and fig-align
+// go along unchanged (in a line, only width and height show).
+const toInline = (f) => ({ k: f.k, src: f.src, alt: f.caption, figAlt: f.alt, id: f.id, width: f.width, height: f.height ?? null, align: f.align })
+const toFigure = (x) => ({ kind: 'fig', k: x.k, src: x.src, caption: x.alt, alt: x.figAlt ?? '', id: x.id ?? null, width: x.width ?? null, height: x.height ?? null, align: x.align ?? 'center' })
 const para = (tag, ...parts) => ({ kind: 'text', tag, items: parts.flatMap((p) => (typeof p === 'string' ? text(p) : [p])) })
 const figure = (src, f = {}) => ({ kind: 'fig', k: key(), src, alt: '', caption: '', id: null, width: null, align: 'center', ...f })
 
@@ -547,6 +556,7 @@ function renderBlock(blk, b, nums) {
       span.dataset.k = x.k
       const img = renderImage(x.src)
       if (img.tagName === 'IMG') { img.alt = x.alt; if (x.height) img.style.height = x.height }
+      if (x.width) { span.style.width = x.width + '%'; img.style.width = '100%' }
       span.append(img)
       span.onmousedown = (e) => { e.preventDefault(); sel = { inl: x.k }; panel = null; editor.focus({ preventScroll: true }); clicked = true; render(); pressImage(e, x.k) }
       el.append(span)
@@ -565,6 +575,7 @@ function renderBlock(blk, b, nums) {
   const img = renderImage(blk.src)
   if (img.tagName === 'IMG') img.alt = blk.alt || blk.caption
   if (blk.width) frame.style.width = blk.width + '%'
+  if (blk.height && img.tagName === 'IMG') img.style.height = blk.height
   if (blk.width) img.style.width = '100%'
   frame.append(img)
   frame.onmousedown = (e) => { e.preventDefault(); sel = { fig: blk.k }; panel = null; editor.focus({ preventScroll: true }); clicked = true; render(); pressImage(e, blk.k) }
@@ -852,7 +863,7 @@ function inlineToFigure({ at }) {
   const blk = doc[at.b]
   const img = blk.items[at.o]
   const before = blk.items.slice(0, at.o), after = blk.items.slice(at.o + 1)
-  const fig = figure(img.src, { alt: img.alt })
+  const fig = toFigure(img)
   const out = []
   if (before.length) out.push({ ...blk, items: before })
   out.push(fig)
@@ -1386,10 +1397,12 @@ function toQmd(blk) {
     // text goes in fig-alt (else qmd reads the caption as the alt text).
     const alt = blk.alt && !(opts.alt === 'caption' && blk.caption && blk.alt === blk.caption) ? `fig-alt=${q(blk.alt)}` : null
     return imageQmd(blk.src, blk.caption, [blk.id && blk.caption ? `#${blk.id}` : null, blk.width ? `width=${q(blk.width + '%')}` : null,
-      blk.align !== 'center' ? `fig-align=${q(blk.align)}` : null, alt])
+      blk.height ? `height=${q(blk.height)}` : null, blk.align !== 'center' ? `fig-align=${q(blk.align)}` : null, alt])
   }
   let out = ''
-  for (const x of blk.items) out += typeof x === 'string' ? x : imageQmd(x.src, x.alt, [x.height ? `height=${q(x.height)}` : null])
+  // In a line, everything it brought from being a figure is written as it was.
+  for (const x of blk.items) out += typeof x === 'string' ? x : imageQmd(x.src, x.alt, [x.id ? `#${x.id}` : null, x.width ? `width=${q(x.width + '%')}` : null,
+    x.height ? `height=${q(x.height)}` : null, x.align && x.align !== 'center' ? `fig-align=${q(x.align)}` : null, x.figAlt ? `fig-alt=${q(x.figAlt)}` : null])
   return (blk.tag === 'h2' ? '## ' : '') + out
 }
 
@@ -1717,9 +1730,10 @@ editor.addEventListener('drop', async (e) => {
 })
 
 // ------------------------------------------------------------- moving
-// Dragging an image moves it. A figure stays a figure: dropped in a line of
-// text, it splits it there (at either end, it goes before or after the
-// line); an image in a line stays in a line.
+// Dragging an image moves it: into a line of text (anywhere over its words),
+// where it's an image in the line; or between lines (the gap between blocks,
+// or the thin strip at a line's top or bottom), where it's on its own. Either
+// way it keeps its Markdown (see toInline).
 let moving = null   // { k, fig, ghost, at }
 function pressImage(e, k) {
   if (e.button !== 0) return
@@ -1731,10 +1745,11 @@ function pressImage(e, k) {
     }
     moving.ghost.style.left = ev.clientX + 12 + 'px'
     moving.ghost.style.top = ev.clientY + 12 + 'px'
-    const at = dropPoint(ev)
-    // Not onto itself; and an image in a line only into a line.
-    moving.at = at && !(moving.fig && doc[at.b] === moving.fig) && (moving.fig || !at.after) ? at : null
-    markDrop(moving.at, Boolean(moving.fig))
+    const at = movePoint(ev)
+    // Not onto itself.
+    moving.at = at && !(moving.fig && doc[at.b] === moving.fig) ? at : null
+    moving.ghost.dataset.as = moving.at ? (moving.at.edge ? 'Own line' : 'In the line') : ''
+    markMove(moving.at)
   }
   const up = () => {
     document.removeEventListener('mousemove', move)
@@ -1772,38 +1787,67 @@ function startMove(k, ev) {
   ;(fig ? editor.querySelector(`figure[data-k="${k}"] .frame`) : editor.querySelector(`.inl[data-k="${k}"]`))?.classList.add('moving-from')
 }
 
+/** Where a moved image would go: { b, edge } between lines, { b, o } in one. */
+function movePoint(e) {
+  const kids = [...editor.children]
+  let best = null
+  for (const [b, el] of kids.entries()) {
+    const r = el.getBoundingClientRect()
+    if (e.clientY >= r.top && e.clientY <= r.bottom) { best = { b, el, r, over: true }; break }
+    const d = e.clientY < r.top ? r.top - e.clientY : e.clientY - r.bottom
+    if (!best || d < best.d) best = { b, el, r, d, over: false }
+  }
+  if (!best) return null
+  const { b, el, r } = best
+  const nearer = e.clientY < (r.top + r.bottom) / 2 ? 'before' : 'after'
+  if (!best.over || el.nodeName === 'FIGURE') return { b, edge: nearer }
+  // A line's top and bottom edges are between lines too.
+  const BAND = 5
+  if (e.clientY < r.top + BAND) return { b, edge: 'before' }
+  if (e.clientY > r.bottom - BAND) return { b, edge: 'after' }
+  const p = document.caretPositionFromPoint ? document.caretPositionFromPoint(e.clientX, e.clientY) : document.caretRangeFromPoint(e.clientX, e.clientY)
+  const node = p && (p.offsetNode ?? p.startContainer), offset = p && (p.offset ?? p.startOffset)
+  if (!node || !el.contains(node)) return { b, edge: nearer }
+  return { b, o: caretOffset(el, node, offset), node, offset }
+}
+
+/** A bar between lines, or a caret in one. */
+function markMove(at) {
+  if (!at) return dropMark.remove()
+  if (at.edge) return markDrop({ b: at.b, after: at.edge === 'after', o: at.edge === 'after' ? 1 : 0 }, true)
+  markDrop(at, false)
+}
+
 function finishMove(at) {
-  const { k, fig } = moving
+  const { k } = moving
   // Where it goes, held by the block (not its index), which may shift.
   const target = doc[at.b]
-  if (fig) {
-    record()
-    doc.splice(figIndex(k), 1)
-    let b = doc.indexOf(target)
-    if (at.after || target.kind === 'fig') b++
-    else if (at.o === target.items.length) b++
-    else if (at.o > 0) {
-      // The middle of a line: split it there, without the spaces at the split.
-      const before = target.items.slice(0, at.o), after = target.items.slice(at.o)
-      while (before.at(-1) === ' ') before.pop()
-      while (after[0] === ' ') after.shift()
-      doc.splice(b, 1, { ...target, items: before }, { kind: 'text', tag: 'p', items: after })
-      b++
-    }
-    doc.splice(b, 0, fig)
-    sel = { fig: k }
-  } else {
-    record()
+  let o = at.o
+  record()
+  // Out of where it was.
+  let img
+  const fi = figIndex(k)
+  if (fi >= 0) [img] = doc.splice(fi, 1)
+  else {
     const from = inlineByKey(k)
-    const items = doc[from.b].items
-    const [img] = items.splice(from.o, 1)
-    let o = items === target.items && from.o < at.o ? at.o - 1 : at.o
+    const blk = doc[from.b], items = blk.items
+    ;[img] = items.splice(from.o, 1)
+    if (items === target.items && from.o < o) o--
     // It leaves no double space behind.
     if (items[from.o - 1] === ' ' && items[from.o] === ' ') {
       items.splice(from.o, 1)
       if (items === target.items && from.o < o) o--
     }
-    target.items.splice(o, 0, img)
+    // Nor a paragraph that was only it.
+    if (items.length === 0 && blk !== target && doc.filter((x) => x.kind === 'text').length > 1) doc.splice(doc.indexOf(blk), 1)
+  }
+  // Into where it goes, in the shape that place gives it.
+  if (at.edge) {
+    const fig = img.kind === 'fig' ? img : toFigure(img)
+    doc.splice(doc.indexOf(target) + (at.edge === 'after' ? 1 : 0), 0, fig)
+    sel = { fig: k }
+  } else {
+    target.items.splice(o, 0, img.kind === 'fig' ? toInline(img) : img)
     sel = { inl: k }
   }
 }
