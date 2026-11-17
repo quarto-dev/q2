@@ -15,6 +15,10 @@
   Use uv to build a venv with ipykernel, give it a python3.exe, register a `python3` kernelspec
   for the current user, and put it on PATH for this run, so the Python engine tests run
   instead of skipping.
+.PARAMETER WithTools
+  Download pandoc and typst (the versions CI pins in .github/workflows/test-suite.yml) as portable
+  zips into results/tools and put them on PATH for this run. Without them about 240 nextest tests
+  fail with "pandoc must be installed" or "typst must be on PATH", which says nothing about Windows.
 .PARAMETER PositronDoc
   Optional path of a .qmd you have run in Positron on this machine: item i2b prints the cache
   file name q2 expects for it so you can look for it on disk.
@@ -28,6 +32,7 @@
 param(
     [string[]]$Only,
     [switch]$WithPython,
+    [switch]$WithTools,
     [string]$PositronDoc,
     [switch]$Publish,
     [switch]$SkipBuild
@@ -216,6 +221,33 @@ if ($WithPython) {
     Copy-Item -Force (Join-Path $scripts 'python.exe') (Join-Path $scripts 'python3.exe')
     $env:PATH = $scripts + ';' + $env:PATH
     & (Join-Path $scripts 'python3.exe') -m ipykernel install --user --name python3 2>&1 | Out-Null
+}
+if ($WithTools) {
+    Write-Host '== pandoc and typst (portable zips, versions from CI) =='
+    $wf = Get-Content -Raw (Join-Path $repo '.github/workflows/test-suite.yml')
+    $pv = '3.12.1'; $tv = '0.15.1'
+    if ($wf -match 'PANDOC_VERSION:\s*"?([0-9.]+)') { $pv = $Matches[1] }
+    if ($wf -match 'TYPST_VERSION:\s*"?([0-9.]+)') { $tv = $Matches[1] }
+    $toolsDir = Join-Path $resultsDir 'tools'
+    New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
+    $ProgressPreference = 'SilentlyContinue'
+    $arm = ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64')
+    $typstArch = if ($arm) { 'aarch64' } else { 'x86_64' }
+    $dl = @(
+        @{ Name = 'pandoc'; Exe = 'pandoc.exe'; Url = "https://github.com/jgm/pandoc/releases/download/$pv/pandoc-$pv-windows-x86_64.zip" },
+        @{ Name = 'typst';  Exe = 'typst.exe';  Url = "https://github.com/typst/typst/releases/download/v$tv/typst-$typstArch-pc-windows-msvc.zip" }
+    )
+    foreach ($t in $dl) {
+        $dir = Join-Path $toolsDir $t.Name
+        if (-not (Get-ChildItem -Path $dir -Filter $t.Exe -Recurse -ErrorAction SilentlyContinue)) {
+            $zip = Join-Path $toolsDir ($t.Name + '.zip')
+            Invoke-WebRequest -UseBasicParsing -Uri $t.Url -OutFile $zip
+            Expand-Archive -Force -Path $zip -DestinationPath $dir
+        }
+        $exe = Get-ChildItem -Path $dir -Filter $t.Exe -Recurse | Select-Object -First 1
+        $env:PATH = $exe.DirectoryName + ';' + $env:PATH
+        Write-Host ('  ' + $t.Name + ': ' + (& $exe.FullName --version | Select-Object -First 1))
+    }
 }
 $pyOk = $false
 & python3 -I -c 'import ipykernel' 2>$null

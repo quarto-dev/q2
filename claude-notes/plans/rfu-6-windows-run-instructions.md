@@ -44,8 +44,10 @@ A later fix from the macOS side arrives with `git pull origin feature/rfu-6-wind
 From the repository root, in Windows PowerShell 5.1 or PowerShell 7:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\rfu6-windows\run.ps1 -WithPython
+powershell -ExecutionPolicy Bypass -File scripts\rfu6-windows\run.ps1 -WithPython -WithTools
 ```
+
+`-WithTools` downloads pandoc and typst (the versions CI pins) as zips under `scripts\rfu6-windows\results\tools` and puts them on `PATH` for the run. Without them about 240 tests fail for lack of those tools.
 
 `-WithPython` makes a venv with `ipykernel` under `scripts\rfu6-windows\results\venv`, gives it a `python3.exe`, and
 registers a `python3` kernelspec for your user, so the Python engine tests run instead of skipping. Leave it off if you
