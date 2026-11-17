@@ -3319,6 +3319,14 @@
         {
           "type": "SYMBOL",
           "name": "_commonmark_double_quote_string"
+        },
+        {
+          "type": "STRING",
+          "value": "''"
+        },
+        {
+          "type": "STRING",
+          "value": "\"\""
         }
       ]
     },
