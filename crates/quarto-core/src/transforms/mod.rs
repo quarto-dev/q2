@@ -120,6 +120,9 @@ mod responsive_image;
 // `image_alt_normalize`, `responsive_image`, `hephaestus`, and the Pandoc
 // cut's `pandoc_filters::image_alt_encode`.
 pub(crate) mod image_walk;
+// `width=60%` → `style`, `750px` → `750` on HTML images
+// (bd-html-image-dims-t5ogxjxd).
+mod image_dimensions;
 // `fig-alt` / `alt` → the image's alt inlines (bd-ykjwiqcc, GH #877).
 pub(crate) mod image_alt_normalize;
 // hephaestus `.hep` → SVG (bd-3qych45b). Native-only: the crate links
@@ -205,6 +208,7 @@ pub use hephaestus::HephaestusRenderTransform;
 pub use image_alt_normalize::ImageAltNormalizeTransform;
 pub use lightbox::LightboxTransform;
 // Only `hephaestus-render` (native-only, see above) calls it.
+pub use image_dimensions::ImageDimensionsTransform;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use lightbox::sync_lightbox_hrefs;
 pub use link_external::LinkExternalTransform;

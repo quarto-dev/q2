@@ -90,16 +90,17 @@ use crate::transforms::{
     EditorialMarksOoxmlTransform, EditorialMarksTypstTransform, EquationLabelTransform,
     ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
     FooterGenerateTransform, FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform,
-    GraphvizRenderTransform, LinkExternalTransform, LinkRewriteTransform, ListingGenerateTransform,
-    ListingRenderTransform, MermaidRenderTransform, MetadataNormalizeTransform,
-    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
-    PageNavRenderTransform, ProofSugarTransform, ReferenceLinkDiagnosticsTransform,
-    RepoActionsRenderTransform, ResourceCollectorTransform, ResponsiveImageTransform,
-    SectionizeTransform, ShortcodeResolveTransform, SidebarGenerateTransform,
-    SidebarRenderTransform, TableBootstrapClassTransform, TableFloatClassForwardTransform,
-    TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform, TocGenerateTransform,
-    TocLocationTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
-    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    GraphvizRenderTransform, ImageDimensionsTransform, LinkExternalTransform, LinkRewriteTransform,
+    ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
+    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
+    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
+    ResponsiveImageTransform, SectionizeTransform, ShortcodeResolveTransform,
+    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
+    TableFloatClassForwardTransform, TheoremSugarTransform, TitleBannerTransform,
+    TitleBlockTransform, TocGenerateTransform, TocLocationTransform, TocRenderTransform,
+    WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform, WebsiteFaviconTransform,
+    WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -2911,6 +2912,14 @@ pub fn build_transform_pipeline(
             )),
         ));
     }
+    // bd-html-image-dims-t5ogxjxd: rewrite image `width` / `height` into
+    // valid HTML — `N`/`Npx` stays an integer attribute, everything else
+    // moves into `style` (Pandoc's HTML writer does this in Quarto 1).
+    // Last of the content transforms: `responsive-image`, revealjs
+    // auto-stretch and `llms-capture` all read the author's unlifted
+    // values. Still inside `AstTransformsStage`, so Lua post filters see
+    // the lifted form. HTML-family self-gated; runs in the q2-preview too.
+    pipeline.push(Box::new(ImageDimensionsTransform::new()));
     pipeline.push(Box::new(AttributionRenderTransform::new()));
 
     // After attribution-render: auto-inject the default viewer
@@ -3130,6 +3139,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "draft-alert",
     "format-css",
     "responsive-image",
+    "image-dimensions",
     "link-external",
     // Swaps a `.hep` plot-document reference for a rendered SVG artifact;
     // no Pandoc-writer analog exists yet (bd-3qych45b covers HTML only).
@@ -3367,6 +3377,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // which it runs immediately before). No Pandoc-writer analog exists yet.
     ("hephaestus-render", Bucket::B4),
     ("responsive-image", Bucket::B4),
+    // Lifts image `width`/`height` into valid HTML attributes / `style`
+    // (Pandoc's HTML writer does the same at write time). HTML-only.
+    ("image-dimensions", Bucket::B4),
     // Adorns external body links (`link-external-*`): HTML presentation.
     ("link-external", Bucket::B4),
     // Both bake per-node attribution onto `ctx.format_options` fields that
@@ -7124,6 +7137,7 @@ mod tests {
                 "responsive-image",
                 "llms-capture",
                 "link-external",
+                "image-dimensions",
                 "attribution-render",
                 "attribution-viewer",
             ]
@@ -7228,6 +7242,7 @@ mod tests {
                 "responsive-image",
                 "llms-capture",
                 "link-external",
+                "image-dimensions",
                 "attribution-render",
                 "attribution-viewer",
             ]
@@ -7605,6 +7620,7 @@ mod tests {
                 "responsive-image",
                 "llms-capture",
                 "link-external",
+                "image-dimensions",
                 "attribution-render",
             ]
         );
