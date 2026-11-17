@@ -237,7 +237,7 @@ const GROUPS = [
     ['handles', 'Handles only', 'Drag a corner; the label shows the width as you go.'],
   ]},
   { key: 'caption', title: 'Captions', options: [
-    ['below', 'Under the image', 'Typed in place under the image, where it shows. Selecting an image without one shows "Add a caption". As in Google Docs and Notion.'],
+    ['below', 'Under the image', 'Typed in place under the image, where it shows. The Caption button, or ↓ with the image selected, goes into it ("Add a caption" until there\'s one), as does a new image. As in Google Docs and Notion.'],
     ['controls', 'In the controls', "A field with the image's other controls; the caption under the image is just shown."],
   ]},
   { key: 'alt', title: 'Alt text', options: [
@@ -584,7 +584,9 @@ function renderBlock(blk, b, nums) {
   if (nums.has(blk.k)) cap.dataset.num = `Figure ${nums.get(blk.k)}: `
   if (captionInPlace()) {
     cap.contentEditable = 'true'
-    if (!blk.caption) cap.className = selected ? 'empty' : 'hide'
+    // "Add a caption" only with the caret in it: selecting the image
+    // mustn't push the page down.
+    if (!blk.caption) cap.className = selected && sel.caption ? 'empty' : 'hide'
   } else {
     if (!blk.caption) cap.className = 'hide'
     cap.onmousedown = (e) => { e.preventDefault(); sel = { fig: blk.k }; focusCaption = true; editor.focus({ preventScroll: true }); render() }
@@ -795,6 +797,7 @@ function imageControls(img, inToolbar) {
       seg.append(textButton(name, img.inl.height === h, act(() => { record(); img.inl.height = h }), tip))
     out.push(seg, sep(inToolbar ? 'sep' : 'bsep'))
   }
+  if (fig && captionInPlace()) out.push(textButton('Caption', Boolean(fig.caption), () => { sel = { fig: fig.k, caption: true }; render() }, 'Type a caption under the image (↓)'))
   if (fig && opts.caption === 'controls') out.push(textField('Caption', fig.caption, (v) => setFig(fig.k, { caption: v }, true), 'caption'))
   const altShown = !(opts.alt === 'caption' && fig && fig.caption)
   if (altShown) out.push(textField('Alt text', target.alt, (v) => { record(true); target.alt = v }, 'alt', needsAlt(target, Boolean(fig))))
@@ -839,8 +842,9 @@ function refreshCaptions() {
     if (cap.textContent !== blk.caption && document.activeElement !== cap) cap.textContent = blk.caption
     if (nums.has(blk.k)) cap.dataset.num = `Figure ${nums.get(blk.k)}: `
     else delete cap.dataset.num
-    cap.classList.toggle('hide', !blk.caption && !(captionInPlace() && sel.fig === blk.k))
-    cap.classList.toggle('empty', !blk.caption && captionInPlace() && sel.fig === blk.k)
+    const typing = captionInPlace() && sel.fig === blk.k && sel.caption
+    cap.classList.toggle('hide', !blk.caption && !typing)
+    cap.classList.toggle('empty', !blk.caption && typing)
     el.querySelector('.alt-mark')?.remove()
     if (needsAlt(blk, true)) el.querySelector('.frame').append(altMark(() => { selectFigure(blk.k); focusAlt = true; render() }))
   }
