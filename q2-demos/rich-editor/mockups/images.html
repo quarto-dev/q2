@@ -126,12 +126,17 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 .hbar button[data-tip]::after, .viewer button[data-tip]::after { content:attr(data-tip); position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%);
   background:#343a40; color:#fff; font:12px/1 system-ui, sans-serif; padding:5px 7px; border-radius:4px; white-space:nowrap; pointer-events:none; visibility:hidden; z-index:40; }
 .hbar button[data-tip]:hover::after, .viewer button[data-tip]:hover::after { visibility:visible; transition:visibility 0s .5s; }
+.bridge { position:absolute; pointer-events:auto; }
 .hmenu { position:absolute; pointer-events:auto; display:flex; flex-direction:column; background:#fff; border-radius:8px; padding:4px; min-width:220px; z-index:13;
   box-shadow:0 0 0 1px rgba(15,15,15,.06), 0 3px 10px rgba(15,15,15,.14); font-size:14px; }
-.hmenu button { display:flex; align-items:center; gap:6px; padding:6px 8px; border:0; background:none; border-radius:5px; font:inherit; text-align:left; cursor:pointer; color:#37352f; }
+.hmenu button { display:flex; align-items:center; gap:9px; padding:6px 8px; border:0; background:none; border-radius:5px; font:inherit; text-align:left; cursor:pointer; color:#37352f; }
 .hmenu button:hover:not(:disabled) { background:#efeeec; }
 .hmenu button:disabled { color:var(--faint); cursor:default; }
-.hmenu .mark { width:14px; flex:none; color:var(--accent); }
+.hmenu .icon { flex:none; display:grid; color:#5f5e5b; }
+.hmenu .icon svg { width:18px; height:18px; }
+.hmenu button:disabled .icon { color:var(--faint); }
+.hmenu .danger .icon { color:inherit; }
+.hmenu .mark { flex:none; color:var(--accent); }
 .hmenu .label { flex:1; }
 .hmenu .hint { color:var(--faint); font-size:12px; }
 .hmenu .danger { color:#c4342d; }
@@ -1049,7 +1054,7 @@ function renderHandles(fig, frame, fr, origin, bars = false) {
 // ------------------------------------------------------------- hover bar
 // The image under the pointer, and the menu open from its bar: { kind:
 // 'align' | 'more' | 'alt', k, x?, y? } (x and y when it was right-clicked).
-let hoverK = null, menu = null, hoverTimer = null
+let hoverK = null, menu = null
 const STROKE = (body) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`
 const ALIGN_ICONS = {
   left: STROKE('<path d="M4 4.5h16M4 19.5h16"/><rect x="4" y="8" width="9" height="8" rx="1"/>'),
@@ -1063,6 +1068,16 @@ const HOVER_ICONS = {
   more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>',
   close: STROKE('<path d="M6 6l12 12M18 6 6 18"/>'),
 }
+// The More menu's, one at the left of each item.
+const MENU_ICONS = {
+  alt: STROKE('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h10M7 14h6"/>'),
+  replace: STROKE('<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>'),
+  original: STROKE('<path d="M4 9V4h5M20 15v5h-5M4 4l6 6M20 20l-6-6"/>'),
+  numbered: STROKE('<path d="M10 4 8 20M16 4l-2 16M5 9h15M4 15h15"/>'),
+  ownLine: STROKE('<path d="M4 4.5h16M4 19.5h16"/><rect x="4" y="8" width="16" height="8" rx="1"/>'),
+  download: STROKE('<path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/>'),
+  delete: STROKE('<path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13M10 11v5.5M14 11v5.5"/>'),
+}
 
 /** What the pointer is over: an image, or the bar and menus of one. */
 document.addEventListener('mousemove', (e) => {
@@ -1070,11 +1085,10 @@ document.addEventListener('mousemove', (e) => {
   const t = e.target
   const ui = t.closest?.('[data-hover-k]')
   const k = ui ? Number(ui.dataset.hoverK) : Number(t.closest?.('#editor figure .frame')?.closest('figure').dataset.k ?? t.closest?.('#editor .inl')?.dataset.k ?? 0) || null
-  if (k === hoverK) { clearTimeout(hoverTimer); return }
-  clearTimeout(hoverTimer)
-  // Leaving goes after a moment, so the pointer can cross a gap to the bar.
-  if (k) { hoverK = k; renderOverlay() }
-  else hoverTimer = setTimeout(() => { hoverK = null; renderOverlay() }, 250)
+  if (k === hoverK) return
+  // Leaving hides it at once: a bar off the image has a bridge to it (below).
+  hoverK = k
+  renderOverlay()
 })
 
 function hoverUi(cls, k) {
@@ -1129,6 +1143,17 @@ function renderHover(origin) {
   }
   bar.style.left = Math.max(8, Math.min(left, origin.width - bar.offsetWidth - 8)) + 'px'
   bar.style.top = top + 'px'
+  if (top < fr.top - origin.top) {
+    // Above the image: the gap between them counts as the image, so the
+    // pointer can cross it without the bar going.
+    const bridge = hoverUi('bridge', k)
+    const left = Math.min(fr.left - origin.left, parseFloat(bar.style.left))
+    bridge.style.left = left + 'px'
+    bridge.style.width = Math.max(fr.right - origin.left, parseFloat(bar.style.left) + bar.offsetWidth) - left + 'px'
+    bridge.style.top = top + bar.offsetHeight + 'px'
+    bridge.style.height = fr.top - origin.top - top - bar.offsetHeight + 'px'
+    overlay.append(bridge)
+  }
   if (fig) renderHandles(fig, el, fr, origin, true)
 
   if (!menu || menu.k !== k) return
@@ -1155,9 +1180,9 @@ function renderHover(origin) {
     under(alignButton, sub, true)
   } else if (menu.kind === 'more') {
     const list = hoverUi('hmenu', k)
-    const item = (label, action, { disabled = false, danger = false, check = null, hint = '' } = {}) => {
+    const item = (icon, label, action, { disabled = false, danger = false, check = null, hint = '' } = {}) => {
       const b = document.createElement('button')
-      b.innerHTML = `<span class="mark">${check === null ? '' : check ? '✓' : ''}</span><span class="label"></span><span class="hint"></span>`
+      b.innerHTML = `<span class="icon">${MENU_ICONS[icon]}</span><span class="label"></span><span class="hint"></span>${check ? '<span class="mark">✓</span>' : ''}`
       b.querySelector('.label').textContent = label
       b.querySelector('.hint').textContent = hint
       if (danger) b.classList.add('danger')
@@ -1166,14 +1191,14 @@ function renderHover(origin) {
       list.append(b)
     }
     const select = () => { sel = fig ? { fig: k } : { inl: k } }
-    item('Alt text…', () => { menu = { ...menu, kind: 'alt' }; renderOverlay() }, { hint: target.alt ? '' : 'none yet' })
-    item('Replace…', () => { menu = null; select(); replaceCommand(); render() })
-    if (fig && fig.width) item('Original size', () => { menu = null; setFig(k, { width: null }); render() }, { hint: `now ${fig.width}%` })
-    if (fig && opts.xref === 'toggle') item('Numbered', () => { setFig(k, { id: fig.id ? null : slug(fig.caption) }); render() }, { check: Boolean(fig.id && fig.caption), disabled: !fig.caption, hint: fig.caption ? (fig.id ? '#' + fig.id : '') : 'needs a caption' })
-    if (!fig) item('Own line', () => { menu = null; inlineToFigure({ at }); render() })
+    item('alt', 'Alt text…', () => { menu = { ...menu, kind: 'alt' }; renderOverlay() }, { hint: target.alt ? '' : 'none yet' })
+    item('replace', 'Replace…', () => { menu = null; select(); replaceCommand(); render() })
+    if (fig && fig.width) item('original', 'Original size', () => { menu = null; setFig(k, { width: null }); render() }, { hint: `now ${fig.width}%` })
+    if (fig && opts.xref === 'toggle') item('numbered', 'Numbered', () => { setFig(k, { id: fig.id ? null : slug(fig.caption) }); render() }, { check: Boolean(fig.id && fig.caption), disabled: !fig.caption, hint: fig.caption ? (fig.id ? '#' + fig.id : '') : 'needs a caption' })
+    if (!fig) item('ownLine', 'Own line', () => { menu = null; inlineToFigure({ at }); render() })
     list.append(document.createElement('hr'))
-    item('Download', () => { menu = null; download(target); renderOverlay() }, { disabled: !have })
-    item('Delete', () => { menu = null; hoverK = null; select(); removeImage(); render() }, { danger: true, hint: '⌫' })
+    item('download', 'Download', () => { menu = null; download(target); renderOverlay() }, { disabled: !have })
+    item('delete', 'Delete', () => { menu = null; hoverK = null; select(); removeImage(); render() }, { danger: true, hint: '⌫' })
     menu.x == null ? under(moreButton, list, false) : atPointer(list)
   } else if (menu.kind === 'alt') {
     const box = hoverUi('hmenu', k)
