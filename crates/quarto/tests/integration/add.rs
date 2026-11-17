@@ -615,6 +615,35 @@ fn json_emits_one_result_object() {
     assert_eq!(v["gitattributes_written"], true);
 }
 
+#[test]
+fn a_dropped_owner_folder_is_noted_in_human_and_json_output() {
+    let src = tree(&[
+        ("_extensions/cderv/demo/_extension.yml", &manifest("1.0.0")),
+        ("_extensions/cderv/demo/demo.lua", DEMO_LUA),
+    ]);
+    let expected = "'cderv/demo' installed as 'demo', as extensions from a local path or an \
+                    archive have no owner. Refer to it as 'demo'.";
+
+    let proj = project();
+    let out = run_q2_add(proj.path(), &[&path_arg(src.path())]);
+    assert_succeeded(&out);
+    assert!(proj.path().join("_extensions/demo/_extension.yml").exists());
+    let stderr = stderr_str(&out);
+    assert!(stderr.contains(expected), "stderr: {stderr}");
+
+    let proj = project();
+    let out = run_q2_add(proj.path(), &["--json", &path_arg(src.path())]);
+    assert_succeeded(&out);
+    let stdout = stdout_str(&out);
+    assert_eq!(stdout.lines().count(), 1, "one result object: {stdout}");
+    let notes: Vec<serde_json::Value> = stderr_str(&out)
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap_or_else(|e| panic!("{e}: {l}")))
+        .collect();
+    assert_eq!(notes.len(), 1, "{notes:?}");
+    assert!(notes[0].to_string().contains(expected), "{}", notes[0]);
+}
+
 // ====================================================================
 // Invalid sources
 // ====================================================================
