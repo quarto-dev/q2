@@ -1,12 +1,15 @@
 /**
- * Tests for wasmRenderer utility functions.
- *
- * Note: These tests focus on pure functions that don't require WASM initialization.
- * Full WASM integration tests are in themeContentHash.wasm.test.ts.
+ * Tests for wasmRenderer utility functions and raw-call forwarding.
  */
 
-import { describe, it, expect } from 'vitest';
-import { toSimpleYaml } from './wasmRenderer';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  _setWasmModuleForTest,
+  renderPageForPreview,
+  renderPageInProjectWithAttribution,
+  toSimpleYaml,
+} from './wasmRenderer';
+import { setPerfOverrideForTests } from './perfCounters';
 
 describe('toSimpleYaml', () => {
   it('serializes flat key-value pairs', () => {
@@ -41,5 +44,37 @@ describe('toSimpleYaml', () => {
     const settings = { format: { html: { 'source-location': 'full' } } };
     const yaml = toSimpleYaml(settings) + '\n';
     expect(yaml).toBe('format:\n  html:\n    source-location: full\n');
+  });
+});
+
+describe('capture option forwarding (Phase 3B1)', () => {
+  afterEach(() => {
+    _setWasmModuleForTest(null);
+    setPerfOverrideForTests(null);
+  });
+
+  it.each([false, true])('reaches both raw WASM entries with perf=%s', async (perf) => {
+    setPerfOverrideForTests(perf);
+    const response = JSON.stringify({ success: true, ast_json: '{}' });
+    const renderPreview = vi.fn(async () => response);
+    const renderProject = vi.fn(async () => response);
+    _setWasmModuleForTest({
+      render_page_for_preview: renderPreview,
+      render_page_in_project_with_attribution: renderProject,
+    });
+    const options = { captureUntransformedAst: false };
+
+    await renderPageForPreview('doc.qmd', undefined, undefined, options);
+    expect(renderPreview).toHaveBeenCalledWith('doc.qmd', undefined, undefined, options);
+
+    await renderPageInProjectWithAttribution('doc.qmd', undefined, null, undefined, true, options);
+    expect(renderProject).toHaveBeenCalledWith(
+      'doc.qmd',
+      undefined,
+      undefined,
+      undefined,
+      true,
+      options,
+    );
   });
 });

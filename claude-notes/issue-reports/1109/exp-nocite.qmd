@@ -1,0 +1,7 @@
+---
+bibliography: refs.bib
+nocite: |
+  @extra
+---
+
+See [@cited].

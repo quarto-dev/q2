@@ -499,3 +499,76 @@ async fn no_execute_demand_replays_instead_of_running_jupyter() {
         problems(&out)
     );
 }
+
+/// GH #1156: a cell's `#| output: asis` stdout is document markdown (Quarto 1 `jupyter.ts`),
+/// so the printed heading, emphasis and callout reach the AST as structure, with no
+/// `.cell-output-stdout` code block and no `.cell` div around them.
+#[tokio::test]
+async fn output_asis_stdout_becomes_document_markdown() {
+    let notebook = r###"{"cells":[{"cell_type":"code","execution_count":1,"metadata":{},"outputs":[{"output_type":"stream","name":"stdout","text":["## Generated heading\n","\n","Some **bold** text.\n","\n","::: {.callout-note}\n","A note.\n",":::\n"]}],"source":["#| echo: false\n","#| output: asis\n","print('...')\n"]}],"metadata":{"kernelspec":{"name":"python3","language":"python"}},"nbformat":4,"nbformat_minor":5}"###;
+    let out = preview_ast(notebook, ExecutionPolicy::None, None).await;
+    let ast = &out.ast_json;
+    assert!(
+        ast.contains("\"Header\"") && ast.contains("Generated"),
+        "the printed heading must be a Header: {ast}"
+    );
+    assert!(
+        ast.contains("\"Strong\""),
+        "the printed **bold** must be Strong: {ast}"
+    );
+    assert!(
+        ast.contains("callout"),
+        "the printed callout must survive: {ast}"
+    );
+    assert!(
+        !ast.contains("cell-output-stdout") && !ast.contains("\"CodeBlock\""),
+        "no stdout code block under output: asis: {ast}"
+    );
+    assert!(problems(&out).is_empty(), "{:?}", problems(&out));
+}
+
+/// GH #1156: a document-level `execute: output: asis` applies to every cell, and a cell's own
+/// `output: true` turns it off (Quarto 1 `jupyter.ts`: asis is the cell option, or the
+/// document's with no cell override).
+#[tokio::test]
+async fn document_level_output_asis_yields_to_a_cell_override() {
+    let notebook = r###"{"cells":[{"cell_type":"markdown","metadata":{},"source":["---\nexecute:\n  output: asis\n---\n"]},{"cell_type":"code","execution_count":1,"metadata":{},"outputs":[{"output_type":"stream","name":"stdout","text":["Document-level **asis**.\n"]}],"source":["#| echo: false\n","print('a')\n"]},{"cell_type":"code","execution_count":2,"metadata":{},"outputs":[{"output_type":"stream","name":"stdout","text":["Cell override: not asis.\n"]}],"source":["#| echo: false\n","#| output: true\n","print('b')\n"]}],"metadata":{"kernelspec":{"name":"python3","language":"python"}},"nbformat":4,"nbformat_minor":5}"###;
+    let out = preview_ast(notebook, ExecutionPolicy::None, None).await;
+    let ast = &out.ast_json;
+    assert!(
+        ast.contains("\"Strong\""),
+        "the document-level asis cell's **asis** must be Strong: {ast}"
+    );
+    assert_eq!(
+        ast.matches("cell-output-stdout").count(),
+        1,
+        "only the overriding cell keeps its stdout div: {ast}"
+    );
+    assert!(
+        ast.contains("Cell override: not asis."),
+        "the override cell's text stays a code block: {ast}"
+    );
+}
+
+/// bd-f63cqoke: a backtick run of three or more in a code cell's source lengthens the cell's
+/// fence (the ipynb converter for a line-leading run, the qmd writer for one anywhere in a
+/// line). The replayer must still treat the cell as a code cell and present its stored output;
+/// it used to accept only three-backtick fences and left such a cell as plain source.
+#[tokio::test]
+async fn cell_whose_source_holds_a_backtick_run_replays_its_output() {
+    let notebook = r###"{"cells":[{"cell_type":"code","execution_count":1,"metadata":{},"outputs":[{"output_type":"stream","name":"stdout","text":["MID-LINE-OUT\n"]}],"source":["print(\"a ``` b\")\n"]},{"cell_type":"code","execution_count":2,"metadata":{},"outputs":[{"output_type":"stream","name":"stdout","text":["LINE-START-OUT\n"]}],"source":["s = '''\n","```bash\n","pip install x\n","```\n","'''\n","print(s)\n"]}],"metadata":{"kernelspec":{"name":"python3","language":"python"}},"nbformat":4,"nbformat_minor":5}"###;
+    let out = preview_ast(notebook, ExecutionPolicy::None, None).await;
+    let ast = &out.ast_json;
+    for marker in ["MID-LINE-OUT", "LINE-START-OUT"] {
+        assert!(
+            ast.contains(marker),
+            "the stored output {marker} must be presented: {ast}"
+        );
+    }
+    assert_eq!(
+        ast.matches("cell-output-stdout").count(),
+        2,
+        "both cells present their stdout: {ast}"
+    );
+    assert!(problems(&out).is_empty(), "{:?}", problems(&out));
+}

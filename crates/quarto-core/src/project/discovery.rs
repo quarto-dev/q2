@@ -49,7 +49,9 @@
 //!    every `.py` and `.R` on the way.
 //! 3. Exclude in either mode:
 //!    - the output directory (e.g. `_site/`)
-//!    - `.quarto/`, `.git/`, `node_modules/`
+//!    - `.quarto/`, `.git/`, `node_modules/`, and the engine environment
+//!      directories `renv/`, `packrat/`, `rsconnect/`, `venv/`, `env/`
+//!      (at any depth; matches Quarto 1)
 //!    - any path whose component starts with `_` (partials /
 //!      `_metadata.yml` / `_quarto*.yml`)
 //!    - any path whose component starts with `.` (hidden)
@@ -196,6 +198,37 @@ pub const DEFAULT_RENDER_PATTERN: &str = "**/*.qmd";
 /// one is enough, with or without a `project:` key. A profile overlay
 /// (`_quarto-<profile>.yml`) on its own is not a marker.
 pub const PROJECT_CONFIG_FILENAMES: [&str; 2] = ["_quarto.yml", "_quarto.yaml"];
+
+/// The project root for `start`: the nearest directory at or above it
+/// that holds a project config ([`PROJECT_CONFIG_FILENAMES`], checked in
+/// that order), with the config file's path. `None` when the walk reaches
+/// the filesystem root without finding one.
+///
+/// Every check goes through `runtime` (`path_exists`), so the answer
+/// reflects whatever the runtime layers: the disk for `q2 render`, open
+/// editor buffers over the disk for the language server. It never lists
+/// a directory. This is the one copy of the upward walk:
+/// `ProjectContext::discover` parses the config it finds, and the
+/// `render`/`preview` commands and the LSP use it to locate a project
+/// cheaply (bd-ojsx06at; there used to be three copies).
+pub fn find_project_root(
+    start: &Path,
+    runtime: &dyn SystemRuntime,
+) -> quarto_system_runtime::RuntimeResult<Option<(PathBuf, PathBuf)>> {
+    let mut current = start.to_path_buf();
+    loop {
+        for name in PROJECT_CONFIG_FILENAMES {
+            let candidate = current.join(name);
+            if runtime.path_exists(&candidate, None)? {
+                return Ok(Some((current, candidate)));
+            }
+        }
+        match current.parent() {
+            Some(parent) => current = parent.to_path_buf(),
+            None => return Ok(None),
+        }
+    }
+}
 
 /// Discover the render list for a project.
 ///
@@ -541,11 +574,25 @@ fn has_md_extension(path: &Path) -> bool {
     path.extension().and_then(|e| e.to_str()) == Some("md")
 }
 
+/// Directory names discovery never descends into, at any depth. Matches
+/// Quarto 1's `engineIgnoreDirs()`: `node_modules` plus each engine's
+/// environment directories — knitr's `renv`, `packrat`, `rsconnect` and
+/// jupyter's `venv`, `env`. These hold installed packages, whose bundled
+/// `.qmd` vignettes must not render as project pages (GH #1222).
+const IGNORED_DIR_NAMES: &[&str] = &[
+    "node_modules",
+    "renv",
+    "packrat",
+    "rsconnect",
+    "venv",
+    "env",
+];
+
 fn is_excluded_component(name: &str) -> bool {
     if name.starts_with('_') || name.starts_with('.') {
         return true;
     }
-    matches!(name, "node_modules")
+    IGNORED_DIR_NAMES.contains(&name)
 }
 
 fn starts_with(path: &Path, prefix: &Path) -> bool {
@@ -876,6 +923,56 @@ mod tests {
     use quarto_system_runtime::NativeRuntime;
     use std::fs;
     use tempfile::TempDir;
+
+    // ── find_project_root (bd-ojsx06at) ────────────────────────────────
+
+    #[test]
+    fn find_project_root_takes_the_nearest_config_upward() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        fs::write(root.join("_quarto.yml"), "project: {}\n").unwrap();
+        fs::create_dir_all(root.join("a/b")).unwrap();
+        fs::write(root.join("a/_quarto.yaml"), "project: {}\n").unwrap();
+        let rt = NativeRuntime::new();
+
+        let found = find_project_root(&root.join("a/b"), &rt).unwrap();
+        assert_eq!(found, Some((root.join("a"), root.join("a/_quarto.yaml"))));
+        let found = find_project_root(&root, &rt).unwrap();
+        assert_eq!(found, Some((root.clone(), root.join("_quarto.yml"))));
+    }
+
+    #[test]
+    fn find_project_root_prefers_yml_over_yaml_in_one_directory() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        fs::write(root.join("_quarto.yaml"), "").unwrap();
+        fs::write(root.join("_quarto.yml"), "").unwrap();
+        let found = find_project_root(&root, &NativeRuntime::new()).unwrap();
+        assert_eq!(found, Some((root.clone(), root.join("_quarto.yml"))));
+    }
+
+    #[test]
+    fn find_project_root_sees_an_unsaved_config_through_an_overlay() {
+        // How the language server finds a session root: the client's open
+        // buffers overlaid on the disk, so an unsaved `_quarto.yml` counts.
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        fs::create_dir_all(root.join("sub")).unwrap();
+        let native = std::sync::Arc::new(NativeRuntime::new());
+        let on_disk = find_project_root(&root.join("sub"), native.as_ref()).unwrap();
+        assert!(
+            on_disk
+                .as_ref()
+                .is_none_or(|(dir, _)| !dir.starts_with(&root)),
+            "no config on disk under the temp root: {on_disk:?}"
+        );
+
+        let mut files = std::collections::HashMap::new();
+        files.insert(root.join("_quarto.yml"), b"project: {}\n".to_vec());
+        let rt = crate::overlay_runtime::OverlayRuntime::new(native, files);
+        let found = find_project_root(&root.join("sub"), &rt).unwrap();
+        assert_eq!(found, Some((root.clone(), root.join("_quarto.yml"))));
+    }
 
     fn native() -> NativeRuntime {
         NativeRuntime::new()
@@ -1246,6 +1343,71 @@ mod tests {
         let files = discover_project_files(&config, &native()).unwrap().files;
         assert_eq!(files.len(), 1);
         assert!(files[0].ends_with("index.qmd"));
+    }
+
+    /// GH #1222: renv installs packages (and their `.qmd` vignettes) under
+    /// `renv/library/`. Quarto 1 never walks the execution engines'
+    /// environment directories — `renv`, `packrat`, `rsconnect` (knitr) and
+    /// `venv`, `env` (jupyter) — at any depth, and neither do we.
+    #[test]
+    fn discovery_excludes_engine_environment_dirs() {
+        let temp = TempDir::new().unwrap();
+        let project_dir = canonical(temp.path());
+        write_file(&project_dir.join("index.qmd"), "# x\n");
+        for dir in ["renv", "packrat", "rsconnect", "venv", "env"] {
+            write_file(
+                &project_dir.join(format!("{dir}/library/pkg/doc/vignette.qmd")),
+                "# v\n",
+            );
+            write_file(&project_dir.join(format!("sub/{dir}/nested.qmd")), "# n\n");
+        }
+        // Names that merely contain an ignored dir name still render.
+        write_file(&project_dir.join("environment/page.qmd"), "# e\n");
+
+        let output_dir = project_dir.join("_site");
+        let exts = RenderableExtensions::fixed();
+        let config = DiscoveryConfig {
+            project_dir: &project_dir,
+            output_dir: &output_dir,
+            render_patterns: &[],
+            renderable_extensions: &exts,
+        };
+        let files = discover_project_files(&config, &native()).unwrap().files;
+        let mut rels: Vec<_> = files
+            .iter()
+            .map(|p| {
+                p.strip_prefix(&project_dir)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace(std::path::MAIN_SEPARATOR, "/")
+            })
+            .collect();
+        rels.sort();
+        assert_eq!(rels, vec!["environment/page.qmd", "index.qmd"]);
+    }
+
+    /// An explicit pattern naming a file under an engine environment dir
+    /// does not override the exclusion (Quarto 1 subtracts these dirs from
+    /// `project.render` too); the author gets Q-5-13 instead.
+    #[test]
+    fn discovery_engine_environment_dirs_are_hard_filters() {
+        let temp = TempDir::new().unwrap();
+        let project_dir = canonical(temp.path());
+        write_file(&project_dir.join("index.qmd"), "# x\n");
+        write_file(
+            &project_dir.join("renv/library/pkg/doc/vignette.qmd"),
+            "# v\n",
+        );
+
+        let (rels, _) = discover_with(&project_dir, &["**/*.qmd"]);
+        assert_eq!(rels, vec!["index.qmd"]);
+
+        let (rels, diags) = discover_with(&project_dir, &["renv/library/pkg/doc/vignette.qmd"]);
+        assert!(rels.is_empty(), "got {rels:?}");
+        assert!(
+            diags.iter().any(|d| d.code.as_deref() == Some("Q-5-13")),
+            "expected Q-5-13, got {diags:?}"
+        );
     }
 
     #[test]
@@ -1825,6 +1987,7 @@ mod tests {
             claims: None,
             file_extensions: None,
             claims_files: None, // ← decides by inspecting content
+            kernel_equivalence: None,
         };
 
         assert!(

@@ -37,8 +37,33 @@ struct Cli {
     #[arg(short = 'v', long = "verbose", global = true, action = clap::ArgAction::Count)]
     verbose: u8,
 
+    /// When to color messages and make file locations clickable.
+    /// `auto` (the default) decides from the terminal and the
+    /// `NO_COLOR` / `CLICOLOR` / `CLICOLOR_FORCE` / `FORCE_COLOR`
+    /// environment variables; this flag overrides them all.
+    #[arg(long, global = true, value_enum, default_value_t = ColorArg::Auto, value_name = "WHEN")]
+    color: ColorArg,
+
     #[command(subcommand)]
     command: Commands,
+}
+
+/// clap's view of [`quarto_util::output_style::ColorFlag`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum ColorArg {
+    Auto,
+    Always,
+    Never,
+}
+
+impl From<ColorArg> for quarto_util::output_style::ColorFlag {
+    fn from(arg: ColorArg) -> Self {
+        match arg {
+            ColorArg::Auto => Self::Auto,
+            ColorArg::Always => Self::Always,
+            ColorArg::Never => Self::Never,
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -201,6 +226,17 @@ enum Commands {
         /// Skip the project's `pre-render` and `post-render` scripts.
         #[arg(long = "no-render-scripts")]
         no_render_scripts: bool,
+
+        /// Check the render without producing output: discover the
+        /// project, resolve formats, parse every file and merge its
+        /// metadata, then report every problem found and exit. No code is
+        /// executed, no pre-/post-render script runs and nothing is
+        /// written. Problems only a full render finds (engine, filter,
+        /// template and cross-reference errors) are not reported. With
+        /// -v, lists the files a render would produce; with
+        /// --json-errors, prints a JSON summary on stdout
+        #[arg(long = "dry-run", conflicts_with = "clean_cache")]
+        dry_run: bool,
     },
 
     /// Start a live preview of a Quarto document or project.
@@ -279,7 +315,9 @@ enum Commands {
 
         /// Share this preview session over an end-to-end encrypted
         /// peer-to-peer tunnel (via iroh). Prints a join string;
-        /// anyone who has it can VIEW the project and RE-RUN its code
+        /// anyone who has it can VIEW the project and, if `engine` is in the
+        /// record sources (`execute: record-sources`) and `preview.engine` is not
+        /// `off`, RE-RUN its code
         /// on this machine (and EDIT the files if --allow-edit is also
         /// set), so treat the string like a password.
         #[arg(long)]
@@ -395,6 +433,26 @@ enum Commands {
         /// `--ui editor`, `--join` or `--no-project`.
         #[arg(long, conflicts_with_all = ["join", "no_project"])]
         profile: Vec<String>,
+
+        /// Preview a project that lives on an existing sync server (a
+        /// `q2 hub`) instead of a local directory. Takes the hub's
+        /// websocket URL, e.g. `ws://127.0.0.1:3000/ws`; requires
+        /// --project. The preview mirrors that project's documents: the
+        /// viewer follows it, --allow-edit and --ui editor write edits to
+        /// it. Nothing on this machine is read or written. The hub must
+        /// not require sign-in (yet).
+        #[arg(
+            long,
+            value_name = "WS_URL",
+            requires = "project",
+            conflicts_with_all = ["path", "no_project", "join", "static_mode", "share", "to", "metadata", "profile"]
+        )]
+        hub_url: Option<String>,
+
+        /// With --hub-url: the project to preview — its index document id
+        /// (`automerge:…` or bare) or a hub share URL (`…/#/share/<id>?…`).
+        #[arg(long, value_name = "ID_OR_SHARE_URL", requires = "hub_url")]
+        project: Option<String>,
     },
 
     /// Serve a Shiny interactive document
@@ -501,14 +559,49 @@ enum Commands {
         target: Vec<String>,
     },
 
-    /// Convert documents to alternate representations
+    /// Convert a document to another representation.
+    ///
+    /// The output format is always explicit (`--to`); the input format is inferred
+    /// from the extension (`.qmd` and `.md` are qmd) unless `--from` is given.
+    /// Supported: `--from qmd --to positron-ipynb`, a Positron output-cache
+    /// notebook built from the document's execution record. `--to ipynb` and
+    /// `--from ipynb` are reserved and not implemented yet.
+    ///
+    /// For `positron-ipynb`: `-o <path>` is required (`-o -` writes the notebook
+    /// to stdout and the JSON report to stderr; otherwise the report is one JSON
+    /// line on stdout, and an existing file is overwritten). The record is the
+    /// `.quarto` copy if there is one, else the document is RUN to produce one,
+    /// so this command may execute code. Exit codes: 0 success; 2 usage error; 10
+    /// no record and execution is forbidden; 11 no exportable cells; 12 unreadable
+    /// or invalid record; 13 engine run failed.
     Convert {
         /// Input file to convert
-        input: String,
+        input: PathBuf,
 
-        /// Output format
+        /// Output format: `positron-ipynb`
         #[arg(long)]
-        output: Option<String>,
+        to: String,
+
+        /// Input format (default: from the extension): `qmd`
+        #[arg(long)]
+        from: Option<String>,
+
+        /// Where to write the result (`-` for stdout). Required for
+        /// `positron-ipynb`.
+        #[arg(short = 'o', long, value_name = "PATH")]
+        output: Option<PathBuf>,
+
+        /// Metadata value (KEY:VALUE, or KEY=VALUE; repeatable), as
+        /// `q2 render -M`, for the document run that produces a record. The value
+        /// is parsed as YAML; the first `=` or `:` separates key and value, and
+        /// dotted keys are not expanded.
+        #[arg(short = 'M', long)]
+        metadata: Vec<String>,
+
+        /// `positron-ipynb` only: written to the notebook's `quarto_source` as given
+        /// (default: the document's absolute path, with forward slashes).
+        #[arg(long, value_name = "URI")]
+        source_uri: Option<String>,
     },
 
     /// Run the version of Pandoc embedded within Quarto
@@ -611,6 +704,26 @@ enum Commands {
 
     /// Start the Quarto Language Server Protocol server
     Lsp,
+
+    /// Answer questions about hub projects over LSP on stdio.
+    ///
+    /// Joins a hub's sync websocket as a client peer. The LSP client names
+    /// projects as workspace folders (`automerge:<index-doc-id>`) and asks
+    /// about them with custom requests, such as `quarto/projectComments`;
+    /// the server sends `quarto/documentsChanged` when their documents
+    /// change. Meant to be run by a program that hosts a hub, not by hand.
+    #[command(name = "hub-lsp")]
+    HubLsp {
+        /// The hub's sync websocket URL, e.g. ws://127.0.0.1:40404/ws.
+        #[arg(long)]
+        server: String,
+
+        /// Send handshake header NAME with the contents of the file at PATH
+        /// (trailing newline removed). Repeatable. Values come from files so
+        /// that secrets stay off the command line.
+        #[arg(long = "header-file", value_name = "NAME=PATH")]
+        header_file: Vec<String>,
+    },
 
     /// Print a document's merged configuration as JSON.
     ///
@@ -1319,6 +1432,33 @@ mod cli_parse_tests {
         }
     }
 
+    /// The record source list moved into the `execute: record-sources` key (set with
+    /// `-M`); the option is gone with no alias.
+    #[test]
+    fn preview_and_provide_hub_reject_the_removed_records_option() {
+        for args in [
+            &["preview", "--records", "positron,engine"][..],
+            &[
+                "provide-hub",
+                "id",
+                "--file",
+                "a.qmd",
+                "--records",
+                "engine",
+            ][..],
+        ] {
+            let err = match try_parse(args) {
+                Ok(_) => panic!("must be refused: {args:?}"),
+                Err(e) => e,
+            };
+            assert_eq!(
+                err.kind(),
+                clap::error::ErrorKind::UnknownArgument,
+                "args: {args:?}"
+            );
+        }
+    }
+
     #[test]
     fn preview_share_flag_parses() {
         let Commands::Preview { share, .. } = parse_preview(&["preview", "--share"]) else {
@@ -1723,7 +1863,22 @@ mod cli_parse_tests {
     }
 }
 
-fn main() -> Result<()> {
+fn main() {
+    if let Err(err) = run() {
+        // A structured parse error reaching here prints its diagnostic
+        // decorated per the resolved stderr style (bd-be8ve52f): its
+        // `Display` is plain by design. Anything else prints exactly as
+        // returning the error from `main` would (`Error: {err:?}`).
+        let opts = commands::terminal_style::stderr_text_options();
+        match commands::terminal_style::format_error_report(&err, &opts) {
+            Some(report) => eprintln!("{report}"),
+            None => eprintln!("Error: {err:?}"),
+        }
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<()> {
     // Install Quarto's `Q-*` error catalog into the catalog-agnostic
     // `quarto-error-reporting` host, so diagnostics can resolve docs URLs and
     // catalog metadata. Must run before any diagnostic is rendered; idempotent.
@@ -1737,19 +1892,46 @@ fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
+    // Decide color and hyperlinks for stdout/stderr once, here on the
+    // main thread before any runtime, thread, or output exists
+    // (bd-be8ve52f). Every sink reads it back via
+    // `quarto_util::output_style::get()`.
+    let output_style = quarto_util::output_style::init(cli.color.into());
+
     // Initialize logging. The `-v` flag chooses a default filter
     // directive (see `quarto_util::verbose_to_filter`); `RUST_LOG`,
     // when set, takes precedence and is parsed directly by
     // `try_from_default_env`. This matches the long-standing
     // convention in the workspace.
+    //
+    // `q2 render --dry-run --json-errors` keeps stderr pure NDJSON even
+    // under `-v` (bd-render-dry-run-dyiq7d08): there `-v` only adds the
+    // would-render list to the stdout JSON summary, so the default log
+    // filter stays in place. `RUST_LOG` still wins when set.
+    let log_verbosity = if matches!(
+        cli.command,
+        Commands::Render {
+            dry_run: true,
+            json_errors: true,
+            ..
+        }
+    ) {
+        0
+    } else {
+        cli.verbose
+    };
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| quarto_util::verbose_to_filter(cli.verbose).into()),
+                .unwrap_or_else(|_| quarto_util::verbose_to_filter(log_verbosity).into()),
         )
         // Logs go to stderr like every other q2 diagnostic — stdout
         // stays reserved for command output (`get-config` JSON, etc.).
-        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_ansi(output_style.stderr.color),
+        )
         .init();
 
     match cli.command {
@@ -1770,6 +1952,7 @@ fn main() -> Result<()> {
             profile,
             metadata,
             no_execute,
+            dry_run,
             ..
         } => commands::render::execute(commands::render::RenderArgs {
             metadata,
@@ -1789,6 +1972,8 @@ fn main() -> Result<()> {
             profile,
             execution_policy: render_execution_policy(no_execute),
             audience: quarto_core::project::drafts::RenderAudience::Reading,
+            dry_run,
+            verbose: cli.verbose,
         }),
         Commands::Preview {
             path,
@@ -1810,6 +1995,8 @@ fn main() -> Result<()> {
             to,
             metadata,
             profile,
+            hub_url,
+            project,
         } => {
             if print_asset_manifest_hashes {
                 // Binary diagnostic (release CI drift check); answers
@@ -1864,6 +2051,7 @@ fn main() -> Result<()> {
                     to,
                     metadata,
                     profile,
+                    upstream: hub_url.zip(project),
                 })
             }
         }
@@ -1912,7 +2100,24 @@ fn main() -> Result<()> {
         }),
         Commands::Update { .. } => commands::update::execute(),
         Commands::Remove { .. } => commands::remove::execute(),
-        Commands::Convert { .. } => commands::convert::execute(),
+        Commands::Convert {
+            input,
+            to,
+            from,
+            output,
+            metadata,
+            source_uri,
+        } => {
+            let code = commands::convert::execute(commands::convert::ConvertArgs {
+                input,
+                from,
+                to,
+                output,
+                metadata,
+                source_uri,
+            });
+            std::process::exit(code)
+        }
         Commands::Pandoc { .. } => commands::pandoc::execute(),
         Commands::Typst { .. } => commands::typst::execute(),
         Commands::Run { .. } => commands::run::execute(),
@@ -1958,6 +2163,13 @@ fn main() -> Result<()> {
             CallCommands::InlineCss => commands::inline_css::execute(),
         },
         Commands::Lsp => commands::lsp::execute(),
+        Commands::HubLsp {
+            server,
+            header_file,
+        } => commands::hub_lsp::execute(commands::hub_lsp::HubLspArgs {
+            server,
+            header_files: header_file,
+        }),
         Commands::GetConfig {
             file,
             path,

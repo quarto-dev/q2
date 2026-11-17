@@ -199,6 +199,7 @@ mod tests {
                     },
                 ],
                 expanded: false,
+                active: false,
             },
         ];
         prune_unlinkable_sidebar(&mut entries, &idx);

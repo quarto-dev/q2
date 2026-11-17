@@ -1,0 +1,11 @@
+pandoc 3.12.1
+lang=[nl] csl=[default]: See (Smith 2020).  Smith, Jane. 2020. ‘A page’. juli 12. 
+lang=[nl] csl=[style-de.csl]: See A page en 12 juli 2020.  A page en 12 juli 2020 
+lang=[nl-NL] csl=[default]: See (Smith 2020).  Smith, Jane. 2020. ‘A page’. juli 12. 
+lang=[nl-NL] csl=[style-de.csl]: See A page en 12 juli 2020.  A page en 12 juli 2020 
+lang=[en] csl=[default]: See (Smith 2020).  Smith, Jane. 2020. “A Page.” July 12. 
+lang=[en] csl=[style-de.csl]: See A page and July 12, 2020.  A page and July 12, 2020 
+lang=[de] csl=[default]: See (Smith 2020).  Smith, Jane. 2020. „A page“. Juli 12. 
+lang=[de] csl=[style-de.csl]: See A page und 12. Juli 2020.  A page und 12. Juli 2020 
+lang=[] csl=[default]: See (Smith 2020).  Smith, Jane. 2020. “A Page.” July 12. 
+lang=[] csl=[style-de.csl]: See A page und 12. Juli 2020.  A page und 12. Juli 2020 

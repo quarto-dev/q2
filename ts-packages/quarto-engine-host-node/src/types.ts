@@ -196,6 +196,10 @@ export interface TsExecuteOptions {
   /** q2-only (EXR-8 B4), absent from an older core: `"core"` means core presents the
    *  output from the record, so the engine returns its notebook and no markdown. */
   presentedBy?: "core";
+  /** q2-only (bd-x3h4zjhl), absent from an older core: the environment to merge into the
+   *  processes that run user code. Project environment first, then the per-document
+   *  execute environment on top. May carry secrets: never log it. */
+  executeEnv?: Record<string, string>;
 }
 
 /** One execution unit on the wire (q2-only, EXR-7). No byte or UTF-16 offsets in v1:
@@ -244,6 +248,14 @@ export interface TsRecordInfo {
    *  Core checks the count only under `owned`. */
   coverage?: "owned" | "subset";
   hashDefinition?: TsHashDefinition;
+  /** The engine honored core's `presentedBy: "core"` offer: it returned the notebook and made
+   *  no markdown of its own. Omitted when it presented itself (OPR-3, decision D8). */
+  presentedBy?: "core";
+  /** What kind of page-dependency data this engine's outputs carry (OPR-7i). The one value is
+   *  `"jupyter-outputs"`: the cell outputs are nbformat outputs, and core derives the page
+   *  dependencies (requirejs, jQuery, hoisted libraries) from their MIME types. Honored only
+   *  together with `presentedBy: "core"`; omit it for any other engine. */
+  dependencyData?: "jupyter-outputs";
 }
 
 // ==================== Dependencies options ====================

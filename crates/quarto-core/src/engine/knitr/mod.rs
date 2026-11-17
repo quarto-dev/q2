@@ -231,7 +231,7 @@ impl ExecutionEngine for KnitrEngine {
         // edits below change cell bodies (the label re-insertion adds option lines, which
         // would stop `locate_units` matching those cells).
         let engine_input = input;
-        let (input, expected_ids) = chunk_records::insert_unit_ids(input, ctx);
+        let (input, expected_ids) = chunk_records::insert_unit_ids(input, ctx)?;
         let input = input.as_str();
 
         // Step 2: Preprocess markdown (resolve inline R expressions)
@@ -269,8 +269,12 @@ impl ExecutionEngine for KnitrEngine {
 
         // Step 5b (KNR-3): ask R for pieces only on a structured route; a fallback route
         // skips capture and says so once.
-        let capture_plan =
-            target_route::plan_capture(ctx.want_record, !ctx.units.is_empty(), &ctx.format);
+        let capture_plan = target_route::plan_capture(
+            ctx.want_record,
+            ctx.present_from_record,
+            !ctx.units.is_empty(),
+            &ctx.format,
+        );
 
         // KNR-6: a captured run gets a nonce, so R returns markers for the units Rust presents.
         let nonce = capture_plan.capture.then(super::skeleton::new_nonce);
@@ -283,7 +287,11 @@ impl ExecutionEngine for KnitrEngine {
             temp_dir: ctx.temp_dir.clone(),
             lib_dir: None,
             dependencies: true,
-            cwd: working_dir.clone(),
+            // knitr's `root.dir`: the execute dir the pipeline resolved (the document's
+            // directory unless `project: execute-dir: project`), as Quarto 1 passes
+            // `options.cwd` (GH #1202). The Rscript process itself still runs in
+            // `working_dir`.
+            cwd: ctx.cwd.clone(),
             params: None,
             resource_dir: resource_dir.to_path_buf(),
             // Languages that Quarto handles (knitr passes them through unchanged).
@@ -298,11 +306,12 @@ impl ExecutionEngine for KnitrEngine {
         let call_options = CallROptions {
             quiet: ctx.quiet,
             project_env: ctx.project_env.clone(),
+            execute_env: ctx.execute_env.clone(),
             ..Default::default()
         };
 
         // Step 8: Call R
-        let result: KnitrExecuteResult = call_r(
+        let mut result: KnitrExecuteResult = call_r(
             "execute",
             &params,
             &ctx.temp_dir,
@@ -332,13 +341,17 @@ impl ExecutionEngine for KnitrEngine {
         };
 
         execute_result.warnings.extend(capture_plan.diagnostic);
-        if !result.cache_disabled.is_empty() {
-            execute_result
-                .warnings
-                .push(super::diagnostics::knitr_cache_disabled_diagnostic(
-                    &result.cache_disabled,
-                ));
-        }
+        // OPR-7b: a chunk that asked for knitr\'s cache keeps it; one that ends the run unrecorded (OPR-7e
+        // records level 3 from a sidecar) is
+        // not one of the units the record is checked against; its finished markdown is already
+        // in place in the skeleton.
+        let expected_ids: Vec<String> = expected_ids
+            .into_iter()
+            .filter(|id| !result.cached_units.contains(id))
+            .collect();
+        let cached_units = std::mem::take(&mut result.cached_units);
+        result.chunks.retain(|c| !cached_units.contains(&c.id));
+        result.pieces.retain(|c| !is_cached_chunk(c, &cached_units));
         let child_labels: Vec<String> = result
             .pieces
             .iter()
@@ -381,11 +394,12 @@ impl ExecutionEngine for KnitrEngine {
             (!result.pieces.is_empty()).then_some(&adapter::Captured {
                 pieces: &result.pieces,
                 known_options: result.known_options.as_deref(),
-                // knitr resolves a path the author wrote (`include_graphics`) against its working
-                // directory, but writes the figures it draws under the document\'s own directory
-                // (they differ in a project subdirectory), so look in both.
+                // knitr resolves a path the author wrote (`include_graphics`) against its root
+                // directory (the execute dir), but writes the figures it draws under the
+                // document\'s own directory (they differ under `execute-dir: project`), so look
+                // in both.
                 read_file: &|path| {
-                    std::fs::read(working_dir.join(path))
+                    std::fs::read(ctx.cwd.join(path))
                         .or_else(|_| std::fs::read(document_dir.join(path)))
                         .ok()
                 },
@@ -410,7 +424,8 @@ impl ExecutionEngine for KnitrEngine {
                     .collect(),
             };
             let units = super::units::units_for_engine(&ctx.units, engine_input);
-            let mut fig = crate::presenter::figures::FsFigureSink::new(&ctx.source_path);
+            let mut fig = crate::presenter::figures::FsFigureSink::new(&ctx.source_path)
+                .with_format(&ctx.format);
             let presented = super::skeleton::present_skeleton(
                 &execute_result.markdown,
                 &nonce,
@@ -474,6 +489,12 @@ impl ExecutionEngine for KnitrEngine {
         first_class: Option<&str>,
     ) -> Option<LanguageClaim> {
         Some(self.claims_language(language, first_class))
+    }
+
+    /// R code under knitr gives the same outputs in Positron's R kernel (the hash agrees; only
+    /// the display shape differs, which RIU-3 accepted). Exactly `r`: not `R`, not `r.x`.
+    fn kernel_equivalence(&self, language: &str) -> Option<bool> {
+        Some(language == "r")
     }
 
     fn is_available(&self) -> bool {
@@ -621,6 +642,15 @@ fn convert_includes(
     result
 }
 
+/// Whether a captured chunk carries the unit id of a chunk that asked for knitr\'s cache.
+fn is_cached_chunk(chunk: &types::KnitrCapturedChunk, cached_units: &[String]) -> bool {
+    chunk
+        .options
+        .get(chunk_records::UNIT_ID_OPTION)
+        .and_then(|v| v.as_str())
+        .is_some_and(|id| cached_units.iter().any(|c| c == id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -663,12 +693,15 @@ mod tests {
     }
 
     #[test]
-    fn knitr_declares_empty_exclusion_lists_and_the_knitr_key() {
+    fn knitr_excludes_only_record_sources_from_the_execute_keys_and_declares_the_knitr_key() {
         let def = KnitrEngine { rscript_path: None }.hash_definition();
         assert_eq!(def.id, "knitr");
         assert_eq!(def.granularity, crate::record::Granularity::Unit);
         assert!(def.presentation_cell_options.is_empty());
-        assert!(def.presentation_execute_keys.is_empty());
+        assert_eq!(
+            def.presentation_execute_keys,
+            ["output-interleave", "record-sources"]
+        );
         assert_eq!(def.document_keys, ["knitr"]);
         // KNR-3: the default profile is still the all-options rule; fallback units use it. The
         // `structured` profile is covered in `hash_rule`.

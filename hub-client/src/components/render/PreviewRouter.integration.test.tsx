@@ -17,8 +17,8 @@
  *     pass-through arm, unchanged).
  *
  * Both preview components are mocked to sentinels that capture their
- * props; the WASM probe is mocked to return an AST whose `meta.format`
- * is whatever the normalised detection would have produced.
+ * props; the resolver (`resolvePandocFormats`) is mocked to return
+ * whatever resolved key the normalised detection would have produced.
  *
  * @vitest-environment jsdom
  */
@@ -37,14 +37,6 @@ const PSEUDO: Record<string, string | null> = { html: 'q2-preview', 'q2-debug': 
 const resolveCalls: { path: string; options: any }[] = [];
 
 vi.mock('@quarto/preview-runtime', () => ({
-  parseQmdToAst: vi.fn(async () => ({
-    success: true,
-    ast: JSON.stringify({
-      'pandoc-api-version': [1, 23, 1],
-      meta: { format: { t: 'MetaString', c: probeFormat } },
-      blocks: [],
-    }),
-  })),
   resolvePandocFormats: vi.fn((path: string, options: any) => {
     resolveCalls.push({ path, options });
     return {

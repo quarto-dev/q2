@@ -107,6 +107,7 @@ async fn pre_render_scripts_run_once_at_boot() {
     let port = pick_free_port();
     let config = PreviewConfig {
         render: Default::default(),
+        upstream: None,
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(project_dir.clone()),
@@ -115,6 +116,7 @@ async fn pre_render_scripts_run_once_at_boot() {
         spa_dir_override: None,
         engine_registry: None,
         engine_policy: Default::default(),
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,

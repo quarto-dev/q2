@@ -192,6 +192,12 @@ pub enum SidebarEntry {
         contents: Vec<SidebarEntry>,
         /// Whether the section is expanded in the rendered output.
         expanded: bool,
+        /// Whether the section's own header `href` is the current page.
+        /// Set by [`resolve_active_state`]; read by the renderer to emit
+        /// `active` on the header anchor (Q1 parity, bd-gtpwby98). A
+        /// section that merely *contains* the current page is expanded,
+        /// not active.
+        active: bool,
     },
 
     /// A visual divider rendered as `<hr>`.
@@ -258,6 +264,9 @@ impl SidebarEntry {
                 .get("expanded")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
+            // `active` roundtrips through the Generate → Render handoff
+            // the same way `NavigationItem::active` does.
+            let active = cv.get("active").and_then(|v| v.as_bool()).unwrap_or(false);
             return Some(SidebarEntry::Section {
                 text,
                 href,
@@ -265,6 +274,7 @@ impl SidebarEntry {
                 id,
                 contents,
                 expanded,
+                active,
             });
         }
 
@@ -317,6 +327,7 @@ impl SidebarEntry {
                 id,
                 contents,
                 expanded,
+                active,
             } => {
                 let mut entries: Vec<ConfigMapEntry> = Vec::new();
                 if let Some(text) = text {
@@ -355,6 +366,13 @@ impl SidebarEntry {
                 if *expanded {
                     entries.push(ConfigMapEntry {
                         key: "expanded".to_string(),
+                        key_source: info.clone(),
+                        value: ConfigValue::new_bool(true, info.clone()),
+                    });
+                }
+                if *active {
+                    entries.push(ConfigMapEntry {
+                        key: "active".to_string(),
                         key_source: info.clone(),
                         value: ConfigValue::new_bool(true, info.clone()),
                     });
@@ -739,10 +757,17 @@ fn mark_active_in(entries: &mut [SidebarEntry], self_source: &str) -> bool {
                 href,
                 contents,
                 expanded,
+                active,
                 ..
             } => {
-                // Check header href first.
+                // Check header href first. A header match makes the
+                // section itself the current page (its anchor gets
+                // `active`, Q1 parity — bd-gtpwby98); a child match only
+                // expands it.
                 let header_matches = href.as_deref() == Some(self_source);
+                if header_matches {
+                    *active = true;
+                }
                 let child_matched = mark_active_in(contents, self_source);
                 if header_matches || child_matched {
                     *expanded = true;
@@ -1215,6 +1240,7 @@ mod tests {
                     href_source: SourceInfo::for_test(),
                     id: Some("adv".to_string()),
                     expanded: true,
+                    active: false,
                     contents: vec![SidebarEntry::Link {
                         item: NavigationItem {
                             href: Some("deep.qmd".to_string()),
@@ -1983,6 +2009,98 @@ mod tests {
         }
     }
 
+    /// bd-gtpwby98 — a header-href match marks the section itself
+    /// `active` (Q1 parity), not just expanded. Its outer ancestor is
+    /// expanded but not active, and sibling leaves stay inactive.
+    #[test]
+    fn active_state_marks_section_header_active() {
+        let inner = map(vec![
+            ("section", s("Groups")),
+            ("href", s("guide/groups/index.qmd")),
+            ("contents", arr(vec![s("guide/groups/a.qmd")])),
+        ]);
+        let outer = map(vec![
+            ("section", s("Guide")),
+            ("contents", arr(vec![s("guide/intro.qmd"), inner])),
+        ]);
+        let mut sb = sidebar_from_yaml(map(vec![("contents", arr(vec![outer]))]));
+        assert!(resolve_active_state(&mut sb, "guide/groups/index.qmd"));
+        let SidebarEntry::Section {
+            expanded: outer_expanded,
+            active: outer_active,
+            contents: outer_contents,
+            ..
+        } = &sb.contents[0]
+        else {
+            unreachable!()
+        };
+        assert!(*outer_expanded);
+        assert!(!*outer_active, "an ancestor section is not itself active");
+        match &outer_contents[0] {
+            SidebarEntry::Link { item } => assert!(!item.active),
+            _ => unreachable!(),
+        }
+        let SidebarEntry::Section {
+            expanded,
+            active,
+            contents,
+            ..
+        } = &outer_contents[1]
+        else {
+            unreachable!()
+        };
+        assert!(*expanded);
+        assert!(
+            *active,
+            "the section whose href is the current page is active"
+        );
+        match &contents[0] {
+            SidebarEntry::Link { item } => assert!(!item.active),
+            _ => unreachable!(),
+        }
+    }
+
+    /// bd-gtpwby98 — the `file:` + `contents:` spelling of a section
+    /// header is marked active the same way.
+    #[test]
+    fn active_state_marks_file_contents_header_active() {
+        let section = map(vec![
+            ("file", s("docs/index.qmd")),
+            ("contents", arr(vec![s("docs/a.qmd")])),
+        ]);
+        let mut sb = sidebar_from_yaml(map(vec![("contents", arr(vec![section]))]));
+        assert!(resolve_active_state(&mut sb, "docs/index.qmd"));
+        match &sb.contents[0] {
+            SidebarEntry::Section { active, .. } => assert!(*active),
+            _ => unreachable!(),
+        }
+    }
+
+    /// bd-gtpwby98 — a section's `active` survives the
+    /// `to_config_value` → `from_config_value` Generate → Render handoff,
+    /// and an inactive section serializes without an `active` key.
+    #[test]
+    fn section_active_roundtrips_through_config_value() {
+        let section = map(vec![
+            ("section", s("Docs")),
+            ("href", s("docs/index.qmd")),
+            ("contents", arr(vec![s("docs/a.qmd")])),
+        ]);
+        let mut sb = sidebar_from_yaml(map(vec![("contents", arr(vec![section]))]));
+        let inactive_cv = sb.contents[0].to_config_value();
+        assert!(inactive_cv.get("active").is_none());
+
+        resolve_active_state(&mut sb, "docs/index.qmd");
+        let cv = sb.contents[0].to_config_value();
+        assert_eq!(cv.get("active").and_then(|v| v.as_bool()), Some(true));
+        let reparsed = SidebarEntry::from_config_value(&cv).expect("reparse");
+        assert_eq!(reparsed, sb.contents[0]);
+        match reparsed {
+            SidebarEntry::Section { active, .. } => assert!(active),
+            _ => unreachable!(),
+        }
+    }
+
     // --- Phase 4: page-nav flatten ----------------------------------------
 
     fn flatten_yaml(yaml: ConfigValue) -> Vec<FlatEntry> {
@@ -2243,6 +2361,7 @@ mod tests {
             id: None,
             contents,
             expanded: false,
+            active: false,
         }
     }
 

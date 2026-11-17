@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0" default-locale="de-DE">
+  <info><title>German default-locale</title><id>style-de</id><updated>2026-11-07T00:00:00+00:00</updated></info>
+  <citation><layout><text variable="title"/><text term="and" prefix=" "/><date variable="issued" form="text" prefix=" "/></layout></citation>
+  <bibliography><layout><text variable="title"/></layout></bibliography>
+</style>

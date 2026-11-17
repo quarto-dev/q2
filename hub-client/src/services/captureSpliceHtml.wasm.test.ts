@@ -48,11 +48,11 @@ const DOC = ['---', 'format: html', 'engine: knitr', '---', '', '```{r}', '1 + 1
   '\n',
 );
 
-function captureBytes(): Uint8Array {
+function captureBytes(engine = 'knitr', lang = 'r'): Uint8Array {
   const captures = [
     {
-      engine_name: 'knitr',
-      input_qmd: '```{r}\n1 + 1\n```\n',
+      engine_name: engine,
+      input_qmd: `\`\`\`{${lang}}\n1 + 1\n\`\`\`\n`,
       result: {
         markdown: [
           '::: {.cell}',
@@ -154,5 +154,38 @@ describe('format: html capture splicing (bd-uy4uygha)', () => {
       result.html!.includes(MARKER),
       'the capture output marker must appear in the html when a capture is threaded through the html branch',
     ).toBe(true);
+  });
+});
+
+// OPR-9g: the engine stage now presents from a record by default, and in the browser it
+// coalesces any record a replayed capture carries (before the flip it did not). A capture that
+// was stored before the flip must still render. A Jupyter capture from then has markdown and no
+// record, so it takes the replay engine's markdown path.
+describe('captures stored before the present-from-record flip (OPR-9g)', () => {
+  const JUPYTER_DOC = [
+    '---',
+    'format: html',
+    'engine: jupyter',
+    '---',
+    '',
+    '```{python}',
+    '1 + 1',
+    '```',
+    '',
+  ].join('\n');
+
+  it('a stored Jupyter capture (markdown, no record) still renders and splices its output', async () => {
+    wasm.vfs_add_file('/project/doc.qmd', JUPYTER_DOC);
+
+    const json = await wasm.render_page_in_project_with_attribution(
+      '/project/doc.qmd',
+      undefined,
+      undefined,
+      captureBytes('jupyter', 'python'),
+    );
+    const result = JSON.parse(json) as RenderResponse;
+
+    expect(result.success, `Render failed: ${result.error}`).toBe(true);
+    expect(result.html!.includes(MARKER), 'the stored output is spliced in').toBe(true);
   });
 });

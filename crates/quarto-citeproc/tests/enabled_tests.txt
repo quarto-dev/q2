@@ -754,3 +754,10 @@ nameattr_NamesDelimiterOnStyleInCitation
 locator_SimpleLocators
 locator_WithLeadingSpace
 locator_TrickyEntryForPlurals
+
+# Document-language locale selection (bd-kn01ctxg, issue #1110): style
+# <locale xml:lang> blocks apply only to the matching locale; an unknown
+# locale falls back to en-US; title case follows the effective locale.
+locale_NonExistentLocaleDef
+locale_OverloadWithEmptyString
+locale_TitleCaseEmptyLangNonEnglishLocale

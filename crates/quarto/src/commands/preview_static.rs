@@ -45,7 +45,8 @@ use quarto_core::{ProjectContext, metadata_flag};
 use quarto_hub::watch::{FileWatcher, WatchConfig, WatchEvent, WatchFilter};
 use quarto_preview::EnginePolicy;
 use quarto_preview::config::{
-    read_engine_policy_from_project, read_static_preview_defaults_from_project,
+    engine_policy_with_overlay, read_engine_policy_from_project,
+    read_static_preview_defaults_from_project,
 };
 use quarto_preview::render_flags::native_runtime_for;
 use quarto_preview::static_mode::{
@@ -444,10 +445,15 @@ async fn run(args: StaticArgs) -> Result<()> {
             .parent()
             .map_or_else(|| full_input.clone(), Path::to_path_buf)
     };
-    let engine_off = matches!(
-        read_engine_policy_from_project(&policy_root, &native_runtime_for(&args.profile), profile),
-        EnginePolicy::Off
-    );
+    // `-M 'preview: {engine: off}'` wins over `_quarto.yml`, as in the live preview; an unknown
+    // value is refused before anything is served.
+    let project_policy =
+        read_engine_policy_from_project(&policy_root, &native_runtime_for(&args.profile), profile);
+    let overlay =
+        metadata_flag::parse_metadata_flags(&base_args.metadata).map_err(|e| anyhow::anyhow!(e))?;
+    let engine_off = engine_policy_with_overlay(project_policy, overlay.as_ref())
+        .map_err(|e| anyhow::anyhow!(e))?
+        == EnginePolicy::Off;
     // Q1's `project: preview:` keys are the defaults; CLI flags win
     // (plan Phase 4). `--no-watch` / `--no-navigate` / `--no-browser`
     // only ever turn things off, so a config `false` cannot be undone
@@ -826,7 +832,7 @@ fn record_failure(hub: &ReloadHub, report: &RenderReport) {
         hub.set_failure(None);
         return;
     }
-    let text = report.diagnostics_text(false);
+    let text = report.diagnostics_text(quarto_util::output_style::StreamStyle::PLAIN);
     hub.set_failure(Some(if text.trim().is_empty() {
         "The render produced no output.".to_string()
     } else {
@@ -851,7 +857,7 @@ fn finish_render(
                 ok,
                 errors: counts.errors,
                 warnings: counts.warnings,
-                text: report.diagnostics_text(false),
+                text: report.diagnostics_text(quarto_util::output_style::StreamStyle::PLAIN),
             });
             if ok {
                 let target = match ran {
@@ -867,14 +873,22 @@ fn finish_render(
             *last = LastRender::from_report(&report);
         }
         RenderOutcome::Abort(abort) => {
-            let message = abort.user_message();
-            eprintln!("{message}");
-            hub.set_failure(Some(strip_ansi_escapes(&message)));
+            eprintln!(
+                "{}",
+                abort.user_message(&crate::commands::terminal_style::stderr_text_options())
+            );
+            // The browser gets the plain form. Still sanitized: an
+            // `Other` abort can quote external tool output (a pandoc or
+            // engine error) that carries its own escapes.
+            let message = strip_ansi_escapes(
+                &abort.user_message(&quarto_error_reporting::TextRenderOptions::plain()),
+            );
+            hub.set_failure(Some(message.clone()));
             hub.send(ReloadEvent::RenderStop {
                 ok: false,
                 errors: 1,
                 warnings: 0,
-                text: strip_ansi_escapes(&message),
+                text: message,
             });
         }
         RenderOutcome::Panicked(message) => {

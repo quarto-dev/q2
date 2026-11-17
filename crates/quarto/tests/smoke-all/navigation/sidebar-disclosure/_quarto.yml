@@ -1,0 +1,21 @@
+project:
+  type: website
+
+website:
+  title: "Sidebar disclosure"
+  sidebar:
+    style: docked
+    collapse-level: 1
+    contents:
+      - index.qmd
+      - section: "Group"
+        contents:
+          - group-a.qmd
+          - group-b.qmd
+          - section: "Nested"
+            contents:
+              - nested.qmd
+      - section: "Linked"
+        href: section.qmd
+        contents:
+          - section-child.qmd

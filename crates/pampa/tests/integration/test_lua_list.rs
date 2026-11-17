@@ -370,16 +370,17 @@ fn empty_source() -> quarto_source_map::SourceInfo {
 fn create_div_doc(classes: Vec<&str>, content: Vec<Block>) -> Pandoc {
     Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::Div(Div {
+        blocks: vec![Block::Div(Box::new(Div {
             attr: (
                 String::new(),
                 classes.into_iter().map(|s| s.to_string()).collect(),
                 Default::default(),
-            ),
+            )
+                .into(),
             content,
             source_info: empty_source(),
             attr_source: AttrSourceInfo::empty(),
-        })],
+        }))],
     }
 }
 
@@ -532,7 +533,7 @@ end
 
     let doc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::OrderedList(OrderedList {
+        blocks: vec![Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![vec![Block::Plain(Plain {
                 content: vec![Inline::Str(Str {
@@ -542,7 +543,7 @@ end
                 source_info: empty_source(),
             })]],
             source_info: empty_source(),
-        })],
+        }))],
     };
 
     run_filter(filter_code, doc).await;

@@ -83,3 +83,74 @@ fn the_lint_sees_a_direct_construction() {
         vec![(2, "let r = NativeRuntime::new();".to_string())]
     );
 }
+
+// ── `-M` reaches every engine run ────────────────────────────────────────────────────────
+//
+// The session's `-M` overlay is a runtime layer, so an engine run reads it only through a
+// runtime built by `render_flags::runtime_with_overlay()`. A site that hands the engine a
+// plain `native_runtime()` silently drops `-M` (and `execute: {record: true}` with it).
+// Source-side reads (project, inputs, staleness) stay on the plain runtime on purpose.
+
+/// Non-test, non-comment lines that call `record_capture_run(` (the engine run) or build a
+/// `PreviewLookup {` (whose `runtime` field the engine step uses), with the `runtime_with_overlay`
+/// check each must pass: a `record_capture_run(` call must have `engine_runtime` or
+/// `self.runtime` among its arguments, and a `PreviewLookup {` must set `runtime:` from
+/// `runtime_with_overlay()`.
+fn engine_run_violations(text: &str) -> Vec<(usize, String)> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        if line.trim() == "#[cfg(test)]"
+            && lines
+                .get(i + 1)
+                .is_some_and(|n| n.trim_start().starts_with("mod "))
+        {
+            break;
+        }
+        let code = line.trim_start();
+        if code.starts_with("//") || code.starts_with("use ") || code.contains("fn ") {
+            continue;
+        }
+        let window = lines[i..lines.len().min(i + 8)].join("\n");
+        if code.contains("record_capture_run(")
+            && !window.contains("engine_runtime")
+            && !window.contains("self.runtime")
+        {
+            out.push((i + 1, line.trim().to_string()));
+        }
+        if code.contains("PreviewLookup {") && !window.contains("runtime_with_overlay()") {
+            out.push((i + 1, line.trim().to_string()));
+        }
+    }
+    out
+}
+
+#[test]
+fn engine_runs_take_the_overlay_runtime() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut failures = Vec::new();
+    for file in rust_files(&manifest.join("src")) {
+        // `cache.rs` forwards the runtime its caller chose.
+        if file.file_name().is_some_and(|n| n == "cache.rs") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&file).unwrap();
+        for (line, code) in engine_run_violations(&text) {
+            failures.push(format!("{}:{line}: {code}", file.display()));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "an engine run must get quarto_preview::render_flags::runtime_with_overlay() so `-M` \
+         reaches it:\n{}",
+        failures.join("\n")
+    );
+}
+
+#[test]
+fn the_engine_run_lint_sees_a_plain_runtime() {
+    let bad = "fn a() {\n    let p = PreviewLookup {\n        runtime: runtime.clone(),\n    };\n    record_capture_run(&path, &project, runtime, None).await;\n}\n";
+    assert_eq!(engine_run_violations(bad).len(), 2);
+    let good = "fn a() {\n    let p = PreviewLookup {\n        runtime: crate::render_flags::runtime_with_overlay(),\n    };\n    record_capture_run(&path, &project, engine_runtime, None).await;\n}\n";
+    assert!(engine_run_violations(good).is_empty());
+}

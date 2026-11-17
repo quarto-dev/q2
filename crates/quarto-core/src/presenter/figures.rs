@@ -131,6 +131,8 @@ fn decode_image_checked(
 pub struct FigureNaming {
     /// `<stem>_files` (single path component).
     files_dir_name: String,
+    /// The output format identifier; the figure directory is `figure-<format>` (OPR-9b).
+    format: String,
     /// 1-based index of the cell currently being rendered.
     cell_index: usize,
     /// 1-based index of the next output within the current cell. Reset by `begin_cell`.
@@ -164,6 +166,7 @@ impl FigureNaming {
             .unwrap_or("document");
         Self {
             files_dir_name: format!("{stem}_files"),
+            format: "html".to_string(),
             cell_index: 0,
             output_index: 0,
             failures: Vec::new(),
@@ -208,6 +211,11 @@ impl FigureNaming {
         rel
     }
 
+    /// Name the figure directory `figure-<format>`; a `+extension` suffix is ignored.
+    pub fn set_format(&mut self, format: &str) {
+        self.format = format.split('+').next().unwrap_or(format).to_string();
+    }
+
     pub fn begin_cell(&mut self) {
         self.cell_index += 1;
         self.output_index = 0;
@@ -225,7 +233,7 @@ impl FigureNaming {
             "cell-{}-output-{}.{ext}",
             self.cell_index, self.output_index
         );
-        let rel = format!("{}/figure-html/{file_name}", self.files_dir_name);
+        let rel = format!("{}/figure-{}/{file_name}", self.files_dir_name, self.format);
         (file_name, rel)
     }
 }
@@ -246,6 +254,12 @@ impl FsFigureSink {
             naming: FigureNaming::new(source_path),
             wrote_any: false,
         }
+    }
+
+    /// Name the figure directory `figure-<format>` (OPR-9b); html when never called.
+    pub fn with_format(mut self, format: &str) -> Self {
+        self.naming.set_format(format);
+        self
     }
 }
 
@@ -323,6 +337,12 @@ impl RuntimeFigureSink {
             naming: FigureNaming::new(source_path),
             wrote_any: false,
         }
+    }
+
+    /// Name the figure directory `figure-<format>` (OPR-9b); html when never called.
+    pub fn with_format(mut self, format: &str) -> Self {
+        self.naming.set_format(format);
+        self
     }
 }
 
@@ -436,6 +456,38 @@ mod tests {
 
     fn rels(sink: &MemorySink) -> Vec<&str> {
         sink.files.iter().map(|(r, _)| r.as_str()).collect()
+    }
+
+    // === OPR-9b: the figure directory is named after the format ===
+
+    #[test]
+    fn a_figure_lands_under_figure_and_the_format() {
+        for (format, dir) in [
+            ("gfm", "figure-gfm"),
+            ("typst", "figure-typst"),
+            ("revealjs", "figure-revealjs"),
+            ("html", "figure-html"),
+            ("docx+smart", "figure-docx"),
+        ] {
+            let tmp = tempfile::tempdir().unwrap();
+            let mut sink = FsFigureSink::new(&tmp.path().join("report.qmd")).with_format(format);
+            sink.begin_cell();
+            let rel = sink.write_image("image/png", &json!(PNG)).unwrap();
+            assert_eq!(rel, format!("report_files/{dir}/cell-1-output-1.png"));
+            assert!(
+                tmp.path().join(&rel).is_file(),
+                "{format}: file written at {rel}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_sink_with_no_format_still_writes_figure_html() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut sink = FsFigureSink::new(&tmp.path().join("report.qmd"));
+        sink.begin_cell();
+        let rel = sink.write_image("image/png", &json!(PNG)).unwrap();
+        assert_eq!(rel, "report_files/figure-html/cell-1-output-1.png");
     }
 
     #[test]

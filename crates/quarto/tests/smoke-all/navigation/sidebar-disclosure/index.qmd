@@ -1,0 +1,31 @@
+---
+title: "Index"
+_quarto:
+  # A per-file smoke render has no project index, so sidebar hrefs
+  # stay unresolved and no page is marked active; check the sidebar
+  # as a whole-project render produces it.
+  render-project: true
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        # Ported from Quarto 1 tests/docs/smoke-all/website/sidebar-disclosure
+        # (quarto-cli #14826, bd-3bg8h1rx). q2 section ids are tree-path
+        # based (`quarto-sidebar-section-1-2`), not Q1's running counter.
+        - - 'button.sidebar-item-text.sidebar-item-toggle[data-bs-toggle="collapse"][data-bs-target="#quarto-sidebar-section-1"][aria-controls="quarto-sidebar-section-1"][aria-expanded="false"]'
+          - 'button.sidebar-item-text.sidebar-item-toggle span.menu-text#quarto-sidebar-section-1-label'
+          - 'ul#quarto-sidebar-section-1[aria-labelledby="quarto-sidebar-section-1-label"]'
+          - 'button.sidebar-item-text.sidebar-item-toggle[data-bs-target="#quarto-sidebar-section-1-2"][aria-expanded="false"]'
+          - 'ul#quarto-sidebar-section-1-2[aria-labelledby="quarto-sidebar-section-1-2-label"]'
+          - 'a.sidebar-item-text[href="section.html"] span.menu-text#quarto-sidebar-section-2-label'
+          - 'button.sidebar-item-toggle[aria-label="Toggle section: Linked"][aria-expanded="false"][aria-controls="quarto-sidebar-section-2"]'
+          - 'ul#quarto-sidebar-section-2[aria-labelledby="quarto-sidebar-section-2-label"]'
+        - - '#quarto-sidebar a.sidebar-item-toggle'
+          - '#quarto-sidebar a[data-bs-toggle="collapse"]'
+          - '#quarto-sidebar a[role="navigation"]'
+          - '#quarto-sidebar a[aria-expanded]'
+---
+
+Every sidebar section toggle is a `<button>` with `aria-expanded`, and every
+disclosed list is named by its own section label. See quarto-cli#12116 and
+quarto-cli#4935.

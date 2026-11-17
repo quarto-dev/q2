@@ -63,6 +63,7 @@ function mount(paraCount: number) {
     const ctx: PreviewContextValue = {
         currentFilePath: '/project/test.qmd',
         commentsMode: 'show',
+        sourceIndex: new Map(),
         resolveSource,
         commitSubtreeEdit: () => {},
     };

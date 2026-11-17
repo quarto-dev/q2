@@ -45,11 +45,19 @@ them. The result is a broken drawing with no caption — which is why
 Quarto reports it here rather than letting the failure surface in the
 browser console.
 
+## Graphviz blocks
+
+The same warning is raised for a ```` ```dot ```` block that starts with
+`#|` lines. The DOT language comments with `//`, so its options are
+`//|`. The effect of the mistake is different: Graphviz ignores lines that
+start with `#`, so the diagram still draws and the options are dropped
+without any sign in the page.
+
 ## Why this happens
 
 Almost always familiarity with `#|` from Python and R cells. The marker
 is not universal: it tracks the language, so `--|` serves Lua and SQL,
-`//|` serves JavaScript and Rust, and `%%|` serves Mermaid.
+`//|` serves JavaScript, Rust and Graphviz, and `%%|` serves Mermaid.
 
 Earlier Quarto 2 versions accepted `#|` inside a ```` ```mermaid ````
 fence. That was a bug, and accepting it taught the wrong rule; Quarto 2

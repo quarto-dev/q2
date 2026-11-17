@@ -786,6 +786,27 @@ fn scaffold_html_lang_follows_document_lang() {
     );
 }
 
+/// The scaffold writes the document's `dir` option on `<html>`, as Quarto 1
+/// and Pandoc's reveal.js template do (GH #1219); without `dir` it writes
+/// no attribute.
+#[test]
+fn scaffold_html_dir_follows_document_dir() {
+    let html = render_revealjs(
+        "---\ntitle: \"RTL\"\nlang: ar\ndir: rtl\nformat: revealjs\n---\n\n## One\n\nHi.\n",
+    );
+    assert!(
+        html.contains("<html lang=\"ar\" dir=\"rtl\">"),
+        "expected <html lang=\"ar\" dir=\"rtl\"> in scaffold"
+    );
+
+    let default_html =
+        render_revealjs("---\ntitle: \"Talk\"\nformat: revealjs\n---\n\n## One\n\nHi.\n");
+    assert!(
+        !default_html.contains(" dir="),
+        "expected no dir attribute without `dir`"
+    );
+}
+
 /// A Reveal.js *format extension* (`demo-revealjs`) renders through the
 /// Reveal.js path, not the Bootstrap one (GH #1034, bd-eco47h7r). Before the
 /// fix the theme stage gated on the raw target name (`revealjs` /

@@ -97,6 +97,7 @@ pub fn assemble_theme_scss(
     // title-block rule by declaring the same selector in a later layer.
     let mut user_layers = builtin_user_layers(config)?;
     user_layers.extend(result.layers);
+    user_layers.extend(dashboard_brand_layers(config, context)?);
 
     // Assemble SCSS
     let scss = crate::bundle::assemble_with_user_layers_opts(&user_layers, config.dashboard_layer)?;
@@ -140,6 +141,22 @@ fn builtin_user_layers(config: &ThemeConfig) -> Result<Vec<crate::SassLayer>, Sa
     }
     layers.push(load_search_layer()?);
     Ok(layers)
+}
+
+/// The `_brand.yml` layers a dashboard adds once more after the theme
+/// layers. Q1's dashboard format pushes the brand SCSS bundle after the
+/// HTML theme bundle (`format-dashboard.ts:191`); since user-layer
+/// defaults merge in reverse, this copy's `$brand-*` defaults come
+/// first, so a theme file listed after `brand` can use them (GH #1132).
+/// Plain HTML has no such copy, in Q1 or here.
+fn dashboard_brand_layers(
+    config: &ThemeConfig,
+    context: &ThemeContext<'_>,
+) -> Result<Vec<crate::SassLayer>, SassError> {
+    match context.brand() {
+        Some(brand) if config.dashboard_layer => crate::brand_layer::brand_to_layers(brand),
+        _ => Ok(Vec::new()),
+    }
 }
 
 /// Compile CSS from theme configuration.
@@ -262,7 +279,8 @@ pub fn compile_with_doc_vars(
     // Build user layers: title-block (unless dropped by
     // `title-block-style: plain|none`) + highlight built-ins,
     // matching `compile_default_css` and `assemble_theme_scss`, then any
-    // theme layers, then doc_vars LAST so it lands at the top of the
+    // theme layers (plus a dashboard's second copy of the brand
+    // layers), then doc_vars LAST so it lands at the top of the
     // merged-defaults section and wins the `!default` race.
     let mut user_layers = builtin_user_layers(config)?;
 
@@ -272,6 +290,7 @@ pub fn compile_with_doc_vars(
         user_layers.extend(result.layers);
         theme_dirs = result.load_paths;
     }
+    user_layers.extend(dashboard_brand_layers(config, context)?);
     let load_paths = theme_load_paths(theme_dirs, context);
 
     user_layers.push(doc_vars.clone());
@@ -538,6 +557,7 @@ pub async fn compile_with_doc_vars(
         user_layers.extend(result.layers);
         theme_dirs = result.load_paths;
     }
+    user_layers.extend(dashboard_brand_layers(config, context)?);
     let load_paths = theme_load_paths(theme_dirs, context);
 
     user_layers.push(doc_vars.clone());
@@ -778,6 +798,123 @@ mod tests {
         assert!(
             found.iter().any(|(_, value)| value != "none"),
             "every #quarto-sidebar display rule at lg+ resolves to `none`: {found:?}"
+        );
+    }
+
+    /// bd-rl7r38pw: an expanded sidebar section must show a rotated
+    /// (down-pointing) chevron, a collapsed one a right-pointing one.
+    /// Bootstrap's collapse plugin keeps `aria-expanded` on the
+    /// `.sidebar-item-toggle` button in sync; the theme has to key the
+    /// rotation off it (Q1 `quarto-nav.scss:418-432`). The markup is
+    /// correct either way, so only the compiled CSS can show the bug.
+    #[test]
+    fn test_sidebar_toggle_chevron_rotates_when_expanded() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, false).unwrap();
+
+        // Find the declarations of the rule targeting the chevron of a
+        // toggle in the given `aria-expanded` state. Quotes around the
+        // attribute value are optional in CSS; normalize them away.
+        let decls_for = |state: &str| -> Option<String> {
+            let want = format!("[aria-expanded={state}]");
+            rules(&css).into_iter().find_map(|(selector, decls)| {
+                let sel = selector.replace('"', "");
+                (sel.contains(".sidebar-item-toggle")
+                    && sel.contains(&want)
+                    && sel.contains(".bi-chevron-right::before"))
+                .then(|| decls.replace(' ', ""))
+            })
+        };
+
+        let expanded = decls_for("true").expect(
+            "no rule for `.sidebar-item-toggle[aria-expanded=true] .bi-chevron-right::before` \
+             — expanded sidebar sections show a collapsed chevron. \
+             Port Q1 quarto-nav.scss:418-432.",
+        );
+        assert!(
+            expanded.contains("transform:rotate(90deg)"),
+            "expanded chevron rule does not rotate 90deg: {expanded}"
+        );
+
+        let collapsed = decls_for("false")
+            .expect("no rule for `.sidebar-item-toggle[aria-expanded=false]` chevron");
+        assert!(
+            collapsed.contains("transform:none"),
+            "collapsed chevron rule should reset transform: {collapsed}"
+        );
+    }
+
+    /// bd-kwgtllvn: the color-mode runtime's floating fallback toggle
+    /// carries `.top-right` (Q1 `_quarto-rules.scss:3-7`). Without the
+    /// utility the toggle renders at the end of the document instead
+    /// of the page's top-right corner; markup tests can't see that.
+    #[test]
+    fn test_top_right_utility_positions_against_page() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, false).unwrap();
+        let decls = rules(&css)
+            .into_iter()
+            .find(|(sel, _)| sel.trim() == ".top-right")
+            .map(|(_, decls)| decls.replace(' ', ""))
+            .expect("no `.top-right` rule. Port Q1 _quarto-rules.scss:3-7.");
+        for decl in ["position:absolute", "top:1em", "right:1em"] {
+            assert!(decls.contains(decl), "`.top-right` lacks `{decl}`: {decls}");
+        }
+    }
+
+    /// bd-3bg8h1rx: sidebar section toggles are `<button>`s (Q1 #14826).
+    /// Without the reset they render with the browser's native button
+    /// chrome; without the flex layout an unlinked section's single
+    /// label+chevron button loses the chevron's right alignment.
+    #[test]
+    fn test_sidebar_toggle_buttons_are_reset_and_laid_out() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, false).unwrap();
+        let all = rules(&css);
+
+        let reset = all
+            .iter()
+            .find(|(sel, _)| {
+                sel.contains(".sidebar-item .sidebar-item-toggle")
+                    && sel.contains(".sidebar-item button.sidebar-item-text")
+            })
+            .map(|(_, decls)| decls.replace(' ', ""))
+            .expect("no button-reset rule for sidebar toggles. Port Q1 quarto-nav.scss:378-393.");
+        for decl in [
+            "background:none",
+            "border:none",
+            "padding:0",
+            "font:inherit",
+            "color:inherit",
+            "text-align:inherit",
+        ] {
+            assert!(reset.contains(decl), "reset rule lacks `{decl}`: {reset}");
+        }
+
+        let layout = all
+            .iter()
+            .find(|(sel, _)| sel.trim() == ".sidebar-item button.sidebar-item-text")
+            .map(|(_, decls)| decls.replace(' ', ""))
+            .expect("no layout rule for `.sidebar-item button.sidebar-item-text`");
+        for decl in ["display:flex", "align-items:baseline", "width:100%"] {
+            assert!(
+                layout.contains(decl),
+                "layout rule lacks `{decl}`: {layout}"
+            );
+        }
+
+        let chevron = all
+            .iter()
+            .find(|(sel, _)| {
+                sel.contains("button.sidebar-item-text")
+                    && sel.contains(".bi-chevron-right")
+                    && !sel.contains("::before")
+            })
+            .map(|(_, decls)| decls.replace(' ', ""))
+            .expect("no rule pushing the in-button chevron right");
+        assert!(
+            chevron.contains("margin-left:auto"),
+            "in-button chevron must sit hard right: {chevron}"
         );
     }
 
@@ -1136,13 +1273,14 @@ mod tests {
             "code a:hover should underline on hover per Q1 (bd-bthmzyrc)"
         );
 
-        // Should have the task-list rules ported from TS Quarto's
-        // _quarto-rules.scss (bd-obkvhlam): the ul.task-list indent and the
-        // checkbox right-margin that space `<input type="checkbox">` from the
+        // Should have the task-list rules (bd-obkvhlam): the ul.task-list
+        // indent — sized to the hung checkbox since bd-2ydvebkc (Q1 used 1em
+        // with a -1em checkbox) — and the checkbox right-margin ported from
+        // _quarto-rules.scss that spaces `<input type="checkbox">` from the
         // item text emitted by the HTML writer's task-list rendering.
         assert!(
-            css.contains("ul.task-list{padding-left:1em}"),
-            "Should contain the ul.task-list rule ported from _quarto-rules.scss (bd-obkvhlam)"
+            css.contains("ul.task-list{padding-left:1.2em}"),
+            "Should contain the ul.task-list indent (bd-obkvhlam, bd-2ydvebkc)"
         );
         assert!(
             css.contains("input[type=checkbox]{margin-right:.5ch}"),
@@ -1240,9 +1378,8 @@ mod tests {
 
     /// bd-t3n1nghb: the external-link layer is unconditional, so a
     /// hand-written `.external` link gets its icon without
-    /// `link-external-icon`, and the SVG fill is a real color (Quarto 1's
-    /// `colorToRGB()` is undefined on the HTML path and would be emitted
-    /// verbatim).
+    /// `link-external-icon`, and the SVG fill is a real color (the layer's
+    /// `colorToRGB()` call must evaluate, not be emitted verbatim).
     #[test]
     fn test_compile_default_css_includes_link_external_rules() {
         let runtime = NativeRuntime::new();
@@ -1295,6 +1432,10 @@ mod tests {
         assert!(
             css.contains(".code-copy-outer-scaffold"),
             "reveal theme CSS must contain the .code-copy-outer-scaffold scaffold rule"
+        );
+        assert!(
+            !css.contains("colorToRGB("),
+            "reveal theme CSS must evaluate colorToRGB() in the SVG icon fills"
         );
     }
 
@@ -1380,6 +1521,99 @@ mod tests {
         let css = compile_theme_css(&config, &context).unwrap().css;
         assert!(css.contains(".bslib-value-box"));
         assert!(css.contains(".quarto-dashboard"));
+    }
+
+    /// `theme: [cosmo, brand, custom.scss]` where `custom.scss` reads a
+    /// brand palette variable (GH #1132). Defaults merge in reverse, so
+    /// the `brand` entry's `$brand-*` defaults come after the custom
+    /// file's. Like Quarto 1, a dashboard adds the brand layers once
+    /// more after the theme, which defines them first; plain HTML does
+    /// not, and fails in both Quarto 1 and q2.
+    fn brand_then_custom(
+        dashboard: bool,
+    ) -> (Result<String, SassError>, Result<String, SassError>) {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("custom.scss"),
+            "/*-- scss:defaults --*/\n$navbar-bg: $brand-navy;\n\
+             /*-- scss:rules --*/\n.probe { color: $navbar-bg; }\n",
+        )
+        .unwrap();
+        let brand = quarto_brand::UnifiedBrand::from_yaml_str(
+            "color:\n  palette:\n    navy: \"#1f4e79\"\n",
+        )
+        .unwrap()
+        .split()
+        .light;
+        let runtime = NativeRuntime::new();
+        let context = ThemeContext::new(dir.path().to_path_buf(), &runtime).with_brand(&brand);
+        let themes = ["cosmo", "brand", "custom.scss"]
+            .iter()
+            .map(|s| ThemeSpec::parse(s).unwrap())
+            .collect();
+        let mut config = ThemeConfig::new(themes, false);
+        config.dashboard_layer = dashboard;
+        let themed = compile_theme_css(&config, &context).map(|o| o.css);
+        let with_vars = compile_with_doc_vars(
+            &config,
+            &context,
+            &crate::SassLayer {
+                defaults: "$probe-var: 1;".to_string(),
+                ..Default::default()
+            },
+        )
+        .map(|o| o.css);
+        (themed, with_vars)
+    }
+
+    #[test]
+    fn test_dashboard_theme_after_brand_can_use_brand_variables() {
+        let (themed, with_vars) = brand_then_custom(true);
+        for css in [themed.unwrap(), with_vars.unwrap()] {
+            assert!(
+                css.contains("color: #1f4e79"),
+                "probe rule uses the brand navy"
+            );
+            assert!(css.contains(".quarto-dashboard"));
+        }
+    }
+
+    /// `theme: [cosmo, brand]` on a dashboard: the value boxes take the
+    /// brand's `success`, not cosmo's override from the
+    /// `theme-override-value` table (GH #1187). Like Quarto 1, the brand
+    /// layers name the theme `brand`, which has no table entry.
+    #[test]
+    fn test_dashboard_value_boxes_use_brand_colors_over_bootswatch() {
+        let brand = quarto_brand::UnifiedBrand::from_yaml_str(
+            "color:\n  palette:\n    green: \"#009e73\"\n  success: green\n",
+        )
+        .unwrap()
+        .split()
+        .light;
+        let runtime = NativeRuntime::new();
+        let context = ThemeContext::new(PathBuf::from("/doc"), &runtime).with_brand(&brand);
+        let themes = ["cosmo", "brand"]
+            .iter()
+            .map(|s| ThemeSpec::parse(s).unwrap())
+            .collect();
+        let mut config = ThemeConfig::new(themes, true);
+        config.dashboard_layer = true;
+        let css = compile_theme_css(&config, &context).unwrap().css;
+        let rule = ".card.valuebox.bslib-card.bg-success{background-color:";
+        let start = css.find(rule).expect("bg-success value box rule") + rule.len();
+        assert!(
+            css[start..].starts_with("#009e73"),
+            "value box uses the brand success colour: {}",
+            &css[start..start + 30]
+        );
+    }
+
+    #[test]
+    fn test_html_theme_after_brand_cannot_use_brand_variables() {
+        let (themed, with_vars) = brand_then_custom(false);
+        for err in [themed.unwrap_err(), with_vars.unwrap_err()] {
+            assert!(err.to_string().contains("Undefined variable"), "{err}");
+        }
     }
 
     #[test]
@@ -1506,6 +1740,53 @@ mod tests {
             css.contains("fill=rgba(") || css.contains("fill=\"rgba("),
             "toggle icon SVG fill must be a concrete rgba() color"
         );
+    }
+
+    /// bd-65ja3het: `colorToRGB()` (ported from Q1's
+    /// `_quarto-functions.scss`) fills the SVG data-URI icons for the
+    /// code-copy button, code-tools button, notebook link and collapsible
+    /// callout toggles. When it was missing on the HTML path, sass emitted
+    /// `fill="colorToRGB(#6a737d)"` verbatim; the bare `#` starts a URL
+    /// fragment, truncating the SVG, so every one of those icons was
+    /// invisible. Check the default CSS and a light and a dark Bootswatch
+    /// theme.
+    #[test]
+    fn test_compile_html_css_evaluates_color_to_rgb_in_svg_icons() {
+        let runtime = NativeRuntime::new();
+        let mut outputs = vec![(
+            "default".to_string(),
+            compile_default_css(&runtime, true).unwrap(),
+        )];
+        for theme in ["cosmo", "darkly"] {
+            let config = ThemeConfig::new(vec![ThemeSpec::parse(theme).unwrap()], true);
+            let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
+            outputs.push((
+                theme.to_string(),
+                compile_theme_css(&config, &context).unwrap().css,
+            ));
+        }
+        for (name, css) in outputs {
+            assert!(
+                !css.contains("colorToRGB("),
+                "{name}: colorToRGB() must be evaluated, not emitted literally"
+            );
+            for selector in [
+                "div.code-copy-outer-scaffold:hover>.code-copy-button>.bi::before{",
+                ".callout-toggle::before{",
+                ".code-tools-button>.bi::before{",
+            ] {
+                // A selector can head several rules (sizing, then icon), so
+                // look for one whose SVG fill is a concrete rgb() color.
+                let has_rgb_fill = css.match_indices(selector).any(|(start, _)| {
+                    let end = css[start..].find('}').map_or(css.len(), |i| start + i);
+                    css[start..end].contains("fill=\"rgb(")
+                });
+                assert!(
+                    has_rgb_fill,
+                    "{name}: no {selector} rule with a concrete rgb() icon fill"
+                );
+            }
+        }
     }
 
     /// bd-0pic6 phase B: `highlight-style` selects the `.hl-*` palette
@@ -1849,6 +2130,98 @@ mod tests {
                 || css.contains(".quarto-container{min-height:calc(100vh-132px)}")
                 || css.contains(".quarto-container { min-height: calc(100vh - 132px) }"),
             "missing `.quarto-container {{ min-height: calc(100vh - 132px) }}` (Q1 parity)"
+        );
+    }
+
+    // ---------------------------------------------------------------------
+    // Task lists (GH #892, bd-2ydvebkc). The HTML writer marks each task
+    // `<li>` with `task-list-item`; the theme hides the list marker per item
+    // and hangs the checkbox into the marker's gutter. Ordered task items
+    // keep their number unless a theme sets `$task-list-ordered-markers:
+    // false` in its `scss:defaults` layer.
+    // ---------------------------------------------------------------------
+
+    const TASK_UL_MARKER_RULE: &str = "ul>li.task-list-item{list-style-type:none}";
+    const TASK_OL_MARKER_RULE: &str = "ol>li.task-list-item{list-style-type:none}";
+
+    /// Compile the default HTML theme stacked with a user `custom.scss`.
+    fn compile_with_user_theme(custom_scss: &str) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("custom.scss"), custom_scss).unwrap();
+        let runtime = NativeRuntime::new();
+        let context = ThemeContext::new(dir.path().to_path_buf(), &runtime);
+        let themes = vec![
+            ThemeSpec::parse("cosmo").unwrap(),
+            ThemeSpec::parse("custom.scss").unwrap(),
+        ];
+        let config = ThemeConfig::new(themes, true);
+        compile_theme_css(&config, &context).unwrap().css
+    }
+
+    #[test]
+    fn test_task_list_items_hide_bullet_and_hang_checkbox() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, true).unwrap();
+        assert!(
+            css.contains(TASK_UL_MARKER_RULE),
+            "bullet task items must hide their marker per item (GH #892)"
+        );
+        assert!(
+            css.contains("ul>li.task-list-item>label>input[type=checkbox]"),
+            "tight bullet task items must hang the checkbox into the marker gutter"
+        );
+        assert!(
+            css.contains("ul>li.task-list-item>p:first-child>label>input[type=checkbox]"),
+            "loose bullet task items (li > p > label > input) must hang the checkbox too"
+        );
+        // Ordered task items keep their numbers by default.
+        assert!(
+            !css.contains("ol>li.task-list-item"),
+            "ordered task items keep their number unless the theme opts out"
+        );
+    }
+
+    #[test]
+    fn test_task_list_ordered_markers_escape_hatch() {
+        let css = compile_with_user_theme(
+            "/*-- scss:defaults --*/\n$task-list-ordered-markers: false;\n/*-- scss:rules --*/\n",
+        );
+        assert!(css.contains(TASK_UL_MARKER_RULE));
+        assert!(
+            css.contains(TASK_OL_MARKER_RULE),
+            "$task-list-ordered-markers: false must hide ordered task-item numbers"
+        );
+        assert!(
+            css.contains("ol>li.task-list-item>label>input[type=checkbox]"),
+            "...and hang their checkboxes into the freed gutter"
+        );
+
+        // The default value set explicitly is the same as not setting it.
+        let css = compile_with_user_theme(
+            "/*-- scss:defaults --*/\n$task-list-ordered-markers: true;\n/*-- scss:rules --*/\n",
+        );
+        assert!(css.contains(TASK_UL_MARKER_RULE));
+        assert!(!css.contains("ol>li.task-list-item"));
+    }
+
+    #[test]
+    fn test_reveal_task_list_items_hide_bullet() {
+        let runtime = NativeRuntime::new();
+        let css = compile_reveal_theme_css(&runtime, true, &[], &[]).unwrap();
+        assert!(
+            css.contains(".reveal ul>li.task-list-item{list-style-type:none}"),
+            "reveal bullet task items must hide their marker per item"
+        );
+        assert!(!css.contains(".reveal ol>li.task-list-item"));
+
+        let layer = crate::SassLayer {
+            defaults: "$task-list-ordered-markers: false;".to_string(),
+            ..Default::default()
+        };
+        let css = compile_reveal_theme_css(&runtime, true, &[layer], &[]).unwrap();
+        assert!(
+            css.contains(".reveal ol>li.task-list-item{list-style-type:none}"),
+            "the escape hatch applies to reveal decks too"
         );
     }
 }

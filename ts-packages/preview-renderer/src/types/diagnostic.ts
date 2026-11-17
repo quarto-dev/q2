@@ -106,8 +106,8 @@ export interface RenderResponse {
   /**
    * Untransformed Pandoc AST JSON — the `qmd_to_pandoc` output
    * captured immediately after `ParseDocumentStage`, before any
-   * `AstTransformsStage`. Populated alongside `ast_json` for
-   * q2-preview renders; `undefined` for HTML / error responses.
+   * `AstTransformsStage`. Populated alongside `ast_json` for capture-armed
+   * q2-preview renders; `undefined` for capture-off, HTML, and error responses.
    * Round-tripped from the frontend as the baseline for
    * `apply_node_edit` (target-incremental-writes Phase 1).
    */

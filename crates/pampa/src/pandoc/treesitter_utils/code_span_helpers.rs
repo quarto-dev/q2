@@ -168,18 +168,18 @@ pub fn process_pandoc_code_span(
 
     // Create Code or RawInline based on presence of raw format
     let code = if let Some(format) = raw_format {
-        Inline::RawInline(crate::pandoc::inline::RawInline {
+        Inline::RawInline(Box::new(crate::pandoc::inline::RawInline {
             format,
             text: trimmed_code_text,
             source_info: tight_si.clone(),
-        })
+        }))
     } else {
-        Inline::Code(Code {
+        Inline::Code(Box::new(Code {
             attr,
             text: trimmed_code_text,
             source_info: tight_si.clone(),
             attr_source,
-        })
+        }))
     };
 
     // Build result with injected Space nodes as needed

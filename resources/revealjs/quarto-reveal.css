@@ -3,7 +3,8 @@
  *
  * Layout/styling Quarto adds on top of reveal.js core + theme. Single source
  * of truth for both render and preview:
- *   - q2 render inlines this via include_str! (crates/quarto-core/src/revealjs/assemble.rs)
+ *   - q2 render embeds this via include_str! (crates/quarto-core/src/revealjs/assemble.rs)
+ *     and writes it beside the deck, which links it
  *   - q2 preview imports it (ts-packages/preview-renderer .../RevealDeck.tsx)
  * Keep it minimal and reveal-scoped. Extended per authoring phase.
  */
@@ -21,6 +22,37 @@
   overflow-x: auto;
 }
 
+/* Absolute positioning: `{.absolute top=200 left=400}` on a div, span or
+   image. RevealAbsoluteTransform moves the position attributes into an inline
+   style; this rule takes the element out of the flow. Mirrors Quarto 1's
+   `.reveal .slide .absolute` (`styles.html`); q2 slide sections carry no
+   `slide` class, so the slide is matched as `.slides section`. */
+.reveal .slides section .absolute {
+  position: absolute;
+  display: block;
+}
+
+/* Full-height slides. A slide's <section> is only as tall as its content
+   unless told otherwise, and then "the bottom of the slide" (asides, below)
+   is the bottom of the text. Mirrors Quarto 1's
+   `.reveal .slide:not(.center) { height: 100%; }` (`styles.html`), adapted to
+   q2's markup:
+   - q2 sections carry no `slide` class, and the wrapper of a vertical stack is
+     a section too, so leaf slides are "sections reveal has not marked `stack`"
+     (reveal adds that class to stack wrappers when it starts);
+   - Quarto 1 exempts a centered deck by putting `center` on every slide; q2
+     leaves that to reveal, which puts `center` on the `.reveal` wrapper.
+   Centered slides are exempt because reveal centers a slide by its own height. */
+.reveal:not(.center) .slides section:not(.stack):not(.center) {
+  height: 100%;
+}
+
+/* Scrollable slides: `## Title {.scrollable}`. Works because the slide is
+   full height (above). Mirrors Quarto 1's `.reveal .slide.scrollable`. */
+.reveal .slides section.scrollable {
+  overflow-y: auto;
+}
+
 /* Asides (Phase 2e) — `::: {.aside}` → `<aside class="aside">`, shown small
    and muted at the bottom of the slide. (`aside.notes` is hidden by reveal.css.)
    Mirrors Quarto 1's `.reveal .slide aside` rule. */
@@ -29,6 +61,20 @@
   bottom: 20px;
   font-size: 0.6em;
   color: #6c757d;
+}
+
+/* On a scrollable slide the aside follows the content, so it does not sit on
+   top of text that scrolls under it. Mirrors Quarto 1's
+   `.reveal .slide.scrollable aside`. */
+.reveal .slides section.scrollable aside.aside {
+  position: relative;
+  margin-top: 1em;
+}
+
+/* In a centered deck the slide is not full height, so the aside stays in the
+   flow under the content. Mirrors Quarto 1's `.reveal.center .slide aside`. */
+.reveal.center .slides aside.aside {
+  position: initial;
 }
 
 /* Per-slide footnotes (Phase 2e-ii) — RevealFootnotesTransform coalesces each

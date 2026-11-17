@@ -25,73 +25,11 @@ use sha2::{Digest, Sha256};
 
 use crate::error::Result;
 
-/// Known binary file extensions and their MIME types.
-///
-/// Used as a fallback when `infer` cannot detect the type from magic bytes.
-const BINARY_EXTENSIONS: &[(&str, &str)] = &[
-    // Images
-    ("png", "image/png"),
-    ("jpg", "image/jpeg"),
-    ("jpeg", "image/jpeg"),
-    ("gif", "image/gif"),
-    ("webp", "image/webp"),
-    ("svg", "image/svg+xml"),
-    ("ico", "image/x-icon"),
-    ("bmp", "image/bmp"),
-    ("tiff", "image/tiff"),
-    ("tif", "image/tiff"),
-    // Documents
-    ("pdf", "application/pdf"),
-    // Import sources (document import I21): stored as-is, and EMF/WMF when
-    // conversion fails. Mirror of `BINARY_EXTENSIONS` in
-    // ts-packages/quarto-automerge-schema.
-    (
-        "docx",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ),
-    ("odt", "application/vnd.oasis.opendocument.text"),
-    ("rtf", "application/rtf"),
-    ("epub", "application/epub+zip"),
-    (
-        "pptx",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ),
-    ("emf", "image/emf"),
-    ("wmf", "image/wmf"),
-    // hephaestus plot documents (bd-sxiv2tio). Not an IANA type; the
-    // vendor-tree name keeps the binary document self-describing. Mirror
-    // of `BINARY_EXTENSIONS` in ts-packages/quarto-automerge-schema.
-    ("hep", "application/vnd.hephaestus.plot"),
-    // Fonts
-    ("woff", "font/woff"),
-    ("woff2", "font/woff2"),
-    ("ttf", "font/ttf"),
-    ("otf", "font/otf"),
-    ("eot", "application/vnd.ms-fontobject"),
-    // Audio/Video
-    ("mp3", "audio/mpeg"),
-    ("mp4", "video/mp4"),
-    ("webm", "video/webm"),
-    ("ogg", "audio/ogg"),
-    ("wav", "audio/wav"),
-];
-
-/// Check if a file extension indicates a binary file.
-pub fn is_binary_extension(ext: &str) -> bool {
-    let ext_lower = ext.to_lowercase();
-    BINARY_EXTENSIONS.iter().any(|(e, _)| *e == ext_lower)
-}
-
-/// Get MIME type from file extension.
-///
-/// Returns `None` if the extension is not recognized.
-pub fn mime_type_from_extension(ext: &str) -> Option<&'static str> {
-    let ext_lower = ext.to_lowercase();
-    BINARY_EXTENSIONS
-        .iter()
-        .find(|(e, _)| *e == ext_lower)
-        .map(|(_, mime)| *mime)
-}
+// The extension table and the extension predicates live in
+// `quarto-project-files`, shared with the language server so both classify a
+// project's files identically. Re-exported here so existing callers and
+// `quarto_hub::resource::*` paths keep working.
+pub use quarto_project_files::{is_binary_extension, mime_type_from_extension};
 
 /// Detect MIME type from file content using magic bytes.
 ///
@@ -268,6 +206,35 @@ pub fn create_engine_payload_document(
     }
 }
 
+/// Why [`publish_payload_doc`] failed.
+#[derive(Debug, thiserror::Error)]
+pub enum PublishDocError {
+    /// Building the automerge document failed.
+    #[error("{0}")]
+    Build(#[from] crate::error::Error),
+    /// The samod repo was stopped before the document could be created.
+    #[error("samod repo is stopped")]
+    RepoStopped,
+}
+
+/// Build the engine payload document ([`create_engine_payload_document`]) and create it in
+/// `repo`, returning its stringified `DocumentId`. This is the whole part the preview and the
+/// provider shared; each caller encodes the payload itself (`quarto-core` cannot be a dependency
+/// of this crate) and updates its own sidecar afterwards.
+pub async fn publish_payload_doc(
+    repo: &samod::Repo,
+    is_record: bool,
+    gzipped: &[u8],
+    meta: &CaptureDocMeta,
+) -> std::result::Result<String, PublishDocError> {
+    let doc = create_engine_payload_document(is_record, gzipped, meta)?;
+    let handle = repo
+        .create(doc)
+        .await
+        .map_err(|_stopped| PublishDocError::RepoStopped)?;
+    Ok(handle.document_id().to_string())
+}
+
 /// The shared body of the capture and record writers: they differ only in
 /// MIME and `meta.kind`.
 fn create_payload_document(
@@ -425,6 +392,42 @@ pub fn read_content_hash(doc: &Automerge) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The publish half the preview and the provider share: build the payload document and
+    /// create it in the repo. The kind and MIME follow `is_record`.
+    #[tokio::test]
+    async fn publish_payload_doc_creates_the_doc_the_flag_names() {
+        use automerge::ReadDoc;
+        let repo = samod::Repo::build_tokio().load().await;
+        let meta = CaptureDocMeta {
+            source_path: "doc.qmd".into(),
+            engines: vec!["jupyter".into()],
+        };
+        for (is_record, mime, kind) in [
+            (true, RECORD_MIME_TYPE, RECORD_META_KIND),
+            (false, CAPTURE_MIME_TYPE, CAPTURE_META_KIND),
+        ] {
+            let id = publish_payload_doc(&repo, is_record, b"gz", &meta)
+                .await
+                .unwrap();
+            let handle = repo
+                .find(id.parse().unwrap())
+                .await
+                .unwrap()
+                .expect("doc exists");
+            handle.with_document(|doc| {
+                let got = doc
+                    .get(ROOT, "mimeType")
+                    .unwrap()
+                    .and_then(|(v, _)| v.into_string().ok())
+                    .unwrap_or_default();
+                assert_eq!(got, mime);
+                let m = read_capture_meta(doc).expect("meta");
+                assert_eq!(m.kind.as_deref(), Some(kind));
+                assert_eq!(m.source_path.as_deref(), Some("doc.qmd"));
+            });
+        }
+    }
 
     #[test]
     fn test_is_binary_extension() {

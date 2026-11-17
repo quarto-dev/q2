@@ -152,7 +152,16 @@ describe('bd-igpm0xur — one pop-up toolbar for every editable block', () => {
         expect(boldMark(tb), 'mark buttons render on the rich surface').not.toBeNull();
         // Type indicator: the current-type crumb for a Para is ¶.
         const crumbs = Array.from(tb.querySelectorAll('.q2-crumb'));
-        expect(crumbs.map((c) => c.textContent)).toEqual(['¶']);
+        expect(crumbs.map((c) => c.getAttribute('data-abbrev'))).toEqual(['¶']);
+        // ¶ renders as the paragraph SVG (currentColor), not the text pilcrow.
+        expect(crumbs[0].querySelector('svg.q2-rt-tb-icon')).not.toBeNull();
+        expect(crumbs[0].textContent).toBe('');
+        // Mode / bold / italic / strike / link / comment / editorial buttons are SVG icons (no text glyphs).
+        for (const cls of ['mode', 'bold', 'italic', 'strike', 'link', 'comment', 'highlight', 'delete', 'insert']) {
+            const btn = tb.querySelector(`.q2-rt-tb-${cls}`);
+            expect(btn?.querySelector('svg.q2-rt-tb-icon'), `${cls} button has an icon`).not.toBeNull();
+            expect(btn?.textContent, `${cls} button has no text glyph`).toBe('');
+        }
         // The retired left-margin affordance and its "Editing…" label are gone.
         expect(container.querySelector('.q2-edit-affordance')).toBeNull();
         expect(container.textContent).not.toContain('Editing');
@@ -169,7 +178,7 @@ describe('bd-igpm0xur — one pop-up toolbar for every editable block', () => {
         // The type crumb's VISIBLE text is the abbrev "Cd" (the language/label lives
         // in the title/tooltip, not the crumb text).
         const crumbs = Array.from(tb.querySelectorAll('.q2-crumb'));
-        expect(crumbs.map((c) => c.textContent)).toEqual(['Cd']);
+        expect(crumbs.map((c) => c.getAttribute('data-abbrev'))).toEqual(['Cd']);
         expect(container.querySelector('.q2-edit-affordance')).toBeNull();
     });
 
@@ -183,7 +192,7 @@ describe('bd-igpm0xur — one pop-up toolbar for every editable block', () => {
         const tb = toolbars(container)[0];
         // Full ancestor path with nesting nav.
         const crumbs = Array.from(tb.querySelectorAll('.q2-crumb'));
-        expect(crumbs.map((c) => c.textContent)).toEqual(['Dv', '¶']);
+        expect(crumbs.map((c) => c.getAttribute('data-abbrev'))).toEqual(['Dv', '¶']);
         expect(tb.querySelector('.q2-breadcrumb-out')).not.toBeNull();
         expect(tb.querySelector('.q2-breadcrumb-in')).not.toBeNull();
         // The standalone floating chip is retired.
@@ -202,7 +211,7 @@ describe('bd-igpm0xur — one pop-up toolbar for every editable block', () => {
         // case a naïve `ctx.richText`-only gate would have dropped).
         expect(modeToggle(container), 'rich off → no toggle').toBeNull();
         const crumbs = Array.from(tb.querySelectorAll('.q2-crumb'));
-        expect(crumbs.map((c) => c.textContent)).toEqual(['Dv', '¶']);
+        expect(crumbs.map((c) => c.getAttribute('data-abbrev'))).toEqual(['Dv', '¶']);
         expect(tb.querySelector('.q2-breadcrumb-out')).not.toBeNull();
         expect(standaloneChip(container)).toBeNull();
     });

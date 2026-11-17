@@ -1,0 +1,134 @@
+name: Publish npm packages
+
+# Stages q2's @quarto/* workspace packages on npm with trusted publishing
+# (bd-korgbhew; plan: claude-notes/plans/2026-11-09-reusable-hub-client-infrastructure.md,
+# section N1).
+#
+# How a release reaches npm:
+#
+#   1. Dispatch this workflow with the package directories to publish.
+#      `pack` builds, tests, packs and smoke-tests them
+#      (scripts/npm-publish/pack.mjs) and fails if a version is already on
+#      the registry. Dry-run (the default) stops there.
+#   2. A non-dry-run dispatch runs `stage` in the `npm-publish` environment.
+#      It authenticates to npm through GitHub OIDC (trusted publishing; there
+#      is no npm token in this repository) and runs `npm stage publish` for
+#      each tarball, in dependency order.
+#   3. Staged versions stay private until a maintainer approves them with
+#      2FA: `npm stage list`, then `npm stage approve <stage-id>` (or the
+#      Staged Packages tab on npmjs.com).
+#
+# One-time setup per package (needs a maintainer of the @quarto npm org):
+#
+#   - The package must already exist on npm. For a new name, reserve it
+#     with `node scripts/npm-publish/bootstrap-placeholder.mjs <dir>`.
+#   - Register this workflow as the package's trusted publisher, with
+#     npm 11.15 or later:
+#
+#       npm trust github <name> --repo quarto-dev/q2 \
+#         --file publish-npm.yml --env npm-publish --allow-stage-publish
+#
+#     A new trusted-publisher configuration expires unless a publish
+#     through it succeeds within 2 days, so register right before the
+#     first non-dry-run dispatch.
+#   - After the first approved version, set the package's Publishing
+#     access to "Require two-factor authentication and disallow tokens".
+#
+# This workflow must stay a top-level workflow_dispatch workflow under this
+# file name: npm checks the file name of the workflow that started the run,
+# so calling it from another workflow (workflow_call) would not match the
+# registered publisher.
+
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: 'Workspace package directories, space-separated (e.g. "ts-packages/pandoc-types")'
+        required: true
+        type: string
+      dry-run:
+        description: 'Build, test and pack only; stage nothing on npm'
+        required: true
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
+jobs:
+  pack:
+    name: Build, test and pack
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false # never cache in release builds
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit-test the publish tooling
+        run: node --test scripts/npm-publish/*.test.mjs
+
+      - name: Build, test, pack and smoke-test
+        env:
+          PACKAGES: ${{ inputs.packages }}
+        run: |
+          read -r -a dirs <<< "$PACKAGES"
+          node scripts/npm-publish/pack.mjs --out dist-npm --check-unpublished "${dirs[@]}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm-tarballs
+          path: |
+            dist-npm/*.tgz
+            dist-npm/packages.json
+          if-no-files-found: error
+          retention-days: 30
+
+  stage:
+    name: Stage on npm (trusted publishing)
+    if: ${{ !inputs.dry-run }}
+    needs: pack
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC); also signs provenance
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      # `npm stage` needs npm 11.15 or later; Node 24 may bundle an older 11.x.
+      - name: Install npm with staged publishing
+        run: |
+          npm install -g npm@^11.15.0
+          npm --version
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: npm-tarballs
+          path: dist-npm
+
+      - name: Stage tarballs in dependency order
+        working-directory: dist-npm
+        run: |
+          jq -r '.[].tarball' packages.json | while read -r tgz; do
+            echo "::group::npm stage publish $tgz"
+            npm stage publish "./$tgz"
+            echo "::endgroup::"
+          done
+          echo "Staged. Approve with: npm stage list && npm stage approve <stage-id>"

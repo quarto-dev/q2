@@ -220,6 +220,28 @@ impl Build {
             _ => Err(format!("don't know how to build Lua for {target}"))?,
         }
 
+        // q2 (GH #1205, bd-hf93wq9r): on POSIX, Lua >= 5.2's liolib.c defines
+        // `l_popen(L,c,m)` as `(fflush(NULL), popen(c,m))`. `fflush(NULL)`
+        // walks every open FILE, and on macOS that walk takes no lock while a
+        // concurrent `fclose`/`pclose` destroys the FILE's mutex, so the
+        // walker can wait forever. q2 runs one Lua state per render thread,
+        // and `io.popen` from extensions deadlocked parallel renders. liolib.c
+        // only defines `l_popen`/`l_pclose` when `l_popen` is undefined, so
+        // predefine both as the plain libc calls. `popen`/`pclose` never walk
+        // the FILE list. What the flush bought was ordering: a script's
+        // unflushed `io.write` output reached a shared stdout before the
+        // child's. Losing that is acceptable (`print` flushes on its own, and
+        // `pandoc.pipe` never flushed). Windows' `_popen` has no flush, and
+        // the wasm targets have no popen.
+        let posix_popen = target.contains("linux")
+            || target.ends_with("bsd")
+            || target.contains("apple-darwin")
+            || target.contains("apple-ios");
+        if posix_popen && !matches!(version, Lua51) {
+            config.define("l_popen(L,c,m)", Some("popen(c,m)"));
+            config.define("l_pclose(L,file)", Some("pclose(file)"));
+        }
+
         if let Lua54 = version {
             config.define("LUA_COMPAT_5_3", None);
         }

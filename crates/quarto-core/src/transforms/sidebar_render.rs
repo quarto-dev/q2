@@ -57,7 +57,10 @@
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_navigation::{
     Sidebar, SidebarEntry,
-    render_html::{SidebarRenderOptions, SidebarSearch, sidebar_to_html_with_options},
+    render_html::{
+        DEFAULT_TOGGLE_SECTION_LABEL, SidebarRenderOptions, SidebarSearch,
+        sidebar_to_html_with_options,
+    },
 };
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
@@ -194,6 +197,7 @@ impl AstTransform for SidebarRenderTransform {
         let has_navbar = page_has_navbar(&ast.meta);
         let search_label = crate::project::search::ui::search_label(&ast.meta);
         let search = sidebar_search_option(&ast.meta, sidebar.search, &search_label);
+        let toggle_section_label = toggle_section_label(&ast.meta);
         let html = sidebar_to_html_with_options(
             &sidebar,
             &SidebarRenderOptions {
@@ -201,6 +205,7 @@ impl AstTransform for SidebarRenderTransform {
                 appended_html: toc_block.as_deref(),
                 has_navbar,
                 search,
+                toggle_section_label: &toggle_section_label,
             },
         );
 
@@ -299,6 +304,7 @@ fn synthesize_toc_sidebar(ast: &mut Pandoc, ctx: &mut RenderContext, toc_block: 
         .map_or_else(|| "./".to_string(), |r| r.page_url_for_site_root_dir());
     let search_label = crate::project::search::ui::search_label(&ast.meta);
     let search = sidebar_search_option(&ast.meta, sidebar.search, &search_label);
+    let toggle_section_label = toggle_section_label(&ast.meta);
     let html = sidebar_to_html_with_options(
         &sidebar,
         &SidebarRenderOptions {
@@ -306,6 +312,7 @@ fn synthesize_toc_sidebar(ast: &mut Pandoc, ctx: &mut RenderContext, toc_block: 
             appended_html: Some(toc_block),
             has_navbar,
             search,
+            toggle_section_label: &toggle_section_label,
         },
     );
     ast.meta.insert_path(
@@ -520,7 +527,7 @@ mod tests {
     fn nav_image(url: &str, alt: &str) -> quarto_pandoc_types::inline::Inline {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         use quarto_pandoc_types::inline::{Image, Inline, Str};
-        Inline::Image(Image {
+        Inline::Image(Box::new(Image {
             attr: Default::default(),
             content: vec![Inline::Str(Str {
                 text: alt.to_string(),
@@ -530,13 +537,13 @@ mod tests {
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn nav_link(url: &str, text: &str) -> quarto_pandoc_types::inline::Inline {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         use quarto_pandoc_types::inline::{Inline, Link, Str};
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr: Default::default(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
@@ -546,7 +553,7 @@ mod tests {
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Defect 2 of bd-page-footer-image-items-stmpikgo, sidebar
@@ -578,6 +585,7 @@ mod tests {
                         },
                     }],
                     expanded: true,
+                    active: false,
                 },
                 SidebarEntry::Heading(inlines_cv(vec![nav_image("images/z.svg", "head")])),
             ],
@@ -1149,6 +1157,14 @@ mod tests {
             .and_then(|v| v.as_plain_text());
         assert_eq!(body_classes.as_deref(), Some("user-override-class"));
     }
+}
+
+/// The localized `toggle-section` term that names a linked section's
+/// chevron button (bd-3bg8h1rx; Q1 `sidebaritem.ejs`).
+fn toggle_section_label(meta: &ConfigValue) -> String {
+    crate::language::LanguageTerms::from_meta(meta)
+        .and_then(|t| t.get("toggle-section").map(str::to_owned))
+        .unwrap_or_else(|| DEFAULT_TOGGLE_SECTION_LABEL.to_string())
 }
 
 /// The sidebar's search box, if search renders there (bd-6cme): Q1's

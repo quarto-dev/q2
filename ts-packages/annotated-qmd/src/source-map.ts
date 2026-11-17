@@ -23,10 +23,75 @@ function isConcatData(data: unknown): data is [number, number, number][] {
 
 /**
  * Resolved SourceInfo pointing to a file location
+ *
+ * `noLocation` marks a SourceInfo that legitimately has no source location
+ * (see `NO_LOCATION`). Error paths also report `file_id: -1`, but without
+ * `noLocation`, and only after calling the error handler.
  */
 interface ResolvedSource {
   file_id: number;
   range: [number, number];
+  noLocation?: true;
+}
+
+/**
+ * Result for content no source text produced: a Generated entry (code 4)
+ * without an `invocation` anchor, or a legacy filter-provenance entry
+ * (code 3, string-headed). Mirrors Rust's `resolve_byte_range` returning
+ * `None` for these. Not an error.
+ */
+const NO_LOCATION: ResolvedSource = { file_id: -1, range: [0, 0], noLocation: true };
+
+/**
+ * Where a code-3/code-4 entry takes its location from:
+ * - `{ substringOf }`: legacy Transformed, approximated as a Substring of
+ *   that parent (same as the Rust reader);
+ * - `{ anchor }`: a Generated entry's `invocation` anchor, resolved whole —
+ *   generated content has no positional correspondence with its source;
+ * - `{ none: true }`: no source location;
+ * - `{ malformed }`: the data does not match either code's wire shape.
+ */
+type LocationTarget =
+  | { substringOf: number }
+  | { anchor: number }
+  | { none: true }
+  | { malformed: string };
+
+/**
+ * Classify a code-3 (Legacy) or code-4 (Generated) pool entry.
+ *
+ * Wire shapes (`crates/pampa/src/writers/json.rs`,
+ * `crates/pampa/src/readers/json.rs`):
+ * - 3: `[parent_id, ...]` (numeric head) or `[filter_path, line]` (string head)
+ * - 4: `{ by: { kind, data? }, from?: [{ role, si_id }, ...] }`; only the
+ *   `invocation` role locates the node (`SourceInfo::invocation_anchor`).
+ */
+function locationTarget(info: SerializableSourceInfo): LocationTarget {
+  const d = info.d as unknown;
+  if (info.t === 3) {
+    if (!Array.isArray(d) || d.length === 0) {
+      return { malformed: 'Legacy SourceInfo data must be a non-empty array' };
+    }
+    if (typeof d[0] === 'number') return { substringOf: d[0] };
+    if (typeof d[0] === 'string') return { none: true };
+    return { malformed: 'Legacy SourceInfo data must start with a number or a string' };
+  }
+  if (typeof d !== 'object' || d === null || Array.isArray(d)) {
+    return { malformed: 'Generated SourceInfo data must be an object with a "by" field' };
+  }
+  const { by, from } = d as { by?: unknown; from?: unknown };
+  if (typeof by !== 'object' || by === null) {
+    return { malformed: 'Generated SourceInfo data must have a "by" object' };
+  }
+  if (from === undefined) return { none: true };
+  if (!Array.isArray(from)) {
+    return { malformed: 'Generated SourceInfo "from" must be an array' };
+  }
+  const invocation = from.find(
+    (a): a is { role: string; si_id: number } =>
+      typeof a === 'object' && a !== null && a.role === 'invocation' && typeof a.si_id === 'number'
+  );
+  return invocation ? { anchor: invocation.si_id } : { none: true };
 }
 
 /**
@@ -103,6 +168,10 @@ export class SourceInfoReconstructor {
       case 2: // Concat
         result = this.handleConcat(id, info);
         break;
+      case 3: // Legacy
+      case 4: // Generated
+        result = this.handleLocated(id, info);
+        break;
       default:
         this.errorHandler(`Unknown SourceInfo type ${info.t}`, id);
         result = asMappedString('');
@@ -175,12 +244,47 @@ export class SourceInfoReconstructor {
     start: number;
     end: number;
   } {
+    const resolved = this.resolveChain(id);
+    if (resolved.noLocation) {
+      return { source: asMappedString(''), start: 0, end: 0 };
+    }
     const { fileId, start, end } = this.getSourceLocation(id);
     return {
       source: this.getTopLevelMappedString(fileId),
       start,
       end
     };
+  }
+
+  /**
+   * Whether `id` has a source location at all. False for content no source
+   * text produced (see `NO_LOCATION`) and for entries that failed to resolve.
+   */
+  hasSourceLocation(id: number): boolean {
+    return this.resolveChain(id).file_id !== -1;
+  }
+
+  /**
+   * Handle Legacy (t=3) and Generated (t=4) SourceInfo types.
+   *
+   * The MappedString is the source text the node maps to, as for every other
+   * type: a legacy Transformed entry is a Substring of its parent; a
+   * Generated entry is its invocation anchor's text; a node with no source
+   * location is the empty string.
+   */
+  private handleLocated(id: number, info: SerializableSourceInfo): MappedString {
+    const target = locationTarget(info);
+    if ('substringOf' in target) {
+      const [localStart, localEnd] = info.r;
+      return mappedSubstring(this.toMappedString(target.substringOf), localStart, localEnd);
+    }
+    if ('anchor' in target) {
+      return this.toMappedString(target.anchor);
+    }
+    if ('malformed' in target) {
+      this.errorHandler(target.malformed, id);
+    }
+    return asMappedString('');
   }
 
   /**
@@ -359,6 +463,8 @@ export class SourceInfoReconstructor {
           // zero-width-at-the-end case if pieces ever arrived unsorted.
           let lastPieceEnd: number | undefined;
           let lastPieceFileId: number | undefined;
+          // Whether some piece had no source location (see NO_LOCATION).
+          let sawNoLocation = false;
 
           // A piece is [source_info_id, offset_in_concat, content_length].
           for (const [pieceId, pieceOffset, pieceLength] of pieces) {
@@ -411,6 +517,12 @@ export class SourceInfoReconstructor {
                 : this.mapContentRange(pieceId, 0, this.contentLength(this.pool[pieceId]));
             }
 
+            if (contribution?.noLocation) {
+              // A piece no source text produced contributes nothing.
+              sawNoLocation = true;
+              contribution = undefined;
+            }
+
             if (contribution) {
               if (file_id === -1) {
                 file_id = contribution.file_id;
@@ -439,8 +551,12 @@ export class SourceInfoReconstructor {
               const tail = lengthPreserving
                 ? this.mapContentRange(pieceId, pieceLength, pieceLength)
                 : this.mapContentRange(pieceId, 0, this.contentLength(this.pool[pieceId]));
-              lastPieceFileId = tail.file_id;
-              lastPieceEnd = tail.range[1];
+              if (tail.noLocation) {
+                sawNoLocation = true;
+              } else {
+                lastPieceFileId = tail.file_id;
+                lastPieceEnd = tail.range[1];
+              }
             }
           }
 
@@ -464,6 +580,10 @@ export class SourceInfoReconstructor {
             if (lastPieceEnd !== undefined && lastPieceFileId !== undefined) {
               return { file_id: lastPieceFileId, range: [lastPieceEnd, lastPieceEnd] };
             }
+            if (sawNoLocation) {
+              // Every overlapping piece was generated without a source.
+              return NO_LOCATION;
+            }
             this.errorHandler(`Concat range [${start}, ${end}] matched no piece`, id);
             return { file_id: -1, range: info.r };
           }
@@ -473,6 +593,25 @@ export class SourceInfoReconstructor {
             return { file_id: -1, range: info.r };
           }
           return { file_id, range: [lo, hi] };
+        }
+
+      case 3: // Legacy
+      case 4: // Generated
+        {
+          const target = locationTarget(info);
+          if ('substringOf' in target) {
+            return this.mapContentRange(target.substringOf, info.r[0] + start, info.r[0] + end);
+          }
+          if ('anchor' in target) {
+            // Generated content does not correspond position-by-position to
+            // its invocation, so any query maps to the invocation's whole span.
+            return this.resolveChain(target.anchor);
+          }
+          if ('malformed' in target) {
+            this.errorHandler(target.malformed, id);
+            return { file_id: -1, range: [0, 0] };
+          }
+          return NO_LOCATION;
         }
 
       default:

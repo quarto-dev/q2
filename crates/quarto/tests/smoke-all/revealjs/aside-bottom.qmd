@@ -1,0 +1,53 @@
+---
+title: "revealjs: aside at the slide bottom"
+format: revealjs
+# The aside is the last child of its slide section, and the classes the
+# stylesheet keys on (`scrollable`, `center`) reach the section. Where the
+# aside lands is CSS: `quarto-reveal.css` makes leaf slides full height so
+# `bottom: 20px` is the slide bottom. Those rules are asserted in
+# crates/quarto-core/tests/integration/revealjs_features.rs and were measured
+# in a browser against Quarto 1.
+_quarto:
+  tests:
+    revealjs:
+      ensureHtmlElements:
+        - - 'section#plain > aside.aside:last-child'
+          - 'section#scrolls.scrollable > aside.aside:last-child'
+          - 'section#middle.center > aside.aside:last-child'
+          - 'section > section#child > aside.aside:last-child'
+        - []
+---
+
+## Plain
+
+Body.
+
+::: {.aside}
+PLAIN-ASIDE
+:::
+
+## Scrolls {.scrollable}
+
+Body.
+
+::: {.aside}
+SCROLL-ASIDE
+:::
+
+## Middle {.center}
+
+Body.
+
+::: {.aside}
+CENTER-ASIDE
+:::
+
+# Stack
+
+## Child
+
+Body.
+
+::: {.aside}
+STACK-ASIDE
+:::

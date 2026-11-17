@@ -1,0 +1,8 @@
+---
+bibliography: refs.bib
+csl: ieee.csl
+nocite: |
+  @uncited, @extra
+---
+
+See [@second], then [@cited].

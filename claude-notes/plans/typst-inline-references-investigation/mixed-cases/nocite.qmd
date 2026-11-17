@@ -1,0 +1,8 @@
+---
+references:
+  - id: item
+    type: webpage
+    title: A page
+---
+
+No citations here.

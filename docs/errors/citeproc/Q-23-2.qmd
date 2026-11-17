@@ -1,0 +1,59 @@
+---
+title: "Citation Key Not Found"
+description: "A citation names a key that no reference in the document's bibliography defines, so it renders as the key followed by `?`, in bold."
+code: Q-23-2
+subsystem: citeproc
+status: stub
+since: "99.9.9"
+categories:
+  - citeproc
+---
+
+# `Q-23-2` — Citation Key Not Found
+
+> No reference has this citation key, so the citation renders as the
+> key followed by `?`, in bold.
+
+## What this means
+
+A citation such as `[@smith2020]` names the key `smith2020`, but none
+of the files listed in `bibliography` (and no entry under `references`)
+defines a reference with that key.
+
+Quarto doesn't stop the render. As in Pandoc, it reports this warning
+at the key in your source and prints the citation as **smith2020?**, so
+the gap is easy to find in the output. The other references in the same
+citation render normally. A missing key gets no number in numeric
+styles, so it doesn't shift the numbers of the references after it.
+
+This applies to Typst output too. When Typst handles the bibliography
+itself (the default for `format: typst`), Quarto checks each key before
+Typst runs, because Typst would otherwise stop the whole render on an
+unknown key and report the error in the generated `.typ` file.
+
+## Why this happens
+
+- The key has a typo, or differs in case from the key in the
+  bibliography file (`Smith2020` vs `smith2020`).
+- The reference is in a bibliography file the document doesn't list.
+- The reference was renamed or removed from the bibliography file.
+
+## How to fix
+
+Check the key against your bibliography file and correct it, or add
+the missing reference to a file listed in `bibliography`:
+
+```yaml
+---
+bibliography: references.bib
+---
+```
+
+For a Typst render, the check is skipped when Quarto can't read one of
+the bibliography files (for example a Hayagriva `.yml` file); Typst
+then reports unknown keys itself.
+
+## Related
+
+- `Q-23-1` — another citeproc diagnostic, about where the citeproc
+  filter runs in a book.

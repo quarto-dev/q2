@@ -2,7 +2,7 @@
 
 **Status:** Active (Phase 0 of the website epic, `bd-0tr6` / `bd-f3jc`;
 extended in Phase 8 sub-phase 8.0, `bd-fegm` + `bd-r82e`).
-**Version tag:** `DOCUMENT_PROFILE_VERSION = 17` (see the Change log
+**Version tag:** `DOCUMENT_PROFILE_VERSION = 18` (see the Change log
 for per-version deltas; the authoritative history is the doc comment
 on the constant in `document_profile.rs`)
 **Type:** `quarto_core::document_profile::DocumentProfile`
@@ -33,10 +33,30 @@ epic](../plans/2026-10-28-execution-records-epic.md).)
 ## Pipeline position
 
 ```
-Parse → Merge → [Profile checkpoint] → Sugar → Engine → ThemeCSS →
+Convert → Parse → Merge → [Authored-metadata checkpoint] →
+LanguageResolve → IncludeExpansion → IncludeResolve → ListingItemInfo →
+[Profile checkpoint] → LinkResolution → Sugar → Engine → ThemeCSS →
 UserFilters(pre) → AstTransforms → UserFilters(post) → Highlight →
 RenderBody → ApplyTemplate
 ```
+
+`build_head_stages` (in `crates/quarto-core/src/pipeline.rs`) runs these
+phases, ending at the profile checkpoint. Its doc comment is the
+authoritative list:
+
+1. **Ingest:** convert, parse, merge.
+2. **Authored-metadata checkpoint.** It records the merged metadata
+   before anything derived is added, on `DocumentAst::authored_meta`
+   (bd-xzsnuoqq). This is what `q2 get-config` reports. It is **not** a
+   profile field: it is open-shaped and repeats the project
+   configuration in every document. `pass1::Pass1Document` carries it
+   next to the profile.
+3. **Enrich:** stages that write derived keys (`quarto.language`,
+   `rendered.includes`, `listing-item`) into `meta`.
+4. **Profile checkpoint.**
+5. **Pass-1 analyses:** `LinkResolution`.
+
+Profile fields drawn from `meta` therefore see the enriched metadata.
 
 The checkpoint is **deliberately pre-sugar**: outlines reflect the
 author's heading hierarchy, not synthetic sections added by theorem /
@@ -62,7 +82,7 @@ produced.
 | `categories`, `keywords` | Arrays of plain-text strings. A single scalar value is lifted into a one-element list. |
 | `draft` | Boolean. Defaults to `false` when the key is missing or non-boolean. |
 | `order` | `Option<i32>` sort key from `order:` frontmatter. `None` when the key is absent or non-integer. Consumed by Phase-2's auto-sidebar sort (`claude-notes/plans/2026-04-24-websites-phase-2.md`). Added v1-additive (no version bump). |
-| `outline` | `Vec<pampa::toc::TocEntry>` built from the raw block sequence at `OUTLINE_MAX_DEPTH = 6`. **Always un-numbered**: `TocEntry::number == None` for every entry and every descendant. Since v11, `TocEntry::title` is `Inlines`, not `String` — the outline carries the heading's inline markup verbatim. Consumers that want text project it themselves (`pampa::writers::plaintext::inlines_to_string`). |
+| `outline` | `Vec<pampa::toc::TocEntry>` built from the raw block sequence at `OUTLINE_MAX_DEPTH = 6`. **Always un-numbered**: `TocEntry::number == None` for every entry and every descendant. Since v11, `TocEntry::title` is `Inlines`, not `String` — the outline carries the heading's inline markup verbatim. Consumers that want text project it themselves (`pampa::writers::plaintext::inlines_to_string`). Since v18 each entry carries `source_info`: the heading's span (`None` only for entries not built from a heading). |
 | `includes` | `Vec<IncludeEntry { path, content_hash }>` recording every file whose contents were spliced into the parent AST via `{{< include child.qmd >}}`. Populated by `IncludeExpansionStage` via a side-channel on `DocumentAst.recorded_includes`, drained into the profile by `DocumentProfileStage`. Direct + transitive children appear; cycles are pre-truncated. **Phase-8 cache invalidation depends on this field** (`bd-r82e`). Default empty. |
 | `nav_dependencies` | `Vec<PathBuf>` of project-relative `.qmd` paths the user explicitly declares as cross-doc dependencies via `meta.project.nav-dependencies`. The Phase-8 dependency graph adds an edge to each declared target. The escape hatch for Lua filters that walk siblings without using sidebar / link / prev-next channels. Default empty. |
 | `always_render` | `bool` from `meta.project.always-render`. When `true`, Mode B (subset render) pulls this page into the render set if any of its dependents is among the user-named targets. Mode A re-renders every page anyway, so this flag has no Mode-A effect. Default `false`. |
@@ -636,3 +656,9 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   from `_quarto.yml`, `_metadata.yml`, an extension or a format default does
   not count. A cached v16 profile of such a page would claim no engine.
   Plan: `claude-notes/plans/2026-10-28-jol-2a-jupyter-key.md`.
+- **2026-11-16 — v18 (bd-kkmn4413).** `outline` entries carry
+  `source_info`, the heading's span, so the language server's
+  `quarto/documentProfile` can give each outline entry a range (decision D5
+  of the LSP epic). Additive in shape, bumped because a cached v17 profile
+  would deserialize with every span missing. Plan:
+  `claude-notes/plans/2026-11-16-lsp-document-profile-requests.md`.

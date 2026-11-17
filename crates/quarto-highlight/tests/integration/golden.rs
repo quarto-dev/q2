@@ -60,23 +60,23 @@ fn golden_all_builtins() {
 }
 
 #[test]
-fn golden_user_grammar_toml() {
+fn golden_user_grammar_properties() {
     // A user-supplied grammar loaded dynamically from the
-    // `user-grammar-toml` fixture. Snapshot tracks that dynamic loading
-    // produces the same shape of output as static built-ins.
+    // `user-grammar-properties` fixture. Snapshot tracks that dynamic
+    // loading produces the same shape of output as static built-ins.
     let fixture_dir =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/user-grammar-toml");
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/user-grammar-properties");
     let mut user = quarto_highlight::UserGrammars::new();
     user.load_from_directory(&fixture_dir)
-        .expect("toml fixture should load");
+        .expect("properties fixture should load");
 
-    let source = "name = \"value\"\ncount = 42\n";
-    let encoded = highlight_with_user("toml", source, Some(&mut user))
-        .expect("toml highlight succeeds")
-        .expect("toml resolves via user grammars");
+    let source = "# server\nhost = localhost\nport: 8080\n";
+    let encoded = highlight_with_user("properties", source, Some(&mut user))
+        .expect("properties highlight succeeds")
+        .expect("properties resolves via user grammars");
     let spans = encoding::decode(&encoded).expect("valid JSON");
 
     insta::with_settings!({ description => source, omit_expression => true }, {
-        insta::assert_snapshot!("user_grammar_toml", format_spans(&spans));
+        insta::assert_snapshot!("user_grammar_properties", format_spans(&spans));
     });
 }

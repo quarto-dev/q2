@@ -1,0 +1,10 @@
+# The quarto2 PyPI package (bd-2p7dwmqe). See README.dev.md.
+#
+# The build backend is in-tree and stdlib-only, so building needs no
+# dependencies. Package metadata is written by the backend (version from the
+# generated release.json), which is why there is no [project] table.
+
+[build-system]
+requires = []
+build-backend = "q2_pypi_backend"
+backend-path = ["backend"]

@@ -2747,12 +2747,138 @@
                     "contents": {
                       "c": [
                         {
-                          "c": "one.qmd",
-                          "t": "MetaString"
+                          "c": {
+                            "href": {
+                              "c": "one.qmd",
+                              "t": "MetaString"
+                            },
+                            "text": {
+                              "c": [
+                                {
+                                  "a": {
+                                    "classes": [],
+                                    "id": null,
+                                    "kvs": []
+                                  },
+                                  "c": [
+                                    [
+                                      "",
+                                      [
+                                        "chapter-number"
+                                      ],
+                                      []
+                                    ],
+                                    [
+                                      {
+                                        "c": "2",
+                                        "t": "Str"
+                                      }
+                                    ]
+                                  ],
+                                  "t": "Span"
+                                },
+                                {
+                                  "c": " ",
+                                  "t": "Str"
+                                },
+                                {
+                                  "t": "Space"
+                                },
+                                {
+                                  "a": {
+                                    "classes": [],
+                                    "id": null,
+                                    "kvs": []
+                                  },
+                                  "c": [
+                                    [
+                                      "",
+                                      [
+                                        "chapter-title"
+                                      ],
+                                      []
+                                    ],
+                                    [
+                                      {
+                                        "c": "One",
+                                        "t": "Str"
+                                      }
+                                    ]
+                                  ],
+                                  "t": "Span"
+                                }
+                              ],
+                              "t": "MetaInlines"
+                            }
+                          },
+                          "t": "MetaMap"
                         },
                         {
-                          "c": "sub/two.qmd",
-                          "t": "MetaString"
+                          "c": {
+                            "href": {
+                              "c": "sub/two.qmd",
+                              "t": "MetaString"
+                            },
+                            "text": {
+                              "c": [
+                                {
+                                  "a": {
+                                    "classes": [],
+                                    "id": null,
+                                    "kvs": []
+                                  },
+                                  "c": [
+                                    [
+                                      "",
+                                      [
+                                        "chapter-number"
+                                      ],
+                                      []
+                                    ],
+                                    [
+                                      {
+                                        "c": "3",
+                                        "t": "Str"
+                                      }
+                                    ]
+                                  ],
+                                  "t": "Span"
+                                },
+                                {
+                                  "c": " ",
+                                  "t": "Str"
+                                },
+                                {
+                                  "t": "Space"
+                                },
+                                {
+                                  "a": {
+                                    "classes": [],
+                                    "id": null,
+                                    "kvs": []
+                                  },
+                                  "c": [
+                                    [
+                                      "",
+                                      [
+                                        "chapter-title"
+                                      ],
+                                      []
+                                    ],
+                                    [
+                                      {
+                                        "c": "Two",
+                                        "t": "Str"
+                                      }
+                                    ]
+                                  ],
+                                  "t": "Span"
+                                }
+                              ],
+                              "t": "MetaInlines"
+                            }
+                          },
+                          "t": "MetaMap"
                         }
                       ],
                       "t": "MetaList"
@@ -2773,16 +2899,142 @@
                           "t": "MetaString"
                         },
                         {
-                          "c": "withh1.qmd",
-                          "t": "MetaString"
+                          "c": {
+                            "href": {
+                              "c": "withh1.qmd",
+                              "t": "MetaString"
+                            },
+                            "text": {
+                              "c": [
+                                {
+                                  "a": {
+                                    "classes": [],
+                                    "id": null,
+                                    "kvs": []
+                                  },
+                                  "c": [
+                                    [
+                                      "",
+                                      [
+                                        "chapter-number"
+                                      ],
+                                      []
+                                    ],
+                                    [
+                                      {
+                                        "c": "5",
+                                        "t": "Str"
+                                      }
+                                    ]
+                                  ],
+                                  "t": "Span"
+                                },
+                                {
+                                  "c": " ",
+                                  "t": "Str"
+                                },
+                                {
+                                  "t": "Space"
+                                },
+                                {
+                                  "a": {
+                                    "classes": [],
+                                    "id": null,
+                                    "kvs": []
+                                  },
+                                  "c": [
+                                    [
+                                      "",
+                                      [
+                                        "chapter-title"
+                                      ],
+                                      []
+                                    ],
+                                    [
+                                      {
+                                        "c": "Heading Y",
+                                        "t": "Str"
+                                      }
+                                    ]
+                                  ],
+                                  "t": "Span"
+                                }
+                              ],
+                              "t": "MetaInlines"
+                            }
+                          },
+                          "t": "MetaMap"
                         },
                         {
                           "c": "neither.qmd",
                           "t": "MetaString"
                         },
                         {
-                          "c": "textfirst.qmd",
-                          "t": "MetaString"
+                          "c": {
+                            "href": {
+                              "c": "textfirst.qmd",
+                              "t": "MetaString"
+                            },
+                            "text": {
+                              "c": [
+                                {
+                                  "a": {
+                                    "classes": [],
+                                    "id": null,
+                                    "kvs": []
+                                  },
+                                  "c": [
+                                    [
+                                      "",
+                                      [
+                                        "chapter-number"
+                                      ],
+                                      []
+                                    ],
+                                    [
+                                      {
+                                        "c": "7",
+                                        "t": "Str"
+                                      }
+                                    ]
+                                  ],
+                                  "t": "Span"
+                                },
+                                {
+                                  "c": " ",
+                                  "t": "Str"
+                                },
+                                {
+                                  "t": "Space"
+                                },
+                                {
+                                  "a": {
+                                    "classes": [],
+                                    "id": null,
+                                    "kvs": []
+                                  },
+                                  "c": [
+                                    [
+                                      "",
+                                      [
+                                        "chapter-title"
+                                      ],
+                                      []
+                                    ],
+                                    [
+                                      {
+                                        "c": "Early Heading",
+                                        "t": "Str"
+                                      }
+                                    ]
+                                  ],
+                                  "t": "Span"
+                                }
+                              ],
+                              "t": "MetaInlines"
+                            }
+                          },
+                          "t": "MetaMap"
                         }
                       ],
                       "t": "MetaList"
@@ -2803,8 +3055,71 @@
                     "contents": {
                       "c": [
                         {
-                          "c": "app.qmd",
-                          "t": "MetaString"
+                          "c": {
+                            "href": {
+                              "c": "app.qmd",
+                              "t": "MetaString"
+                            },
+                            "text": {
+                              "c": [
+                                {
+                                  "a": {
+                                    "classes": [],
+                                    "id": null,
+                                    "kvs": []
+                                  },
+                                  "c": [
+                                    [
+                                      "",
+                                      [
+                                        "chapter-number"
+                                      ],
+                                      []
+                                    ],
+                                    [
+                                      {
+                                        "c": "A",
+                                        "t": "Str"
+                                      }
+                                    ]
+                                  ],
+                                  "t": "Span"
+                                },
+                                {
+                                  "c": " ",
+                                  "t": "Str"
+                                },
+                                {
+                                  "t": "Space"
+                                },
+                                {
+                                  "a": {
+                                    "classes": [],
+                                    "id": null,
+                                    "kvs": []
+                                  },
+                                  "c": [
+                                    [
+                                      "",
+                                      [
+                                        "chapter-title"
+                                      ],
+                                      []
+                                    ],
+                                    [
+                                      {
+                                        "c": "Appendix Alpha",
+                                        "t": "Str"
+                                      }
+                                    ]
+                                  ],
+                                  "t": "Span"
+                                }
+                              ],
+                              "t": "MetaInlines"
+                            }
+                          },
+                          "t": "MetaMap"
                         }
                       ],
                       "t": "MetaList"

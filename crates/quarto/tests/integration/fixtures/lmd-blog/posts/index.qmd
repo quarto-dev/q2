@@ -49,10 +49,11 @@ for _, y in ipairs(years) do
   out:extend({=:
 ### `{lmd} y`
 :=})
-  -- One list per year: each item is a `Blocks` fragment, which is
-  -- what `pandoc.BulletList` takes for a list item.
+  -- One tight list per year: each item is an inline fragment wrapped
+  -- in `pandoc.Plain`. A `{=: :=}` block fragment would be a `Para`,
+  -- which makes the list loose (`<li><p>`), as in Pandoc.
   local entries = pandoc.List(by_year[y]):map(function(it)
-    return {=: `{lmd} pandoc.Link(it.title, it.path)` (`{lmd} it.date`) :=}
+    return pandoc.Plain({=[ `{lmd} pandoc.Link(it.title, it.path)` (`{lmd} it.date`) ]=})
   end)
   out:insert(pandoc.BulletList(entries))
 end

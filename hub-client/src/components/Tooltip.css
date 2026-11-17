@@ -25,8 +25,10 @@
   line-height: var(--leading-tight);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-2);
+  box-sizing: border-box;
   width: max-content;
-  max-width: 300px;
+  max-width: min(300px, calc(100vw - 8px));
+  overflow-wrap: anywhere;
   pointer-events: none;
   animation: qh-pop-in var(--duration-fast) var(--ease-out);
 }

@@ -1,0 +1,10 @@
+q2 q2 (quarto 2) 0.41.0; quarto 99.9.9; typst 0.15.1 (unknown commit)
+q2  repro (references only): FAIL: error: label `<item>` does not exist in the document
+q1  repro (references only): FAIL: [typst]: Compiling repro.typ to repro.pdf...error: label `<item>` does not exist in the document
+q2  mixed (bibliography + references): FAIL: error: label `<item>` does not exist in the document
+q1  mixed (bibliography + references): FAIL: [typst]: Compiling mixed.typ to mixed.pdf...error: label `<item>` does not exist in the document
+q2  repro + citeproc: true: OK
+q1  repro + citeproc: true: OK
+typst #bibliography(refs.json): FAIL: error: unknown bibliography format (must be .yaml/.yml or .bib)
+typst #bibliography(refs.yml): OK
+typst #bibliography(refs.bib): OK

@@ -5,16 +5,125 @@
 
 use hashlink::LinkedHashMap;
 use quarto_source_map::SourceInfo;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt;
+use std::ops::{Deref, DerefMut};
+use std::sync::LazyLock;
 
-pub fn empty_attr() -> Attr {
-    (String::new(), vec![], LinkedHashMap::new())
+/// The contents of an [`Attr`]: `(id, classes, key-value attributes)`.
+pub type AttrTuple = (String, Vec<String>, LinkedHashMap<String, String>);
+
+/// Pandoc's `Attr`: an id, a list of classes, and ordered key-value pairs.
+///
+/// **Layout.** Most nodes that can carry an `Attr` carry an empty one (92% of
+/// them on the `claude-notes/plans` corpus), so the empty case is stored as a
+/// null pointer and only a non-empty `Attr` owns a heap [`AttrTuple`]. That
+/// makes this type one word instead of 104 bytes. See
+/// `claude-notes/plans/2026-11-12-ast-string-storage-study.md`.
+///
+/// **Use.** `Attr` dereferences to [`AttrTuple`], so it reads and writes like
+/// the tuple it used to be: `attr.0`, `attr.1.push(..)`, `attr.2.get(..)`.
+/// Build one from a tuple with `.into()` (or [`Attr::from`]) and take it apart
+/// with [`Attr::into_tuple`].
+///
+/// Mutable access (`DerefMut`) to an empty `Attr` allocates its tuple, even if
+/// nothing ends up being written. That costs memory but never changes
+/// meaning: equality, `Debug` and serde all look at the contents, so an
+/// allocated-but-empty `Attr` is indistinguishable from an unallocated one.
+#[derive(Clone, Default)]
+pub struct Attr {
+    // Named (not a tuple struct) so that `attr.0` reaches the tuple through
+    // `Deref` instead of this field.
+    inner: Option<Box<AttrTuple>>,
 }
 
-pub type Attr = (String, Vec<String>, LinkedHashMap<String, String>);
+static EMPTY_ATTR: LazyLock<AttrTuple> =
+    LazyLock::new(|| (String::new(), Vec::new(), LinkedHashMap::new()));
 
-pub fn is_empty_attr(attr: &Attr) -> bool {
-    attr.0.is_empty() && attr.1.is_empty() && attr.2.is_empty()
+fn is_empty_tuple(t: &AttrTuple) -> bool {
+    t.0.is_empty() && t.1.is_empty() && t.2.is_empty()
+}
+
+impl Attr {
+    /// Consumes the `Attr`, returning `(id, classes, attributes)`.
+    pub fn into_tuple(self) -> AttrTuple {
+        match self.inner {
+            Some(boxed) => *boxed,
+            None => (String::new(), Vec::new(), LinkedHashMap::new()),
+        }
+    }
+}
+
+impl Deref for Attr {
+    type Target = AttrTuple;
+    fn deref(&self) -> &AttrTuple {
+        match &self.inner {
+            Some(boxed) => boxed,
+            None => &EMPTY_ATTR,
+        }
+    }
+}
+
+impl DerefMut for Attr {
+    fn deref_mut(&mut self) -> &mut AttrTuple {
+        self.inner.get_or_insert_with(Box::default)
+    }
+}
+
+impl From<AttrTuple> for Attr {
+    fn from(tuple: AttrTuple) -> Self {
+        Attr {
+            inner: (!is_empty_tuple(&tuple)).then(|| Box::new(tuple)),
+        }
+    }
+}
+
+impl From<Attr> for AttrTuple {
+    fn from(attr: Attr) -> Self {
+        attr.into_tuple()
+    }
+}
+
+impl PartialEq for Attr {
+    fn eq(&self, other: &Self) -> bool {
+        **self == **other
+    }
+}
+
+impl PartialEq<AttrTuple> for Attr {
+    fn eq(&self, other: &AttrTuple) -> bool {
+        **self == *other
+    }
+}
+
+impl fmt::Debug for Attr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        (**self).fmt(f)
+    }
+}
+
+impl Serialize for Attr {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        (**self).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Attr {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        AttrTuple::deserialize(deserializer).map(Attr::from)
+    }
+}
+
+pub fn empty_attr() -> Attr {
+    Attr::default()
+}
+
+/// Whether an attr has no id, no classes and no key-value pairs.
+///
+/// Takes the tuple so it accepts both `&Attr` (through deref coercion) and a
+/// bare `&AttrTuple`.
+pub fn is_empty_attr(attr: &AttrTuple) -> bool {
+    is_empty_tuple(attr)
 }
 
 /// Source location information for Attr components.
@@ -65,21 +174,116 @@ pub fn is_empty_attr(attr: &Attr) -> bool {
 /// mismatch so production never panics on misaligned input. See
 /// `quarto-core/src/transforms/theorem.rs` and `proof.rs` for the
 /// canonical fall-back-to-`None` pattern.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+///
+/// **Layout.** Like [`Attr`], this is one word: the empty case (no source
+/// tracking, which is what an empty `Attr` has) is a null pointer, and only a
+/// non-empty value owns a heap [`AttrSourceParts`]. It dereferences to
+/// `AttrSourceParts`, so `attr_source.id`, `.classes` and `.attributes` read
+/// and write as before. Build one with [`AttrSourceInfo::new`] or from an
+/// `AttrSourceParts` with `.into()`. As with `Attr`, mutable access to an
+/// empty value allocates, and equality, `Debug` and serde look only at the
+/// contents.
+#[derive(Clone, Default)]
 pub struct AttrSourceInfo {
+    inner: Option<Box<AttrSourceParts>>,
+}
+
+/// The contents of an [`AttrSourceInfo`].
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct AttrSourceParts {
     pub id: Option<SourceInfo>,
     pub classes: Vec<Option<SourceInfo>>,
     pub attributes: Vec<(Option<SourceInfo>, Option<SourceInfo>)>,
 }
 
+static EMPTY_ATTR_SOURCE: AttrSourceParts = AttrSourceParts {
+    id: None,
+    classes: Vec::new(),
+    attributes: Vec::new(),
+};
+
+impl AttrSourceParts {
+    fn is_empty(&self) -> bool {
+        self.id.is_none() && self.classes.is_empty() && self.attributes.is_empty()
+    }
+}
+
+impl Deref for AttrSourceInfo {
+    type Target = AttrSourceParts;
+    fn deref(&self) -> &AttrSourceParts {
+        match &self.inner {
+            Some(boxed) => boxed,
+            None => &EMPTY_ATTR_SOURCE,
+        }
+    }
+}
+
+impl DerefMut for AttrSourceInfo {
+    fn deref_mut(&mut self) -> &mut AttrSourceParts {
+        self.inner.get_or_insert_with(Box::default)
+    }
+}
+
+impl From<AttrSourceParts> for AttrSourceInfo {
+    fn from(parts: AttrSourceParts) -> Self {
+        AttrSourceInfo {
+            inner: (!parts.is_empty()).then(|| Box::new(parts)),
+        }
+    }
+}
+
+impl PartialEq for AttrSourceInfo {
+    fn eq(&self, other: &Self) -> bool {
+        **self == **other
+    }
+}
+
+impl fmt::Debug for AttrSourceInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Print under the type's own name, as the derived impl did.
+        f.debug_struct("AttrSourceInfo")
+            .field("id", &self.id)
+            .field("classes", &self.classes)
+            .field("attributes", &self.attributes)
+            .finish()
+    }
+}
+
+impl Serialize for AttrSourceInfo {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        (**self).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for AttrSourceInfo {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        AttrSourceParts::deserialize(deserializer).map(AttrSourceInfo::from)
+    }
+}
+
 impl AttrSourceInfo {
     /// Creates an empty AttrSourceInfo with no source tracking.
     pub fn empty() -> Self {
-        AttrSourceInfo {
-            id: None,
-            classes: Vec::new(),
-            attributes: Vec::new(),
+        AttrSourceInfo::default()
+    }
+
+    /// Consumes the AttrSourceInfo, returning its components.
+    pub fn into_parts(self) -> AttrSourceParts {
+        self.inner.map(|boxed| *boxed).unwrap_or_default()
+    }
+
+    /// Creates an AttrSourceInfo from its three components.
+    pub fn new(
+        id: Option<SourceInfo>,
+        classes: Vec<Option<SourceInfo>>,
+        attributes: Vec<(Option<SourceInfo>, Option<SourceInfo>)>,
+    ) -> Self {
+        AttrSourceParts {
+            id,
+            classes,
+            attributes,
         }
+        .into()
     }
 
     /// Combine all source pieces into a single SourceInfo.
@@ -173,11 +377,8 @@ mod tests {
     #[test]
     fn test_combine_all_only_id() {
         // Only id present
-        let attr_source = AttrSourceInfo {
-            id: Some(SourceInfo::original(FileId(0), 5, 15)),
-            classes: vec![],
-            attributes: vec![],
-        };
+        let attr_source =
+            AttrSourceInfo::new(Some(SourceInfo::original(FileId(0), 5, 15)), vec![], vec![]);
 
         let result = attr_source.combine_all();
         assert!(result.is_some());
@@ -190,14 +391,14 @@ mod tests {
     #[test]
     fn test_combine_all_only_classes() {
         // Only classes present
-        let attr_source = AttrSourceInfo {
-            id: None,
-            classes: vec![
+        let attr_source = AttrSourceInfo::new(
+            None,
+            vec![
                 Some(SourceInfo::original(FileId(0), 10, 20)),
                 Some(SourceInfo::original(FileId(0), 21, 30)),
             ],
-            attributes: vec![],
-        };
+            vec![],
+        );
 
         let result = attr_source.combine_all();
         assert!(result.is_some());
@@ -219,15 +420,15 @@ mod tests {
     #[test]
     fn test_combine_all_id_and_classes() {
         // Both id and classes present
-        let attr_source = AttrSourceInfo {
-            id: Some(SourceInfo::original(FileId(0), 5, 15)),
-            classes: vec![
+        let attr_source = AttrSourceInfo::new(
+            Some(SourceInfo::original(FileId(0), 5, 15)),
+            vec![
                 Some(SourceInfo::original(FileId(0), 16, 25)),
                 None, // Some classes may not have source info
                 Some(SourceInfo::original(FileId(0), 26, 35)),
             ],
-            attributes: vec![],
-        };
+            vec![],
+        );
 
         let result = attr_source.combine_all();
         assert!(result.is_some());
@@ -250,10 +451,10 @@ mod tests {
     #[test]
     fn test_combine_all_full_attributes() {
         // Full AttrSourceInfo with id, classes, and key-value attributes
-        let attr_source = AttrSourceInfo {
-            id: Some(SourceInfo::original(FileId(0), 5, 15)),
-            classes: vec![Some(SourceInfo::original(FileId(0), 16, 25))],
-            attributes: vec![
+        let attr_source = AttrSourceInfo::new(
+            Some(SourceInfo::original(FileId(0), 5, 15)),
+            vec![Some(SourceInfo::original(FileId(0), 16, 25))],
+            vec![
                 (
                     Some(SourceInfo::original(FileId(0), 26, 30)), // key
                     Some(SourceInfo::original(FileId(0), 31, 40)), // value
@@ -263,7 +464,7 @@ mod tests {
                     Some(SourceInfo::original(FileId(0), 41, 50)), // value
                 ),
             ],
-        };
+        );
 
         let result = attr_source.combine_all();
         assert!(result.is_some());
@@ -286,14 +487,14 @@ mod tests {
     #[test]
     fn test_combine_all_sparse_attributes() {
         // Some pieces missing source info (None)
-        let attr_source = AttrSourceInfo {
-            id: None,
-            classes: vec![None, Some(SourceInfo::original(FileId(0), 10, 20)), None],
-            attributes: vec![
+        let attr_source = AttrSourceInfo::new(
+            None,
+            vec![None, Some(SourceInfo::original(FileId(0), 10, 20)), None],
+            vec![
                 (None, None),
                 (None, Some(SourceInfo::original(FileId(0), 30, 40))),
             ],
-        };
+        );
 
         let result = attr_source.combine_all();
         assert!(result.is_some());
@@ -310,5 +511,90 @@ mod tests {
             }
             _ => panic!("Unexpected SourceInfo variant"),
         }
+    }
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    fn attr(id: &str, classes: &[&str]) -> Attr {
+        (
+            id.to_string(),
+            classes.iter().map(|c| c.to_string()).collect(),
+            LinkedHashMap::new(),
+        )
+            .into()
+    }
+
+    #[test]
+    fn attr_and_attr_source_are_one_word() {
+        assert_eq!(std::mem::size_of::<Attr>(), std::mem::size_of::<usize>());
+        assert_eq!(
+            std::mem::size_of::<AttrSourceInfo>(),
+            std::mem::size_of::<usize>()
+        );
+    }
+
+    #[test]
+    fn empty_attr_does_not_allocate() {
+        assert!(empty_attr().inner.is_none());
+        assert!(
+            Attr::from((String::new(), vec![], LinkedHashMap::new()))
+                .inner
+                .is_none()
+        );
+        assert!(AttrSourceInfo::empty().inner.is_none());
+        assert!(AttrSourceInfo::new(None, vec![], vec![]).inner.is_none());
+    }
+
+    #[test]
+    fn attr_reads_and_writes_like_a_tuple() {
+        let mut a = empty_attr();
+        assert!(a.0.is_empty() && a.1.is_empty() && a.2.is_empty());
+        assert!(is_empty_attr(&a));
+        a.1.push("cls".to_string());
+        a.0 = "id".to_string();
+        a.2.insert("k".to_string(), "v".to_string());
+        assert!(!is_empty_attr(&a));
+        let (id, classes, kvs) = a.into_tuple();
+        assert_eq!(id, "id");
+        assert_eq!(classes, vec!["cls".to_string()]);
+        assert_eq!(kvs.get("k").map(String::as_str), Some("v"));
+    }
+
+    #[test]
+    fn allocated_but_empty_equals_unallocated() {
+        let mut touched = empty_attr();
+        let _ = &mut touched.1; // DerefMut allocates
+        assert!(touched.inner.is_some());
+        assert_eq!(touched, empty_attr());
+        assert!(is_empty_attr(&touched));
+        assert_eq!(format!("{touched:?}"), format!("{:?}", empty_attr()));
+        assert_eq!(
+            serde_json::to_string(&touched).unwrap(),
+            serde_json::to_string(&empty_attr()).unwrap()
+        );
+
+        let mut src = AttrSourceInfo::empty();
+        src.classes.clear();
+        assert!(src.inner.is_some());
+        assert_eq!(src, AttrSourceInfo::empty());
+    }
+
+    #[test]
+    fn debug_and_serde_match_the_old_shapes() {
+        let a = attr("x", &["a", "b"]);
+        let tuple: AttrTuple = a.clone().into_tuple();
+        assert_eq!(format!("{a:?}"), format!("{tuple:?}"));
+        let json = serde_json::to_string(&a).unwrap();
+        assert_eq!(json, serde_json::to_string(&tuple).unwrap());
+        assert_eq!(serde_json::from_str::<Attr>(&json).unwrap(), a);
+
+        let src = AttrSourceInfo::new(Some(SourceInfo::for_test()), vec![None], vec![]);
+        assert!(format!("{src:?}").starts_with("AttrSourceInfo { id: Some("));
+        let json = serde_json::to_string(&src).unwrap();
+        assert_eq!(json, serde_json::to_string(&*src).unwrap());
+        assert_eq!(serde_json::from_str::<AttrSourceInfo>(&json).unwrap(), src);
     }
 }

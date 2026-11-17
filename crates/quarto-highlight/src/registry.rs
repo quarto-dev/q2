@@ -175,12 +175,17 @@ fn extract_builtin_captures(
 static BUILTIN_ALIASES: &[(&str, &[&str])] = &[
     ("bash", &["sh"]),
     ("css", &[]),
+    // Class names match case-insensitively, so `Dockerfile` resolves here.
+    ("dockerfile", &[]),
     ("html", &[]),
+    ("ini", &[]),
     ("javascript", &["js", "jsx"]),
     ("json", &[]),
     ("julia", &["jl"]),
     ("lmd", &[]),
     ("lua", &[]),
+    // `ps1` follows Pandoc, which resolves it through PowerShell's `*.ps1` glob.
+    ("powershell", &["ps1"]),
     ("python", &["py"]),
     // Quarto markdown (GH #1081). tree-sitter-qmd parses a superset of
     // Pandoc markdown, so plain `markdown` / `md` blocks use it too.
@@ -188,8 +193,11 @@ static BUILTIN_ALIASES: &[(&str, &[&str])] = &[
     ("r", &[]),
     ("rust", &["rs"]),
     ("sql", &[]),
+    // `conf` follows Pandoc, which resolves it through TOML's `*.conf` glob.
+    ("toml", &["conf"]),
     ("tsx", &[]),
     ("typescript", &["ts"]),
+    ("xml", &[]),
     ("yaml", &["yml"]),
 ];
 
@@ -208,18 +216,23 @@ static BUILTIN_BUILDERS: &[(
 )] = &[
     ("bash", crate::langs::bash::build),
     ("css", crate::langs::css::build),
+    ("dockerfile", crate::langs::dockerfile::build),
     ("html", crate::langs::html::build),
+    ("ini", crate::langs::ini::build),
     ("javascript", crate::langs::javascript::build),
     ("json", crate::langs::json::build),
     ("julia", crate::langs::julia::build),
     ("lmd", crate::langs::lmd::build),
     ("lua", crate::langs::lua::build),
+    ("powershell", crate::langs::powershell::build),
     ("python", crate::langs::python::build),
     ("r", crate::langs::r::build),
     ("rust", crate::langs::rust::build),
     ("sql", crate::langs::sql::build),
+    ("toml", crate::langs::toml::build),
     ("tsx", crate::langs::tsx::build),
     ("typescript", crate::langs::typescript::build),
+    ("xml", crate::langs::xml::build),
     ("yaml", crate::langs::yaml::build),
 ];
 

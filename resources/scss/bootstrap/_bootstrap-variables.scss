@@ -179,6 +179,14 @@ $sidebar-border: false !default;
 $sidebar-glass-bg: #66666666 !default;
 $sidebar-anim-duration: 0.15s !default;
 
+// Task lists (GH #892, bd-2ydvebkc). A task item's checkbox replaces its
+// list marker. In an ordered list the number carries information a bullet
+// does not, so by default ordered task items keep it and the checkbox
+// follows it inline; set this to `false` in a theme's `scss:defaults` layer
+// to hide ordered task-item numbers too (the checkbox then hangs into the
+// freed gutter, as in bullet lists).
+$task-list-ordered-markers: true !default;
+
 // Title block variables
 $title-block-color: $body-contrast-color !default;
 $title-block-contast-color: $body-contrast-bg !default;

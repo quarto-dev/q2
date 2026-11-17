@@ -52,9 +52,14 @@ async fn share_glue_tunnels_to_preview_port_and_announces_join_string() {
     let mut announced: Vec<String> = Vec::new();
     let session = tokio::time::timeout(
         STEP_TIMEOUT,
-        start_share_session(hermetic_host_cfg(), "127.0.0.1", port, false, |banner| {
-            announced.push(banner.to_string())
-        }),
+        start_share_session(
+            hermetic_host_cfg(),
+            "127.0.0.1",
+            port,
+            false,
+            true,
+            |banner| announced.push(banner.to_string()),
+        ),
     )
     .await
     .expect("start_share_session should not hang")
@@ -150,6 +155,7 @@ async fn share_task_waits_for_server_ready_gate() {
             "127.0.0.1".to_string(),
             port,
             false,
+            true,
             ready_rx,
             move |banner| announced.lock().unwrap().push(banner.to_string()),
         )
@@ -216,6 +222,7 @@ async fn share_task_exits_quietly_when_server_dies_before_ready() {
             "127.0.0.1".to_string(),
             1, // never dialed: the gate drops before the tunnel starts
             false,
+            true,
             ready_rx,
             move |banner| announced.lock().unwrap().push(banner.to_string()),
         )
@@ -238,7 +245,7 @@ async fn share_task_exits_quietly_when_server_dies_before_ready() {
 /// `--allow-edit` sessions must warn about disk writes.
 #[test]
 fn banner_states_capabilities_per_allow_edit() {
-    let read_only = format_share_banner("q2previewexample", false, true);
+    let read_only = format_share_banner("q2previewexample", false, true, true);
     assert!(
         read_only.contains("VIEW") && read_only.contains("RE-RUN"),
         "banner must state the view + re-run capability:\n{read_only}"
@@ -248,24 +255,41 @@ fn banner_states_capabilities_per_allow_edit() {
         "read-only banner must not claim edit capability:\n{read_only}"
     );
 
-    let editable = format_share_banner("q2previewexample", true, true);
+    let editable = format_share_banner("q2previewexample", true, true, true);
     assert!(
         editable.contains("EDIT") && editable.contains("--allow-edit"),
         "--allow-edit banner must warn that guests can edit files on this machine:\n{editable}"
     );
 }
 
+/// A session that cannot re-execute (`engine` absent from `execute: record-sources`, or `preview.engine: off`)
+/// must not tell the host that guests can RE-RUN code.
+#[test]
+fn banner_does_not_claim_re_run_when_the_engine_cannot_run() {
+    for allow_edit in [false, true] {
+        let banner = format_share_banner("q2previewexample", allow_edit, true, false);
+        assert!(
+            !banner.contains("RE-RUN"),
+            "no engine, no re-run claim (allow_edit={allow_edit}):\n{banner}"
+        );
+        assert!(
+            banner.contains("VIEW") && banner.contains("cannot re-run"),
+            "the banner says guests cannot re-run:\n{banner}"
+        );
+    }
+}
+
 /// Relay reachability: when the endpoint never came online, the banner
 /// says so (guests on other networks won't be able to join).
 #[test]
 fn banner_warns_when_relay_unreachable() {
-    let no_relay = format_share_banner("q2previewexample", false, false);
+    let no_relay = format_share_banner("q2previewexample", false, false, true);
     assert!(
         no_relay.contains("direct/LAN"),
         "no-relay banner must warn about direct/LAN-only reachability:\n{no_relay}"
     );
 
-    let with_relay = format_share_banner("q2previewexample", false, true);
+    let with_relay = format_share_banner("q2previewexample", false, true, true);
     assert!(
         !with_relay.contains("direct/LAN"),
         "relay-reachable banner must not carry the LAN-only warning:\n{with_relay}"
@@ -276,7 +300,7 @@ fn banner_warns_when_relay_unreachable() {
 #[test]
 fn banner_join_line_is_always_last() {
     for (allow_edit, relay) in [(false, true), (true, true), (false, false), (true, false)] {
-        let banner = format_share_banner("q2previewexample", allow_edit, relay);
+        let banner = format_share_banner("q2previewexample", allow_edit, relay, true);
         assert!(
             banner
                 .trim_end()

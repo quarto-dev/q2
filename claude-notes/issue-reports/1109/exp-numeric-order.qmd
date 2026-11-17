@@ -1,0 +1,6 @@
+---
+bibliography: refs.bib
+csl: ieee.csl
+---
+
+See [@cited], then [@second].

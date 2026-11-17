@@ -170,10 +170,11 @@ pub struct KnitrExecuteResult {
     #[serde(default)]
     pub known_options: Option<Vec<String>>,
 
-    /// The labels of chunks that asked for knitr\'s cache and had it forced off by the capture
-    /// (KNR-1 S4). Empty on an uncaptured run.
+    /// The unit ids of chunks that asked for knitr\'s cache (OPR-7b). They keep the cache, are
+    /// not recorded, and their finished markdown stays in the skeleton; they are not part of the
+    /// expected unit count. Empty on an uncaptured run.
     #[serde(default)]
-    pub cache_disabled: Vec<String>,
+    pub cached_units: Vec<String>,
 }
 
 /// A brace-spelling inline expression recorded by the `evaluate.inline` and `inline`

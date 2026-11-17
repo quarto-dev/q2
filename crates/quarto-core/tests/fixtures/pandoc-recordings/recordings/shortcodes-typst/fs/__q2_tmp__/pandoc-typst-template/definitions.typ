@@ -255,3 +255,6 @@ $if(highlighting-definitions)$
 $highlighting-definitions$
 
 $endif$
+
+$-- QUARTO2-PATCH (GH #1102): q2's editorial-mark functions, in a partial of their own.
+$editorial-marks.typ()$

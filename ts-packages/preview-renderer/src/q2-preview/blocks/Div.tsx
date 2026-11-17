@@ -64,7 +64,18 @@ export const Div = (args: NodeArgs<DivBlock>) => {
         return <aside ref={anchorRef} {...props} {...locProps}>{wrap(renderChildren(args))}</aside>;
     }
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
-    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
+    // INTERIM (RIU-3b): the record splice cannot name its own nodes, so when an expanded cell
+    // shifts the block count, reconcile pairs the author's next Div with a spliced `.cell` Div
+    // and that Div keeps the author's source info (it resolves, and it is not stamped). Refuse
+    // to edit any `.cell` Div rather than rewrite the author's bytes from output. Engines
+    // should return provenance for the nodes they produce; then replace this rule and its
+    // `interim_` tests (record-output-stamp.integration.test.tsx).
+    const isInterimCell = classes.includes('cell');
+    const isEditable =
+        resolved != null &&
+        resolved.reachabilityClass !== 'Opaque' &&
+        poolId !== undefined &&
+        !isInterimCell;
     if (isEditable) {
         props['data-block-pool-id'] = String(poolId);
         props.tabIndex = -1;

@@ -79,6 +79,7 @@ pub async fn boot(files: &[(&str, &[u8])]) -> Server {
     let port = pick_free_port();
     let config = PreviewConfig {
         render: Default::default(),
+        upstream: None,
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(root.clone()),
@@ -87,6 +88,7 @@ pub async fn boot(files: &[(&str, &[u8])]) -> Server {
         spa_dir_override: None,
         engine_registry: None,
         engine_policy: quarto_preview::config::EnginePolicy::Off,
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,

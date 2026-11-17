@@ -74,8 +74,10 @@ clap = { workspace = true }
 quarto-util = { workspace = true }
 # Shared canonicalize, so hub paths match the rest of q2's spelling
 quarto-system-runtime = { workspace = true }
-walkdir = "2"
 dirs = "6"
+
+# Project file classification shared with the language server (bd-n0uth2zt)
+quarto-project-files.workspace = true
 
 # Filesystem watching for continuous sync
 notify = "8"

@@ -1,0 +1,28 @@
+---
+title: A subfigure group from knitr
+---
+
+```{r}
+#| label: fig-one
+#| fig-cap: One figure.
+plot(1:3)
+```
+
+```{r}
+#| label: fig-two
+#| fig-cap: A group.
+#| fig-subcap:
+#|   - First.
+#|   - Second.
+#| layout-ncol: 2
+plot(1:4)
+plot((1:4)^2)
+```
+
+```{r}
+#| label: tbl-one
+#| tbl-cap: A table.
+knitr::kable(data.frame(a = 1, b = 2))
+```
+
+References: @fig-one, @fig-two, @fig-two-1, @fig-two-2, @tbl-one.

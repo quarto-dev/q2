@@ -91,7 +91,13 @@ fn select_artifact<'a>(
 
 /// Print a diagnostic as pretty text on stderr and exit non-zero.
 fn fail_human(diag: &DiagnosticMessage) -> ! {
-    eprintln!("{}", diag.to_text(None));
+    eprintln!(
+        "{}",
+        diag.to_text_with_options(
+            None,
+            &crate::commands::terminal_style::stderr_text_options()
+        )
+    );
     std::process::exit(1);
 }
 
@@ -142,7 +148,13 @@ fn run_human(
         Err(f) => fail_human(&f.0),
     };
     for warning in &resolved.warnings {
-        eprintln!("{}", warning.to_text(None));
+        eprintln!(
+            "{}",
+            warning.to_text_with_options(
+                None,
+                &crate::commands::terminal_style::stderr_text_options()
+            )
+        );
     }
     let files = match writer::execute_plan(&resolved.plan) {
         Ok(files) => files,

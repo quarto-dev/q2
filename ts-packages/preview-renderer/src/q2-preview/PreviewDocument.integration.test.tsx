@@ -95,20 +95,17 @@ describe('PreviewDocument body container', () => {
         ).not.toBeNull();
     });
 
-    it('body-classes: custom-cls → document.body.className === "custom-cls quarto-light"', () => {
-        // bd-elgxx (D6 react): mirror Rust `append_color_mode_class` —
-        // the color-mode class is appended regardless of the
-        // structural class source.
+    it('body-classes: custom-cls is added to the computed classes (GH #1218)', () => {
+        // Mirrors Rust `render_with_compiled_template`: a user
+        // `body-classes` joins `fullcontent` and the color-mode class
+        // instead of replacing them, as in Q1.
         mount({ 'body-classes': ms('custom-cls') });
-        expect(document.body.className).toBe('custom-cls quarto-light');
+        expect(document.body.className).toBe('custom-cls fullcontent quarto-light');
     });
 
-    it('body-classes: "" (empty string) still gets quarto-light', () => {
-        // bd-elgxx (D6 react): even when the structural class is empty,
-        // the color-mode class survives so theme-conditional CSS keys
-        // off `body.quarto-light` (matches the Rust template helper).
+    it('body-classes: "" (empty string) adds nothing', () => {
         mount({ 'body-classes': ms('') });
-        expect(document.body.className).toBe('quarto-light');
+        expect(document.body.className).toBe('fullcontent quarto-light');
     });
 
     it('default → document.body.className === "fullcontent quarto-light"', () => {
@@ -231,7 +228,7 @@ describe('PreviewDocument body container', () => {
     it('cleanup: unmount restores the pre-mount body.className', () => {
         document.body.className = 'pre-existing';
         const { unmount } = mount({ 'body-classes': ms('mid') });
-        expect(document.body.className).toBe('mid quarto-light');
+        expect(document.body.className).toBe('mid fullcontent quarto-light');
         unmount();
         expect(document.body.className).toBe('pre-existing');
     });
@@ -241,7 +238,7 @@ describe('PreviewDocument body container', () => {
         // `quarto-light` in their body-classes shouldn't end up with two
         // copies. Mirrors `append_color_mode_class` in template.rs.
         mount({ 'body-classes': ms('custom-cls quarto-light') });
-        expect(document.body.className).toBe('custom-cls quarto-light');
+        expect(document.body.className).toBe('custom-cls quarto-light fullcontent');
     });
 
     it('body-classes containing quarto-dark suppresses the quarto-light append', () => {
@@ -250,7 +247,7 @@ describe('PreviewDocument body container', () => {
         // treats either `quarto-light` or `quarto-dark` as a signal
         // that the color mode is already set.
         mount({ 'body-classes': ms('custom-cls quarto-dark') });
-        expect(document.body.className).toBe('custom-cls quarto-dark');
+        expect(document.body.className).toBe('custom-cls quarto-dark fullcontent');
     });
 });
 
@@ -671,8 +668,10 @@ describe('PreviewDocument chrome injection (Phase F.2)', () => {
         );
     });
 
-    it('user-set top-level body-classes still wins over sidebar-render', () => {
-        // Mirror Rust template.rs:419 — user override always wins.
+    it('user-set top-level body-classes adds to sidebar-render classes (GH #1218)', () => {
+        // Mirror Rust `render_with_compiled_template`: the sidebar's
+        // structural base, then the user's classes, then the computed
+        // layout classes, as in Q1.
         mount({
             'body-classes': ms('user-bcs'),
             rendered: metaMap([
@@ -684,9 +683,9 @@ describe('PreviewDocument chrome injection (Phase F.2)', () => {
                 },
             ]),
         });
-        // bd-elgxx (D6 react): color-mode class still appends after
-        // the user's body-classes win.
-        expect(document.body.className).toBe('user-bcs quarto-light');
+        expect(document.body.className).toBe(
+            'nav-sidebar floating user-bcs fullcontent quarto-light',
+        );
     });
 
     it('header-includes (favicon link) lands in document.head with cleanup marker', () => {

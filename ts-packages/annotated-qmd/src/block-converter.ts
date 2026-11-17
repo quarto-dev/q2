@@ -245,9 +245,16 @@ export class BlockConverter {
    */
   private convertAttr(
     attr: [string, string[], [string, string][]],
-    attrSource: { id: number | null; classes: (number | null)[]; kvs: [number | null, number | null][] }
+    attrSource: { id: number | null; classes: (number | null)[]; kvs: [number | null, number | null][] } | undefined
   ): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
+
+    // No `a` field at all: the writer synthesized this attribute (e.g. the
+    // `quarto-shortcode__` Span a shortcode becomes), so no source text backs
+    // any part of it — the same as every entry being null.
+    if (attrSource === undefined) {
+      return components;
+    }
 
     // ID
     if (attr[0] && attrSource.id !== null) {

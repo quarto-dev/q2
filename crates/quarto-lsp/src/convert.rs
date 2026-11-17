@@ -1,6 +1,6 @@
-//! Conversion between quarto-lsp-core types and tower_lsp::lsp_types.
+//! Conversion between quarto-lsp-core types and lsp-types.
 
-use tower_lsp::lsp_types::{
+use lsp_types::{
     Diagnostic as LspDiagnostic, DiagnosticSeverity as LspSeverity,
     DocumentSymbol as LspDocumentSymbol, NumberOrString, Position as LspPosition,
     Range as LspRange, SymbolKind as LspSymbolKind,

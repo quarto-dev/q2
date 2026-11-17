@@ -62,12 +62,12 @@ fn make_strong(content: Vec<Inline>) -> Inline {
 }
 
 fn make_code(text: &str) -> Inline {
-    Inline::Code(quarto_pandoc_types::inline::Code {
+    Inline::Code(Box::new(quarto_pandoc_types::inline::Code {
         text: text.to_string(),
         attr: quarto_pandoc_types::attr::Attr::default(),
         source_info: si(),
         attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 fn make_plan(alignments: Vec<InlineAlignment>) -> InlineReconciliationPlan {

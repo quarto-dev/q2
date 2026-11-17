@@ -47,10 +47,16 @@ pub async fn start_share_session(
     host: &str,
     port: u16,
     allow_edit: bool,
+    can_rerun: bool,
     announce: impl FnOnce(&str),
 ) -> Result<ShareSession, TunnelError> {
     let (ticket, handle) = TunnelHost::spawn(cfg, share_target(host, port)).await?;
-    let banner = format_share_banner(&ticket.to_string(), allow_edit, ticket.has_relay_addr());
+    let banner = format_share_banner(
+        &ticket.to_string(),
+        allow_edit,
+        ticket.has_relay_addr(),
+        can_rerun,
+    );
     announce(&banner);
     Ok(ShareSession { ticket, handle })
 }
@@ -76,6 +82,7 @@ pub fn spawn_share_task(
     host: String,
     port: u16,
     allow_edit: bool,
+    can_rerun: bool,
     mut ready: watch::Receiver<bool>,
     announce: impl FnOnce(&str) + Send + 'static,
 ) -> JoinHandle<Option<ShareSession>> {
@@ -85,7 +92,7 @@ pub fn spawn_share_task(
         if ready.wait_for(|&r| r).await.is_err() {
             return None;
         }
-        match start_share_session(cfg, &host, port, allow_edit, announce).await {
+        match start_share_session(cfg, &host, port, allow_edit, can_rerun, announce).await {
             Ok(session) => Some(session),
             Err(e) => {
                 eprintln!(
@@ -101,19 +108,35 @@ pub fn spawn_share_task(
 /// Render the share banner: capability warning + the bare
 /// `q2 preview --join …` line (last, with nothing after it, so a
 /// triple-click / drag copy survives terminal wrapping).
-pub fn format_share_banner(join_string: &str, allow_edit: bool, relay_reachable: bool) -> String {
+///
+/// `can_rerun` is whether a guest's re-execute can start an engine (`engine` is in `execute: record-sources`
+/// and `preview.engine` is not `off`); when it is not, the banner must not say guests can
+/// re-run code.
+pub fn format_share_banner(
+    join_string: &str,
+    allow_edit: bool,
+    relay_reachable: bool,
+    can_rerun: bool,
+) -> String {
     let mut banner = String::new();
     banner.push_str("Sharing this preview session (end-to-end encrypted via iroh).\n");
-    if allow_edit {
-        banner.push_str(
+    match (allow_edit, can_rerun) {
+        (true, true) => banner.push_str(
             "Anyone with the join string below can VIEW the project, RE-RUN its code\n\
              on this machine, and EDIT the project's files on disk (--allow-edit):\n",
-        );
-    } else {
-        banner.push_str(
+        ),
+        (true, false) => banner.push_str(
+            "Anyone with the join string below can VIEW the project and EDIT its files\n\
+             on disk (--allow-edit); guests cannot re-run code (no engine is enabled):\n",
+        ),
+        (false, true) => banner.push_str(
             "Anyone with the join string below can VIEW the project and RE-RUN its\n\
              code on this machine:\n",
-        );
+        ),
+        (false, false) => banner.push_str(
+            "Anyone with the join string below can VIEW the project; guests cannot re-run\n\
+             code (no engine is enabled):\n",
+        ),
     }
     if !relay_reachable {
         banner.push_str(

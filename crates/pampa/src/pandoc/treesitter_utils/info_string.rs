@@ -28,7 +28,7 @@ pub fn process_info_string(
     attr_source.classes.push(Some(lang_source.clone()));
 
     PandocNativeIntermediate::IntermediateAttr(
-        (String::new(), vec![lang_text], LinkedHashMap::new()),
+        (String::new(), vec![lang_text], LinkedHashMap::new()).into(),
         attr_source,
         lang_source,
     )

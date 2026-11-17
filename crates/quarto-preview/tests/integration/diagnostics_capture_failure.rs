@@ -80,6 +80,7 @@ async fn capture_failure_lands_in_sink() {
 
     let config = PreviewConfig {
         render: Default::default(),
+        upstream: None,
         host: "127.0.0.1".to_string(),
         port: pick_free_port(),
         project_root: Some(project.path().to_path_buf()),
@@ -88,6 +89,7 @@ async fn capture_failure_lands_in_sink() {
         spa_dir_override: None,
         engine_registry: Some(Arc::new(registry)),
         engine_policy: Default::default(),
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,

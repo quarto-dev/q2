@@ -167,6 +167,30 @@ pub fn collect_metadata_layers(inputs: &LayerInputs<'_>) -> Vec<MetadataLayer> {
     layers
 }
 
+/// The highest layer that sets the key at `path` (for example
+/// `["execute", "record-sources"]`), with the value it set.
+///
+/// This is "last one wins", not a merge: right for a scalar read before the
+/// pipeline runs. `include_runtime: false` ignores the runtime layer (`-M`,
+/// the provider overlay), for a reader that treats the runtime layer as the
+/// host's and the layers below it as a guest's.
+pub fn layered_value<'a>(
+    layers: &'a [MetadataLayer],
+    path: &[&str],
+    include_runtime: bool,
+) -> Option<(&'a ConfigValue, &'a MetadataLayer)> {
+    layers.iter().rev().find_map(|layer| {
+        if !include_runtime && layer.kind == LayerKind::Runtime {
+            return None;
+        }
+        let mut value = &layer.config;
+        for key in path {
+            value = value.get(key)?;
+        }
+        Some((value, layer))
+    })
+}
+
 /// The document layer read from source text: its leading YAML front matter
 /// as a `ConfigValue`, or an empty map when there is none or it does not
 /// parse.
@@ -454,6 +478,29 @@ mod tests {
 
     fn kinds(layers: &[MetadataLayer]) -> Vec<LayerKind> {
         layers.iter().map(|l| l.kind).collect()
+    }
+
+    #[test]
+    fn layered_value_returns_the_highest_layer_that_sets_the_path() {
+        let f = fixture();
+        let layers = collect(
+            &f,
+            "---\nexecute:\n  record-sources: q2\n---\n",
+            None,
+            None,
+            &MetaRuntime::new(Some(json!({"execute": {"record-sources": "engine"}}))),
+        );
+        let (v, layer) = layered_value(&layers, &["execute", "record-sources"], true).unwrap();
+        assert_eq!(v.as_plain_text().as_deref(), Some("engine"));
+        assert_eq!(layer.kind, LayerKind::Runtime);
+        let (v, layer) = layered_value(&layers, &["execute", "record-sources"], false).unwrap();
+        assert_eq!(v.as_plain_text().as_deref(), Some("q2"));
+        assert_eq!(layer.kind, LayerKind::Document);
+        assert!(layered_value(&layers, &["execute", "nope"], true).is_none());
+        // `probe` is set by the project and both directories; the leaf wins.
+        let (_, layer) = layered_value(&layers, &["probe"], true).unwrap();
+        assert_eq!(layer.kind, LayerKind::Directory);
+        assert_eq!(layer.base_dir, f.doc.parent().unwrap());
     }
 
     #[test]

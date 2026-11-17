@@ -1,0 +1,23 @@
+---
+title: "Typst source only: an inline-only reference is a warning"
+format:
+  typst:
+    output-ext: typ
+references:
+  - id: smith2020
+    type: webpage
+    title: A page
+_quarto:
+  tests:
+    typst:
+      noErrors: default
+      printsMessage:
+        level: WARN
+        regex: "Q-21-5"
+---
+
+bd-yjf99rzx: with `output-ext: typ` the Typst source is the output and Typst
+never runs here, so the inline-only key is reported as a warning and the
+source is still written.
+
+See [@smith2020].

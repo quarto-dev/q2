@@ -1,0 +1,44 @@
+---
+title: Julia on non-HTML targets
+engine: julia
+---
+
+```{julia}
+using Base64, Markdown
+struct Dot
+    bytes::Vector{UInt8}
+end
+Base.show(io::IO, ::MIME"image/png", d::Dot) = write(io, d.bytes)
+dot() = Dot(base64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
+nothing
+```
+
+```{julia}
+println("hello")
+```
+
+```{julia}
+#| label: fig-dot
+#| fig-cap: A one-pixel dot.
+dot()
+```
+
+```{julia}
+#| label: tbl-md
+#| tbl-cap: A small table.
+Markdown.parse("| a | b |\n|---|---|\n| 1 | 2 |")
+```
+
+```{julia}
+40 + 2
+```
+
+```{julia}
+#| label: fig-pair
+#| fig-cap: Two dots.
+#| fig-subcap: [first, second]
+display(dot())
+display(dot())
+```
+
+References: @fig-dot, @tbl-md, @fig-pair.

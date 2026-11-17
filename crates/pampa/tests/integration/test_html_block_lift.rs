@@ -929,11 +929,11 @@ fn unrelated_blocks_are_not_merged_by_the_writer() {
         })
     };
     let raw = |text: &str| {
-        Block::RawBlock(RawBlock {
+        Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: text.to_string(),
             source_info: span(),
-        })
+        }))
     };
 
     let pandoc = pampa::pandoc::Pandoc {

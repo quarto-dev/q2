@@ -1,0 +1,33 @@
+---
+title: Records knitr
+engine: knitr
+execute:
+  record: true
+---
+
+Prose paragraph one.
+
+```{r}
+print("hello from R")
+x <- 1 + 1
+x
+```
+
+```{r}
+plot(1:3, c(1, 4, 9))
+```
+
+```{r}
+message("a message")
+data.frame(a = 1:2, b = c("x", "y"))
+```
+
+```{r}
+#| results: hide
+print("hidden")
+```
+
+```{r}
+#| results: asis
+cat("**bold**\n")
+```

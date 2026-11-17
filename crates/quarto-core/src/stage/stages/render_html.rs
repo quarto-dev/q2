@@ -343,6 +343,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);

@@ -53,11 +53,7 @@ const TEST_MARKERS: &[&str] = &["npm test", "npm run test", "vitest"];
 /// Packages deliberately not gated, with the reason. Keep this list short and
 /// always name the tracking strand or issue — an entry here is a promise to
 /// come back, not a place to park work.
-pub(crate) const EXCUSED: &[(&str, &str)] = &[(
-    "@quarto/annotated-qmd",
-    "2 of 156 tests fail on a source-tracking off-by-one; tracked by bd-1d6io. \
-     Wire it in once that strand closes.",
-)];
+pub(crate) const EXCUSED: &[(&str, &str)] = &[];
 
 /// Expand the root `package.json` `workspaces` globs into package directories.
 ///

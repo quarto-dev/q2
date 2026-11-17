@@ -51,13 +51,14 @@ function isTaskMarker(inline: InlineNode | undefined): inline is InlineNode & { 
 /** `true`/`false` = task item with that checked state; `null` = not a task
  * item. Mirrors the writer's `task_item_checked`: the head block is a
  * `Plain` (tight) or `Para` (loose) whose inlines start with the marker
- * `Str` followed by `Space`. */
+ * `Str` followed by `Space`, or hold the marker `Str` alone (an empty item,
+ * `- [ ] `; bd-2ydvebkc). */
 export function taskItemChecked(item: BlockNode[]): boolean | null {
     const head = item[0] as any;
     if (!head || (head.t !== 'Plain' && head.t !== 'Para') || !Array.isArray(head.c)) return null;
     const first = head.c[0];
     if (!isTaskMarker(first)) return null;
-    if (head.c[1]?.t !== 'Space') return null;
+    if (head.c.length > 1 && head.c[1]?.t !== 'Space') return null;
     return first.c === '☒';
 }
 
@@ -71,7 +72,10 @@ export function allTaskItems(items: BlockNode[][]): boolean {
  * does not start with a task marker. Used by the head block to decide
  * whether it is the task head and what goes inside the `<label>`. */
 export function stripTaskMarker(inlines: InlineNode[]): InlineNode[] | null {
-    if (!isTaskMarker(inlines[0]) || inlines[1]?.t !== 'Space') return null;
+    if (!isTaskMarker(inlines[0])) return null;
+    // Empty item: the lone marker `Str` (bd-2ydvebkc).
+    if (inlines.length === 1) return [];
+    if (inlines[1]?.t !== 'Space') return null;
     return inlines.slice(2);
 }
 

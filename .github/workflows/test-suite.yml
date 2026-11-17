@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PANDOC_VERSION: "3.12.1"
+  PANDOC_VERSION: "3.13"
   # Typst — the Pandoc-hybrid typst leg's `L`-tier tests (typst_compile.rs)
   # require a real `typst` binary on PATH (TYPST_VERSION_FLOOR is 0.8+).
   TYPST_VERSION: "0.15.1"
@@ -91,7 +91,8 @@ jobs:
         with:
           tool: cargo-insta
 
-      # Pandoc setup (pinned to match Quarto 1.9)
+      # Pandoc setup: PANDOC_VERSION must equal PANDOC_PIN (crates/quarto-core/src/pandoc_filters/mod.rs;
+      # enforced by `cargo xtask lint` pandoc-pin). Bump procedure: dev-docs/pandoc-wasm-bump.md.
       - name: Set up Pandoc (Linux)
         if: runner.os == 'Linux'
         run: |

@@ -300,7 +300,11 @@ pub fn corpus_jobs() -> Vec<(Fixture, String)> {
         .into_iter()
         .filter(|f| only.as_ref().is_none_or(|o| f.name.contains(o.as_str())))
         .flat_map(|f| {
-            let formats = f.formats.clone();
+            // EXPERIMENT: `KNR_FORMAT=<fmt>` runs every fixture under that one format.
+            let formats = match std::env::var("KNR_FORMAT") {
+                Ok(fmt) => vec![fmt],
+                Err(_) => f.formats.clone(),
+            };
             formats.into_iter().map(move |fmt| (f.clone(), fmt))
         })
         .collect()
@@ -546,8 +550,10 @@ fn capture_include_false_and_cache_hit_shapes() {
         .find(|c| c.options.get("include").and_then(|v| v.as_bool()) == Some(false))
         .expect("an include=FALSE chunk is recorded");
     assert!(!hidden.pieces.is_empty());
-    // S4: with capture on, cache is off, so a level-3 chunk reaches the hooks and yields
-    // pieces, and the recorded option is 0 (knitr normalizes FALSE to 0).
+    // OPR-7b (reverses S4): capture no longer turns the cache off, so the recorded option is the
+    // chunk\'s own level (3). This harness gives no unit ids, so the chunk is still captured on
+    // the miss; with ids (the engine\'s path) it is noted as cached and left out of the record
+    // (`capture_tests`, `gating_tests`).
     let run =
         run_fixture_with_env(&fixture_named("s1/14_cache_level3"), "html", true, &[]).expect("run");
     let cached = run
@@ -555,6 +561,6 @@ fn capture_include_false_and_cache_hit_shapes() {
         .iter()
         .find(|c| c.options.get("cache").is_some())
         .expect("a chunk records its cache option");
-    assert_eq!(cached.options["cache"], serde_json::json!(0));
+    assert_eq!(cached.options["cache"], serde_json::json!(3));
     assert!(!cached.pieces.is_empty());
 }

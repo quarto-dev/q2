@@ -1,6 +1,6 @@
 ---
 title: "Unprocessed Highlight Markup"
-description: !str "Highlight editorial markup ({== ...}) was not desugared to a Span during postprocessing."
+description: !str "Highlight editorial markup ([!! ...]) was not desugared to a Span during postprocessing."
 code: Q-3-35
 subsystem: writer
 status: stub
@@ -11,14 +11,14 @@ categories:
 
 # `Q-3-35` — Unprocessed Highlight Markup
 
-> Highlight editorial markup `{== ...}` was not desugared to a
+> Highlight editorial markup `[!! ...]` was not desugared to a
 > Span during postprocessing.
 
 ## What this means
 
-Quarto's CriticMarkup-inspired highlight construct `{== ...}`
+Quarto's CriticMarkup-inspired highlight construct `[!! ...]`
 is parsed as a `Highlight` AST node. Postprocessing rewrites
-it as a `Span` with the `.mark` class before the writer runs.
+it as a `Span` with the `.quarto-highlight` class before the writer runs.
 This error fires when a raw `Highlight` node reaches the
 writer.
 

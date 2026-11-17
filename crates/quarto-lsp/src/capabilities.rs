@@ -1,6 +1,6 @@
 //! LSP capability negotiation.
 
-use tower_lsp::lsp_types::{
+use lsp_types::{
     OneOf, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
     TextDocumentSyncOptions,
 };
@@ -26,6 +26,16 @@ pub fn server_capabilities() -> ServerCapabilities {
 
         // Document symbols (outline)
         document_symbol_provider: Some(OneOf::Left(true)),
+
+        // Protocol extensions (epic bd-3f6ijnw9, C4): each `quarto/*`
+        // method with the version of its wire schema. Clients check this
+        // before sending them.
+        experimental: Some(serde_json::json!({
+            "quarto": {
+                "documentProfile": quarto_lsp_project::wire::WIRE_SCHEMA_VERSION,
+                "documentMetadata": quarto_lsp_project::wire::WIRE_SCHEMA_VERSION,
+            }
+        })),
 
         // Features to be added in future phases:
         // hover_provider: Some(HoverProviderCapability::Simple(true)),

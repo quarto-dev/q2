@@ -23,6 +23,7 @@ function makeState(overrides: Partial<ReplayState> = {}): ReplayState {
     isPlaying: false,
     playbackSpeed: 1,
     currentContent: '',
+    currentHeads: null,
     timestamp: null,
     actor: null,
     chunkActors: [],
@@ -85,6 +86,7 @@ describe('ReplayDrawer', () => {
       historyLength: 100,
       currentIndex: 42,
       currentContent: 'hello',
+      currentHeads: null,
       timestamp: 1710000000,
       actor: 'abcdef0123456789abcdef0123456789',
       chunkActors: Array.from({ length: 10 }, () => [{ actor: 'abcdef0123456789abcdef0123456789', fraction: 1 }]),
@@ -142,6 +144,24 @@ describe('ReplayDrawer', () => {
       expect(screen.getByText('Alice')).toBeDefined();
     });
 
+    it('truncates long actor names and exposes the full name in a tooltip', async () => {
+      const longName = 'A'.repeat(100);
+      const identities = {
+        'abcdef0123456789abcdef0123456789': { name: longName, color: '#E91E63' },
+      };
+      render(<ReplayDrawer state={activeState} controls={controls} identities={identities} />);
+
+      const actorName = screen.getByText(longName);
+      expect(actorName.className).toContain('qh-truncate');
+
+      const { readFileSync } = await import('node:fs');
+      const styles = readFileSync('src/components/ReplayDrawer.css', 'utf8');
+      expect(styles).toMatch(/\.replay-drawer__actor\s*\{[^}]*min-width:\s*0;/s);
+
+      fireEvent.focus(actorName.closest('.replay-drawer__actor')!);
+      expect(screen.getByRole('tooltip').textContent).toBe(longName);
+    });
+
     it('renders truncated hex when identity is not in map', () => {
       const identities = { 'otheractor': { name: 'Bob', color: '#4CAF50' } };
       render(<ReplayDrawer state={activeState} controls={controls} identities={identities} />);
@@ -152,7 +172,7 @@ describe('ReplayDrawer', () => {
       mockAuthorId = 'abcdef0123456789abcdef0123456789';
       const identities = { 'abcdef0123456789abcdef0123456789': { name: 'Alice', color: '#E91E63' } };
       render(<ReplayDrawer state={activeState} controls={controls} identities={identities} />);
-      const actorEl = screen.getByText('Alice');
+      const actorEl = screen.getByText('Alice').closest('.replay-drawer__actor')!;
       expect(actorEl.className).toContain('replay-drawer__actor--me');
     });
 
@@ -160,14 +180,14 @@ describe('ReplayDrawer', () => {
       mockAuthorId = 'different0123456789abcdef01234567';
       const identities = { 'abcdef0123456789abcdef0123456789': { name: 'Alice', color: '#E91E63' } };
       render(<ReplayDrawer state={activeState} controls={controls} identities={identities} />);
-      const actorEl = screen.getByText('Alice');
+      const actorEl = screen.getByText('Alice').closest('.replay-drawer__actor')!;
       expect(actorEl.className).not.toContain('replay-drawer__actor--me');
     });
 
     it('applies --me CSS class with truncated hex when no identity', () => {
       mockAuthorId = 'abcdef0123456789abcdef0123456789';
       render(<ReplayDrawer state={activeState} controls={controls} />);
-      const actorEl = screen.getByText('abcdef01');
+      const actorEl = screen.getByText('abcdef01').closest('.replay-drawer__actor')!;
       expect(actorEl.className).toContain('replay-drawer__actor--me');
     });
 
@@ -205,6 +225,7 @@ describe('ReplayDrawer', () => {
           historyLength: 4,
           currentIndex: 3,
           currentContent: 'hello',
+          currentHeads: null,
           timestamp: 1710000000,
           actor: KEY,
           chunkActors: [
@@ -229,7 +250,7 @@ describe('ReplayDrawer', () => {
         }
 
         // The current step highlights as "me" with the shared identity name.
-        const actorEl = screen.getByText('Alice');
+        const actorEl = screen.getByText('Alice').closest('.replay-drawer__actor')!;
         expect(actorEl.className).toContain('replay-drawer__actor--me');
       });
     });
@@ -325,6 +346,7 @@ describe('ReplayDrawer', () => {
       historyLength: 5,
       currentIndex: 2,
       currentContent: 'hello',
+      currentHeads: null,
       timestamp: null,
       actor: null,
     });
@@ -354,6 +376,7 @@ describe('ReplayDrawer', () => {
       historyLength: 100,
       currentIndex: 42,
       currentContent: 'hello',
+      currentHeads: null,
       timestamp: 1710000000,
       actor: 'abcdef0123456789abcdef0123456789',
       chunkActors: Array.from({ length: 10 }, () => [{ actor: 'abcdef0123456789abcdef0123456789', fraction: 1 }]),
@@ -440,6 +463,7 @@ describe('ReplayDrawer', () => {
       historyLength: 100,
       currentIndex: 42,
       currentContent: 'hello',
+      currentHeads: null,
       chunkActors: [],
     });
 
@@ -484,6 +508,7 @@ describe('ReplayDrawer', () => {
       historyLength: 100,
       currentIndex: 50,
       currentContent: 'test',
+      currentHeads: null,
       chunkActors: Array.from({ length: 10 }, () => [{ actor: 'actor1', fraction: 1 }]),
     });
 
@@ -543,6 +568,7 @@ describe('ReplayDrawer', () => {
         historyLength: 100,
         currentIndex: 42,
         currentContent: 'hello',
+        currentHeads: null,
         timestamp: 1710000000,
         actor: 'abcdef0123456789abcdef0123456789',
         chunkActors: [],
@@ -745,6 +771,7 @@ describe('ReplayDrawer', () => {
         historyLength: 100,
         currentIndex: 42,
         currentContent: 'hello',
+        currentHeads: null,
         timestamp: 1710000000,
         actor: 'abcdef0123456789abcdef0123456789',
         chunkActors: [],

@@ -84,14 +84,17 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
    `classify.rs` must learn the new MIME or orphaned records leak. Immutable
    gzipped blob, not structured automerge (single writer, history bloat). One
    `CaptureRef` per path points at a legacy capture or a record, never both;
-   old docs are never rewritten. **Readers ship one release before writers.**
+   old docs are never rewritten. **Readers ship before writers, per writer and reader pair:** a writer may flip once every reader of the store it writes can parse a record. For the local preview, whose writer and reader are one binary, that is the first release that carries the reader; for a hosted hub it is the deployed `q2_ref`. See the records-in-use epic, decision 2 (2026-11-06). The per-surface gate, its rollback and the stranding table are in [the release runbook](../instructions/release-runbook.md#engine-record-writer-gate-exr-13b-riu-1).
    Upgrade path kept open: content-addressed figure docs for single-cell runs.
 5. **Engine API scope.** Julia and marimo are in. New wire fields are optional
    and versioned; the Quarto API is not published to npm (bd-ixz93hjp, retitled
    2026-10-28: the packages go to npm, not JSR) until Jupyter, Julia and knitr
    have exercised the contract. The Rust presenter is the long-term single
-   presenter; Julia stays presented by the TS `toMarkdown` until a parity suite
-   shows they match.
+   presenter; Julia stayed presented by the TS `toMarkdown` until a parity suite
+   showed they match. **Done:** the parity suite landed (EXR-8 B3) and Julia flipped to core
+   presentation on 2026-11-01 (`b4d827186`; `core_presents` in `engine/ts_record.rs`: Julia, with a
+   record wanted and a non-empty unit list). The TS `toMarkdown` path still runs when either condition
+   fails.
 6. **knitr stores rendered chunk markdown, in this epic.** `text/x-quarto-markdown`
    as a `display_data` output plus files. Structured outputs (the old K3) are
    not part of this epic: the design here assumed they would require knitr to
@@ -122,7 +125,8 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
    stays keyed by `sha256(input_qmd)` until freeze: a hit there skips
    execution, which is reuse. Staleness is advisory and drives only a
    user-edit-triggered re-execution in preview; nothing in this epic skips
-   execution on a hit. Intended, user-visible consequence: a prose-only edit no
+   execution on a record's staleness. (The records-in-use epic later adds reuse of a record file, bounded by a
+   staleness check at choice; its decision 3.) Intended, user-visible consequence: a prose-only edit no
    longer flips staleness or auto re-executes a record (it also fixes the second
    symptom of bd-n1vmlalw). The hash is overlay-free (`provide-hub -M`, as the
    F8-D9 rewrite does today); the record also stores the overlay's
@@ -385,7 +389,7 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
     on one matching cell hash. Plans: EXR-4, EXR-16.
 40. **The scanner reports what the legacy executor skips (EXR-2).** `CellUnit` carries
     `indent`, `container_prefix`, `fence_len` and `attr_tail`; one quarantined function,
-    `runs_in_legacy_executor`, holds today\'s executor rule. It is not deleted by this epic: it retires when the strands that decide the executor\'s skipped cells (bd-9j6z311f, bd-rh4cce9e, bd-7gvl455a) are each decided.
+    `runs_in_legacy_executor`, holds today\'s executor rule. It is not deleted by this epic: it retires when the strands that decide the executor\'s skipped cells (bd-9j6z311f, bd-rh4cce9e, bd-7gvl455a) are each decided. (The opener-length skip, which no strand owned, was decided by bd-f63cqoke on 2026-11-11: any opener of three or more backticks runs.)
     Phase 0 pins the executor\'s quirks, a Phase 4 test shows the scanner filtered by it
     equals `parse_code_blocks`, and the mask\'s inline pattern is widened to the shared
     token class (a deliberate mask behavior change, consistent with decision 13). Plan:
@@ -741,7 +745,7 @@ Notified: <lanes messaged at a gate merge, and any lane not found> | none
 2. **Presenter parity.** The Rust presenter and the TS `toMarkdown` both turn
    nbformat into markdown. Golden tests on existing fixtures before anything
    builds on the extraction (EXR-1); a Julia parity suite before Julia flips
-   (EXR-8). Keep the `.cell` wrapper shape until the legacy splice retires
+   (EXR-8; both done, the flip is `b4d827186`, 2026-11-01). Keep the `.cell` wrapper shape until the legacy splice retires
    (`2026-07-01-bd-gthycd33-jupyter-cell-wrapper.md`).
 3. **Hub schema transition.** Deployed docs, admin tooling and guests: readers
    first; old docs untouched; `classify.rs` updated.

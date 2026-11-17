@@ -31,6 +31,9 @@
   const authorPrefersDark = script.dataset.authorPrefersDark === "true";
   const respectUserColorScheme =
     script.dataset.respectUserColorScheme === "true";
+  // Localized `toggle-dark-mode` term, naming the floating fallback
+  // toggle (bd-kwgtllvn). Absent on hand-built pages → English.
+  const toggleLabel = script.dataset.toggleLabel || "Toggle dark mode";
 
   const isFileUrl = () => window.location.protocol === "file:";
 
@@ -90,6 +93,11 @@
       ".quarto-color-scheme-toggle"
     );
     for (let i = 0; i < toggles.length; i++) {
+      // Every toggle is a `role="switch"` (Q1 #14739, bd-kwgtllvn): its
+      // checked state is the dark (alternate) mode, so assistive tech
+      // announces the state, which the `.alternate` icon swap alone
+      // never reached.
+      toggles[i].setAttribute("aria-checked", alternate ? "true" : "false");
       if (alternate) {
         toggles[i].classList.add("alternate");
       } else {
@@ -198,22 +206,58 @@
   toggleColorMode(hasAlternateSentinel());
 
   // Documents without a navbar/sidebar toggle get a floating one
-  // (Q1's after-body fallback).
+  // (Q1's after-body fallback, as of quarto-cli #14739 / bd-kwgtllvn).
   window.document.addEventListener("DOMContentLoaded", () => {
-    let toggle = window.document.querySelector(".quarto-color-scheme-toggle");
-    if (!toggle) {
-      toggle = window.document.createElement("a");
-      toggle.href = "";
+    if (!window.document.querySelector(".quarto-color-scheme-toggle")) {
+      const toggle = window.document.createElement("button");
+      toggle.type = "button";
+      toggle.setAttribute("role", "switch");
+      toggle.setAttribute("aria-checked", "false");
+      toggle.className = "top-right quarto-color-scheme-toggle";
+      toggle.setAttribute("aria-label", toggleLabel);
       toggle.setAttribute(
         "onclick",
         "window.quartoToggleColorScheme(); return false;"
       );
-      toggle.className = "top-right quarto-color-scheme-toggle";
-      toggle.title = "Toggle dark mode";
       const icon = window.document.createElement("i");
       icon.className = "bi";
       toggle.appendChild(icon);
-      window.document.body.appendChild(toggle);
+
+      // Put the toggle in a landmark of its own, so that landmark
+      // navigation can reach it.
+      //
+      // The container is always a fresh direct child of body: the
+      // toggle is positioned against the page, and any ancestor that
+      // establishes a containing block (a positioned element or grid,
+      // or a transform/filter/will-change/contain) would silently
+      // capture it.
+      //
+      // ARIA allows at most one banner per document (axe flags a
+      // duplicate even when labelled), so use a header only when the
+      // page has no banner yet, and a named region otherwise. A header
+      // is a banner wherever it sits unless it is inside sectioning
+      // content — so this can't just look at body's children (a custom
+      // layout wraps the title-block header in a plain div). An explicit
+      // role="banner" always counts.
+      const sectioning =
+        'article, aside, main, nav, section, [role="article"], ' +
+        '[role="complementary"], [role="main"], [role="navigation"], ' +
+        '[role="region"]';
+      const hasBanner = Array.from(
+        window.document.querySelectorAll('header:not([role]), [role="banner"]')
+      ).some(
+        (el) => el.hasAttribute("role") || el.closest(sectioning) === null
+      );
+      const container = window.document.createElement(
+        hasBanner ? "div" : "header"
+      );
+      if (hasBanner) {
+        container.setAttribute("role", "region");
+        container.setAttribute("aria-label", toggleLabel);
+      }
+      container.className = "quarto-color-scheme-toggle-container";
+      container.appendChild(toggle);
+      window.document.body.appendChild(container);
     }
     setColorSchemeToggle(hasAlternateSentinel());
   });

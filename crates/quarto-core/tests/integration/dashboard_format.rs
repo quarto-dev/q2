@@ -144,6 +144,12 @@ fn dashboard_theme_css_carries_bslib_and_dashboard_layers() {
     assert!(css.contains(".bslib-value-box"), "bslib value box rules");
     assert!(css.contains(".html-fill-container"), "htmltools fill rules");
     assert!(css.contains(".quarto-dashboard"), "dashboard layer rules");
+    // bd-65ja3het: the dashboard layer's SVG icon fills use `colorToRGB()`,
+    // which must evaluate rather than land in the CSS verbatim.
+    assert!(
+        !css.contains("colorToRGB("),
+        "colorToRGB() left unevaluated"
+    );
 
     let temp = tempfile::TempDir::new().unwrap();
     write(

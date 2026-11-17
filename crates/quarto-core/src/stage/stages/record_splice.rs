@@ -29,23 +29,17 @@ use std::path::Path;
 use quarto_source_map::{FileId, SourceInfo};
 use serde_json::Value;
 
-use crate::cell_options::partition_cell_options;
 use crate::engine::units::Unit;
-use crate::presenter::cell::render_cell_with;
-use crate::presenter::expansion::{render_expanded_unit, split_expansions};
+use crate::presenter::document::{Edit, PresentInput, UnitOutcome, apply_edits, present_units};
 use crate::presenter::figures::{FigureSink, RuntimeFigureSink};
-use crate::presenter::inline::{InlineTarget, render_inline};
-use crate::presenter::knitr_inputs::{knitr_header_options, original_chunk, present_knitr_cell};
-use crate::presenter::options::CellOptions;
-use crate::presenter::output::{CellOutput, CellResult};
-use crate::presenter::visibility::{CellVisibility, resolve_cell_options};
+use crate::presenter::inline::InlineTarget;
 use crate::record::{
     EngineEntry, Record, UnitKey, UnitKind, UnitLocation, UnitStaleness, lost_header_keys,
-    match_units, replacement, stored_markdown,
+    match_units,
 };
 use crate::stage::data::DocumentAst;
 use crate::stage::stages::engine_execution::{
-    merge_execute_scope, merge_markdown_into_ast, scan_and_fill_ids, serialize_ast_to_qmd,
+    merge_execute_scope, merge_markdown_into_ast_with_slot, scan_and_fill_ids, serialize_ast_to_qmd,
 };
 use crate::stage::{EventLevel, StageContext};
 use crate::trace_event;
@@ -94,18 +88,70 @@ fn unit_id(unit: &Unit) -> String {
 }
 
 /// Splice `record` into `doc`. `doc_dir` is where figure and supporting files are written.
+/// The spliced output is stamped (see [`stamp_spliced_output`]).
 pub(crate) fn splice_record(
     doc: DocumentAst,
     record: &Record,
     ctx: &mut StageContext,
     doc_dir: &Path,
 ) -> (DocumentAst, SpliceReport) {
-    let (mut doc, report) = splice_units(doc, record, ctx, doc_dir);
-    // After the merge: reconciling against the reparsed text takes its meta, which would drop
-    // anything folded earlier. Includes must reach the pane even when no unit splices.
+    splice_record_with(doc, record, ctx, doc_dir, stamp_by_default())
+}
+
+/// [`splice_record`] with an explicit switch for the stamping post-walk. A test seam: no flag,
+/// setting or environment variable reaches it, so the stamp is always on in a real render.
+pub(crate) fn splice_record_with(
+    doc: DocumentAst,
+    record: &Record,
+    ctx: &mut StageContext,
+    doc_dir: &Path,
+    stamp: bool,
+) -> (DocumentAst, SpliceReport) {
+    // Derived at present time from every cell of the record, as render does, and never stored.
+    let page_deps = crate::presenter::page_dependencies::page_dependencies(
+        &record.cells,
+        &record.metadata.quarto_engines,
+        &ctx.format.identifier.to_string(),
+    );
+    let (mut doc, report) = splice_units(doc, record, ctx, doc_dir, stamp, &page_deps);
+    // Includes must reach the pane even when no unit splices, so they are folded here rather
+    // than by the merge. (Before bd-8svy3p89's metadata reconcile the merge replaced the meta
+    // with the reparsed text's, which also dropped anything folded earlier.)
     fold_includes(record, &mut doc);
+    // After the stored entries, which are never deduplicated; the derived head text is deduplicated
+    // within `page_dependencies`.
+    super::include_resolve::append_pandoc_includes(
+        &mut doc.ast.meta,
+        &crate::stage::data::PandocIncludes {
+            header_includes: page_deps.header_includes.clone(),
+            ..Default::default()
+        },
+    );
     fold_warnings(record, ctx);
     (doc, report)
+}
+
+thread_local! {
+    /// Set only by [`with_stamp_switch`], which exists under test.
+    static STAMP_OFF: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The stamp is always on outside tests. Under test, [`with_stamp_switch`] can turn it off
+/// for the calling thread, so tests that render the same document with the stamp on and off
+/// cannot disturb each other.
+fn stamp_by_default() -> bool {
+    !(cfg!(test) && STAMP_OFF.with(std::cell::Cell::get))
+}
+
+/// Run `f` with the default stamp switch set to `stamp`, on this thread only. The splice runs
+/// on the calling thread in a current-thread runtime, which is how the render-invariance test
+/// reaches it through the whole pipeline.
+#[cfg(test)]
+fn with_stamp_switch<T>(stamp: bool, f: impl FnOnce() -> T) -> T {
+    let previous = STAMP_OFF.with(|c| c.replace(!stamp));
+    let out = f();
+    STAMP_OFF.with(|c| c.set(previous));
+    out
 }
 
 fn splice_units(
@@ -113,6 +159,8 @@ fn splice_units(
     record: &Record,
     ctx: &mut StageContext,
     doc_dir: &Path,
+    stamp: bool,
+    page_deps: &crate::presenter::page_dependencies::PageDependencies,
 ) -> (DocumentAst, SpliceReport) {
     let format = ctx.format.identifier.to_string();
 
@@ -158,13 +206,7 @@ fn splice_units(
                 })
                 // No owning engine, or options that do not parse: the unit can match by
                 // content hash only.
-                .unwrap_or_else(|| UnitKey {
-                    kind,
-                    exec_hash: String::new(),
-                    content_hash: text.content_hash.clone(),
-                    alt_exec_hashes: Vec::new(),
-                    header_keys: None,
-                })
+                .unwrap_or_else(|| UnitKey::content_only(kind, &text.content_hash))
         })
         .collect();
     let mut matching = match_units(&keys, &record.cells);
@@ -191,49 +233,70 @@ fn splice_units(
     // 4. Present and substitute.
     let doc_scope =
         merge_execute_scope(ctx.format.identifier, doc.ast.meta.get("execute").cloned());
-    let mut fig: Box<dyn FigureSink> = Box::new(RuntimeFigureSink::new(
-        ctx.runtime.clone(),
-        &doc_dir.join(doc.path.file_name().unwrap_or_default()),
-    ));
-    let target = InlineTarget::from_format(&format);
-    let mut edits: Vec<(usize, usize, String)> = Vec::new();
-    for (i, unit) in units.iter().enumerate() {
-        let Some(cell_index) = matching.assignment[i] else {
-            continue;
-        };
-        let cell = &record.cells[cell_index];
-        if matches!(unit, Unit::Inline(u) if u.in_front_matter)
-            || cell.metadata.quarto_location == Some(UnitLocation::Metadata)
+    let mut fig: Box<dyn FigureSink> = Box::new(
+        RuntimeFigureSink::new(
+            ctx.runtime.clone(),
+            &doc_dir.join(doc.path.file_name().unwrap_or_default()),
+        )
+        .with_format(&format),
+    );
+    // The pairs the splice presents: a matched unit, except a cell recorded for the metadata.
+    let matched: Vec<(usize, &crate::record::RecordCell)> = matching
+        .assignment
+        .iter()
+        .enumerate()
+        .filter_map(|(i, a)| a.map(|ci| (i, &record.cells[ci])))
+        .filter(|(_, cell)| cell.metadata.quarto_location != Some(UnitLocation::Metadata))
+        .collect();
+    let input = PresentInput {
+        text: &qmd,
+        units: &units,
+        author_texts: &texts,
+        scope: doc_scope.as_ref(),
+        target: InlineTarget::from_format(&format),
+        format: &format,
+        engines: &record.metadata.quarto_engines,
+        page_deps,
+    };
+    // The splice keeps the source on every skip and every error, and ignores a front-matter span.
+    let mut edits: Vec<Edit> = Vec::new();
+    let mut edit_units: Vec<usize> = Vec::new();
+    for report in present_units(&input, &matched, fig.as_mut()) {
+        if let UnitOutcome::Replace(edit) = report.outcome
+            && !edit.front_matter
         {
-            continue;
-        }
-        let markdown = match unit {
-            Unit::Cell(_) => {
-                fig.begin_cell();
-                present_cell(
-                    unit,
-                    &texts.0[i].text,
-                    cell,
-                    doc_scope.as_ref(),
-                    fig.as_mut(),
-                    &format,
-                    engine_entry_for(record, cell),
-                )
-            }
-            Unit::Inline(_) => present_span(cell, target),
-        };
-        if let Some(markdown) = markdown {
-            edits.push(replacement(unit, &qmd, &markdown));
+            edit_units.push(report.unit);
+            edits.push(edit);
         }
     }
     if edits.is_empty() {
         return (doc, report);
     }
 
-    let mut text = qmd;
-    edits.sort_by_key(|e| e.0);
-    for (start, end, replaced) in edits.into_iter().rev() {
-        text.replace_range(start..end, &replaced);
+    // The text before the edits is the baseline for the metadata
+    // reconcile: splice never edits front matter, so every value should
+    // come back as it was (bd-8svy3p89).
+    let baseline = crate::engine::nested_cell_mask::unmask(&qmd);
+    // Where each unit's presented markdown lands in the final text, before the unmask.
+    let unit_ids_by_start: std::collections::HashMap<usize, String> = edits
+        .iter()
+        .zip(&edit_units)
+        .map(|(edit, &u)| (edit.start, unit_id(&units[u])))
+        .collect();
+    let (text, sorted, ranges) = apply_edits(&qmd, edits);
+    let mut spans: Vec<StampSpan> = sorted
+        .iter()
+        .zip(ranges)
+        .map(|(edit, range)| StampSpan {
+            start: range.start,
+            end: range.end,
+            unit: unit_ids_by_start[&edit.start].clone(),
+        })
+        .collect();
+    // Unmasking changes lengths outside the units too; carry each span through it.
+    for span in &mut spans {
+        span.start = crate::engine::nested_cell_mask::unmask(&text[..span.start]).len();
+        span.end = crate::engine::nested_cell_mask::unmask(&text[..span.end]).len();
     }
     let text = crate::engine::nested_cell_mask::unmask(&text);
 
@@ -252,10 +315,20 @@ fn splice_units(
         mut warnings,
         recorded_includes,
         derived_listing,
+        authored_meta,
     } = doc;
     let fallback = ast.clone();
-    match merge_markdown_into_ast(ast, &mut ast_context, &text, intermediate) {
-        Ok((merged, parse_warnings, _plan)) => {
+    match merge_markdown_into_ast_with_slot(ast, &mut ast_context, &baseline, &text, intermediate) {
+        Ok((mut merged, parse_warnings, _plan, slot)) => {
+            if stamp {
+                let source = record
+                    .metadata
+                    .extra
+                    .get("quarto_provenance")
+                    .and_then(Value::as_str)
+                    .unwrap_or("engine");
+                stamp_spliced_output(&mut merged, slot, &spans, source);
+            }
             warnings.extend(parse_warnings);
             doc = DocumentAst {
                 path,
@@ -265,6 +338,7 @@ fn splice_units(
                 warnings,
                 recorded_includes,
                 derived_listing,
+                authored_meta,
             };
         }
         Err(_) => {
@@ -281,107 +355,79 @@ fn splice_units(
                 warnings,
                 recorded_includes,
                 derived_listing,
+                authored_meta,
             };
         }
     }
     (doc, report)
 }
 
-/// A record cell's stored nbformat outputs as the kernel result shape [`render_cell_with`] consumes.
-fn stored_result_for_cell(cell: &Value) -> CellResult {
-    let outputs = cell
-        .get("outputs")
-        .and_then(|v| v.as_array())
-        .map_or(&[][..], Vec::as_slice);
-    CellResult::from_nbformat(
-        outputs,
-        cell.get("execution_count").and_then(|v| v.as_u64()),
-    )
+/// A unit's presented markdown, as a byte range of the reparsed text.
+#[derive(Debug, Clone)]
+struct StampSpan {
+    start: usize,
+    end: usize,
+    unit: String,
 }
 
-/// A fenced cell: stored markdown is placed as it is; anything else is presented with the
-/// current cell's options layered over the document scope.
-fn present_cell(
-    unit: &Unit,
-    author_text: &str,
-    cell: &crate::record::RecordCell,
-    doc_scope: Option<&quarto_pandoc_types::ConfigValue>,
-    fig: &mut dyn FigureSink,
-    format: &str,
-    engine: Option<&crate::record::EngineEntry>,
-) -> Option<String> {
-    if let Some((markdown, stored_format)) = stored_markdown(cell) {
-        return (stored_format.as_deref() == Some(format)).then_some(markdown);
-    }
-    let lang = unit.lang();
-    let body_source = SourceInfo::original(FileId(0), 0, author_text.len());
-    let partitioned = partition_cell_options(lang, author_text, body_source).ok()?;
-    let partitioned_options = partitioned.options.clone();
-    let resolved = resolve_cell_options(doc_scope, partitioned.options);
-    let visibility = CellVisibility::resolve(resolved.as_ref());
-    let options = CellOptions::from_config(resolved.as_ref());
-    if let Some(expansions) = split_expansions(&cell.outputs) {
-        // An expanded cell: the author's cell, then one cell per expansion, each with its
-        // own options.
-        return render_expanded_unit(
-            lang,
-            &partitioned.code,
-            &options,
-            visibility,
-            &expansions,
-            doc_scope,
-            fig,
-        )
-        .ok();
-    }
-    // A structured knitr cell is read by the shared reader; any other cell presents as it
-    // always did.
-    if let Unit::Cell(u) = unit {
-        let header = knitr_header_options(partitioned_options);
-        let (info, lines) = original_chunk(&u.lang, &u.attr_tail, author_text);
-        if let Some(markdown) = present_knitr_cell(
-            lang,
-            &partitioned.code,
-            cell,
-            engine,
-            header.as_ref(),
-            (&info, &lines),
-            fig,
+/// The kind of every stamped node: `quarto-source-map`'s `jupyter-output`, which is atomic
+/// (output is regenerated or imported, never edited in place; provenance contract section 7).
+/// The name says "jupyter" for a Julia, knitr or Positron record too; `data.source` carries the
+/// real origin.
+fn record_output_by(source: &str, unit: &str) -> quarto_source_map::By {
+    let mut by = quarto_source_map::By::jupyter_output();
+    by.data = serde_json::json!({ "source": source, "unit": unit });
+    by
+}
+
+/// Mark every node the reparse produced inside a unit's span as
+/// `SourceInfo::Generated { from: [], by: jupyter-output }` with `data = {source, unit}`.
+///
+/// A node is spliced output when its source info resolves into `slot` (the file the reparse
+/// registered; reconcile keeps the document's own nodes under the document's file id, so prose,
+/// stale cells and unmatched units are never touched) and its range lies inside one span. A
+/// `Str` is stamped when it merely overlaps a span, because the reparse merges a value with the
+/// adjacent prose characters (`v1` and `.` become `Str("v1.")`).
+///
+/// Never stamped: a `CodeBlock` (the copy-button decoration is keyed on its `Original` range,
+/// `CodeBlockDecorationKey::from_source_info`) and a `Header` (the heading-id step treats a
+/// `Generated` header as having a deliberate id; epic decision 9). Attribute, target and
+/// metadata source info are not nodes and are left alone.
+///
+/// An interim measure: when engines return provenance for the nodes they produce, this
+/// post-walk goes away.
+fn stamp_spliced_output(
+    ast: &mut quarto_pandoc_types::Pandoc,
+    slot: FileId,
+    spans: &[StampSpan],
+    source: &str,
+) {
+    use quarto_ast_reconcile::SourceRole;
+    quarto_ast_reconcile::walk_source_infos(ast, &mut |si: &mut SourceInfo, role| {
+        if matches!(
+            role,
+            SourceRole::CodeBlock | SourceRole::Header | SourceRole::Ancillary | SourceRole::Meta
         ) {
-            return Some(markdown);
+            return;
         }
-    }
-    let result = stored_result_for_cell(&serde_json::to_value(cell).ok()?);
-    Some(render_cell_with(
-        lang,
-        &partitioned.code,
-        &result,
-        &options,
-        fig,
-        visibility,
-    ))
-}
-
-/// The engine entry that ran `cell`: the one its `quarto_engine` names, else the only one.
-fn engine_entry_for<'a>(
-    record: &'a crate::record::Record,
-    cell: &crate::record::RecordCell,
-) -> Option<&'a crate::record::EngineEntry> {
-    let engines = &record.metadata.quarto_engines;
-    match cell.metadata.quarto_engine.as_deref() {
-        Some(name) => engines.iter().find(|e| e.name == name),
-        None => (engines.len() == 1).then(|| &engines[0]),
-    }
-}
-
-/// A span: its first output that carries data, as an inline value. `None` keeps the source.
-fn present_span(cell: &crate::record::RecordCell, target: InlineTarget) -> Option<String> {
-    let result = stored_result_for_cell(&serde_json::to_value(cell).ok()?);
-    let bundle = result.outputs.iter().find_map(|o| match o {
-        CellOutput::ExecuteResult { data, .. } | CellOutput::DisplayData { data, .. } => Some(data),
-        _ => None,
-    })?;
-    render_inline(bundle, target).filter(|s| !s.is_empty())
+        if si.root_file_id() != Some(slot) {
+            return;
+        }
+        let Some(range) = si.preimage_in(slot) else {
+            return;
+        };
+        let is_str = role == SourceRole::Str;
+        let hit = spans.iter().find(|sp| {
+            if is_str {
+                range.start < sp.end && range.end > sp.start
+            } else {
+                range.start >= sp.start && range.end <= sp.end
+            }
+        });
+        if let Some(span) = hit {
+            *si = SourceInfo::generated(record_output_by(source, &span.unit));
+        }
+    });
 }
 
 /// Write the record's embedded files beside the document.
@@ -469,6 +515,7 @@ mod tests {
             warnings,
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         }
     }
 
@@ -579,6 +626,25 @@ mod tests {
 
     fn three_cells() -> Record {
         record_of(THREE, |i| Some(stdout(&format!("out{i}\n"))))
+    }
+
+    /// bd-8svy3p89: splicing re-reads the document through the same
+    /// metadata round-trip as a live engine run, and never edits front
+    /// matter, so the metadata comes back exactly as it was. A marked path
+    /// with two underscores used to come back as emphasis (GH #1152).
+    #[test]
+    fn splice_keeps_the_metadata_as_it_was() {
+        let mut doc = parse(THREE);
+        let theme = quarto_pandoc_types::ConfigValue::new_path(
+            "_extensions/a/_b.scss".into(),
+            quarto_source_map::SourceInfo::original(quarto_source_map::FileId(77), 3, 9),
+        );
+        doc.ast.meta.insert_path(&["theme"], theme.clone());
+        let before = doc.ast.meta.clone();
+        let (doc, _) = splice_record(doc, &three_cells(), &mut ctx(), Path::new("/project"));
+        assert!(text_of(&doc).contains("out0"), "the splice happened");
+        assert_eq!(doc.ast.meta.get("theme"), Some(&theme));
+        assert_eq!(doc.ast.meta, before);
     }
 
     #[test]
@@ -1213,13 +1279,18 @@ mod tests {
         fixture::apply(&mut record.cells[0]);
         record.metadata.quarto_engines[0].known_options =
             Some(fixture::KNOWN.iter().map(|s| s.to_string()).collect());
+        // knitr declares that it interleaves; the fixture's anchors are only used then.
+        record.metadata.quarto_engines[0].interleaves_output = true;
         let (text, report) = splice_in(Format::html(), fixture::SOURCE, &record);
         assert_eq!(report.units[0].1, UnitStaleness::Fresh, "{text}");
         fixture::assert_rich(&text);
     }
 
     mod layering;
+    mod opr_pinning;
     mod option_sweep;
+    mod page_dependencies;
+    mod stamp;
 
     const MIXED: &str =
         "```{r}\n#| echo: true\nx <- 1\nx\n```\n\n```{r}\n#| echo: true\ny <- 2\ny\n```\n";

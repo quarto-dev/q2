@@ -1398,12 +1398,12 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                         // Create attr with nocase class: (id, classes, attrs)
                         let mut attr = empty_attr();
                         attr.1.push("nocase".to_string());
-                        vec![Inline::Span(Span {
+                        vec![Inline::Span(Box::new(Span {
                             attr,
                             content: inner,
                             source_info: empty_source_info(),
                             attr_source: empty_attr_source(),
-                        })]
+                        }))]
                     }
                 }
                 Tag::NoDecoration => {
@@ -1413,12 +1413,12 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                     } else {
                         let mut attr = empty_attr();
                         attr.1.push("nodecoration".to_string());
-                        vec![Inline::Span(Span {
+                        vec![Inline::Span(Box::new(Span {
                             attr,
                             content: inner,
                             source_info: empty_source_info(),
                             attr_source: empty_attr_source(),
-                        })]
+                        }))]
                     }
                 }
                 _ => inner,
@@ -1429,14 +1429,14 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
             if content.is_empty() {
                 vec![]
             } else {
-                vec![Inline::Link(Link {
+                vec![Inline::Link(Box::new(Link {
                     attr: empty_attr(),
                     content,
                     target: (url.clone(), String::new()),
                     source_info: empty_source_info(),
                     attr_source: empty_attr_source(),
                     target_source: empty_target_source(),
-                })]
+                }))]
             }
         }
         Output::InNote(child) => {
@@ -1580,11 +1580,11 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
 
             // 8. Apply quotes
             if formatting.quotes {
-                inner = vec![Inline::Quoted(Quoted {
+                inner = vec![Inline::Quoted(Box::new(Quoted {
                     quote_type: QuoteType::DoubleQuote,
                     content: inner,
                     source_info: empty_source_info(),
-                })];
+                }))];
             }
 
             // 9. Apply prefix/suffix OUTSIDE formatting (for regular elements)
@@ -1651,7 +1651,7 @@ fn to_blocks_inner(output: &Output) -> Vec<quarto_pandoc_types::Block> {
                 let mut attr = quarto_pandoc_types::empty_attr();
                 attr.1.push(class.to_string());
 
-                blocks.push(Block::Div(Div {
+                blocks.push(Block::Div(Box::new(Div {
                     attr,
                     content: vec![Block::Plain(Plain {
                         content: inlines,
@@ -1659,7 +1659,7 @@ fn to_blocks_inner(output: &Output) -> Vec<quarto_pandoc_types::Block> {
                     })],
                     source_info: empty_source_info(),
                     attr_source: empty_attr_source(),
-                }));
+                })));
             }
             None => {
                 // No display attribute - wrap in Plain
@@ -1943,7 +1943,7 @@ fn apply_title_case_to_inlines_with_last(
                 );
             }
             Inline::Span(s) => {
-                let (_, classes, _) = &s.attr;
+                let (_, classes, _) = &*s.attr;
                 // nocase and nodecoration spans are protected from text-case transformations
                 // per CSL-JSON spec and Pandoc citeproc behavior
                 if classes.iter().any(|c| c == "nocase" || c == "nodecoration") {
@@ -1997,7 +1997,7 @@ fn apply_text_case_to_inlines_simple(
             Inline::Quoted(q) => apply_text_case_to_inlines_simple(&mut q.content, text_case),
             Inline::Link(l) => apply_text_case_to_inlines_simple(&mut l.content, text_case),
             Inline::Span(s) => {
-                let (_, classes, _) = &s.attr;
+                let (_, classes, _) = &*s.attr;
                 // nocase and nodecoration spans are protected from text-case transformations
                 // per CSL-JSON spec and Pandoc citeproc behavior
                 if !classes.iter().any(|c| c == "nocase" || c == "nodecoration") {
@@ -4920,7 +4920,7 @@ fn render_block_to_csl_html(
             }
         }
         Block::Div(d) => {
-            let (_, classes, _) = &d.attr;
+            let (_, classes, _) = &*d.attr;
             // Get the first class as the div class
             if let Some(class) = classes.first() {
                 output.push_str("<div class=\"");
@@ -5120,7 +5120,7 @@ fn render_inline_to_csl_html_with_ctx(
             }
         }
         Inline::Span(s) => {
-            let (_, classes, _) = &s.attr;
+            let (_, classes, _) = &*s.attr;
             if classes.iter().any(|c| c == "nodecoration") {
                 // NoDecoration: reset all currently active formatting to normal
                 // Build a style string with normal values for all active formats

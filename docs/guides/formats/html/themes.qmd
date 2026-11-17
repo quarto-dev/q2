@@ -41,6 +41,20 @@ Bootstrap entirely, use `theme: none`. Quarto 1's `theme: pandoc`
 is not supported yet: Quarto 2 ignores it with a warning
 ([`Q-14-12`](/errors/theme/Q-14-12.qmd)) and uses plain Bootstrap.
 
+### Task lists {#task-lists}
+
+A task item's checkbox replaces its list marker. In an ordered list, a
+task keeps its number by default, with the checkbox after it. To hide
+the numbers of ordered task items as well, set
+`$task-list-ordered-markers` to `false` in a custom theme:
+
+``` scss
+/*-- scss:defaults --*/
+$task-list-ordered-markers: false;
+```
+
+The same variable works in a `revealjs` theme.
+
 ## Light and dark mode {#dark-mode}
 
 Provide a theme for each color scheme with the `light:`/`dark:` map

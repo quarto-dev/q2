@@ -26,6 +26,10 @@ pub struct LocaleManager {
 
 impl LocaleManager {
     /// Create a new locale manager with a default locale.
+    ///
+    /// If no bundled locale matches the requested one (e.g. `lang: xx`),
+    /// the manager uses en-US instead, as Pandoc's citeproc does, so terms
+    /// and date formats never come back empty.
     pub fn new(default_locale: Option<String>) -> Self {
         let default = default_locale.unwrap_or_else(|| "en-US".to_string());
         let mut manager = Self {
@@ -33,7 +37,10 @@ impl LocaleManager {
             locales: HashMap::new(),
         };
         // Eagerly load the default locale
-        manager.load_locale(&default);
+        if manager.load_locale(&default).is_none() && default != "en-US" {
+            manager.default_locale = "en-US".to_string();
+            manager.load_locale("en-US");
+        }
         manager
     }
 
@@ -237,37 +244,197 @@ fn get_term_value(term: &Term, plural: bool) -> Option<String> {
     }
 }
 
+/// Primary dialect for each bare language code, from the CSL locales
+/// repository's `locales.json` (`primary-dialects`), restricted to the
+/// locales bundled in `locales/`. citeproc (and so Pandoc and Quarto 1)
+/// resolves `lang: pt` to `pt-PT` and `lang: en` to `en-US` through this
+/// table, not through whichever regional file sorts first.
+const PRIMARY_DIALECTS: &[(&str, &str)] = &[
+    ("af", "af-ZA"),
+    ("ar", "ar"),
+    ("bal", "bal-PK"),
+    ("bg", "bg-BG"),
+    ("brh", "brh-PK"),
+    ("ca", "ca-AD"),
+    ("cs", "cs-CZ"),
+    ("cy", "cy-GB"),
+    ("da", "da-DK"),
+    ("de", "de-DE"),
+    ("el", "el-GR"),
+    ("en", "en-US"),
+    ("es", "es-ES"),
+    ("et", "et-EE"),
+    ("eu", "eu"),
+    ("fa", "fa-IR"),
+    ("fi", "fi-FI"),
+    ("fr", "fr-FR"),
+    ("gl", "gl-ES"),
+    ("he", "he-IL"),
+    ("hi", "hi-IN"),
+    ("hr", "hr-HR"),
+    ("hu", "hu-HU"),
+    ("id", "id-ID"),
+    ("is", "is-IS"),
+    ("it", "it-IT"),
+    ("ja", "ja-JP"),
+    ("km", "km-KH"),
+    ("ko", "ko-KR"),
+    ("la", "la"),
+    ("lij", "lij-IT"),
+    ("lt", "lt-LT"),
+    ("lv", "lv-LV"),
+    ("mn", "mn-MN"),
+    ("ms", "ms-MY"),
+    ("nb", "nb-NO"),
+    ("nl", "nl-NL"),
+    ("nn", "nn-NO"),
+    ("pa", "pa-PK"),
+    ("pl", "pl-PL"),
+    ("pt", "pt-PT"),
+    ("ro", "ro-RO"),
+    ("ru", "ru-RU"),
+    ("sk", "sk-SK"),
+    ("sl", "sl-SI"),
+    ("sr", "sr-RS"),
+    ("sv", "sv-SE"),
+    ("th", "th-TH"),
+    ("tr", "tr-TR"),
+    ("uk", "uk-UA"),
+    ("vi", "vi-VN"),
+    ("zh", "zh-CN"),
+];
+
+/// The primary dialect of a bare language code (`nl` → `nl-NL`), if known.
+pub fn primary_dialect(lang: &str) -> Option<&'static str> {
+    PRIMARY_DIALECTS
+        .iter()
+        .find(|(base, _)| base.eq_ignore_ascii_case(lang))
+        .map(|(_, dialect)| *dialect)
+}
+
+/// Normalize a document language tag for locale lookup.
+///
+/// Accepts the spellings people write in `lang:` (`nl`, `NL`, `nl-nl`,
+/// `nl_NL`) and returns the CSL form: lowercase language, uppercase
+/// two-letter region (`nl-NL`). A bare language becomes its primary
+/// dialect when one is known. Returns `None` for an empty tag.
+pub fn normalize_lang(lang: &str) -> Option<String> {
+    let lang = lang.trim();
+    if lang.is_empty() {
+        return None;
+    }
+    let mut parts = lang.split(['-', '_']);
+    let language = parts.next().unwrap_or_default().to_ascii_lowercase();
+    let rest: Vec<String> = parts
+        .map(|part| {
+            if part.len() == 2 {
+                part.to_ascii_uppercase()
+            } else {
+                part.to_string()
+            }
+        })
+        .collect();
+    if rest.is_empty() {
+        return Some(
+            primary_dialect(&language)
+                .map(str::to_string)
+                .unwrap_or(language),
+        );
+    }
+    Some(format!("{}-{}", language, rest.join("-")))
+}
+
 /// Load a locale from embedded data.
+///
+/// An exact file match wins (`nl-NL` → `nl-NL.xml`). A bare language
+/// (`nl`) resolves through the primary-dialect table, then to the
+/// alphabetically first `<lang>-*.xml` file for a language the table does
+/// not list.
 fn load_embedded_locale(lang: &str) -> Option<Locale> {
     // Try exact match first (e.g., "en-US.xml")
-    let filename = format!("{}.xml", lang);
-    if let Some(file) = LocaleFiles::get(&filename) {
-        let xml = std::str::from_utf8(file.data.as_ref()).ok()?;
-        return parse_locale_xml(xml).ok();
+    if let Some(locale) = parse_embedded_file(&format!("{}.xml", lang)) {
+        return Some(locale);
     }
 
-    // Try with country code variations for base language
-    // e.g., for "en", try "en-US.xml"
-    if !lang.contains('-') {
-        // Look for any file starting with the base language
-        for entry in LocaleFiles::iter() {
-            let entry_str = entry.as_ref();
-            if entry_str.starts_with(lang)
-                && entry_str.ends_with(".xml")
-                && let Some(file) = LocaleFiles::get(entry_str)
-            {
-                let xml = std::str::from_utf8(file.data.as_ref()).ok()?;
-                return parse_locale_xml(xml).ok();
-            }
-        }
+    if lang.contains('-') {
+        return None;
     }
 
-    None
+    if let Some(dialect) = primary_dialect(lang) {
+        return parse_embedded_file(&format!("{}.xml", dialect));
+    }
+
+    let prefix = format!("{}-", lang);
+    let mut candidates: Vec<String> = LocaleFiles::iter()
+        .filter(|entry| entry.starts_with(&prefix) && entry.ends_with(".xml"))
+        .map(|entry| entry.into_owned())
+        .collect();
+    candidates.sort();
+    candidates
+        .first()
+        .and_then(|filename| parse_embedded_file(filename))
+}
+
+fn parse_embedded_file(filename: &str) -> Option<Locale> {
+    let file = LocaleFiles::get(filename)?;
+    let xml = std::str::from_utf8(file.data.as_ref()).ok()?;
+    parse_locale_xml(xml).ok()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normalize_lang_spellings() {
+        assert_eq!(normalize_lang("nl").as_deref(), Some("nl-NL"));
+        assert_eq!(normalize_lang("NL").as_deref(), Some("nl-NL"));
+        assert_eq!(normalize_lang("nl_nl").as_deref(), Some("nl-NL"));
+        assert_eq!(normalize_lang(" de-at ").as_deref(), Some("de-AT"));
+        assert_eq!(normalize_lang("pt").as_deref(), Some("pt-PT"));
+        assert_eq!(normalize_lang("zh-Hant-TW").as_deref(), Some("zh-Hant-TW"));
+        assert_eq!(normalize_lang("xx").as_deref(), Some("xx"));
+        assert_eq!(normalize_lang("  "), None);
+    }
+
+    #[test]
+    fn every_primary_dialect_is_bundled() {
+        for (base, dialect) in PRIMARY_DIALECTS {
+            assert!(
+                LocaleFiles::get(&format!("{dialect}.xml")).is_some(),
+                "{base} -> {dialect}.xml is not in locales/"
+            );
+        }
+    }
+
+    #[test]
+    fn bare_language_loads_primary_dialect_not_first_file() {
+        // pt-BR.xml sorts before pt-PT.xml; the primary dialect wins.
+        let pt = load_embedded_locale("pt").unwrap();
+        assert_eq!(pt.lang.as_deref(), Some("pt-PT"));
+        let en = load_embedded_locale("en").unwrap();
+        assert_eq!(en.lang.as_deref(), Some("en-US"));
+    }
+
+    #[test]
+    fn unknown_locale_falls_back_to_en_us() {
+        let manager = LocaleManager::new(Some("xx".to_string()));
+        assert_eq!(manager.default_locale(), "en-US");
+        assert_eq!(
+            manager.get_term("and", TermForm::Long, false).as_deref(),
+            Some("and")
+        );
+    }
+
+    #[test]
+    fn region_without_bundled_file_uses_base_language() {
+        // There is no nl-BE.xml; Dutch terms still apply.
+        let manager = LocaleManager::new(Some("nl-BE".to_string()));
+        assert_eq!(
+            manager.get_term("and", TermForm::Long, false).as_deref(),
+            Some("en")
+        );
+    }
 
     #[test]
     fn test_get_term() {

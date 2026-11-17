@@ -8,6 +8,7 @@
 
 import type { PresenceState } from '../../services/presenceService';
 import { common, tabs } from '../../strings';
+import Tooltip from '../Tooltip';
 import './StatusTab.css';
 
 type WasmStatus = 'loading' | 'ready' | 'error';
@@ -73,7 +74,11 @@ export default function StatusTab({
                     className="user-color-dot"
                     style={{ backgroundColor: user.userColor }}
                   />
-                  <span className="user-name">{user.userName}</span>
+                  <Tooltip content={user.userName} block>
+                    <span className="user-name qh-truncate" tabIndex={0}>
+                      {user.userName}
+                    </span>
+                  </Tooltip>
                 </li>
               ))}
             </ul>

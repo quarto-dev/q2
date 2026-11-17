@@ -1,0 +1,22 @@
+---
+title: "Typst: an inline reference shadowed by a bibliography file"
+format: typst
+bibliography: refs.bib
+references:
+  - id: Cronbach_1951
+    type: article-journal
+    title: An inline copy that Typst ignores
+_quarto:
+  tests:
+    typst:
+      noErrors: default
+      printsMessage:
+        level: WARN
+        regex: "Q-21-6"
+---
+
+bd-yjf99rzx: `Cronbach_1951` is defined in both `refs.bib` and the
+front-matter `references:`. Typst uses the `refs.bib` entry, so the render
+succeeds with a Q-21-6 warning about the ignored inline entry.
+
+See [@Cronbach_1951].

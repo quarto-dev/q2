@@ -1,0 +1,235 @@
+name: Publish PyPI package
+
+# Publishes the `quarto2` package for an existing q2 GitHub Release
+# (bd-2p7dwmqe; plan: claude-notes/plans/2026-11-13-pypi-publishing.md).
+#
+# The package is an sdist with no binary in it. When pip or uv installs it,
+# its in-tree build backend (packaging/pypi/backend/) downloads that host's
+# q2 archive from the GitHub Release named by `tag` and checks it against the
+# SHA-256 pinned in the sdist. So the release must be published (with all six
+# platform archives) before this runs, and its archives must never be rebuilt
+# afterwards: the pins would stop matching.
+#
+# How a release reaches PyPI:
+#
+#   1. release.yml's `pypi` job dispatches this workflow with target=pypi
+#      once the GitHub Release is published. (By hand: `gh workflow run
+#      publish-pypi.yml --ref main -f tag=vX.Y.Z -f target=pypi`.)
+#   2. `build` makes the sdist from the release's checksums.sha256 and runs
+#      the packaging unit tests; `smoke` installs that sdist with pip and uv
+#      on every platform we ship and runs `q2 --version`.
+#   3. `publish` uploads the sdist through PyPI trusted publishing (GitHub
+#      OIDC; there is no PyPI token anywhere). The `pypi` environment has a
+#      required reviewer for now, so the upload waits for an approval.
+#   4. `check-published` installs the version back from the index.
+#
+# One-time setup (done 2026-11-13): pending trusted publishers for project
+# `quarto2` on pypi.org (environment `pypi`) and test.pypi.org (environment
+# `testpypi`), both for quarto-dev/q2, workflow `publish-pypi.yml`. PyPI
+# checks the file name of the top-level workflow, so this must stay a
+# top-level workflow_dispatch workflow under this exact name; calling it via
+# workflow_call would not match the registered publisher.
+#
+# Runbook: claude-notes/instructions/release-runbook.md § PyPI.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published release tag, e.g. v0.45.0'
+        required: true
+        type: string
+      target:
+        description: 'Index to upload to'
+        required: true
+        type: choice
+        options: [testpypi, pypi]
+        default: testpypi
+      post:
+        description: >-
+          Post-release number for a packaging-only fix to a version already on
+          the index (0 = none; 1 publishes X.Y.Z.post1 for the same binaries)
+        required: false
+        type: number
+        default: 0
+
+permissions: {}
+
+concurrency:
+  group: publish-pypi-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build sdist
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Packaging unit tests
+        run: python -I -m unittest discover -s packaging/pypi/tests
+
+      - name: Fetch the release checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          case "$TAG" in v[0-9]*.[0-9]*.[0-9]*) ;; *)
+            echo "::error::tag must look like vX.Y.Z[-rcN], got '$TAG'"; exit 1 ;;
+          esac
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft \
+            -q 'if .isDraft then error("release is a draft") else . end' >/dev/null
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            -p checksums.sha256 -D "$RUNNER_TEMP"
+
+      - name: Generate release.json
+        id: prepare
+        env:
+          TAG: ${{ inputs.tag }}
+          POST: ${{ inputs.post }}
+        run: |
+          python -I packaging/pypi/backend/q2_pypi_lib.py prepare \
+            --tag "$TAG" --checksums "$RUNNER_TEMP/checksums.sha256" \
+            --license LICENSE --post "$POST" | tee "$RUNNER_TEMP/release.json"
+          echo "version=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["pypi_version"])' "$RUNNER_TEMP/release.json")" >> "$GITHUB_OUTPUT"
+
+      - name: Build sdist
+        run: |
+          python -m pip install 'build==1.6.1'
+          python -m build --sdist --outdir dist packaging/pypi
+
+      # The sdist must never carry a binary, and no wheel may be uploaded: a
+      # wheel built here would hold the linux_amd64 binary.
+      - name: Check the distribution set
+        env:
+          VERSION: ${{ steps.prepare.outputs.version }}
+        run: |
+          ls -la dist
+          [ "$(find dist -mindepth 1 | wc -l)" -eq 1 ] || { echo "::error::expected exactly one file in dist/"; exit 1; }
+          f="dist/quarto2-$VERSION.tar.gz"
+          [ -f "$f" ] || { echo "::error::missing $f"; exit 1; }
+          size=$(stat -c %s "$f")
+          [ "$size" -lt 1000000 ] || { echo "::error::$f is $size bytes; the sdist must not carry a binary"; exit 1; }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pypi-sdist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  smoke:
+    name: Install smoke (${{ matrix.os }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest, windows-11-arm]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: pypi-sdist
+          path: dist
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: pip install the sdist and run q2
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          python -m venv venv
+          if [ -d venv/Scripts ]; then BIN=venv/Scripts; else BIN=venv/bin; fi
+          "$BIN/python" -m pip install --no-cache-dir dist/*.tar.gz
+          out=$("$BIN/q2" --version)
+          echo "$out"
+          case "$VERSION" in *.post*) want="${VERSION%.post*}" ;; *) want="$VERSION" ;; esac
+          # The binary prints the Cargo version (0.46.0-rc1); compare the
+          # PEP 440 form loosely by stripping separators.
+          [ "$(echo "${out##* }" | tr -d '.-')" = "$(echo "$want" | tr -d '.-')" ] || {
+            echo "::error::installed q2 reports '$out', expected $want"; exit 1; }
+          "$BIN/python" -m quarto2 --version
+          "$BIN/python" -c "import quarto2; print(quarto2.binary_path())"
+
+      - name: uv tool install the sdist and run q2
+        run: |
+          export UV_TOOL_BIN_DIR="$RUNNER_TEMP/uv-bin"
+          uv tool install --no-cache dist/*.tar.gz
+          "$UV_TOOL_BIN_DIR/q2" --version
+
+  publish:
+    name: Upload to ${{ inputs.target }}
+    needs: [build, smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: ${{ inputs.target }}
+      url: ${{ inputs.target == 'pypi' && 'https://pypi.org/project/quarto2/' || 'https://test.pypi.org/project/quarto2/' }}
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: pypi-sdist
+          path: dist
+
+      # Pinned by SHA: this step holds the OIDC upload credential.
+      - name: Publish to PyPI
+        if: inputs.target == 'pypi'
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # v1.14.0
+
+      - name: Publish to TestPyPI
+        if: inputs.target == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # v1.14.0
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  check-published:
+    name: Install back from ${{ inputs.target }}
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: {}
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: pip install quarto2==${{ needs.build.outputs.version }}
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          INDEX: ${{ inputs.target == 'pypi' && 'https://pypi.org/simple/' || 'https://test.pypi.org/simple/' }}
+        run: |
+          python -m venv venv
+          # The index can take a few minutes to serve a new upload.
+          for i in $(seq 1 20); do
+            if venv/bin/pip install --no-cache-dir --index-url "$INDEX" "quarto2==$VERSION"; then
+              venv/bin/q2 --version
+              exit 0
+            fi
+            echo "not installable yet (attempt $i); retrying in 30 s"
+            sleep 30
+          done
+          echo "::error::quarto2==$VERSION never became installable from $INDEX"
+          exit 1

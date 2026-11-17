@@ -456,6 +456,92 @@ fn editorial_mark_without_attributes_is_unchanged() {
 }
 
 // ---------------------------------------------------------------------------
+// Line breaks inside a comment (bd-ov4jydyf)
+//
+// The q2-preview comment input stores Shift+Enter as a `LineBreak` inside
+// the `[>> …]` span (plan: 2026-11-16-comment-shift-enter-linebreak.md).
+// These lock in the writer behavior that feature depends on, in every
+// place a comment can be added. The client never puts a `LineBreak` at
+// the end of a comment or inside a heading; the writer emits qmd it can't
+// read back for those (bd-ajeb4y6f).
+// ---------------------------------------------------------------------------
+
+fn comment(text: &str) -> Value {
+    span(attr("", &["quarto-edit-comment"], &[]), inl(text))
+}
+
+#[test]
+fn line_break_inside_editorial_comment() {
+    let with = |c: Value| vec![str_("Text."), c];
+    let cases: Vec<(&str, Value, &str)> = vec![
+        (
+            "paragraph",
+            doc(vec![para(with(comment("one\\\ntwo")))]),
+            "Text.[>> one\\\ntwo]\n",
+        ),
+        (
+            "two line breaks (an empty line in the comment)",
+            doc(vec![para(with(comment("one\\\n\\\ntwo")))]),
+            "Text.[>> one\\\n\\\ntwo]\n",
+        ),
+        (
+            "tight list item",
+            doc(vec![bullet_list(vec![vec![plain(with(comment(
+                "one\\\ntwo",
+            )))]])]),
+            "* Text.[>> one\\\n  two]\n",
+        ),
+        (
+            "block quote",
+            doc(vec![block_quote(vec![para(with(comment("one\\\ntwo")))])]),
+            "> Text.[>> one\\\n> two]\n",
+        ),
+        (
+            "block quote inside a list item",
+            doc(vec![bullet_list(vec![vec![block_quote(vec![para(
+                with(comment("one\\\ntwo")),
+            )])]])]),
+            "* > Text.[>> one\\\n  > two]\n",
+        ),
+    ];
+    for (what, input, expected) in cases {
+        let qmd = assert_roundtrip(input);
+        assert_eq!(qmd, expected, "{what}");
+    }
+}
+
+#[test]
+fn line_break_in_a_comment_on_a_span() {
+    // `[range[>> one\ two]]`: a comment attached to a span.
+    let mut content = inl("range");
+    content.push(comment("one\\\ntwo"));
+    let qmd = assert_roundtrip(doc(vec![para(vec![span(attr("", &[], &[]), content)])]));
+    assert_eq!(qmd, "[range[>> one\\\ntwo]]\n");
+}
+
+#[test]
+fn line_break_in_a_comment_container() {
+    // A comment on a code block lives in a comment-container div.
+    let container = json!({"t": "Div", "c": [
+        attr("", &["quarto-edit-comment-container"], &[]),
+        [code_block("x = 1"), para(vec![comment("one\\\ntwo")])],
+    ]});
+    let qmd = assert_roundtrip(doc(vec![container]));
+    assert!(qmd.contains("\n[>> one\\\ntwo]\n"), "{qmd:?}");
+}
+
+#[test]
+fn after_line_break_in_editorial_comment() {
+    check_all("after line break in a comment", LINE_START_TEXTS, |t| {
+        doc(vec![para(vec![
+            str_("x"),
+            space(),
+            comment(&format!("a\\\n{t}")),
+        ])])
+    });
+}
+
+// ---------------------------------------------------------------------------
 // T3: adjacent lists
 // ---------------------------------------------------------------------------
 
@@ -575,26 +661,13 @@ fn adjacent_ordered_lists_in_nested_containers() {
     assert_roundtrip_with(doc(vec![ordered_list(1, vec![item])]), with_list_separators);
 }
 
-/// Every `Plain` as a `Para`, for comparisons that don't care which one a
-/// list item's first block is.
-fn plains_as_paras(value: &mut Value) {
-    match value {
-        Value::Array(items) => items.iter_mut().for_each(plains_as_paras),
-        Value::Object(map) => {
-            if map.get("t") == Some(&json!("Plain")) {
-                map.insert("t".to_string(), json!("Para"));
-            }
-            map.values_mut().for_each(plains_as_paras);
-        }
-        _ => {}
-    }
-}
-
 #[test]
 fn adjacent_ordered_lists_in_a_tight_item_are_not_swallowed() {
-    // A tight item has no blank line between its blocks, so the separator would
-    // read back as text on the preceding list line. The writer loosens the item
-    // instead (its first `Plain` becomes a `Para`), so only Plain/Para may differ.
+    // A tight item has no blank line between its blocks, so a bare separator
+    // would read back as text on the preceding list line, and a blank line
+    // around it would make the item loose. The writer fences the separator
+    // instead (bd-2bcre8cr), so the item stays tight: the round trip is exact
+    // up to the separator itself.
     let mut item = vec![plain(inl("item"))];
     item.extend([numbered(1, &["x"]), numbered(1, &["y"])]);
     for outer in [
@@ -603,11 +676,14 @@ fn adjacent_ordered_lists_in_a_tight_item_are_not_swallowed() {
     ] {
         let mut t = trip(&doc(vec![outer]));
         with_list_separators(&mut t.before);
-        plains_as_paras(&mut t.before);
-        plains_as_paras(&mut t.after);
         assert_eq!(
             t.before["blocks"], t.after["blocks"],
             "--- qmd ---\n{}",
+            t.qmd
+        );
+        assert!(
+            t.qmd.contains("```{=html}"),
+            "the separator inside the item is fenced: {:?}",
             t.qmd
         );
     }

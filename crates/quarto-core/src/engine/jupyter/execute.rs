@@ -49,6 +49,14 @@ impl ExecuteOpts {
         store_history: false,
         silent: false,
     };
+
+    /// The flags for engine setup code the document never sees (the
+    /// per-document execute environment, GH #1131): no history entry and no
+    /// broadcast outputs. An error still comes back in the reply.
+    pub const SETUP: Self = Self {
+        store_history: false,
+        silent: true,
+    };
 }
 
 /// Build the `execute_request` for `code` with `opts`.

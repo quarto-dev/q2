@@ -105,13 +105,24 @@ export function isValidHexColor(color: string): boolean {
   return /^#[0-9A-Fa-f]{6}$/.test(color);
 }
 
+// Connect's user API permits 256 Unicode code points in each name field.
+// Quarto Hub joins first_name and last_name with one space for the display name.
+const CONNECT_MAX_NAME_PART_LENGTH = 256;
+export const MAX_USER_NAME_LENGTH = 2 * CONNECT_MAX_NAME_PART_LENGTH + 1;
+
 /**
  * Validate that a user name is acceptable.
  * - Not empty after trimming
- * - Not too long (max 50 characters)
+ * - Not too long (max 513 Unicode code points)
  * - Contains at least one non-whitespace character
  */
 export function isValidUserName(name: string): boolean {
   const trimmed = name.trim();
-  return trimmed.length > 0 && trimmed.length <= 50;
+  // A code point is one or two UTF-16 units, so only lengths between the
+  // limit and twice the limit need an actual count.
+  if (trimmed.length <= MAX_USER_NAME_LENGTH) return trimmed.length > 0;
+  if (trimmed.length > 2 * MAX_USER_NAME_LENGTH) return false;
+  let codePoints = 0;
+  for (const _ of trimmed) codePoints++;
+  return codePoints <= MAX_USER_NAME_LENGTH;
 }

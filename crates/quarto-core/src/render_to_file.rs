@@ -205,6 +205,12 @@ pub struct RenderToFileOptions {
     /// `render_document_to_file` never read it, so nothing wraps twice.
     /// `None` (the default) changes nothing.
     pub overlay: Option<Arc<crate::overlay_runtime::RenderOverlay>>,
+
+    /// How `execute: record-sources` is read (OPR-6): the command declaration (default and
+    /// allowed values) and, for a render guests can reach, the host's ceiling. The list itself
+    /// is read per document, inside the render, by OPR-5's early reader. There is no option to
+    /// set it: the key and `-M` do.
+    pub record_sources: crate::record::RenderRecordSources,
 }
 
 /// Result of rendering a document to a file.
@@ -526,8 +532,44 @@ pub fn render_document_to_file(
     ctx.child_deadline = options.child_deadline;
     ctx.capture_materialize_dir = options.capture_materialize_dir.clone();
 
+    // OPR-6: read `execute: record-sources` for this document. A fresh record is spliced and the
+    // engine never starts for it; a document no source supplies (and with no `engine` to fall
+    // back on) is left inert. A payload the caller already carries (the preview server's hub
+    // captures) wins: nothing is read then.
+    let mut record_notes: Vec<quarto_error_reporting::DiagnosticMessage> = Vec::new();
+    let mut spliced_record: Option<Arc<crate::record::Record>> = None;
+    let mut record_no_engine = false;
+    if options.captures.is_empty() {
+        let target_format = render_format.identifier.to_string();
+        let selection = pollster::block_on(crate::record::select_render_record(
+            crate::record::SelectInputs {
+                project,
+                abs_path: input_path,
+                runtime: &runtime,
+                config: &options.record_sources,
+                target_format: &target_format,
+                engine_allowed: options.execution_policy.allows(input_path),
+                replay: !options.replay_captures.is_empty(),
+                registry: options.engine_registry_override.clone(),
+            },
+        ))
+        .map_err(QuartoError::other)?;
+        record_notes = selection.diagnostics;
+        record_no_engine = selection.no_engine;
+        if let Some(record) = selection.record {
+            config = config.with_record(record.clone());
+            spliced_record = Some(record);
+        }
+        if record_no_engine {
+            // The skip guard: the engine stage would otherwise still resolve the engine from
+            // metadata after the splice replaced its cells, and could start it.
+            config.execution_policy = crate::engine::ExecutionPolicy::None;
+            ctx.execution_policy = crate::engine::ExecutionPolicy::None;
+        }
+    }
+
     // Run the render pipeline
-    let render_output = if render_format.identifier.is_native() {
+    let mut render_output = if render_format.identifier.is_native() {
         pollster::block_on(render_qmd_to_html(
             &input_bytes,
             &input_path.to_string_lossy(),
@@ -541,7 +583,12 @@ pub fn render_document_to_file(
             &input_path.to_string_lossy(),
             &mut ctx,
             runtime.clone(),
-            options.captures.clone(),
+            match &spliced_record {
+                Some(record) => {
+                    crate::pandoc_request::captures::CapturePayload::Record(record.clone())
+                }
+                None => options.captures.clone(),
+            },
         ))?;
         // Finding 3's decision (see `render_qmd_to_pandoc`'s doc comment):
         // no binary bytes travel through `content` — `PandocWriteStage`
@@ -556,6 +603,14 @@ pub fn render_document_to_file(
             execution_skipped: ctx.execution_skipped,
         }
     };
+
+    if record_no_engine {
+        // The record (or the warning above) already said what happened to the code cells; the
+        // engine stage's "execution skipped" flag would report them a second time.
+        render_output.execution_skipped = false;
+        ctx.execution_skipped = false;
+    }
+    render_output.diagnostics.extend(record_notes);
 
     finalize_rendered_output(
         input_path,

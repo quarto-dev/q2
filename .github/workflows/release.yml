@@ -81,3 +81,26 @@ jobs:
       channel: release
       publish: ${{ github.event_name != 'workflow_dispatch' || inputs.publish }}
     secrets: inherit
+
+  # Hand the published release to PyPI (bd-2p7dwmqe). publish-pypi.yml is
+  # dispatched rather than called: PyPI trusted publishing matches the
+  # top-level workflow file, so it must run as its own workflow. Packaging
+  # code comes from `main`; the binaries it points at are this tag's. The
+  # upload itself waits for a reviewer on the `pypi` environment. Dry runs
+  # (publish=false) never get here; nightlies use nightly.yml, not this file.
+  pypi:
+    name: Dispatch PyPI publish
+    needs: [preflight, pipeline]
+    if: github.event_name != 'workflow_dispatch' || inputs.publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.preflight.outputs.tag }}
+        run: |
+          gh workflow run publish-pypi.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f tag="$TAG" -f target=pypi
+          echo "Dispatched publish-pypi.yml for $TAG; approve its upload in the Actions UI." >> "$GITHUB_STEP_SUMMARY"

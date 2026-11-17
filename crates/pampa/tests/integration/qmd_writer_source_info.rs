@@ -29,22 +29,22 @@ fn paragraph(text: &str, source_info: SourceInfo) -> Block {
 }
 
 fn code_block(code: &str, source_info: SourceInfo) -> Block {
-    Block::CodeBlock(CodeBlock {
+    Block::CodeBlock(Box::new(CodeBlock {
         attr: quarto_pandoc_types::attr::empty_attr(),
         text: code.to_string(),
         source_info,
         attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 fn header(text: &str, level: usize, source_info: SourceInfo) -> Block {
-    Block::Header(Header {
+    Block::Header(Box::new(Header {
         level,
         attr: quarto_pandoc_types::attr::empty_attr(),
         content: vec![str_inline(text, source_info.clone())],
         source_info,
         attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 #[test]

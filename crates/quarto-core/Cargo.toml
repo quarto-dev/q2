@@ -13,6 +13,9 @@ thiserror.workspace = true
 tracing.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
+# Reads the entry keys of BibLaTeX `bibliography:` files (typst_citations;
+# same crate and version as pampa's citeproc).
+biblatex = "0.12"
 async-trait.workspace = true
 tokio-util.workspace = true
 pollster.workspace = true
@@ -126,6 +129,8 @@ clap = ["dep:clap"]
 
 # Native-only dependencies (for execution engines and resource extraction)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The disk feeder's initial walk classifies files like the hub does (bd-c1gyrfvt, D3).
+quarto-project-files.workspace = true
 # Node discovery for the TS engine host (QUARTO_NODE / PATH / fnm / nvm / volta).
 quarto-node-discovery = { path = "../quarto-node-discovery" }
 tempfile = "3"

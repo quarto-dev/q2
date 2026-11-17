@@ -91,6 +91,20 @@ pub fn engine_error_diagnostic(err: &ExecutionError) -> DiagnosticMessage {
         ExecutionError::NoHandlerForLanguage { engine, language } => {
             no_runnable_kernel_diagnostic(engine, std::slice::from_ref(language), true)
         }
+        ExecutionError::ReservedOption { engine, key, chunk } => {
+            DiagnosticMessageBuilder::error("Reserved Chunk Option")
+                .with_code("Q-18-17")
+                .problem(format!(
+                    "the `{engine}` chunk option `{key}` (in code chunk {chunk} of the document) is reserved by Quarto \
+                     for execution records, so a document cannot set it."
+                ))
+                .add_detail(
+                    "Quarto adds its own `quarto-unit-id` option to every chunk it records. \
+                     A second one makes the engine stop with a duplicate-key error.",
+                )
+                .add_hint(format!("Remove the `{key}` line from the chunk."))
+                .build()
+        }
         other => DiagnosticMessage::error(other.to_string()),
     }
 }
@@ -192,26 +206,6 @@ pub fn no_runnable_kernel_diagnostic(
         .build()
 }
 
-/// `Q-18-12`: knitr\'s cache is off for the run that records the document. One per document,
-/// naming the chunks that asked for it. Informational: the output is the same, only slower.
-pub fn knitr_cache_disabled_diagnostic(labels: &[String]) -> DiagnosticMessage {
-    let list = labels
-        .iter()
-        .map(|l| format!("`{l}`"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    DiagnosticMessageBuilder::info("knitr Cache Is Off While Recording")
-        .with_code("Q-18-12")
-        .problem(format!(
-            "these chunks asked for knitr\'s cache, and it was turned off for them: {list}."
-        ))
-        .add_detail(
-            "Recording a chunk\'s output needs the chunk to run, and a cache hit skips the run, \
-             so the chunks run every time this document is executed.",
-        )
-        .build()
-}
-
 /// `Q-18-13`: the document replaced a knitr hook, so that chunk and every later one keep
 /// knitr\'s finished markdown. One per document, naming the hook and the first chunk.
 pub fn knitr_hook_override_diagnostic(hook: &str, label: &str) -> DiagnosticMessage {
@@ -245,6 +239,111 @@ pub fn knitr_child_diagnostic(labels: &[String]) -> DiagnosticMessage {
              so its chunks are not presented from recorded pieces.",
         )
         .build()
+}
+
+/// `Q-18-15`: the document uses an engine that builds no execution record, so the
+/// writer stored it in the older capture format (RIU-1). `with_records` are the engines
+/// whose records exist; `without_records` are the ones that build none. A warning, with
+/// every output still shown.
+pub fn engines_without_record_diagnostic(
+    with_records: &[String],
+    without_records: &[String],
+) -> DiagnosticMessage {
+    let quoted = |names: &[String]| names.iter().map(|n| format!("\"{n}\"")).collect::<Vec<_>>();
+    let without = quoted(without_records);
+    let subject = match without.as_slice() {
+        [one] => format!("The engine {one} does not"),
+        [a, b] => format!("The engines {a} and {b} do not"),
+        many => {
+            let (last, rest) = many.split_last().expect("at least one engine");
+            format!("The engines {}, and {last} do not", rest.join(", "))
+        }
+    };
+    let mut b = DiagnosticMessageBuilder::warning("Execution record skipped")
+        .with_code("Q-18-15")
+        .problem(format!(
+            "{subject} build an execution record, so this document is stored in the older \
+             capture format. Every cell still ran and every output is shown."
+        ));
+    if !with_records.is_empty() {
+        b = b.add_detail(format!(
+            "Engines that build records: {}",
+            with_records.join(", ")
+        ));
+    }
+    b.add_detail(format!(
+        "Engines that do not: {}",
+        without_records.join(", ")
+    ))
+    .add_hint("Nothing needs to change; your output is intact.")
+    .add_hint(
+        "Features that read execution records, like reusing saved results or sharing them with \
+         other editors, may not work with this document.",
+    )
+    .add_hint(
+        "An engine author can add record support (see the execution records page in the docs).",
+    )
+    .build()
+}
+
+/// The warning a page shows when no `execute: record-sources` source supplied a record for a document that
+/// has code cells (RIU-4), built from the walk's outcomes: the problem names each source and why
+/// it was passed over, on one line. `None` (silence) for a prose-only document and
+/// when a source did supply.
+pub fn no_record_source_diagnostic(
+    outcomes: &[crate::record::SourceOutcome],
+    has_code_cells: bool,
+) -> Option<DiagnosticMessage> {
+    use crate::record::OutcomeKind;
+    if !has_code_cells
+        || outcomes.is_empty()
+        || outcomes.iter().any(|o| o.kind == OutcomeKind::Supplied)
+    {
+        return None;
+    }
+    let reasons = outcomes
+        .iter()
+        .map(|o| {
+            let what = match &o.kind {
+                OutcomeKind::Supplied => unreachable!("checked above"),
+                OutcomeKind::Nothing => "nothing for this document".to_string(),
+                OutcomeKind::Refused(why) => format!("refused: {why}"),
+                OutcomeKind::Unavailable(why) => format!("not available: {why}"),
+                OutcomeKind::Failed(why) => format!("failed: {why}"),
+            };
+            format!("{}: {what}", o.source.label())
+        })
+        .collect::<Vec<_>>()
+        .join("; ");
+    // One line, in `problem`: the viewer's warning box shows only the title and the problem.
+    Some(
+        DiagnosticMessageBuilder::warning("No execution record for this document")
+            .problem(format!(
+                "None of the record sources named by `execute: record-sources` supplied one, so no outputs \
+                 are shown ({reasons}). Add `engine` to `execute: record-sources` (and leave `preview.engine` \
+                 on) to run the code."
+            ))
+            .build(),
+    )
+}
+
+/// The one-line form of [`engines_without_record_diagnostic`] for `provide-hub`, which has
+/// no page to attach a diagnostic to.
+pub fn engines_without_record_line(doc: &str, without_records: &[String]) -> String {
+    let (noun, verb) = if without_records.len() == 1 {
+        ("engine", "builds")
+    } else {
+        ("engines", "build")
+    };
+    let names = without_records
+        .iter()
+        .map(|n| format!("\"{n}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "note: {doc}: {noun} {names} {verb} no execution record, so this document is stored in \
+         the older capture format (Q-18-15)."
+    )
 }
 
 /// A fence language that Quarto 2 invented and is removing. Not coded: it
@@ -372,6 +471,9 @@ pub fn inline_span_diagnostic(
 /// The code for an image output the presenter could not use.
 pub const IMAGE_UNUSABLE_CODE: &str = "Q-18-11";
 
+/// The code of the widget-view warning.
+pub const WIDGET_VIEW_UNSUPPORTED_CODE: &str = "Q-18-16";
+
 /// `Q-18-11`: a cell's image output (`mime`) could not be written, so the figure is
 /// missing from the page. The render continues, so this is a warning; `--strict`
 /// promotes it. `location` is `file:line:column` of the cell when it resolves.
@@ -395,6 +497,22 @@ pub fn image_unusable_diagnostic(
              Report it at {ISSUES_URL} with the kernel's name. Use `--strict` to make this \
              stop the render."
         ))
+        .build()
+}
+
+/// `Q-18-16`: a cell shows an ipywidgets view and no widget state is captured, so the page
+/// shows its text representation. A warning; `--strict` promotes it.
+pub fn widget_view_unsupported_diagnostic(location: Option<&str>) -> DiagnosticMessage {
+    let at = location.map(|l| format!(" at {l}")).unwrap_or_default();
+    DiagnosticMessageBuilder::warning("Interactive Widget Not Supported")
+        .with_code(WIDGET_VIEW_UNSUPPORTED_CODE)
+        .problem(format!(
+            "the code cell{at} shows an interactive widget (ipywidgets) that q2 can't render yet"
+        ))
+        .add_detail(
+            "The page shows the widget's text representation instead. The widget's state is \
+             not captured, so it can't be drawn. Other output in this document is unaffected.",
+        )
         .build()
 }
 
@@ -442,6 +560,30 @@ pub(crate) fn note_diagnostic(
             };
             image_unusable_diagnostic(mime, reason, location.as_deref())
         }
+        PresentNote::WidgetViewUnsupported { unit } => {
+            let location = match units.get(*unit) {
+                Some(Unit::Cell(block)) => describe_location(
+                    &SourceInfo::substring(
+                        ctx.source_info.clone(),
+                        block.code_start,
+                        block.code_start + block.code.len(),
+                    ),
+                    0,
+                    ctx,
+                ),
+                _ => None,
+            };
+            widget_view_unsupported_diagnostic(location.as_deref())
+        }
+        PresentNote::EngineAttrsRejected { reason, .. } => {
+            quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                "Engine Attribute Skipped",
+            )
+            .problem(format!(
+                "the engine asked for an attribute that cannot be written, so it was skipped: {reason}."
+            ))
+            .build()
+        }
         // Jupyter records hold no fallback units; the note exists for the knitr and marimo
         // adapters, which report it themselves.
         PresentNote::MarkdownFormatMismatch { stored, wanted, .. } => {
@@ -465,6 +607,77 @@ mod tests {
     use crate::engine::ExecutionError;
     use quarto_error_reporting::DiagnosticKind;
     use std::path::PathBuf;
+
+    // ── RIU-4: the "no source supplies" diagnostic ──────────────────────
+
+    fn outcome(
+        source: crate::record::RecordSource,
+        kind: crate::record::OutcomeKind,
+    ) -> crate::record::SourceOutcome {
+        crate::record::SourceOutcome { source, kind }
+    }
+
+    #[test]
+    fn no_source_diagnostic_lists_each_source_and_names_the_gate_variable() {
+        use crate::record::{OutcomeKind as K, RecordSource as S};
+        let outcomes = vec![
+            outcome(S::Cache, K::Nothing),
+            outcome(
+                S::Q2,
+                K::Refused("set QUARTO_ENGINE_RECORD_WRITE=1 to publish".into()),
+            ),
+            outcome(
+                S::Engine,
+                K::Unavailable("`engine` is not in `execute: record-sources`".into()),
+            ),
+        ];
+        let text = no_record_source_diagnostic(&outcomes, true)
+            .expect("a document with code and no record is reported")
+            .to_text(None);
+        assert!(text.contains("cache: nothing"), "{text}");
+        assert!(text.contains("QUARTO_ENGINE_RECORD_WRITE"), "{text}");
+        assert!(text.contains("engine: not available"), "{text}");
+    }
+
+    /// The viewer's overlay shows only a diagnostic's title and problem, so the per-source
+    /// reasons and the fix must be in `problem` itself, on one line (the overlay collapses
+    /// newlines).
+    #[test]
+    fn no_source_diagnostic_carries_the_reasons_and_the_fix_in_the_problem() {
+        use crate::record::{OutcomeKind as K, RecordSource as S};
+        let d = no_record_source_diagnostic(
+            &[
+                outcome(S::Cache, K::Nothing),
+                outcome(
+                    S::Engine,
+                    K::Unavailable("`engine` is not in `execute: record-sources`".into()),
+                ),
+            ],
+            true,
+        )
+        .unwrap();
+        let problem = d.problem.as_ref().expect("a problem").as_str().to_string();
+        assert!(
+            problem.contains("cache: nothing for this document"),
+            "{problem}"
+        );
+        assert!(problem.contains("engine: not available"), "{problem}");
+        assert!(
+            problem.contains("Add `engine` to `execute: record-sources`"),
+            "{problem}"
+        );
+        assert!(!problem.contains('\n'), "one line: {problem:?}");
+    }
+
+    #[test]
+    fn no_source_diagnostic_is_silent_for_prose_or_when_a_source_supplied() {
+        use crate::record::{OutcomeKind as K, RecordSource as S};
+        let none = vec![outcome(S::Cache, K::Nothing)];
+        assert!(no_record_source_diagnostic(&none, false).is_none());
+        let supplied = vec![outcome(S::Cache, K::Nothing), outcome(S::Q2, K::Supplied)];
+        assert!(no_record_source_diagnostic(&supplied, true).is_none());
+        assert!(no_record_source_diagnostic(&[], true).is_none());
+    }
 
     // ── T6 (bd-gy2ozix3): the malformed-result diagnostic ──────────────
 
@@ -673,5 +886,56 @@ mod tests {
         assert!(text.contains("a.qmd:7:1"), "{text}");
         assert!(text.contains("image/png"), "{text}");
         assert!(text.contains("not valid base64"), "{text}");
+    }
+
+    // ── RIU-1: Q-18-15, an engine that builds no record ───────────────
+
+    fn names(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn engines_without_record_is_a_coded_warning_with_both_lists_and_hints() {
+        let d = engines_without_record_diagnostic(&names(&["jupyter"]), &names(&["echo"]));
+        assert_eq!(d.code.as_deref(), Some("Q-18-15"));
+        assert_eq!(d.kind, DiagnosticKind::Warning);
+        assert_eq!(d.title, "Execution record skipped");
+        let text = d.to_text(None);
+        assert!(
+            text.contains("The engine \"echo\" does not build an execution record"),
+            "{text}"
+        );
+        assert!(
+            text.contains("Engines that build records: jupyter"),
+            "{text}"
+        );
+        assert!(text.contains("Engines that do not: echo"), "{text}");
+        assert!(text.contains("Nothing needs to change"), "{text}");
+        assert!(text.contains("may not work with this document"), "{text}");
+        assert!(
+            text.contains("An engine author can add record support"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn engines_without_record_pluralizes_the_problem_line() {
+        let d = engines_without_record_diagnostic(&names(&["jupyter"]), &names(&["a", "b"]));
+        let text = d.to_text(None);
+        assert!(
+            text.contains("The engines \"a\" and \"b\" do not build"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn engines_without_record_line_is_one_line() {
+        let l = engines_without_record_line("tour.qmd", &names(&["echo"]));
+        assert_eq!(
+            l,
+            "note: tour.qmd: engine \"echo\" builds no execution record, so this document is \
+             stored in the older capture format (Q-18-15)."
+        );
+        assert!(!l.contains('\n'));
     }
 }

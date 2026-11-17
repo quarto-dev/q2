@@ -451,6 +451,16 @@ pub struct DocumentAst {
     ///
     /// [`DerivedListingValues`]: crate::document_profile::DerivedListingValues
     pub derived_listing: crate::document_profile::DerivedListingValues,
+    /// Side-channel set by `AuthoredMetadataStage` at the end of the
+    /// head pipeline's ingest phase: the merged metadata (project,
+    /// directory layers, front matter, `format.<id>.*` flattening)
+    /// *before* the enrich stages write derived keys
+    /// (`quarto.language`, `rendered.includes`, `listing-item`) into
+    /// `ast.meta`. This is what `q2 get-config` reports. Read by
+    /// `pass1::profile_document`; nothing downstream needs it.
+    ///
+    /// Default: `None` (the checkpoint has not run).
+    pub authored_meta: Option<ConfigValue>,
 }
 
 /// Pipeline state at the profile checkpoint.

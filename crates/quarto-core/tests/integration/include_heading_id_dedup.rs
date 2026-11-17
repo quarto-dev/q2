@@ -30,12 +30,14 @@
 use crate::include_expansion_diagnostics::render_fixture;
 
 /// Collect `id="..."` attribute values from `html`, in document order,
-/// keeping only ids equal to `base` or `base-<digits>`.
+/// keeping only ids equal to `base` or `base-<digits>`. Matches the `id`
+/// attribute only (` id="`), not attributes ending in `id`, such as the
+/// `data-anchor-id` that section headings carry (bd-d5gss9pz).
 fn ids_with_base(html: &str, base: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut rest = html;
-    while let Some(pos) = rest.find("id=\"") {
-        let after = &rest[pos + 4..];
+    while let Some(pos) = rest.find(" id=\"") {
+        let after = &rest[pos + 5..];
         let Some(end) = after.find('"') else { break };
         let id = &after[..end];
         let is_match = id == base

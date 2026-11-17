@@ -655,6 +655,35 @@ decision (bd-2qy6mdhq): q2 tracks mermaid's own releases, not Quarto 1's.
 Majors change diagram layout/look defaults; read the release notes.
 '''
 
+[[asset]]
+id = "graphviz"
+title = "Graphviz runtime bundle (Viz.js)"
+paths = ["resources/graphviz"]
+policy = "track"
+version = "3.31.0"
+version_sources = [
+  { kind = "file-contains", file = "resources/graphviz/README.md" },
+  { kind = "file-regex", file = "crates/quarto-core/src/transforms/graphviz.rs", regex = 'VIZ_VERSION: &str = "([^"]+)"' },
+  { kind = "file-regex", file = "ts-packages/preview-renderer/src/q2-preview/blocks/GraphvizCodeBlock.tsx", regex = "VIZ_VERSION = '([^']+)'" },
+  { kind = "json-key", file = "ts-packages/preview-renderer/package.json", key = ["dependencies", "@viz-js/viz"] },
+]
+upstream = { kind = "npm", package = "@viz-js/viz" }
+guards = [
+  "quarto-core graphviz::tests::vendored_bundle_matches_pinned_version",
+  "quarto-core graphviz::tests::vendored_bundle_is_self_contained",
+  "quarto-core graphviz::tests::vendored_bundle_matches_npm_package",
+]
+procedure = "resources/graphviz/README.md#updating"
+license = "MIT"
+last_reviewed = "2026-11-13"
+notes = '''
+Also an exact-pinned npm dependency of ts-packages/preview-renderer, so the
+drift guard compares against node_modules. The bundle contains Graphviz
+(Eclipse Public License) and Expat (MIT) in object-code form; the notice q2
+must carry is not yet confirmed (bd-ijlapt70). A new Graphviz version can
+change diagram layout; read its release notes.
+'''
+
 # ===========================================================================
 # reveal.js
 # ===========================================================================
@@ -753,12 +782,12 @@ id = "subtree-julia-engine"
 title = "Julia engine extension (git subtree of the q2/node-port fork branch)"
 paths = ["resources/extension-subtrees/julia-engine"]
 policy = "track"
-version = "f6d75d172cd615b33eb516403bad3403cc3cac3d"
+version = "4892bf5e1155ca4f883a8912deb26cefa3930cfa"
 version_sources = [{ kind = "subtree-split" }]
 upstream = { kind = "git", repo = "https://github.com/gordonwoodhull/quarto-julia-engine.git", track = { branch = "q2/node-port" } }
 procedure = "resources/extension-subtrees/README.md"
 license = "MIT"
-last_reviewed = "2026-10-21"
+last_reviewed = "2026-11-13"
 notes = '''
 Tracks a fork branch until quarto-cli#14936 ships in a stable Quarto 1
 release; then the row should move to PumasAI/quarto-julia-engine. Refresh
@@ -802,16 +831,16 @@ title = "pandoc.wasm for the hub-client (fetched, manifest only)"
 paths = ["resources/pandoc-wasm.json"]
 policy = "track"
 group = "pandoc"
-version = "3.12.1"
+version = "3.13"
 version_sources = [
-  { kind = "file-regex", file = "resources/pandoc-wasm.json", regex = 'pandoc-([0-9.]+)\.wasm\.zip' },
+  { kind = "file-regex", file = "resources/pandoc-wasm.json", regex = '"version": "([^"]+)"' },
   { kind = "file-regex", file = "crates/quarto-core/src/pandoc_filters/mod.rs", regex = 'PANDOC_PIN: &str = "([^"]+)"' },
 ]
 upstream = { kind = "git", repo = "https://github.com/jgm/pandoc", track = "tags" }
 guards = ["quarto-core pandoc_wasm_constants", "xtask lint::pandoc_pin"]
 procedure = "dev-docs/pandoc-wasm-bump.md"
 license = "GPL-2.0"
-last_reviewed = "2026-10-21"
+last_reviewed = "2026-11-09"
 notes = '''
 Pandoc releases publish the wasm zip as a release asset. A bump moves the
 pandoc pin everywhere the pandoc-pin lint checks (CI, dev-setup, README) and
@@ -902,15 +931,15 @@ title = "Default CSL style (Pandoc's data/default.csl, chicago-author-date)"
 paths = ["crates/pampa/resources/csl"]
 policy = "track"
 group = "pandoc"
-version = "3.12.1"
+version = "3.13"
 version_sources = [{ kind = "file-contains", file = "crates/pampa/resources/csl/README.md" }]
 upstream = { kind = "git", repo = "https://github.com/jgm/pandoc", track = "tags", paths = ["data/default.csl"] }
 guards = ["quarto-citeproc tests", "pampa citeproc tests"]
 procedure = "crates/pampa/resources/csl/README.md"
 license = "CC-BY-SA-3.0"
-last_reviewed = "2026-10-21"
+last_reviewed = "2026-11-09"
 notes = '''
-Byte-identical to Pandoc's data/default.csl (3.11 through 3.12.1; recorded at 3.12.1, the pinned pandoc), so its
+Byte-identical to Pandoc's data/default.csl (3.11 through 3.13; recorded at 3.13, the pinned pandoc), so its
 upstream is Pandoc, NOT citation-style-language/styles: the styles repo's
 chicago-author-date.csl is an older revision (<updated> 2025-02-09 vs
 Pandoc's 2025-08-07) and differs substantially. The 2026-10-21 survey filed
@@ -1005,7 +1034,7 @@ title = "KaTeX (html-math-method: katex)"
 paths = ["crates/quarto-core/src/stage/stages/math_js.rs"]
 policy = "track"
 group = "cdn"
-version = "0.19.0"
+version = "0.19.1"
 version_sources = [
   { kind = "file-regex", file = "crates/quarto-core/src/stage/stages/math_js.rs", regex = 'npm/katex@([0-9.]+)/dist/";' },
   { kind = "file-regex", file = "package.json", regex = '"katex": "\^?([0-9.]+)"' },
@@ -1013,7 +1042,7 @@ version_sources = [
 upstream = { kind = "npm", package = "katex" }
 guards = ["quarto-core katex_cdn_version_matches_npm_pin"]
 license = "MIT"
-last_reviewed = "2026-10-21"
+last_reviewed = "2026-11-16"
 notes = '''
 Pinned to the npm `katex` the preview bundles, so render and preview agree;
 bump the npm pins (root and hub-client/quarto-hub-sandboxed-preview) in the

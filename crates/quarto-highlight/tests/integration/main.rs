@@ -6,6 +6,6 @@ pub mod annotate;
 pub mod golden;
 pub mod python_basic;
 pub mod trait_provider;
-pub mod user_grammar_toml;
+pub mod user_grammar_properties;
 
 fn main() {}

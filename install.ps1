@@ -42,7 +42,7 @@ param(
     [string]$Checksum,
     [switch]$NoVerify,
     [switch]$Nightly,
-    [ValidateSet('windows_amd64', 'windows_arm64')]
+    # No [ValidateSet]: under `irm | iex` it rejects the empty default.
     [string]$Platform
 )
 
@@ -55,6 +55,10 @@ $UA = @{ 'User-Agent' = 'q2-install' }
 
 function Die([string]$msg) { throw "q2 install: $msg" }
 function Step([string]$msg) { Write-Host "-> $msg" }
+
+if ($Platform -and $Platform -notin @('windows_amd64', 'windows_arm64')) {
+    Die "unknown -Platform '$Platform' (expected windows_amd64 or windows_arm64)"
+}
 
 if (-not [System.Environment]::Is64BitOperatingSystem) {
     Die 'only 64-bit Windows is supported'

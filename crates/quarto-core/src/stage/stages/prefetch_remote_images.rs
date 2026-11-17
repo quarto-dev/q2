@@ -237,12 +237,12 @@ impl PipelineStage for PrefetchRemoteImagesStage {
                 }
                 Err(_) if typst => {
                     // typst.lua would fetch the URL again and exit 83 on failure.
-                    *inline = Inline::Span(Span {
+                    *inline = Inline::Span(Box::new(Span {
                         attr: Default::default(),
                         content: std::mem::take(&mut img.content),
                         source_info: img.source_info.clone(),
                         attr_source: AttrSourceInfo::empty(),
-                    });
+                    }));
                 }
                 Err(_) => {}
             }

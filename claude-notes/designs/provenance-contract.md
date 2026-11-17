@@ -59,8 +59,10 @@ and `Generated{from:[Invocation]}` over `Generated{from:[]}`.
 
 ## 2. `By::` constructor catalog
 
-The known producer kinds, defined in
-[`crates/quarto-source-map/src/source_info.rs`](../../crates/quarto-source-map/src/source_info.rs):
+The known producer kinds, defined in the external `quarto-source-map` crate
+(`src/source_info.rs`; repo `posit-dev/quarto-source-map`, consumed here as a version
+dependency, 0.3.1 at the time of writing). The line numbers below are from before the
+extraction and are only a rough guide:
 
 | Constructor                  | Line | `kind` string             | Purpose                                                                       | Atomic? |
 |------------------------------|------|---------------------------|-------------------------------------------------------------------------------|---------|
@@ -73,6 +75,9 @@ The known producer kinds, defined in
 | `By::footnotes()`            | 521  | `"footnotes"`             | Footnotes stage's container `Div` chrome.                                     | no      |
 | `By::appendix()`             | 529  | `"appendix"`              | Appendix-structure stage's wrapper `Div` and its helpers.                     | no      |
 | `By::tree_sitter_postprocess()` | 538 | `"tree-sitter-postprocess"` | Parser-side synthetic Spaces (e.g. citation/suffix separator).             | yes     |
+| `By::citeproc()`             | (ext) | `"citeproc"`            | Citeproc output: generated bibliography and citation text.                    | yes     |
+| `By::jupyter_output()`       | (ext) | `"jupyter-output"`      | Spliced execution-record output (RIU-3b): the cell `Div` and its non-code, non-header nodes, or the value `Str` of an inline expression. `from` is empty; `data = {"source": <record provenance, or "engine">, "unit": <unit id>}`. The name says "jupyter" for a Julia, knitr or Positron record too; `data.source` has the real origin. `CodeBlock` and `Header` are never stamped. | yes     |
+| `By::callout()`              | (ext) | `"callout"`             | Callout default-title synthesizer (`bd-12vrr`). The synthesized title regenerates from the callout type, so the wrapper is not atomic. | no      |
 | `By::test_scaffold()`        | (7f) | `"test-scaffold"`         | Test fixtures that require a source_info but have no real provenance to record. Paired with `SourceInfo::for_test()`. | no      |
 | `By::config_default()`       | (7f) | `"config-default"`        | Empty-Map sentinel `ConfigValue` used in metadata merging when no value is present.                | no      |
 | `By::programmatic_config()`  | (7f) | `"programmatic-config"`   | WASM-bridge programmatic construction of nested `ConfigValue` (`ConfigValue::from_path`).         | no      |
@@ -89,13 +94,15 @@ extension kinds — they are non-atomic by default in v1.
 Worked example, using `bd-12vrr` (callout default-title synthesizer)
 as the reference:
 
-1. **Constructor.** Add `pub fn callout() -> Self` to
-   [`crates/quarto-source-map/src/source_info.rs`](../../crates/quarto-source-map/src/source_info.rs)
-   alongside the existing constructors. Pick a kebab-case `kind`
+1. **Constructor.** Add `pub fn callout() -> Self` to `src/source_info.rs` of the external
+   `quarto-source-map` crate (`posit-dev/quarto-source-map`) alongside the existing
+   constructors. A new kind therefore needs a release of that crate and a version bump here;
+   until then use `By::raw` (non-atomic) or reuse an existing kind with its own `data`, as the
+   record splice does with `jupyter-output`. Pick a kebab-case `kind`
    string (`"callout"`); leave `data` as `Value::Null` unless the
    kind carries per-instance configuration.
 2. **Atomicity decision.** Decide whether the new kind belongs in
-   `is_atomic_kind` (line 570). Default: **no**. Yes only if the
+   `is_atomic_kind`. Default: **no**. Yes only if the
    round-trip rule is "treat the entire subtree as one
    non-user-editable unit" (see §7). Document the decision in the
    beads issue.
@@ -509,3 +516,8 @@ The tiling auditor (`audit_source_range_tiling` in
   `stampUserEdits` stamping path was reverted). Made §2's catalog the canonical
   atomic-kind enumeration (§7/§8 no longer defer to a separate writer-contract
   doc). Dropped the reverted `Transparent`/`Omit`/soft-drop dispatch language.
+- **2026-11-07 — v1.4.** RIU-3b. §2's catalog gains `jupyter-output`, `citeproc` and `callout`,
+  and notes that `quarto-source-map` is an external crate; §3's recipe says a new kind needs a
+  release of it. The record splice stamps spliced output as `jupyter-output` (empty `from`,
+  `data = {source, unit}`, atomic); the viewer's `ATOMIC_KINDS` now lists `jupyter-output` and
+  `citeproc` to agree with `By::is_atomic_kind`.

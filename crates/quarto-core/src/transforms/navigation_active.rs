@@ -293,6 +293,7 @@ mod tests {
                 id: None,
                 contents: vec![link("guide/advanced/tuning.qmd")],
                 expanded: false,
+                active: false,
             },
             SidebarEntry::Separator,
         ];

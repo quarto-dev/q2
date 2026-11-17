@@ -1,0 +1,9 @@
+---
+bibliography: refs.bib
+references:
+  - id: item
+    type: webpage
+    title: A page
+---
+
+See [@knuth] and [@item].

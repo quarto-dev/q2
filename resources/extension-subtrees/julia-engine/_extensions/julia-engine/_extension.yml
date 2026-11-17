@@ -18,6 +18,9 @@ contributes:
           priority: 1
       file-extensions:
         - .jl
+      # Julia cells run as ordinary kernel code: a plain Positron Julia kernel gives the
+      # same outputs for the same text, so Quarto 2 may show Positron's cached outputs.
+      kernel-equivalence: true
       claims-files:
         - extension: .jl
           processor: { name: percent, language: julia }

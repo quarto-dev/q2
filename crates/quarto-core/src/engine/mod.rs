@@ -85,6 +85,8 @@ mod ts_engine;
 
 // EXR-7: the TS wire's unit list and notebook-to-record mapping.
 #[cfg(not(target_arch = "wasm32"))]
+mod ts_presentation;
+#[cfg(not(target_arch = "wasm32"))]
 mod ts_record;
 
 // File-backed test engine for exercising multi-engine sequencing
@@ -96,6 +98,11 @@ mod fixture;
 // Native-only modules
 #[cfg(not(target_arch = "wasm32"))]
 pub mod jupyter;
+// The execute environment code cells see (GH #1131). Native-only: only
+// subprocess engines (knitr, Jupyter) deliver it, and it reuses knitr's
+// `ExecuteConfig` defaults.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod execute_info;
 // `pub(crate)`, not private: Plan 7b Phase 6's launch-free test
 // (`stage::stages::source_conversion`) reads `knitr::subprocess::
 // rscript_spawn_count()` from outside the `engine` module tree.
@@ -106,7 +113,7 @@ pub(crate) mod knitr;
 // KNR-3 without widening the rest of `knitr`.
 #[cfg(not(target_arch = "wasm32"))]
 pub use knitr::pieces_map::{
-    expression_starts, knitr_visibility, output_kinds, pieces_to_cell, pieces_to_cell_anchored,
+    expression_starts, output_kinds, pieces_to_cell, pieces_to_cell_anchored,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use knitr::types::{KnitrCapturedChunk, KnitrPiece};

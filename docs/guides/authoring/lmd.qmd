@@ -224,7 +224,11 @@ end))
 ## Items with several blocks
 
 A block fragment can hold any number of blocks, so an item can be more
-than one paragraph:
+than one paragraph. Its paragraphs are `Para` blocks, so a list built
+from block fragments is a *loose* list: each item renders as `<li><p>`,
+with paragraph spacing between items, as in Pandoc. That holds even for a
+one-line fragment. For a tight list, wrap an inline fragment in
+`pandoc.Plain`, as above.
 
 ```{lmd}
 return pandoc.BulletList(meta.authors:map(function(a)

@@ -203,12 +203,12 @@ fn positron_expected_covers_every_case_and_states_divergences() {
 /// three; see `claude-notes/research/2026-11-01-exr-16-s2a-read-record-findings.md`. This copy
 /// stays because it is the only check that runs in q2's CI.
 #[derive(Debug, PartialEq, Eq)]
-enum LoaderVerdict {
+pub(crate) enum LoaderVerdict {
     Keeps,
     Deletes(&'static str),
 }
 
-fn positron_loader(file: &Value) -> LoaderVerdict {
+pub(crate) fn positron_loader(file: &Value) -> LoaderVerdict {
     if !file["nbformat"].is_number() || !file["cells"].is_array() || !file["metadata"].is_object() {
         return LoaderVerdict::Deletes("invalid structure");
     }

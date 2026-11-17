@@ -13,6 +13,7 @@
 
 use quarto_source_map::SourceInfo;
 
+use super::daemon::SessionLease;
 use super::daemon::daemon;
 use super::error::JupyterError;
 use super::execute::ExecuteOpts;
@@ -24,7 +25,7 @@ use super::kernel_select::{
 };
 use super::kernelspec::{UnusableJupyterKey, list_kernelspecs, unusable_jupyter_key};
 use super::router::{KernelName, SingleKernelRouter, plan_units};
-use super::session::SessionKey;
+use super::session::KernelSession;
 use crate::cell_options::partition_cell_options;
 use crate::engine::context::{ExecuteResult, ExecutionContext};
 use crate::engine::diagnostics::{
@@ -486,7 +487,7 @@ fn execute_blocks_async(
     // Child) are tokio resources bound to the runtime that created
     // them; a per-call runtime made every cross-call session reuse
     // fail with "Tokio context ... is being shutdown" (bd-hxhnnlzs).
-    super::daemon::engine_runtime().block_on(execute_blocks_inner(
+    super::daemon::engine_runtime().block_on(execute_blocks_with_leases(
         input,
         units,
         plan,
@@ -494,6 +495,32 @@ fn execute_blocks_async(
         hash_definition,
     ))
 }
+
+/// Run the document holding a lease on each of its kernels, and end every lease when
+/// it is done, on the error path too (bd-i7yz08uh): under `q2 render` that shuts the
+/// document's kernels down, under `q2 preview` it keeps them warm for its next render.
+async fn execute_blocks_with_leases(
+    input: &str,
+    units: &[Unit],
+    plan: &[(usize, KernelName)],
+    ctx: &ExecutionContext,
+    hash_definition: &HashDefinition,
+) -> JupyterResult<ExecuteResult> {
+    let mut leases = Leases::new();
+    let result = execute_blocks_inner(input, units, plan, ctx, hash_definition, &mut leases).await;
+    let daemon = daemon();
+    let retention = super::daemon::retention();
+    for (kernel, lease) in leases {
+        if let Err(e) = daemon.finish(lease, retention).await {
+            tracing::warn!(kernel = %kernel.as_str(), error = %e,
+                "shutting down the document's kernel failed");
+        }
+    }
+    result
+}
+
+/// The document's lease on each kernel its plan names.
+type Leases = std::collections::HashMap<KernelName, SessionLease>;
 
 /// Inner async function that does the actual execution.
 ///
@@ -508,6 +535,7 @@ async fn execute_blocks_inner(
     plan: &[(usize, KernelName)],
     ctx: &ExecutionContext,
     hash_definition: &HashDefinition,
+    leases: &mut Leases,
 ) -> JupyterResult<ExecuteResult> {
     let daemon = daemon();
 
@@ -542,17 +570,21 @@ async fn execute_blocks_inner(
         RecordBuilder::new(JUPYTER, hash_definition, &presented_units, &presented_texts)
             .map_err(record_failed)?;
 
-    // Start or get an existing session for every kernel the plan names, once
-    // each and before any cell runs (so a start failure surfaces before the
-    // first cell, as it did with the single kernel).
-    let mut sessions: std::collections::HashMap<KernelName, SessionKey> =
-        std::collections::HashMap::new();
+    // Lease this document's session of every kernel the plan names, once each
+    // and before any cell runs (so a start failure surfaces before the first
+    // cell). The session is the document's own (bd-i7yz08uh), and the lease
+    // keeps it to this run until the caller finishes it.
     for (_, kernel) in plan {
-        if !sessions.contains_key(kernel) {
-            let key = daemon
-                .get_or_start_session(kernel.as_str(), &ctx.cwd, &ctx.project_env)
+        if !leases.contains_key(kernel) {
+            let lease = daemon
+                .acquire(
+                    kernel.as_str(),
+                    &ctx.cwd,
+                    &ctx.source_path,
+                    &ctx.project_env,
+                )
                 .await?;
-            sessions.insert(kernel.clone(), key);
+            leases.insert(kernel.clone(), lease);
         }
     }
 
@@ -568,19 +600,45 @@ async fn execute_blocks_inner(
     // Each kernel's language, to wrap a span for it (a `None` value on Python).
     let mut languages: std::collections::HashMap<KernelName, String> =
         std::collections::HashMap::new();
-    for (kernel, key) in &sessions {
-        let language = daemon
-            .with_session(key, |s| s.language().to_string())
-            .await
-            .ok_or(JupyterError::NotConnected)?;
-        languages.insert(kernel.clone(), language);
+    for (kernel, lease) in leases.iter() {
+        languages.insert(kernel.clone(), lease.language().to_string());
+    }
+
+    // GH #1131: the per-document execute environment. A retained kernel (preview)
+    // outlives the render that started it, so these values cannot be given only
+    // when the kernel starts; a silent request sets them inside the kernel before
+    // the document's first cell, on every run (Quarto 1 sets `QUARTO_FIG_*` the
+    // same way). It changes only the kernel's environment, never q2's.
+    if !ctx.execute_env.is_empty() {
+        for (kernel, lease) in leases.iter_mut() {
+            let language = &languages[kernel];
+            let Some(code) =
+                crate::engine::execute_info::jupyter_setup_code(language, &ctx.execute_env)
+            else {
+                tracing::debug!(
+                    kernel = %kernel.as_str(),
+                    language = %language,
+                    "no execute-environment setup for this kernel language"
+                );
+                continue;
+            };
+            let result = lease.execute_with(&code, ExecuteOpts::SETUP).await?;
+            if let ExecuteStatus::Error { ename, evalue, .. } = &result.status {
+                tracing::warn!(
+                    kernel = %kernel.as_str(),
+                    "setting the execute environment in the kernel failed: {ename}: {evalue}"
+                );
+            }
+        }
     }
 
     for (position, ((_, kernel), unit)) in plan.iter().zip(units).enumerate() {
-        let key = &sessions[kernel];
+        let session = leases
+            .get_mut(kernel)
+            .expect("a lease for every kernel the plan names");
         let result = match unit {
             Unit::Inline(span) => {
-                let result = run_span(&daemon, key, &languages[kernel], span).await?;
+                let result = run_span(session, &languages[kernel], span).await?;
                 span_fatal(&result, span, ctx)?;
                 result
             }
@@ -613,27 +671,35 @@ async fn execute_blocks_inner(
                 // unless something opts in.
                 let allow_errors = resolved_flag(resolved.as_ref(), "error", false);
 
-                let exec_result = daemon
-                    .execute_in_session(key, &cell.code)
-                    .await
-                    .ok_or(JupyterError::NotConnected)??;
+                // GH #1247: `eval: false` keeps the cell but never sends it
+                // to the kernel; it presents as its code with no output (Q1's
+                // `cell_execute` in notebook.py skips it the same way).
+                if !resolved_flag(resolved.as_ref(), "eval", true) {
+                    CellResult {
+                        status: ExecuteStatus::Ok,
+                        outputs: Vec::new(),
+                        execution_count: None,
+                    }
+                } else {
+                    let exec_result = session.execute(&cell.code).await?;
 
-                // Error policy (bd-ohvl879u, knitr/Q1 parity): a raising cell
-                // aborts the render unless the cell or the document allows
-                // errors in output.
-                if !allow_errors && let Some((ename, evalue)) = first_cell_error(&exec_result) {
-                    let at = describe_location(&body_source, 0, ctx)
-                        .map(|l| format!(" at {l}"))
-                        .unwrap_or_default();
-                    return Err(JupyterError::CellExecutionFailed {
-                        message: format!(
-                            "code cell{at} raised {ename}: {evalue}\n\
-                             Use `#| error: true` on the cell (or `execute: error: true` in the \
-                             document metadata) to show the error in the output instead."
-                        ),
-                    });
+                    // Error policy (bd-ohvl879u, knitr/Q1 parity): a raising cell
+                    // aborts the render unless the cell or the document allows
+                    // errors in output.
+                    if !allow_errors && let Some((ename, evalue)) = first_cell_error(&exec_result) {
+                        let at = describe_location(&body_source, 0, ctx)
+                            .map(|l| format!(" at {l}"))
+                            .unwrap_or_default();
+                        return Err(JupyterError::CellExecutionFailed {
+                            message: format!(
+                                "code cell{at} raised {ename}: {evalue}\n\
+                                 Use `#| error: true` on the cell (or `execute: error: true` in the \
+                                 document metadata) to show the error in the output instead."
+                            ),
+                        });
+                    }
+                    exec_result
                 }
-                exec_result
             }
         };
 
@@ -654,7 +720,7 @@ async fn execute_blocks_inner(
         .finish(EngineEntryInput::default())
         .map_err(record_failed)?
         .cells;
-    let mut fig = FsFigureSink::new(&ctx.source_path);
+    let mut fig = FsFigureSink::new(&ctx.source_path).with_format(&ctx.format);
     let presented = present_document(
         &cells,
         input,
@@ -662,7 +728,7 @@ async fn execute_blocks_inner(
         doc_scope.as_ref(),
         InlineTarget::from_format(&ctx.format),
         &ctx.format,
-        None,
+        &[],
         &mut fig,
     )
     .map_err(|e| present_error(e, &presented_units, ctx))?;
@@ -706,8 +772,7 @@ fn record_failed(e: impl std::fmt::Display) -> JupyterError {
 /// The writer escaped a front matter value as a YAML double-quoted string; the kernel
 /// must see the expression as the author wrote it.
 async fn run_span(
-    daemon: &super::daemon::JupyterDaemon,
-    key: &SessionKey,
+    session: &mut KernelSession,
     kernel_language: &str,
     span: &InlineUnit,
 ) -> JupyterResult<CellResult> {
@@ -716,14 +781,12 @@ async fn run_span(
     } else {
         span.code.clone()
     };
-    daemon
-        .execute_in_session_with(
-            key,
+    session
+        .execute_with(
             &wrap_inline_code(kernel_language, &expr),
             ExecuteOpts::INLINE,
         )
         .await
-        .ok_or(JupyterError::NotConnected)?
 }
 
 /// Fail the render for a span that raised or produced no value (design decision 2,
@@ -1239,16 +1302,17 @@ mod tests {
         );
 
         let make_cell = |lang: &str| {
-            Block::CodeBlock(AstCodeBlock {
+            Block::CodeBlock(Box::new(AstCodeBlock {
                 attr: (
                     String::new(),
                     vec![format!("{{{lang}}}")],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 text: format!("-- {lang} code"),
                 source_info: si.clone(),
                 attr_source: AttrSourceInfo::empty(),
-            })
+            }))
         };
         let ast = Pandoc {
             meta: meta.clone(),
@@ -1613,7 +1677,6 @@ print("hello")
             // empty body
             "```{python}\n```\n",
             // not cells for either
-            "````{python}\nx=1\n````\n",
             "  ```{python}\n  x=1\n  ```\n",
             "```{=html}\nx\n```\n",
             "```{python .marimo}\nx=1\n```\n",
@@ -1679,16 +1742,61 @@ print("hello")
         assert!(ran("```{python}\nx=1\n```  trailing\n").is_empty());
     }
 
+    // bd-f63cqoke: a backtick run of three or more anywhere in a cell's source
+    // makes the qmd writer lengthen the fence (`determine_backticks`), so the
+    // text the engine receives opens with ````{python}. That cell must run, as
+    // it does in Quarto 1 (`jupyter.ts` opens on ```+). Before the fix it was
+    // silently left as an inert code block.
+    #[test]
+    fn bd_f63cqoke_cell_with_a_backtick_run_survives_the_qmd_round_trip() {
+        let qmd = "```{python}\nprint(\"a ``` b\")\n```\n\n```{python}\nprint(\"control\")\n```\n";
+        let mut output = Vec::<u8>::new();
+        let (doc, _ctx, _warnings) =
+            pampa::readers::qmd::read(qmd.as_bytes(), false, "t.qmd", &mut output, true, None)
+                .expect("parse");
+        let mut buf = Vec::new();
+        pampa::writers::qmd::write(&doc, &mut buf).expect("serialize");
+        let text = String::from_utf8(buf).expect("utf8");
+        assert!(
+            text.contains("````{python}\nprint(\"a ``` b\")\n````"),
+            "the writer lengthens this fence; if it stops doing so this test \
+             no longer covers the bug:\n{text}"
+        );
+
+        let run = ran(&text);
+        assert_eq!(
+            run.iter().map(|c| c.code.as_str()).collect::<Vec<_>>(),
+            ["print(\"a ``` b\")\n", "print(\"control\")\n"],
+            "both cells run"
+        );
+    }
+
+    #[test]
+    fn bd_f63cqoke_longer_opener_runs() {
+        for fence in ["````", "`````"] {
+            let run = ran(&format!("{fence}{{python}}\nx=1\n{fence}\n"));
+            assert_eq!(run.len(), 1, "{fence}: {run:?}");
+            assert_eq!(run[0].code, "x=1\n");
+        }
+    }
+
     // The Phase 3 corpus: the cells the scanner hands the executor equal what
     // the old finder found, except where the old finder was wrong or
     // unreachable. Each exception is named with its reason.
     #[test]
     fn exr2_p4_scanner_filtered_by_the_legacy_rule_equals_the_old_finder_on_the_corpus() {
-        const EXCEPTIONS: &[(&str, &str)] = &[(
-            "cell_inside_display_fence",
-            "quirk (i): the old finder runs an opener shown inside a longer fence; \
+        const EXCEPTIONS: &[(&str, &str)] = &[
+            (
+                "cell_inside_display_fence",
+                "quirk (i): the old finder runs an opener shown inside a longer fence; \
                  the mask hides it in the pipeline, the scanner never claims it",
-        )];
+            ),
+            (
+                "cells_nested",
+                "bd-f63cqoke: a four-backtick `{python}` cell runs (Quarto 1 parity); \
+                 the old finder needed exactly three",
+            ),
+        ];
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/units");
         let mut checked = 0;
         for entry in std::fs::read_dir(dir).unwrap() {
@@ -2019,6 +2127,10 @@ mod span_tests {
 mod e2e_tests;
 
 #[cfg(test)]
+#[path = "text_execute_isolation.rs"]
+mod isolation_tests;
+
+#[cfg(test)]
 mod record_tests {
     //! EXR-5 Phase 0: the execution record the unit loop builds beside its unchanged
     //! markdown. The kernel-free seam is EXR-3's fake kernel (`fake_kernel.rs`): canned
@@ -2123,7 +2235,7 @@ mod record_tests {
             "print('hi')",
             &result,
             &mut fig,
-            CellVisibility::resolve(None),
+            CellVisibility::resolve(None, true),
         );
         assert_eq!(out.trim_end(), expected.trim_end());
         assert!(out.contains("hi\n"), "{out}");

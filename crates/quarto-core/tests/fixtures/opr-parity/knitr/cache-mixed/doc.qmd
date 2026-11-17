@@ -1,0 +1,31 @@
+---
+title: Two live and two cached chunks
+---
+
+```{r}
+#| label: fig-live-a
+#| fig-cap: Live A.
+plot(1:3)
+```
+
+```{r}
+#| label: fig-cached-a
+#| fig-cap: Cached A.
+#| cache: true
+plot(1:4)
+```
+
+```{r}
+#| label: fig-live-b
+#| fig-cap: Live B.
+plot(1:5)
+```
+
+```{r}
+#| label: fig-cached-b
+#| fig-cap: Cached B.
+#| cache: true
+plot(1:6)
+```
+
+References: @fig-live-a, @fig-cached-a, @fig-live-b, @fig-cached-b.

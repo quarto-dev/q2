@@ -5,10 +5,10 @@ Continue, …) read and write Quarto Hub projects through Automerge.
 
 Authentication uses Google's OAuth 2.0 Authorization Code grant with
 PKCE and a loopback redirect (RFC 8252) — the same pattern as `gcloud
-auth login`, `gh auth login`, and `aws sso login`. The agent calls a
-single `authenticate` MCP tool, your browser opens to Google's sign-in
-page, and the redirect lands back on a short-lived `127.0.0.1` listener
-the tool started. The resulting credentials are persisted in your OS
+auth login`, `gh auth login`, and `aws sso login`. The agent calls the
+`auth` MCP tool with `action: "sign_in"`, your browser opens to Google's
+sign-in page, and the redirect lands back on a short-lived `127.0.0.1`
+listener the tool started. The resulting credentials are persisted in your OS
 keyring; the agent can use them indefinitely until you revoke them.
 
 The design lives in
@@ -18,35 +18,9 @@ operators registering a hub for end-user use should consult
 
 ## Tools
 
-Once configured, the agent has the tools below. Each operates on a project
-identified by its Automerge **index document ID**, passed as the `project`
-argument.
-
-### Reading
-
-| Tool | What it does |
-|------|--------------|
-| `connect_project` | Connect to a project by its index doc ID; returns the file list. Triggers the sign-in flow if the hub requires auth. |
-| `list_files` | List the files in a connected project. |
-| `read_file` | Read a text file's content. |
-| `wait_for_change` | **Long-poll**: block until a file is edited by any collaborator, then return its new content (see below). |
-
-### Writing
-
-| Tool | What it does |
-|------|--------------|
-| `write_file` | Replace a text file's entire content (creates it if absent; `create_only: true` refuses to overwrite an existing file). |
-| `patch_file` | Replace one unique substring in a text file. |
-| `delete_file` | Delete a file. |
-| `rename_file` | Rename / move a file. |
-| `create_project` | Create a new project on the sync server with optional initial files. |
-
-The write tools are hidden when the server is started with `--read-only`.
-
-### Authentication
-
-`authenticate` and `authenticate_clear` are present only when the OAuth env
-vars are configured (see [Setup](#setup)). On a no-auth hub they are unused.
+See the [maintained MCP reference](../../docs/tools/q2-mcp.qmd) for the
+current tools and actions, including their availability in `--read-only` mode
+and with `--allow-render`.
 
 ### Resources and prompts
 
@@ -62,7 +36,7 @@ the file it touched. Four prompt templates — `review-draft`,
 ### `wait_for_change` — reacting to a live collaborator
 
 `wait_for_change` lets an agent respond to another editor without busy-polling
-`read_file`. It blocks until the watched `path` changes, then returns
+the `read` tool. It blocks until the watched `path` changes, then returns
 `{ changed: true, content, hash }`; on timeout it returns
 `{ changed: false, hash }`, so the agent just calls again to keep watching.
 
@@ -132,9 +106,9 @@ Add hub-mcp to your MCP client config. For Claude Code the file is
 Restart the MCP client. The first agent action against the hub
 triggers the auth flow:
 
-1. Agent calls the `authenticate` MCP tool. The tool binds a local
-   `127.0.0.1` listener and opens your browser to Google's sign-in
-   page. The authorization URL is also printed (to the tool's progress
+1. Agent calls the `auth` MCP tool with `action: "sign_in"`. The tool
+   binds a local `127.0.0.1` listener and opens your browser to Google's
+   sign-in page. The authorization URL is also printed (to the tool's progress
    output and to stderr) so you can open it manually if the browser
    doesn't launch — useful on headless or SSH sessions.
 2. You sign in and approve consent in your browser. The redirect lands
@@ -158,7 +132,7 @@ Limited Input devices" OAuth client. The loopback+PKCE version uses a
 `client_secret` values. After you switch them, the first agent action
 prompts you to sign in once: the credential store keys entries by
 `(issuer, client_id)`, so the old entry is simply invisible to the new
-lookup and a fresh `authenticate` runs automatically. The stranded old
+lookup and a fresh sign-in runs automatically. The stranded old
 entry under the previous `client_id` is harmless and can be cleared at
 your leisure with the platform command in the **Clearing the entry**
 table (substituting the old `client_id`).
@@ -203,9 +177,9 @@ no-auth hubs.)
 | Windows  | `cmdkey /delete:dev.quarto.hub-mcp:<issuer>:<client_id>`                      |
 
 Clearing the entry forces the next agent action to start a fresh
-sign-in. The `authenticate_clear` MCP tool does the same from inside
-the agent, and additionally best-effort revokes the stored refresh
-token at Google before deleting the local copy (see **Revoking
+sign-in. The `auth` MCP tool with `action: "clear"` does the same from
+inside the agent, and additionally best-effort revokes the stored
+refresh token at Google before deleting the local copy (see **Revoking
 access** below).
 
 ### Headless / SSH sessions
@@ -225,8 +199,8 @@ browser to receive it, so use one of:
   ssh -L N:127.0.0.1:N <remote>
   ```
 
-  Call `authenticate`; the printed authorization URL opens in your
-  local browser, and the redirect to `http://127.0.0.1:N/callback`
+  Call `auth` with `action: "sign_in"`; the printed authorization URL
+  opens in your local browser, and the redirect to `http://127.0.0.1:N/callback`
   travels back through the tunnel. Omitting `--redirect-port` lets the
   OS pick a port (logged to stderr on bind), which is fine for a local
   desktop but awkward to forward.
@@ -242,9 +216,9 @@ cookie path from a graphical session on the same hub.
 
 ## Revoking access
 
-The quickest path is to ask the agent to call `authenticate_clear`.
-It best-effort revokes the stored refresh token at Google's revocation
-endpoint (which also invalidates any access tokens derived from it),
+The quickest path is to ask the agent to call `auth` with
+`action: "clear"`. It best-effort revokes the stored refresh token at
+Google's revocation endpoint (which also invalidates any access tokens derived from it),
 then deletes the local keyring entry. If the revoke fails (offline, or
 the token was already invalid) the local delete still proceeds and the
 response tells you to finish the job manually.
@@ -264,8 +238,8 @@ asking you to re-authenticate.
 > **logout-everywhere** kills every outstanding ID token whose `iat`
 > predates it (401). What the ledger cannot kill is a stolen **refresh
 > token** — a refresh mints a fresh `iat` that passes the floor — so
-> Google-side revocation (`authenticate_clear`, or the manual steps
-> above) remains the lever for a compromised grant, and a hub **ban**
+> Google-side revocation (`auth` with `action: "clear"`, or the manual
+> steps above) remains the lever for a compromised grant, and a hub **ban**
 > remains the operator lever for a hostile identity. A legitimate
 > client caught by logout-everywhere self-heals on its next refresh.
 

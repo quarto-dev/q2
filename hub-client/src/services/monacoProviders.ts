@@ -180,9 +180,104 @@ let documentSymbolDisposable: Monaco.IDisposable | null = null;
 let foldingRangeDisposable: Monaco.IDisposable | null = null;
 let semanticTokensDisposable: Monaco.IDisposable | null = null;
 
-// Fired to make Monaco re-request semantic tokens immediately (it wires a
-// provider's `onDidChange` to `schedule(0)`, skipping the adaptive debounce).
+// Fired to make Monaco re-request semantic tokens without its adaptive
+// scheduler delay (the provider's own quiet window still applies).
 let semanticTokensChangeEmitter: Monaco.Emitter<void> | null = null;
+
+interface SemanticTokensRequest {
+  path: string;
+  content: string;
+  promise: Promise<SemanticToken[]>;
+}
+
+// Monaco schedules its own initial request alongside our mount/WASM-ready
+// refreshes, commonly asking for the same model text more than once. Token
+// extraction is deterministic for `(path, content)`, so share the latest
+// request instead of repeating synchronous VFS + WASM work. Keeping only the
+// latest request bounds memory on file switches and edit bursts.
+let latestSemanticTokensRequest: SemanticTokensRequest | null = null;
+
+function getSemanticTokensForContentCoalesced(
+  path: string,
+  content: string
+): Promise<SemanticToken[]> {
+  if (
+    latestSemanticTokensRequest?.path === path &&
+    latestSemanticTokensRequest.content === content
+  ) {
+    return latestSemanticTokensRequest.promise;
+  }
+
+  const request: SemanticTokensRequest = {
+    path,
+    content,
+    promise: getSemanticTokensForContent(path, content),
+  };
+  latestSemanticTokensRequest = request;
+  void request.promise.then(
+    (tokens) => {
+      // The service collapses failures to an empty list. Do not retain empty
+      // results: a later refresh must be able to retry a transient failure.
+      if (tokens.length === 0 && latestSemanticTokensRequest === request) {
+        latestSemanticTokensRequest = null;
+      }
+    },
+    () => {
+      if (latestSemanticTokensRequest === request) {
+        latestSemanticTokensRequest = null;
+      }
+    },
+  );
+  return request.promise;
+}
+
+const SEMANTIC_TOKENS_QUIET_MS = 300;
+
+/**
+ * Wait for the model to be quiet before paying the synchronous tokenization
+ * cost. Monaco's adaptive request delay also starts at 300 ms, but observing
+ * model changes directly lets one pending provider absorb the whole burst.
+ * Monaco's later trailing request then reuses the identical-result cache.
+ */
+function waitForSemanticTokensQuiet(
+  model: Monaco.editor.ITextModel,
+  token: Monaco.CancellationToken
+): Promise<boolean> {
+  if (token.isCancellationRequested) {
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let changeSubscription: Monaco.IDisposable | null = null;
+    let cancellationSubscription: Monaco.IDisposable | null = null;
+
+    const finish = (shouldTokenize: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (timeout !== undefined) clearTimeout(timeout);
+      changeSubscription?.dispose();
+      cancellationSubscription?.dispose();
+      resolve(shouldTokenize);
+    };
+    const schedule = () => {
+      if (timeout !== undefined) clearTimeout(timeout);
+      timeout = setTimeout(
+        () => finish(true),
+        SEMANTIC_TOKENS_QUIET_MS,
+      );
+    };
+
+    changeSubscription = model.onDidChangeContent(schedule);
+    cancellationSubscription = token.onCancellationRequested(() => finish(false));
+    if (token.isCancellationRequested) {
+      finish(false);
+    } else {
+      schedule();
+    }
+  });
+}
 
 /**
  * Register intelligence providers with Monaco.
@@ -276,7 +371,7 @@ export function registerIntelligenceProviders(
   semanticTokensDisposable = monaco.languages.registerDocumentSemanticTokensProvider(
     'qmd',
     {
-      // Lets refreshSemanticTokens() force an immediate re-tokenise.
+      // Lets refreshSemanticTokens() bypass Monaco's adaptive scheduler delay.
       onDidChange: semanticTokensChangeEmitter.event,
 
       // Synchronous, from the checked-in TS constant (the WASM module is not
@@ -296,14 +391,17 @@ export function registerIntelligenceProviders(
           return null;
         }
 
-        // Snapshot the version + content so we tokenise exactly what Monaco
-        // renders (not the VFS image, which can drift) and can drop a result
-        // computed against superseded content (Monaco fires a fresh request per
-        // debounced edit and cancels the in-flight one).
-        const versionId = model.getVersionId();
-        const content = model.getValue();
         try {
-          const tokens = await getSemanticTokensForContent(path, content);
+          if (!(await waitForSemanticTokensQuiet(model, token))) {
+            return null;
+          }
+
+          // Snapshot only after the quiet window so the synchronous run uses
+          // the latest model text. The version check still discards a result
+          // if an edit lands while that run is being awaited.
+          const versionId = model.getVersionId();
+          const content = model.getValue();
+          const tokens = await getSemanticTokensForContentCoalesced(path, content);
           if (token.isCancellationRequested || model.getVersionId() !== versionId) {
             // Stale/cancelled: discard and leave existing tokens in place. Do
             // NOT return empty data here — that would clear highlighting.
@@ -328,7 +426,7 @@ export function registerIntelligenceProviders(
   );
 }
 
-/** Re-request `.qmd` semantic tokens now, skipping the debounce. No-op if unregistered. */
+/** Re-request `.qmd` semantic tokens, bypassing Monaco's adaptive delay. No-op if unregistered. */
 export function refreshSemanticTokens(): void {
   semanticTokensChangeEmitter?.fire();
 }
@@ -356,4 +454,5 @@ export function disposeIntelligenceProviders(): void {
     semanticTokensChangeEmitter.dispose();
     semanticTokensChangeEmitter = null;
   }
+  latestSemanticTokensRequest = null;
 }

@@ -348,7 +348,7 @@ mod tests {
     fn footer_image(url: &str, alt: &str) -> quarto_pandoc_types::inline::Inline {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         use quarto_pandoc_types::inline::{Image, Inline, Str};
-        Inline::Image(Image {
+        Inline::Image(Box::new(Image {
             attr: Default::default(),
             content: vec![Inline::Str(Str {
                 text: alt.to_string(),
@@ -358,13 +358,13 @@ mod tests {
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn footer_link(url: &str, text: &str) -> quarto_pandoc_types::inline::Inline {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         use quarto_pandoc_types::inline::{Inline, Link, Str};
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr: Default::default(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
@@ -374,7 +374,7 @@ mod tests {
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     // --- Phase 2 behavior preserved -------------------------------

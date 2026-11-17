@@ -195,8 +195,8 @@ fn test_json_roundtrip_complex_document() {
                     },
                 ),
             }),
-            Block::CodeBlock(pampa::pandoc::CodeBlock {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+            Block::CodeBlock(Box::new(pampa::pandoc::CodeBlock {
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 text: "print('Hello, world!')".to_string(),
                 source_info: SourceInfo::from_range(
                     FileId(0),
@@ -214,7 +214,7 @@ fn test_json_roundtrip_complex_document() {
                     },
                 ),
                 attr_source: pampa::pandoc::attr::AttrSourceInfo::empty(),
-            }),
+            })),
         ],
     };
 
@@ -311,7 +311,7 @@ fn test_json_write_then_read_matches_original_structure() {
                     },
                 ),
             }),
-            Block::RawBlock(pampa::pandoc::RawBlock {
+            Block::RawBlock(Box::new(pampa::pandoc::RawBlock {
                 format: "html".to_string(),
                 text: "<div>Raw HTML</div>".to_string(),
                 source_info: SourceInfo::from_range(
@@ -329,7 +329,7 @@ fn test_json_write_then_read_matches_original_structure() {
                         },
                     },
                 ),
-            }),
+            })),
         ],
     };
 

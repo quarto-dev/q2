@@ -1172,7 +1172,7 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
         runtime: Arc<dyn SystemRuntime>,
         project_artifacts: &mut ArtifactStore,
     ) -> Result<Self::Output> {
-        use crate::pipeline::render_qmd_to_preview_ast;
+        use crate::pipeline::render_qmd_to_preview_ast_with_capture;
         use crate::render::{BinaryDependencies, RenderContext, RenderOptions};
 
         // Read source bytes from the runtime (VFS in WASM, native FS
@@ -1248,7 +1248,7 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
 
         let source_name = doc_info.input.to_string_lossy().to_string();
 
-        let mut preview_output = render_qmd_to_preview_ast(
+        let mut preview_output = render_qmd_to_preview_ast_with_capture(
             &input_bytes,
             &source_name,
             &mut ctx,
@@ -1261,6 +1261,9 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
             // captures; future per-page capture maps would replace this
             // with an index-lookup.
             self.captures.clone(),
+            // WasmPassTwoOutput keeps only the transformed AST. The response
+            // builder recaptures the baseline with the original active path.
+            false,
         )
         .await?;
         preview_output.diagnostics.extend(static_sweep_diagnostics);

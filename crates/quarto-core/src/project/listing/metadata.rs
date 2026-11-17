@@ -813,6 +813,7 @@ mod tests {
             "subtitle-html",
             "description-html",
             "image-html",
+            "image-placeholder-html",
             "category-html",
             "metadata-attrs",
             "table-row",

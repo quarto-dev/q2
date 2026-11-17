@@ -17,7 +17,8 @@ That equal-extent case is the only residual ambiguity, and it needs a
 deterministic tie-break.
 
 No built-in-language golden in the corpus produces an equal-extent
-collision. `user-grammar-toml` was previously assumed to, but it does
+collision. The upstream tree-sitter-toml query (the former
+`user-grammar-toml` fixture) was previously assumed to, but it does
 not: there `(bare_key) @type` is **nested inside** `(pair (bare_key))
 @property` (different ends), and only *appears* equal-extent in the legacy
 `collect_spans` output because the bd-98k6 over-wrap bug stretched `type`
@@ -43,19 +44,23 @@ and sorted.
 
 ## Provenance
 
-The grammar binary is the **same** tree-sitter-toml grammar vendored in
-`../user-grammar-toml`, reused purely as a vehicle for a query that
+The grammar binary is the tree-sitter-toml release asset, which the former
+`user-grammar-toml` fixture also used (that fixture is now
+`../user-grammar-properties`, since TOML became a built-in language in
+bd-z6xw3psd). It is reused purely as a vehicle for a query that
 double-captures a node — TOML syntax is incidental.
 
 The loader derives the class name from the `.wasm` stem **and** resolves the
 grammar's entry point as `tree_sitter_<stem>`, so the stem must match the
 symbol the binary actually exports. This binary exports `tree_sitter_toml`,
 so the file is `toml.wasm` and the fixture registers the class `toml`. That
-does **not** collide with the real `../user-grammar-toml` fixture: each is
-loaded into its own `UserGrammars` instance in its own test, so the class
-key `toml` is local to that instance and never in the built-in registry.
+the built-in registry also has `toml` does not matter: the test loads the
+fixture into its own `UserGrammars` instance and calls
+`UserGrammars::highlight_captures` directly, which never consults the
+built-in registry.
 
 - **Grammar**: [tree-sitter-grammars/tree-sitter-toml](https://github.com/tree-sitter-grammars/tree-sitter-toml), tag v0.7.0, commit `64b56832c2cffe41758f28e05c756a3a98d16f41`, MIT.
-- `toml.wasm` — byte-identical copy of `../user-grammar-toml/toml.wasm`.
+- `toml.wasm` — the v0.7.0 release asset `tree-sitter-toml.wasm`
+  (24 040 bytes), renamed.
 - `highlights.scm` — hand-written for this fixture (NOT upstream); the
   double-capture is intentional.

@@ -77,7 +77,7 @@ pub fn crossref_target_view(block: &Block) -> Option<CrossrefTargetView<'_>> {
 /// Inline-level counterpart to [`crossref_target_view`].
 ///
 /// Inline crossref targets exist too — labelled display equations are
-/// `Inline::Custom("Equation")` with the standard plain_data triple. A
+/// `Inline::Custom(Box::new("Equation"))` with the standard plain_data triple. A
 /// walker that wants a uniform outline of all crossref targets (as the
 /// LSP outline does) must recognize both shapes.
 pub fn crossref_target_view_inline(inline: &Inline) -> Option<CrossrefTargetView<'_>> {
@@ -135,14 +135,14 @@ mod tests {
 
     fn make_float_ref_target(ident: &str, ref_type: &str, kind: &str) -> Block {
         let attr = (ident.to_string(), vec![], LinkedHashMap::new());
-        let mut node = CustomNode::new(FLOAT_REF_TARGET, attr, si());
+        let mut node = CustomNode::new(FLOAT_REF_TARGET, attr.into(), si());
         node.plain_data = json!({
             "ref_type": ref_type,
             "kind": kind,
             "identifier": ident,
         });
         node.slots.insert("content".into(), Slot::Blocks(vec![]));
-        Block::Custom(node)
+        Block::Custom(Box::new(node))
     }
 
     #[test]
@@ -167,7 +167,7 @@ mod tests {
     fn view_none_for_unrelated_custom_node() {
         // Callout without crossref plain_data returns None.
         let node = CustomNode::new("Callout", empty_attr(), si());
-        let block = Block::Custom(node);
+        let block = Block::Custom(Box::new(node));
         assert!(crossref_target_view(&block).is_none());
     }
 
@@ -175,13 +175,13 @@ mod tests {
     fn view_recognizes_theorem_custom_node() {
         use crate::crossref::THEOREM;
         let attr = ("thm-one".to_string(), vec![], LinkedHashMap::new());
-        let mut node = CustomNode::new(THEOREM, attr, si());
+        let mut node = CustomNode::new(THEOREM, attr.into(), si());
         node.plain_data = json!({
             "ref_type": "thm",
             "kind": "Theorem",
             "identifier": "thm-one",
         });
-        let block = Block::Custom(node);
+        let block = Block::Custom(Box::new(node));
         let view = crossref_target_view(&block).expect("theorem recognized");
         assert_eq!(view.ref_type, "thm");
         assert_eq!(view.kind, "Theorem");
@@ -194,13 +194,13 @@ mod tests {
         // a sugaring pass populates these fields on Callouts with
         // crossref ids).
         let attr = ("nte-one".to_string(), vec![], LinkedHashMap::new());
-        let mut node = CustomNode::new("Callout", attr, si());
+        let mut node = CustomNode::new("Callout", attr.into(), si());
         node.plain_data = json!({
             "ref_type": "nte",
             "kind": "Note",
             "identifier": "nte-one",
         });
-        let block = Block::Custom(node);
+        let block = Block::Custom(Box::new(node));
         let view = crossref_target_view(&block).expect("callout recognized");
         assert_eq!(view.ref_type, "nte");
     }
@@ -208,18 +208,18 @@ mod tests {
     #[test]
     fn view_none_for_float_ref_target_without_identifier() {
         let attr = (String::new(), vec![], LinkedHashMap::new());
-        let mut node = CustomNode::new(FLOAT_REF_TARGET, attr, si());
+        let mut node = CustomNode::new(FLOAT_REF_TARGET, attr.into(), si());
         node.plain_data = json!({"ref_type": "fig", "kind": "Figure"});
-        let block = Block::Custom(node);
+        let block = Block::Custom(Box::new(node));
         assert!(crossref_target_view(&block).is_none());
     }
 
     #[test]
     fn view_none_when_plain_data_missing_ref_type() {
         let attr = ("fig-one".to_string(), vec![], LinkedHashMap::new());
-        let mut node = CustomNode::new(FLOAT_REF_TARGET, attr, si());
+        let mut node = CustomNode::new(FLOAT_REF_TARGET, attr.into(), si());
         node.plain_data = json!({"kind": "Figure"});
-        let block = Block::Custom(node);
+        let block = Block::Custom(Box::new(node));
         assert!(crossref_target_view(&block).is_none());
     }
 

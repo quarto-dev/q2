@@ -1,6 +1,6 @@
 ---
 title: "Unprocessed Delete Markup"
-description: !str "Delete editorial markup ({-- ...}) was not desugared to a Span during postprocessing."
+description: !str "Delete editorial markup ([-- ...]) was not desugared to a Span during postprocessing."
 code: Q-3-34
 subsystem: writer
 status: stub
@@ -11,14 +11,14 @@ categories:
 
 # `Q-3-34` — Unprocessed Delete Markup
 
-> Delete editorial markup `{-- ...}` was not desugared to a
+> Delete editorial markup `[-- ...]` was not desugared to a
 > Span during postprocessing.
 
 ## What this means
 
-Quarto's CriticMarkup-inspired deletion construct `{-- ...}`
+Quarto's CriticMarkup-inspired deletion construct `[-- ...]`
 is parsed as a `Delete` AST node. Postprocessing rewrites it
-as a `Span` with the `.del` class before the writer runs.
+as a `Span` with the `.quarto-delete` class before the writer runs.
 This error fires when a raw `Delete` node reaches the writer.
 
 This is a defensive guard. The condition is a pipeline bug, not

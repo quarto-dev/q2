@@ -272,3 +272,28 @@ describe('PreviewApp edit write-back (bd-ov4gqk3m)', () => {
     expect(props.commentingDisabled).toBe(true);
   });
 });
+
+describe('PreviewApp untransformed-AST capture gating (Phase 3B1)', () => {
+  it('allowEdit arms capture on the first render', async () => {
+    const runtime = await import('@quarto/preview-runtime');
+    await mountAndGetSetAst();
+
+    expect((runtime.renderPageForPreview as ReturnType<typeof vi.fn>).mock.calls[0]?.[3]).toEqual({
+      captureUntransformedAst: true,
+    });
+  });
+
+  it('read-only mode leaves capture, editing, commenting, and nested regeneration off', async () => {
+    mockState.allowEdit = false;
+    const runtime = await import('@quarto/preview-runtime');
+    await mountAndGetSetAst();
+    const props = capturedIframeProps[capturedIframeProps.length - 1];
+
+    expect((runtime.renderPageForPreview as ReturnType<typeof vi.fn>).mock.calls[0]?.[3]).toEqual({
+      captureUntransformedAst: false,
+    });
+    expect(props.editingDisabled).toBe(true);
+    expect(props.commentingDisabled).toBe(true);
+    expect(runtime.regenerateNestedBuffers).not.toHaveBeenCalled();
+  });
+});

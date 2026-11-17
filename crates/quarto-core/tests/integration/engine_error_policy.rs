@@ -217,3 +217,65 @@ fn healthy_cells_are_unaffected() {
     assert!(md.contains('5'), "output intact");
     assert!(!md.contains("#|"), "directive stripped from echo");
 }
+
+/// GH #1247: `eval: false` keeps the cell's code and skips the kernel, as in
+/// Quarto 1 (`notebook.py`'s `cell_execute`). The cell would raise if it ran,
+/// and its `print` would leave output.
+fn assert_not_evaluated(md: &str) {
+    assert!(md.contains("::: {.cell}"), "cell wrapper kept; got:\n{md}");
+    assert!(
+        md.contains("undefined_name.add(1)"),
+        "the cell's code is shown; got:\n{md}"
+    );
+    assert!(
+        !md.contains(".cell-output"),
+        "an unevaluated cell has no output; got:\n{md}"
+    );
+    assert!(
+        !md.contains("#|"),
+        "directive stripped from echo; got:\n{md}"
+    );
+}
+
+#[test]
+fn cell_eval_false_is_not_run() {
+    if !engine_available("jupyter") {
+        eprintln!("Skipping test: jupyter not available");
+        return;
+    }
+    let captures = run(
+        "---\ntitle: Not evaluated\nengine: jupyter\n---\n\n```{python}\n#| eval: false\nprint(\"ran\")\nundefined_name.add(1)\n```\n",
+    )
+    .expect("GH #1247: an eval: false cell must not run, so it cannot fail the render");
+    assert_not_evaluated(&result_markdown(&captures));
+}
+
+#[test]
+fn document_eval_false_is_not_run() {
+    if !engine_available("jupyter") {
+        eprintln!("Skipping test: jupyter not available");
+        return;
+    }
+    let captures = run(
+        "---\ntitle: Not evaluated\nengine: jupyter\nexecute:\n  eval: false\n---\n\n```{python}\nprint(\"ran\")\nundefined_name.add(1)\n```\n",
+    )
+    .expect("GH #1247: document-level execute.eval: false must keep cells from running");
+    assert_not_evaluated(&result_markdown(&captures));
+}
+
+#[test]
+fn cell_eval_true_overrides_document_eval_false() {
+    if !engine_available("jupyter") {
+        eprintln!("Skipping test: jupyter not available");
+        return;
+    }
+    let captures = run(
+        "---\ntitle: Mixed\nengine: jupyter\nexecute:\n  eval: false\n---\n\n```{python}\n#| eval: true\n2 + 3\n```\n",
+    )
+    .expect("an eval: true cell runs under a document eval: false");
+    let md = result_markdown(&captures);
+    assert!(
+        md.contains(".cell-output") && md.contains('5'),
+        "cell-level eval: true must run the cell; got:\n{md}"
+    );
+}

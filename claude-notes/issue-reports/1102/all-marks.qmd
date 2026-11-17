@@ -1,0 +1,37 @@
+---
+title: "Marks [++ in the title]"
+format: typst
+---
+
+[++ Deze zin is toegevoegd.] [-- Deze zin is verwijderd.] [>> Klopt dit getal?]
+
+Highlight: [!! highlighted text]. Edge cases: [++ x](paren after), [-- y]\[bracket after\],
+nested [-- old [!! hot] words], and attributes [>> check this]{author="Ana \"A\" O'Neil" date="2026-11-07"}.
+
+::: ++
+
+An inserted paragraph.
+
+- with a list item
+
+:::
+
+::: --
+
+A deleted paragraph.
+
+:::
+
+::: !!
+
+A highlighted paragraph.
+
+:::
+
+::: >> {author="Ana"}
+
+A block comment, over
+
+two paragraphs.
+
+:::

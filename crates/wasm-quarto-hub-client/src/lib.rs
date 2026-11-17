@@ -20,19 +20,19 @@ use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
 
 use quarto_core::overlay_runtime::RenderOverlay;
+use quarto_core::pipeline::render_qmd_to_preview_ast_with_capture;
 use quarto_core::project::drafts::RenderAudience;
 use quarto_core::project::render_scripts::RenderHost;
 use quarto_core::{
-    render_qmd_to_html, render_qmd_to_preview_ast, BinaryDependencies, DocumentInfo, Format,
-    HtmlRenderConfig, ProjectConfig, ProjectContext, QuartoError, RenderContext, RenderOptions,
-    ResourceResolverContext,
+    BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig, ProjectContext,
+    QuartoError, RenderContext, RenderOptions, ResourceResolverContext, render_qmd_to_html,
 };
 use quarto_error_reporting::{
-    diagnostic_to_json, with_source_file, DiagnosticMessage, JsonDiagnostic, JsonPass1Failure,
+    DiagnosticMessage, JsonDiagnostic, JsonPass1Failure, diagnostic_to_json, with_source_file,
 };
 use quarto_pandoc_types::ConfigValue;
 use quarto_sass::{
-    compile_theme_css, ThemeConfig, ThemeContext, BOOTSTRAP_RESOURCES, RESOURCE_PATH_PREFIX,
+    BOOTSTRAP_RESOURCES, RESOURCE_PATH_PREFIX, ThemeConfig, ThemeContext, compile_theme_css,
 };
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::{SystemRuntime, WasmRuntime};
@@ -100,7 +100,7 @@ fn populate_vfs_with_embedded_resources(runtime: &WasmRuntime) {
 
 /// Populate the VFS with built-in extensions from the embedded directory.
 fn populate_builtin_extensions(runtime: &WasmRuntime) {
-    use include_dir::{include_dir, Dir};
+    use include_dir::{Dir, include_dir};
 
     static EXTENSIONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../resources/extensions");
 
@@ -118,7 +118,7 @@ fn populate_builtin_extensions(runtime: &WasmRuntime) {
 /// `builtin_extension_subtree_roots` reads on this target — keep the two in
 /// sync when adding a subtree.
 fn populate_extension_subtrees(runtime: &WasmRuntime) {
-    use include_dir::{include_dir, Dir};
+    use include_dir::{Dir, include_dir};
 
     // orange-book (quarto_core::extension::EXTENSION_SUBTREE_NAMES[0])
     static ORANGE_BOOK_SUBTREE_DIR: Dir = include_dir!(
@@ -672,8 +672,8 @@ struct RenderResponse {
     is_slides: bool,
     /// Untransformed Pandoc AST JSON — the `qmd_to_pandoc` output
     /// captured immediately after `ParseDocumentStage`, before any
-    /// `AstTransformsStage`.  Populated alongside `ast_json` for
-    /// q2-preview renders; `None` for HTML / error responses.
+    /// `AstTransformsStage`. Populated alongside `ast_json` for capture-armed
+    /// q2-preview renders; `None` for capture-off, HTML, and error responses.
     /// Round-tripped to the frontend as the baseline for
     /// `apply_node_edit` (target-incremental-writes Phase 1).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -838,9 +838,9 @@ fn resolve_entry_format(
 /// * `content` - QMD source text
 ///
 /// # Returns
-/// JSON string containing:
+/// A JS object (not a JSON string; see [`ast_response_to_js`]) with:
 /// - `success`: true/false
-/// - `ast`: Serialized Pandoc AST (on success)
+/// - `ast`: the Pandoc AST as a JSON string (on success)
 /// - `error`: Error message (on failure)
 /// - `diagnostics`: Structured error diagnostics with line/column info
 /// - `warnings`: Structured warning diagnostics with line/column info
@@ -850,7 +850,7 @@ fn resolve_entry_format(
 /// Kept as a separate entry point for callers that have no attribution
 /// to ship and want the simpler signature.
 #[wasm_bindgen]
-pub async fn parse_qmd_to_ast(content: &str) -> String {
+pub async fn parse_qmd_to_ast(content: &str) -> JsValue {
     parse_qmd_to_ast_with_attribution(content, None).await
 }
 
@@ -879,7 +879,7 @@ pub async fn parse_qmd_to_ast(content: &str) -> String {
 pub async fn parse_qmd_to_ast_with_attribution(
     content: &str,
     attribution_json: Option<String>,
-) -> String {
+) -> JsValue {
     // Create a virtual path for this content
     let path = Path::new("/input.qmd");
 
@@ -892,15 +892,14 @@ pub async fn parse_qmd_to_ast_with_attribution(
     let format = match Format::from_format_string(&format_str) {
         Ok(f) => f,
         Err(e) => {
-            return serde_json::to_string(&AstResponse {
+            return ast_response_to_js(AstResponse {
                 success: false,
                 ast: None,
                 qmd: None,
                 error: Some(e),
                 diagnostics: None,
                 warnings: None,
-            })
-            .unwrap_or_default();
+            });
         }
     };
 
@@ -948,15 +947,14 @@ pub async fn parse_qmd_to_ast_with_attribution(
                 _ => (e.to_string(), None),
             };
 
-            return serde_json::to_string(&AstResponse {
+            return ast_response_to_js(AstResponse {
                 success: false,
                 error: Some(error_msg),
                 ast: None,
                 qmd: None,
                 diagnostics,
                 warnings: None,
-            })
-            .unwrap();
+            });
         }
     };
 
@@ -972,29 +970,27 @@ pub async fn parse_qmd_to_ast_with_attribution(
             .transform(&mut output.ast, &mut ctx)
             .await
         {
-            return serde_json::to_string(&AstResponse {
+            return ast_response_to_js(AstResponse {
                 success: false,
                 error: Some(format!("attribution generate failed: {e}")),
                 ast: None,
                 qmd: None,
                 diagnostics: None,
                 warnings: None,
-            })
-            .unwrap();
+            });
         }
         if let Err(e) = AttributionRenderTransform::new()
             .transform(&mut output.ast, &mut ctx)
             .await
         {
-            return serde_json::to_string(&AstResponse {
+            return ast_response_to_js(AstResponse {
                 success: false,
                 error: Some(format!("attribution render failed: {e}")),
                 ast: None,
                 qmd: None,
                 diagnostics: None,
                 warnings: None,
-            })
-            .unwrap();
+            });
         }
     }
 
@@ -1015,7 +1011,6 @@ pub async fn parse_qmd_to_ast_with_attribution(
     // unflagged path (Phase 0 test #10).
     let (attribution_by_node, attribution_actors) =
         quarto_core::attribution::json_attribution_fields(&ctx.format_options.json);
-    let mut buf = Vec::new();
     let json_config = pampa::writers::json::JsonConfig {
         include_inline_locations: true,
         attribution_by_node,
@@ -1023,38 +1018,21 @@ pub async fn parse_qmd_to_ast_with_attribution(
         ..Default::default()
     };
 
-    let ast_json = match pampa::writers::json::write_with_config(
-        &output.ast,
-        &ast_context,
-        &mut buf,
-        &json_config,
-    ) {
-        Ok(_) => match String::from_utf8(buf) {
-            Ok(json) => json,
-            Err(e) => {
-                return serde_json::to_string(&AstResponse {
-                    success: false,
-                    error: Some(format!("Failed to convert AST JSON to string: {}", e)),
-                    ast: None,
-                    qmd: None,
-                    diagnostics: None,
-                    warnings: None,
-                })
-                .unwrap();
-            }
-        },
-        Err(e) => {
-            return serde_json::to_string(&AstResponse {
-                success: false,
-                error: Some(format!("Failed to serialize AST: {:?}", e)),
-                ast: None,
-                qmd: None,
-                diagnostics: None,
-                warnings: None,
-            })
-            .unwrap();
-        }
-    };
+    // Stream the AST JSON straight to a JS string (see `JsStringSink`).
+    let mut sink = JsStringSink::new();
+    if let Err(e) =
+        pampa::writers::json::write_with_config(&output.ast, &ast_context, &mut sink, &json_config)
+    {
+        return ast_response_to_js(AstResponse {
+            success: false,
+            error: Some(format!("Failed to serialize AST: {:?}", e)),
+            ast: None,
+            qmd: None,
+            diagnostics: None,
+            warnings: None,
+        });
+    }
+    let ast_json = sink.finish();
 
     // Convert warnings to structured JSON with line/column info.
     // Attribution diagnostics collected on `ctx.diagnostics` are
@@ -1066,19 +1044,21 @@ pub async fn parse_qmd_to_ast_with_attribution(
             &output.source_context,
         ));
     }
-    serde_json::to_string(&AstResponse {
-        success: true,
-        error: None,
-        ast: Some(ast_json),
-        qmd: None,
-        diagnostics: None,
-        warnings: if warnings.is_empty() {
-            None
-        } else {
-            Some(warnings)
+    ast_response_with_ast_to_js(
+        AstResponse {
+            success: true,
+            error: None,
+            ast: None,
+            qmd: None,
+            diagnostics: None,
+            warnings: if warnings.is_empty() {
+                None
+            } else {
+                Some(warnings)
+            },
         },
-    })
-    .unwrap()
+        Some(ast_json),
+    )
 }
 
 /// Render a QMD file from the virtual filesystem.
@@ -1132,6 +1112,7 @@ async fn render_qmd_with_overlay(
         None,
         None,
         None,
+        true,
         runtime_arc.clone(),
     )
     .await
@@ -1202,6 +1183,7 @@ async fn render_printable_with_overlay(
         None,
         Some(&printable_format),
         None,
+        true,
         runtime_arc.clone(),
     )
     .await
@@ -1237,6 +1219,7 @@ pub async fn render_qmd_content(
         None,
         None,
         None,
+        true,
         // No overlay on the path-less render: it has no project to resolve.
         render_runtime(None),
     )
@@ -1247,12 +1230,12 @@ pub async fn render_qmd_content(
 ///
 /// Phase 9 entry point used by the hub-client live preview.
 /// Equivalent to
-/// [`render_page_in_project_with_attribution(path, user_grammars, None, None, None)`](render_page_in_project_with_attribution).
+/// [`render_page_in_project_with_attribution(path, user_grammars, None, None, None, None)`](render_page_in_project_with_attribution).
 /// Kept as a separate entry point for callers that have no
 /// attribution payload or capture to ship and want the simpler signature.
 #[wasm_bindgen]
 pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGrammars>) -> String {
-    render_page_in_project_with_attribution(path, user_grammars, None, None, None).await
+    render_page_in_project_with_attribution(path, user_grammars, None, None, None, None).await
 }
 
 /// Render a single page **in the context of its surrounding project**,
@@ -1339,13 +1322,21 @@ pub async fn render_page_in_project_with_attribution(
     // omits the argument (`undefined`) is explicitly `None` → `false`,
     // instead of relying on the ToInt32 coercion of `undefined`.
     prefer_preview_format: Option<bool>,
+    // Phase 3B1: `{ captureUntransformedAst?: boolean }`. Omitted options or
+    // flag preserve the capture-on raw-WASM contract.
+    options: Option<JsValue>,
 ) -> String {
+    let capture_untransformed_ast = match parse_capture_untransformed_ast(options) {
+        Ok(capture) => capture,
+        Err(e) => return error_response(e),
+    };
     render_page_in_project_with_overlay(
         path,
         user_grammars,
         attribution_json,
         capture_gz_json,
         prefer_preview_format,
+        capture_untransformed_ast,
         None,
     )
     .await
@@ -1359,6 +1350,7 @@ async fn render_page_in_project_with_overlay(
     attribution_json: Option<String>,
     capture_gz_json: Option<Vec<u8>>,
     prefer_preview_format: Option<bool>,
+    capture_untransformed_ast: bool,
     overlay: Option<Arc<RenderOverlay>>,
 ) -> String {
     let prefer_preview_format = prefer_preview_format.unwrap_or(false);
@@ -1410,6 +1402,7 @@ async fn render_page_in_project_with_overlay(
             attribution_json,
             None,
             None,
+            capture_untransformed_ast,
             runtime_arc.clone(),
         )
         .await;
@@ -1437,6 +1430,7 @@ async fn render_page_in_project_with_overlay(
         captures,
         attribution_json,
         None,
+        capture_untransformed_ast,
         runtime_arc.clone(),
     )
     .await
@@ -1465,9 +1459,10 @@ async fn render_page_in_project_with_overlay(
 /// and threads it through this argument.
 ///
 /// `options` (optional, trailing) is `{ to?: string, metadata?: Record<string,
-/// unknown> }`: the live viewer's `--to` (the requested format, which wins over
-/// the document's and the project's) and `-M` (the render's runtime metadata
-/// layer). Absent, the render is what it always was.
+/// unknown>, captureUntransformedAst?: boolean }`: the live viewer's `--to`
+/// (the requested format, which wins over the document's and the project's),
+/// `-M` (the render's runtime metadata layer), and the per-render baseline
+/// capture gate. Absent options or capture flag preserve capture-on behavior.
 #[wasm_bindgen]
 pub async fn render_page_for_preview(
     path: &str,
@@ -1482,6 +1477,7 @@ pub async fn render_page_for_preview(
         Ok(o) => o,
         Err(e) => return error_response(e),
     };
+    let capture_untransformed_ast = options.capture_untransformed_ast.unwrap_or(true);
     let overlay = overlay_with_metadata(None, options.metadata);
     render_page_for_preview_with_overlay(
         path,
@@ -1489,6 +1485,7 @@ pub async fn render_page_for_preview(
         capture_gz_json,
         overlay,
         options.to.as_deref(),
+        capture_untransformed_ast,
     )
     .await
 }
@@ -1501,6 +1498,7 @@ async fn render_page_for_preview_with_overlay(
     capture_gz_json: Option<Vec<u8>>,
     overlay: Option<Arc<RenderOverlay>>,
     requested_format: Option<&str>,
+    capture_untransformed_ast: bool,
 ) -> String {
     let runtime_arc = render_runtime(overlay.as_ref());
     let runtime = runtime_arc.as_ref();
@@ -1545,6 +1543,7 @@ async fn render_page_for_preview_with_overlay(
             None,
             None,
             requested_format,
+            capture_untransformed_ast,
             runtime_arc.clone(),
         )
         .await;
@@ -1566,6 +1565,7 @@ async fn render_page_for_preview_with_overlay(
         captures,
         None,
         requested_format,
+        capture_untransformed_ast,
         runtime_arc.clone(),
     )
     .await
@@ -1963,12 +1963,36 @@ fn get_to(options: &JsValue) -> Result<Option<String>, String> {
     }
 }
 
-/// The `{ to?, metadata? }` options of [`render_page_for_preview`] and the
-/// metadata and format of [`resolve_pandoc_formats`].
+fn get_capture_untransformed_ast(options: &JsValue) -> Result<Option<bool>, String> {
+    let capture = js_sys::Reflect::get(options, &"captureUntransformedAst".into())
+        .unwrap_or(JsValue::UNDEFINED);
+    if capture.is_undefined() || capture.is_null() {
+        return Ok(None);
+    }
+    capture
+        .as_bool()
+        .map(Some)
+        .ok_or_else(|| "options.captureUntransformedAst must be a boolean".to_string())
+}
+
+fn parse_capture_untransformed_ast(options: Option<JsValue>) -> Result<bool, String> {
+    let Some(options) = options.filter(|o| !o.is_undefined() && !o.is_null()) else {
+        return Ok(true);
+    };
+    if !options.is_object() {
+        return Err("options must be an object".to_string());
+    }
+    Ok(get_capture_untransformed_ast(&options)?.unwrap_or(true))
+}
+
+/// The `{ to?, metadata?, captureUntransformedAst? }` options of
+/// [`render_page_for_preview`] and the metadata and format of
+/// [`resolve_pandoc_formats`].
 #[derive(Default)]
 struct PreviewOptions {
     to: Option<String>,
     metadata: Option<serde_json::Value>,
+    capture_untransformed_ast: Option<bool>,
 }
 
 fn parse_preview_options(options: Option<JsValue>) -> Result<PreviewOptions, String> {
@@ -1984,6 +2008,7 @@ fn parse_preview_options(options: Option<JsValue>) -> Result<PreviewOptions, Str
     if !metadata.is_undefined() && !metadata.is_null() {
         out.metadata = Some(metadata_object(&metadata)?);
     }
+    out.capture_untransformed_ast = get_capture_untransformed_ast(&options)?;
     Ok(out)
 }
 
@@ -2426,7 +2451,7 @@ fn parse_resolve_formats_options(
                 .ok_or_else(|| "options.contentOverride must be a string".to_string())?,
         );
     }
-    let PreviewOptions { to, metadata } = parse_preview_options(Some(options))?;
+    let PreviewOptions { to, metadata, .. } = parse_preview_options(Some(options))?;
     out.to = to;
     out.metadata = metadata;
     Ok(out)
@@ -2528,6 +2553,8 @@ async fn render_single_doc_to_response(
     // The requested format (`to`; the live viewer's `--to`), which wins over
     // the document's and the project's (FR2). `None` for every other entry.
     requested_format: Option<&str>,
+    // Whether to run the separate parent-less parse and return its JSON.
+    capture_untransformed_ast: bool,
     // The render's runtime, already wrapped in the request's overlay by the
     // entry that created it (FR12); this function never wraps.
     runtime_arc: Arc<dyn SystemRuntime>,
@@ -2591,13 +2618,14 @@ async fn render_single_doc_to_response(
         .pipeline_kind
     {
         Some("preview") => {
-            match render_qmd_to_preview_ast(
+            match render_qmd_to_preview_ast_with_capture(
                 content,
                 &source_name,
                 &mut ctx,
                 runtime_arc,
                 None,
                 captures,
+                capture_untransformed_ast,
             )
             .await
             {
@@ -2721,11 +2749,14 @@ async fn render_project_active_page_to_response(
     attribution_json: Option<String>,
     // The requested format (`to`), as for `render_single_doc_to_response`.
     requested_format: Option<&str>,
+    // Whether this response owns an untransformed-AST capture. Project pass 2
+    // remains capture-off regardless of this response-level flag.
+    capture_untransformed_ast: bool,
     // The render's runtime, already wrapped in the request's overlay by the
     // entry that created it (FR12); this function never wraps.
     runtime_arc: Arc<dyn SystemRuntime>,
 ) -> String {
-    use quarto_core::project::orchestrator::{project_type_for, ProjectPipeline, RenderMode};
+    use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
     use quarto_core::project::pass2_renderer::{
         Pass2Payload, RenderToHtmlRenderer, RenderToPreviewAstRenderer,
     };
@@ -2940,29 +2971,33 @@ async fn render_project_active_page_to_response(
         Pass2Payload::AstJson(s) => (None, Some(s)),
     };
 
-    // Capture the untransformed AST for the active page when this is a
-    // q2-preview render (ast_json is populated). Same logic as
+    // Capture the untransformed AST for the active page when this is an armed
+    // q2-preview render (ast_json is populated). The filter keeps the false
+    // path from parsing or serializing at all. Same capture logic as
     // quarto_core::pipeline::capture_untransformed_ast_json.
     let source_name = active_path.to_string_lossy();
-    let untransformed_ast_json = ast_json.as_ref().and_then(|_| {
-        use pampa::wasm_entry_points::qmd_to_pandoc;
-        use pampa::writers::json::{write_with_config, JsonConfig};
-        let (ast, context) = qmd_to_pandoc(content).ok()?;
-        let ast_ctx = pampa::pandoc::ASTContext {
-            filenames: vec![source_name.to_string()],
-            example_list_counter: std::cell::Cell::new(1),
-            source_context: context.source_context.clone(),
-            parent_source_info: None,
-            file_id: quarto_source_map::FileId(0),
-        };
-        let json_config = JsonConfig {
-            include_inline_locations: true,
-            ..Default::default()
-        };
-        let mut buf = Vec::new();
-        write_with_config(&ast, &ast_ctx, &mut buf, &json_config).ok()?;
-        String::from_utf8(buf).ok()
-    });
+    let untransformed_ast_json = ast_json
+        .as_ref()
+        .filter(|_| capture_untransformed_ast)
+        .and_then(|_| {
+            use pampa::wasm_entry_points::qmd_to_pandoc;
+            use pampa::writers::json::{JsonConfig, write_with_config};
+            let (ast, context) = qmd_to_pandoc(content).ok()?;
+            let ast_ctx = pampa::pandoc::ASTContext {
+                filenames: vec![source_name.to_string()],
+                example_list_counter: std::cell::Cell::new(1),
+                source_context: context.source_context.clone(),
+                parent_source_info: None,
+                file_id: quarto_source_map::FileId(0),
+            };
+            let json_config = JsonConfig {
+                include_inline_locations: true,
+                ..Default::default()
+            };
+            let mut buf = Vec::new();
+            write_with_config(&ast, &ast_ctx, &mut buf, &json_config).ok()?;
+            String::from_utf8(buf).ok()
+        });
 
     serde_json::to_string(&RenderResponse {
         success: true,
@@ -3121,8 +3156,8 @@ pub fn get_builtin_template(name: &str) -> String {
 // with quarto-doctemplate (pure Rust — no JS bridge involved).
 
 use quarto_project_create::{
-    choices_for, choices_grouped_by_path, create_project_from_choice, CreateFromChoiceOptions,
-    ScaffoldedFile, Surface,
+    CreateFromChoiceOptions, ScaffoldedFile, Surface, choices_for, choices_grouped_by_path,
+    create_project_from_choice,
 };
 
 /// A project choice for JSON serialization.
@@ -3328,8 +3363,8 @@ pub fn create_project(choice_id: &str, title: &str) -> String {
 // native and WASM targets.
 
 use quarto_lsp_core::{
-    analyze_document, get_semantic_tokens, Document, DocumentAnalysisJson, SemanticToken,
-    QMD_TOKEN_LEGEND,
+    Document, DocumentAnalysisJson, QMD_TOKEN_LEGEND, SemanticToken, analyze_document,
+    get_semantic_tokens,
 };
 
 /// Response for LSP analyze_document().
@@ -3950,6 +3985,103 @@ struct AstResponse {
     warnings: Option<Vec<JsonDiagnostic>>,
 }
 
+/// Turn an [`AstResponse`] into the JS object the parse entry points return.
+///
+/// The parse entry points used to return the response as one JSON string,
+/// with the AST JSON as a string field inside it. That escaped the whole
+/// AST JSON into a second, larger copy inside WASM memory (9.1 MiB on top
+/// of 7.3 MiB for a 188 KiB document, and 37% of the call's peak memory),
+/// and made the client parse the outer document just to get the inner
+/// string back. Here the small fields still travel as JSON, but `ast` is
+/// handed to JS as a string directly, so it is never escaped or copied
+/// within WASM. The object has the same fields, with the same types, that
+/// parsing the old string gave. See bd-fz5ls4vq and
+/// `claude-notes/plans/2026-11-12-ast-string-storage-study.md`.
+fn ast_response_to_js(response: AstResponse) -> JsValue {
+    ast_response_with_ast_to_js(response, None)
+}
+
+/// [`ast_response_to_js`], with the `ast` field supplied as a JS string
+/// (from a [`JsStringSink`]) instead of through `response.ast`.
+fn ast_response_with_ast_to_js(
+    mut response: AstResponse,
+    ast: Option<js_sys::JsString>,
+) -> JsValue {
+    let rust_ast = response.ast.take();
+    let envelope = serde_json::to_string(&response).unwrap_or_default();
+    let object = js_sys::JSON::parse(&envelope).unwrap_or_else(|_| js_sys::Object::new().into());
+    let ast: Option<JsValue> = ast
+        .map(JsValue::from)
+        .or_else(|| rust_ast.map(|s| JsValue::from_str(&s)));
+    if let Some(ast) = ast {
+        // Cannot fail: `object` is a plain object created just above.
+        let _ = js_sys::Reflect::set(&object, &JsValue::from_str("ast"), &ast);
+    }
+    object
+}
+
+/// An `io::Write` that hands its output to JavaScript in pieces and joins
+/// them there, so a large document never sits in WASM memory.
+///
+/// Writing the AST JSON into a `Vec<u8>` needs one contiguous buffer of the
+/// whole size, grown by doubling. WASM memory never shrinks and its
+/// allocator cannot move blocks, so those multi-megabyte buffers set the
+/// module's memory high-water mark and fragment it across re-parses (an
+/// editing session re-parses on every keystroke). This sink keeps one
+/// small buffer, flushes it to a JS string whenever it fills, and
+/// concatenates the pieces on the JS side. See bd-fz5ls4vq.
+struct JsStringSink {
+    buf: Vec<u8>,
+    parts: js_sys::Array,
+}
+
+impl JsStringSink {
+    const CHUNK: usize = 64 * 1024;
+
+    fn new() -> Self {
+        JsStringSink {
+            buf: Vec::with_capacity(Self::CHUNK + 4096),
+            parts: js_sys::Array::new(),
+        }
+    }
+
+    /// Move the longest valid UTF-8 prefix of the buffer to JS, keeping any
+    /// trailing partial character for the next flush.
+    fn flush_chunk(&mut self) {
+        let valid = match std::str::from_utf8(&self.buf) {
+            Ok(text) => text.len(),
+            Err(e) => e.valid_up_to(),
+        };
+        if valid == 0 {
+            return;
+        }
+        // The prefix was just validated.
+        let text = unsafe { std::str::from_utf8_unchecked(&self.buf[..valid]) };
+        self.parts.push(&JsValue::from_str(text));
+        self.buf.drain(..valid);
+    }
+
+    /// The whole output as one JS string.
+    fn finish(mut self) -> js_sys::JsString {
+        self.flush_chunk();
+        self.parts.join("")
+    }
+}
+
+impl std::io::Write for JsStringSink {
+    fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+        self.buf.extend_from_slice(data);
+        if self.buf.len() >= Self::CHUNK {
+            self.flush_chunk();
+        }
+        Ok(data.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 /// Parse QMD content and return the Pandoc JSON AST.
 ///
 /// This is the WASM equivalent of `pampa -f qmd -t json`.
@@ -3958,39 +4090,39 @@ struct AstResponse {
 /// * `content` - QMD source text
 ///
 /// # Returns
-/// JSON: `{ "success": true, "ast": "<json-ast-string>" }`
-/// or `{ "success": false, "error": "...", "diagnostics": [...] }`
+/// A JS object (not a JSON string; see [`ast_response_to_js`]):
+/// `{ success: true, ast: "<json-ast-string>" }`
+/// or `{ success: false, error: "...", diagnostics: [...] }`
 ///
 /// The `ast` field contains the JSON-serialized Pandoc AST with source info,
 /// matching the `RustQmdJson` TypeScript type from `@quarto/annotated-qmd`.
 #[wasm_bindgen]
-pub fn parse_qmd_content(content: &str) -> String {
+pub fn parse_qmd_content(content: &str) -> JsValue {
     use pampa::wasm_entry_points::qmd_to_pandoc;
-    use pampa::writers::json::{write_with_config, JsonConfig};
+    use pampa::writers::json::{JsonConfig, write_with_config};
 
     match qmd_to_pandoc(content.as_bytes()) {
         Ok((pandoc, context)) => {
-            let mut buf = Vec::new();
+            let mut sink = JsStringSink::new();
             let config = JsonConfig {
                 include_inline_locations: false,
                 ..JsonConfig::default()
             };
-            match write_with_config(&pandoc, &context, &mut buf, &config) {
-                Ok(_) => {
-                    let ast_json = String::from_utf8(buf).unwrap_or_default();
-                    serde_json::to_string(&AstResponse {
+            match write_with_config(&pandoc, &context, &mut sink, &config) {
+                Ok(_) => ast_response_with_ast_to_js(
+                    AstResponse {
                         success: true,
-                        ast: Some(ast_json),
+                        ast: None,
                         qmd: None,
                         error: None,
                         diagnostics: None,
                         warnings: None,
-                    })
-                    .unwrap()
-                }
+                    },
+                    Some(sink.finish()),
+                ),
                 Err(diags) => {
                     let diagnostics = diagnostics_to_json(&diags, &context.source_context);
-                    serde_json::to_string(&AstResponse {
+                    ast_response_to_js(AstResponse {
                         success: false,
                         ast: None,
                         qmd: None,
@@ -3998,14 +4130,13 @@ pub fn parse_qmd_content(content: &str) -> String {
                         diagnostics: Some(diagnostics),
                         warnings: None,
                     })
-                    .unwrap()
                 }
             }
         }
         Err(error_strings) => {
             // qmd_to_pandoc returns Vec<String> for backward compat
             let error_msg = error_strings.join("\n");
-            serde_json::to_string(&AstResponse {
+            ast_response_to_js(AstResponse {
                 success: false,
                 ast: None,
                 qmd: None,
@@ -4013,7 +4144,6 @@ pub fn parse_qmd_content(content: &str) -> String {
                 diagnostics: None,
                 warnings: None,
             })
-            .unwrap()
         }
     }
 }
@@ -4053,7 +4183,12 @@ pub fn ast_to_qmd(ast_json: &str) -> String {
                 Err(diags) => {
                     let error_msg = diags
                         .iter()
-                        .map(|d| d.to_text(None))
+                        .map(|d| {
+                            d.to_text_with_options(
+                                None,
+                                &quarto_error_reporting::TextRenderOptions::plain(),
+                            )
+                        })
                         .collect::<Vec<_>>()
                         .join("\n");
                     serde_json::to_string(&AstResponse {
@@ -4163,7 +4298,12 @@ pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
         Err(diags) => {
             let error_msg = diags
                 .iter()
-                .map(|d| d.to_text(None))
+                .map(|d| {
+                    d.to_text_with_options(
+                        None,
+                        &quarto_error_reporting::TextRenderOptions::plain(),
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join("\n");
             serde_json::to_string(&AstResponse {
@@ -4341,7 +4481,12 @@ pub fn prepare_template(content: &str) -> String {
         Err(diags) => {
             let error_msg = diags
                 .iter()
-                .map(|d| d.to_text(None))
+                .map(|d| {
+                    d.to_text_with_options(
+                        None,
+                        &quarto_error_reporting::TextRenderOptions::plain(),
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join("\n");
             return PrepareTemplateResponse::error(&format!(

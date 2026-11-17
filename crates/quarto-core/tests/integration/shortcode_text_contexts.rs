@@ -81,10 +81,12 @@ fn fenced_code_block_substitutes_meta_shortcode() {
     let html = render_doc(
         "```{.ini filename=\"example.gcfg\"}\n[Section \"corporate {{< meta vendor >}}\"]\n```\n",
     );
+    // `ini` is highlighted, so the code text is split across `hl-*` spans;
+    // compare the text with the markup removed.
+    let line = line_containing(&html, "Section");
     assert!(
-        html.contains("[Section &quot;corporate LDAP&quot;]"),
-        "code block text must substitute the shortcode; got code line: {}",
-        line_containing(&html, "Section")
+        strip_tags(line).contains("[Section &quot;corporate LDAP&quot;]"),
+        "code block text must substitute the shortcode; got code line: {line}"
     );
     assert!(
         !html.contains("{{&lt; meta"),
@@ -298,6 +300,21 @@ fn body_and_code_both_substitute_on_same_page() {
     let html = render_doc("Body {{< meta vendor >}}.\n\n```\ncode {{< meta vendor >}}\n```\n");
     assert!(html.contains("Body LDAP."), "body must substitute");
     assert!(html.contains("code LDAP"), "code must substitute");
+}
+
+/// The text of an HTML fragment with its tags removed (entities kept).
+fn strip_tags(html: &str) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    for c in html.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    out
 }
 
 fn line_containing<'a>(html: &'a str, needle: &str) -> &'a str {

@@ -1,0 +1,11 @@
+---
+format: typst
+---
+
+[++ Deze zin is toegevoegd.] [-- Deze zin is verwijderd.] [>> Klopt dit getal?]
+
+Inline highlight: [!! highlighted text].
+
+::: --
+A deleted paragraph (block form).
+:::

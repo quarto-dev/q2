@@ -32,6 +32,11 @@ Diagram cells accept exactly five: `label`, `fig-cap`, `fig-scap`,
 `fig-alt`, and `fig-align`. Anything else raises this warning, and the
 option is dropped.
 
+A Graphviz ```` ```dot ```` block writes its options after `//|`, and
+accepts one more, `graph-layout`, which chooses the layout engine. This
+warning is also raised when `graph-layout` names something that is not a
+Graphviz layout engine; the diagram is then drawn with `dot`.
+
 ## Why this happens
 
 The warning covers two different mistakes, and the message tells you

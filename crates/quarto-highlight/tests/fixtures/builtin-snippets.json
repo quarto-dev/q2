@@ -83,5 +83,35 @@
     "name": "qmd_markdown_alias",
     "class": "markdown",
     "source": "# Heading\n\n- item with `code`\n"
+  },
+  {
+    "name": "ini",
+    "class": "ini",
+    "source": "; Widget settings\n[server]\nhost = localhost\nport = 8080\n"
+  },
+  {
+    "name": "toml",
+    "class": "toml",
+    "source": "# Site configuration\n[server]\nhost = \"localhost\"\nport = 8080\ndebug = false\n"
+  },
+  {
+    "name": "toml_conf_alias",
+    "class": "conf",
+    "source": "key = \"value\"\n"
+  },
+  {
+    "name": "xml",
+    "class": "xml",
+    "source": "<?xml version=\"1.0\"?>\n<!-- config -->\n<server host=\"localhost\" port=\"8080\">ok</server>\n"
+  },
+  {
+    "name": "dockerfile",
+    "class": "dockerfile",
+    "source": "# Build stage\nFROM rust:1.80 AS build\nRUN cargo build --release\nCOPY --from=build /app /app\n"
+  },
+  {
+    "name": "powershell",
+    "class": "powershell",
+    "source": "# Restart the service\n$name = \"widget\"\nif ($name) {\n    Restart-Service -Name $name -Force\n}\n"
   }
 ]

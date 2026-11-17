@@ -31,7 +31,11 @@ pub fn process_paragraph(
         {
             // Attributes can appear in paragraphs (e.g., after math expressions)
             // They will be processed by postprocess.rs to create Spans
-            inlines.push(Inline::Attr(InlineAttr::new(attr, attr_source, attr_si)));
+            inlines.push(Inline::Attr(Box::new(InlineAttr::new(
+                attr,
+                attr_source,
+                attr_si,
+            ))));
         }
     }
 
@@ -57,11 +61,13 @@ pub fn process_paragraph(
                 }
             }
 
-            return PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(RawBlock {
-                format: "html".to_string(),
-                text,
-                source_info,
-            }));
+            return PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(Box::new(
+                RawBlock {
+                    format: "html".to_string(),
+                    text,
+                    source_info,
+                },
+            )));
         }
     }
 
@@ -258,11 +264,11 @@ fn split_html_block_runs(inlines: &[Inline], paragraph_si: &SourceInfo) -> Vec<B
             .collect::<Vec<_>>()
             .join("\n");
         let source_info = span_of(run.iter().map(|i| i.source_info()), fallback);
-        out.push(Block::RawBlock(RawBlock {
+        out.push(Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text,
             source_info,
-        }));
+        })));
         run.clear();
     }
 

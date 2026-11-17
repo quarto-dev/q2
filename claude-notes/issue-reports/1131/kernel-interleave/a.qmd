@@ -1,0 +1,13 @@
+---
+title: a
+---
+
+```{python}
+owner = "a"
+```
+
+```{python}
+import time
+time.sleep(3)
+print("doc a sees owner =", owner)
+```

@@ -181,7 +181,7 @@ mod tests {
             map.insert(k.to_string(), v.to_string());
         }
         Image {
-            attr: (String::new(), vec![], map),
+            attr: (String::new(), vec![], map).into(),
             content: text(alt),
             target: ("x.png".to_string(), String::new()),
             source_info: si(),
@@ -206,17 +206,17 @@ mod tests {
 
     /// The implicit figure the reader builds for `![caption](x.png){…}`.
     fn implicit_figure(caption: &str, kvs: &[(&str, &str)]) -> Block {
-        Block::Figure(Figure {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+        Block::Figure(Box::new(Figure {
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: Some(vec![plain(text(caption))]),
                 source_info: si(),
             },
-            content: vec![plain(vec![Inline::Image(image(caption, kvs))])],
+            content: vec![plain(vec![Inline::Image(Box::new(image(caption, kvs)))])],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn float(ref_type: &str, kvs: &[(&str, &str)], content: Vec<Block>, caption: &str) -> Block {
@@ -226,13 +226,13 @@ mod tests {
         }
         let node = CustomNode::new(
             FLOAT_REF_TARGET,
-            (format!("{ref_type}-x"), vec![], map),
+            (format!("{ref_type}-x"), vec![], map).into(),
             si(),
         )
         .with_data(json!({ "ref_type": ref_type, "kind": "Figure", "identifier": format!("{ref_type}-x") }))
         .with_slot("content", Slot::Blocks(content))
         .with_slot("caption_long", Slot::Blocks(vec![plain(text(caption))]));
-        Block::Custom(node)
+        Block::Custom(Box::new(node))
     }
 
     /// Every image in document order: (alt text, remaining key-values).
@@ -258,10 +258,10 @@ mod tests {
 
     #[test]
     fn fig_alt_on_a_bare_image_becomes_its_alt_text() {
-        let mut out = run(vec![para(vec![Inline::Image(image(
+        let mut out = run(vec![para(vec![Inline::Image(Box::new(image(
             "",
             &[("fig-alt", "Alt A"), ("width", "50%")],
-        ))])]);
+        )))])]);
         assert_eq!(
             images(&mut out),
             vec![("Alt A".into(), vec![("width".into(), "50%".into())])]
@@ -270,10 +270,10 @@ mod tests {
 
     #[test]
     fn alt_text_is_tokenized_like_pandoc() {
-        let mut out = run(vec![para(vec![Inline::Image(image(
+        let mut out = run(vec![para(vec![Inline::Image(Box::new(image(
             "",
             &[("fig-alt", "Two words")],
-        ))])]);
+        )))])]);
         let Block::Paragraph(p) = &mut out[0] else {
             panic!()
         };
@@ -302,19 +302,19 @@ mod tests {
 
     #[test]
     fn alt_key_value_is_folded_like_pandoc() {
-        let mut out = run(vec![para(vec![Inline::Image(image(
+        let mut out = run(vec![para(vec![Inline::Image(Box::new(image(
             "",
             &[("alt", "KV A")],
-        ))])]);
+        )))])]);
         assert_eq!(images(&mut out), vec![("KV A".into(), vec![])]);
     }
 
     #[test]
     fn fig_alt_beats_alt_and_both_are_removed() {
-        let mut out = run(vec![para(vec![Inline::Image(image(
+        let mut out = run(vec![para(vec![Inline::Image(Box::new(image(
             "",
             &[("alt", "loses"), ("fig-alt", "wins")],
-        ))])]);
+        )))])]);
         assert_eq!(images(&mut out), vec![("wins".into(), vec![])]);
     }
 
@@ -364,19 +364,19 @@ mod tests {
     #[test]
     fn images_in_tables_and_footnotes_are_reached() {
         let cell = Cell {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 1,
-            content: vec![plain(vec![Inline::Image(image(
+            content: vec![plain(vec![Inline::Image(Box::new(image(
                 "",
                 &[("fig-alt", "In cell")],
-            ))])],
+            )))])],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let table = Block::Table(Table {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+        let table = Block::Table(Box::new(Table {
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: None,
@@ -384,17 +384,17 @@ mod tests {
             },
             colspec: vec![(Alignment::Default, ColWidth::Default)],
             head: TableHead {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![TableBody {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 rowhead_columns: 0,
                 head: vec![],
                 body: vec![Row {
-                    attr: (String::new(), vec![], LinkedHashMap::new()),
+                    attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                     cells: vec![cell],
                     source_info: si(),
                     attr_source: AttrSourceInfo::empty(),
@@ -403,19 +403,19 @@ mod tests {
                 attr_source: AttrSourceInfo::empty(),
             }],
             foot: TableFoot {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
             },
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let note = para(vec![Inline::Note(Note {
-            content: vec![para(vec![Inline::Image(image(
+            content: vec![para(vec![Inline::Image(Box::new(image(
                 "",
                 &[("fig-alt", "In note")],
-            ))])],
+            )))])],
             source_info: si(),
         })]);
         let mut out = run(vec![table, note]);
@@ -430,7 +430,7 @@ mod tests {
         let mut out = run(vec![float(
             "fig",
             &[("fig-alt", "Div alt")],
-            vec![plain(vec![Inline::Image(image("", &[]))])],
+            vec![plain(vec![Inline::Image(Box::new(image("", &[])))])],
             "Div caption",
         )]);
         let Block::Custom(node) = &out[0] else {
@@ -446,8 +446,8 @@ mod tests {
             "fig",
             &[("fig-alt", "Float")],
             vec![plain(vec![
-                Inline::Image(image("", &[("fig-alt", "Own")])),
-                Inline::Image(image("", &[])),
+                Inline::Image(Box::new(image("", &[("fig-alt", "Own")]))),
+                Inline::Image(Box::new(image("", &[]))),
             ])],
             "cap",
         )]);
@@ -462,7 +462,7 @@ mod tests {
         let sub = float(
             "fig",
             &[],
-            vec![plain(vec![Inline::Image(image("", &[]))])],
+            vec![plain(vec![Inline::Image(Box::new(image("", &[])))])],
             "(a)",
         );
         let mut out = run(vec![float(
@@ -482,7 +482,10 @@ mod tests {
         };
         n.set_slot(
             "caption_long",
-            Slot::Blocks(vec![plain(vec![Inline::Image(image("icon", &[]))])]),
+            Slot::Blocks(vec![plain(vec![Inline::Image(Box::new(image(
+                "icon",
+                &[],
+            )))])]),
         );
         let mut out = run(vec![node]);
         assert_eq!(images(&mut out), vec![("icon".into(), vec![])]);
@@ -493,7 +496,7 @@ mod tests {
         let mut out = run(vec![float(
             "tbl",
             &[("fig-alt", "Not mine")],
-            vec![plain(vec![Inline::Image(image("", &[]))])],
+            vec![plain(vec![Inline::Image(Box::new(image("", &[])))])],
             "cap",
         )]);
         let Block::Custom(node) = &out[0] else {

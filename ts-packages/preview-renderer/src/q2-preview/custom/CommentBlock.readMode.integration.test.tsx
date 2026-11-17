@@ -101,7 +101,14 @@ describe('comments with Edit off (hub-client read mode, #973)', () => {
         expect(setAst).toHaveBeenCalledOnce();
         const payload = setAst.mock.calls[0][0];
         expect(payload).toMatchObject({ __isPreviewNodeEdit: true, channel: 'subtree', scope: 'comment' });
-        expect(payload.modifiedSubtreeJson).toContain('a reviewer note');
+        // The comment's words arrive as Str/Space, the qmd reader's shape
+        // (bd-ov4jydyf), not as one Str holding the raw text.
+        const committed = JSON.parse(payload.modifiedSubtreeJson).blocks[0];
+        expect(committed.c[1].c[1]).toEqual([
+            { t: 'Str', c: 'a' }, { t: 'Space' },
+            { t: 'Str', c: 'reviewer' }, { t: 'Space' },
+            { t: 'Str', c: 'note' },
+        ]);
     });
 
     it('resolves a comment through a comment-scoped commit', async () => {
@@ -151,5 +158,73 @@ describe('commentingDisabled (host cannot write)', () => {
         expect(input()).toBeNull();
         expect(resolveButton()).toBeNull();
         expect(setAst).not.toHaveBeenCalled();
+    });
+});
+
+describe('baseline-less comments (Phase 3B1)', () => {
+    const PLAIN = [{ t: 'Str', c: 'hello' }];
+
+    it('offers no new-comment affordance without a source index', async () => {
+        const { container } = mount(PLAIN, { editingDisabled: true, untransformedAstJson: null });
+        await act(async () => {
+            hover(container.querySelector('p')!);
+        });
+        expect(bubble()).toBeNull();
+    });
+
+    it('keeps existing comments readable without an input or resolve button', async () => {
+        const { setAst } = mount([...PLAIN, COMMENT], {
+            editingDisabled: true,
+            untransformedAstJson: null,
+        });
+        expect(bubble()?.textContent).toContain('existing');
+        await act(async () => {
+            fireEvent.click(bubble()!);
+        });
+        expect(bubble()?.textContent).toContain('existing');
+        expect(input()).toBeNull();
+        expect(resolveButton()).toBeNull();
+        expect(setAst).not.toHaveBeenCalled();
+    });
+
+    it('suppresses an open input when the baseline disappears and restores normal UI when it returns', async () => {
+        const inlines = [...PLAIN, COMMENT];
+        const json = astJson(inlines);
+        const view = mount(inlines, { editingDisabled: true });
+        const rerenderBaseline = (baseline: string | null) => view.rerender(
+            <PreviewRoot
+                astJson={json}
+                untransformedAstJson={baseline}
+                renderedContent={CONTENT}
+                currentFilePath="/test.qmd"
+                assetManifest={{}}
+                setAst={view.setAst}
+                onNavigateToDocument={() => {}}
+                editingDisabled={true}
+            />,
+        );
+
+        await act(async () => {
+            fireEvent.click(bubble()!);
+        });
+        expect(input()).not.toBeNull();
+        await act(async () => {
+            fireEvent.change(input()!, { target: { value: 'draft not submitted' } });
+        });
+
+        await act(async () => rerenderBaseline(null));
+        expect(bubble()?.textContent).toContain('existing');
+        expect(input()).toBeNull();
+        expect(resolveButton()).toBeNull();
+        expect(view.setAst).not.toHaveBeenCalled();
+
+        await act(async () => rerenderBaseline(json));
+        expect(input()).not.toBeNull();
+        expect(resolveButton()).not.toBeNull();
+        await act(async () => {
+            fireEvent.click(resolveButton()!);
+        });
+        expect(view.setAst).toHaveBeenCalledOnce();
+        expect(view.setAst.mock.calls[0][0]).toMatchObject({ scope: 'comment' });
     });
 });

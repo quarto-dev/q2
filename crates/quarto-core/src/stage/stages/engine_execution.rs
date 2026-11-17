@@ -109,6 +109,14 @@ pub struct EngineExecutionStage {
     /// Empty for every pipeline except q2-preview; see
     /// [`with_spliced_engines`](Self::with_spliced_engines).
     spliced_engines: HashSet<String>,
+
+    /// OPR-7a: build the engines' record in memory so core can present from it, without
+    /// serializing it, emitting it to the observer or writing a file unless something asks
+    /// for that. Internal control, on by default since OPR-9g (a plain render of a Julia or
+    /// knitr document is presented from the record); there is no user-facing opt-out.
+    /// [`with_present_from_record`](Self::with_present_from_record)`(false)` exists for tests
+    /// that need the pre-record route.
+    present_from_record: bool,
 }
 
 impl EngineExecutionStage {
@@ -121,7 +129,15 @@ impl EngineExecutionStage {
     pub fn new() -> Self {
         Self {
             spliced_engines: HashSet::new(),
+            present_from_record: true,
         }
+    }
+
+    /// Present from the engines' record (OPR-7a). See
+    /// [`present_from_record`](Self::present_from_record).
+    pub fn with_present_from_record(mut self, present: bool) -> Self {
+        self.present_from_record = present;
+        self
     }
 
     /// Mark a set of engines as already executed out-of-band, their output
@@ -507,6 +523,24 @@ impl PipelineStage for EngineExecutionStage {
             return Ok(PipelineData::DocumentAst(doc_ast));
         }
 
+        // GH #1131: the execute environment Quarto 1 gives code cells,
+        // built once per document and only when code actually runs (the
+        // markdown fast path above returned already). Stored replay runs no
+        // code, so it gets none.
+        #[cfg(not(target_arch = "wasm32"))]
+        let execute_env = if notebook_replay {
+            Vec::new()
+        } else {
+            prepare_execute_env(
+                ctx,
+                &doc_ast.ast.meta,
+                &doc_ast.source_context,
+                &document_metadata,
+            )?
+        };
+        #[cfg(target_arch = "wasm32")]
+        let execute_env: Vec<(String, String)> = Vec::new();
+
         // Thread the AST, the merged (multi-slot) ASTContext, and warnings
         // through the sequence. Slot 0 is the original `.qmd`; each engine
         // appends one intermediate slot. Note `filenames` and
@@ -523,6 +557,7 @@ impl PipelineStage for EngineExecutionStage {
             warnings,
             recorded_includes,
             derived_listing,
+            authored_meta,
         } = doc_ast;
         let mut ast = ast;
         let mut merged_context = ast_context;
@@ -629,7 +664,12 @@ impl PipelineStage for EngineExecutionStage {
             let owned_languages = resolution.owned_languages_for(engine.name());
             let exec_context = ExecutionContext::new(
                 temp_dir,
-                ctx.project.dir.clone(),
+                resolve_execute_dir(
+                    &path,
+                    &ctx.project.dir,
+                    ctx.project.is_single_file,
+                    ctx.project.config.metadata.as_ref(),
+                ),
                 path.clone(),
                 ctx.format.identifier.to_string(),
             )
@@ -667,7 +707,9 @@ impl PipelineStage for EngineExecutionStage {
             .with_units(units_for_engine)
             .with_author_texts(shared_author_texts.clone().unwrap_or_default())
             .with_want_record(want_record)
+            .with_present_from_record(self.present_from_record)
             .with_metadata(document_metadata.clone())
+            .with_execute_env(execute_env.clone())
             .with_project_env({
                 let mut pairs = crate::project::environment::env_for_subprocess(&ctx.project_env);
                 // QUARTO_PROFILE is applied unconditionally (it may
@@ -798,6 +840,13 @@ impl PipelineStage for EngineExecutionStage {
             ctx.includes
                 .header_includes
                 .extend(result.includes.header_includes);
+            // Derived page dependencies (OPR-7i), after `fold_side_data` so they never reach the
+            // stored entry, and deduplicated against what is already on the page.
+            for derived in std::mem::take(&mut result.derived_header_includes) {
+                if !ctx.includes.header_includes.contains(&derived) {
+                    ctx.includes.header_includes.push(derived);
+                }
+            }
             ctx.includes
                 .include_before
                 .extend(result.includes.include_before);
@@ -842,6 +891,7 @@ impl PipelineStage for EngineExecutionStage {
             let (reconciled_ast, parse_warnings, reconciliation_plan) = merge_markdown_into_ast(
                 ast,
                 &mut merged_context,
+                &crate::engine::nested_cell_mask::unmask(&qmd),
                 &result.markdown,
                 intermediate_name,
             )?;
@@ -870,26 +920,49 @@ impl PipelineStage for EngineExecutionStage {
         // an aux event (the preview recorder and the hub collect it). When the
         // document asked for it, the record is also written beside the
         // project's `.quarto/` (epic decisions 3 and 33).
-        if want_record {
+        if want_record || self.present_from_record {
             let unit_order = shared_units.as_deref().unwrap_or(&[]);
             let mut record = crate::record::coalesce(&engine_records, unit_order).map_err(|e| {
                 PipelineError::stage_error(self.name(), format!("execution record: {e}"))
             })?;
-            record.metadata.quarto_source = Some(project_relative_source(&ctx.project.dir, &path));
-            match serde_json::to_value(&record) {
-                Ok(value) => {
-                    ctx.observer
-                        .on_auxiliary_data(self.name(), 0, ENGINE_RECORD_KIND, &value);
+            record.metadata.quarto_source = Some(crate::record::project_relative_source(
+                &ctx.project.dir,
+                &path,
+            ));
+            // The full JSON copy (a second copy of every inline image) is made only when a
+            // record was explicitly asked for (an observer or `record: true`); presenting
+            // from the record needs none.
+            if want_record {
+                match serde_json::to_value(&record) {
+                    Ok(value) => {
+                        ctx.observer
+                            .on_auxiliary_data(self.name(), 0, ENGINE_RECORD_KIND, &value);
+                    }
+                    Err(e) => trace_event!(
+                        ctx,
+                        EventLevel::Warn,
+                        "failed to serialize the execution record: {}",
+                        e
+                    ),
                 }
-                Err(e) => trace_event!(
-                    ctx,
-                    EventLevel::Warn,
-                    "failed to serialize the execution record: {}",
-                    e
-                ),
             }
             if record_requested {
-                write_record_file(ctx, self.name(), &path, &record)?;
+                // The copy is optional (RIU-1, epic decision 10): a location that
+                // cannot be written warns and the render goes on.
+                if let Err(e) = write_record_file(ctx, self.name(), &path, &record) {
+                    ctx.add_diagnostic(
+                        DiagnosticMessageBuilder::warning("Execution record not written")
+                            .problem(format!(
+                                "the execution record copy requested by `record: true` could \
+                                 not be written: {e}"
+                            ))
+                            .add_hint(
+                                "The render is unaffected. Check that `.quarto/execution-records` \
+                                 is a directory you can write to.",
+                            )
+                            .build(),
+                    );
+                }
             }
         }
 
@@ -902,6 +975,7 @@ impl PipelineStage for EngineExecutionStage {
             warnings,
             recorded_includes,
             derived_listing,
+            authored_meta,
         }))
     }
 }
@@ -910,9 +984,15 @@ impl PipelineStage for EngineExecutionStage {
 /// into `ast`, so unchanged content keeps its source locations and new content points at the
 /// slot. Shared by the engine stage and the record splice (EXR-14), so a spliced record
 /// attributes diagnostics exactly as a live engine run does.
+///
+/// `baseline` is the text the engine received (unmasked). Its metadata is
+/// what the round-trip alone makes of `ast.meta`, so comparing it with the
+/// output's tells the engine's changes from the round-trip's (bd-8svy3p89,
+/// [`quarto_ast_reconcile::reconcile_meta`]).
 pub(crate) fn merge_markdown_into_ast(
     ast: quarto_pandoc_types::pandoc::Pandoc,
     merged_context: &mut pampa::pandoc::ASTContext,
+    baseline: &str,
     markdown: &str,
     intermediate_name: String,
 ) -> Result<
@@ -920,6 +1000,29 @@ pub(crate) fn merge_markdown_into_ast(
         quarto_pandoc_types::pandoc::Pandoc,
         Vec<quarto_error_reporting::DiagnosticMessage>,
         quarto_ast_reconcile::ReconciliationPlan,
+    ),
+    PipelineError,
+> {
+    merge_markdown_into_ast_with_slot(ast, merged_context, baseline, markdown, intermediate_name)
+        .map(|(ast, warnings, plan, _slot)| (ast, warnings, plan))
+}
+
+/// [`merge_markdown_into_ast`], also returning the `FileId` slot the reparsed text was
+/// registered under. Nodes the reparse produced and reconcile kept carry that file id; nodes
+/// reconcile preserved from the document keep their own. The record splice (RIU-3b) uses the
+/// slot to tell its own output from the author's text.
+pub(crate) fn merge_markdown_into_ast_with_slot(
+    mut ast: quarto_pandoc_types::pandoc::Pandoc,
+    merged_context: &mut pampa::pandoc::ASTContext,
+    baseline: &str,
+    markdown: &str,
+    intermediate_name: String,
+) -> Result<
+    (
+        quarto_pandoc_types::pandoc::Pandoc,
+        Vec<quarto_error_reporting::DiagnosticMessage>,
+        quarto_ast_reconcile::ReconciliationPlan,
+        quarto_source_map::FileId,
     ),
     PipelineError,
 > {
@@ -1007,9 +1110,52 @@ pub(crate) fn merge_markdown_into_ast(
     // new content from the executed AST. The "original" side may
     // already carry FileIds from earlier engines; reconcile decides
     // keep/replace by content, so mixed provenance is fine.
+    //
+    // Metadata is reconciled three ways instead: the front matter does not
+    // survive the writer and reader unchanged (strings come back as
+    // markdown, marked paths lose their kind), so the output's metadata
+    // is compared with a parse of the text the engine received, and the
+    // original value is kept wherever the two agree (bd-8svy3p89).
+    executed_ast.meta = reconcile_executed_meta(
+        std::mem::take(&mut ast.meta),
+        baseline,
+        std::mem::take(&mut executed_ast.meta),
+    );
     let (reconciled_ast, reconciliation_plan) = quarto_ast_reconcile::reconcile(ast, executed_ast);
 
-    Ok((reconciled_ast, parse_warnings, reconciliation_plan))
+    Ok((
+        reconciled_ast,
+        parse_warnings,
+        reconciliation_plan,
+        new_slot,
+    ))
+}
+
+/// [`quarto_ast_reconcile::reconcile_meta`] with the baseline parsed from
+/// `baseline` by the same reader as the engine's output. The baseline is
+/// our own serialization, so it parses; if it ever does not, the output's
+/// metadata is taken, as before bd-8svy3p89.
+fn reconcile_executed_meta(
+    original: quarto_pandoc_types::ConfigValue,
+    baseline: &str,
+    executed: quarto_pandoc_types::ConfigValue,
+) -> quarto_pandoc_types::ConfigValue {
+    match pampa::readers::qmd::read(
+        baseline.as_bytes(),
+        false,
+        "<engine input>",
+        &mut std::io::sink(),
+        true,
+        None,
+    ) {
+        Ok((baseline_ast, _, _)) => {
+            quarto_ast_reconcile::reconcile_meta(original, &baseline_ast.meta, executed)
+        }
+        Err(_) => {
+            tracing::warn!("engine input did not re-parse; taking the engine output's metadata");
+            executed
+        }
+    }
 }
 
 /// EXR-5: the one scan, with every unit's id filled from the author text the
@@ -1102,35 +1248,26 @@ fn emit_engine_record(
     }
 }
 
-/// The document's path relative to the project directory, with forward slashes
-/// (the record's `quarto_source`; a standalone document is relative to its own
-/// directory). A path outside the project keeps its file name.
-fn project_relative_source(project_dir: &std::path::Path, path: &std::path::Path) -> String {
-    let rel = path
-        .strip_prefix(project_dir)
-        .unwrap_or_else(|_| path.file_name().map_or(path, std::path::Path::new));
-    quarto_util::to_forward_slashes(rel)
-}
-
 /// EXR-5 (epic decisions 3 and 33): write the coalesced record to
 /// `.quarto/execution-records/<doc path without extension>.ipynb`,
 /// project-relative (a `.quarto/` beside a standalone document), with the
 /// deterministic serializer, so two renders of the same inputs write the same
 /// bytes.
+///
+/// The record is written as the stage built it, so under a runtime `-M` overlay (the preview
+/// applies the session's `-M` to its engine runs) its hashes describe the overlaid metadata,
+/// not the source. A later overlay-free reader (a plain `q2 render`, a viewer's staleness
+/// check) then sees the copy as stale, which errs the safe way: it re-executes rather than
+/// showing outputs the source might not produce. The preview's own stored run is made
+/// overlay-free (`quarto_core::record::overlay_free_run`) before it is published.
 fn write_record_file(
     ctx: &StageContext,
     stage: &str,
     path: &std::path::Path,
     record: &crate::record::Record,
 ) -> Result<(), PipelineError> {
-    let rel = std::path::PathBuf::from(project_relative_source(&ctx.project.dir, path))
-        .with_extension("ipynb");
-    let target = ctx
-        .project
-        .dir
-        .join(".quarto")
-        .join("execution-records")
-        .join(rel);
+    // The reader (the `q2` record source) derives the path from the same function.
+    let target = crate::record::execution_record_path(&ctx.project.dir, path);
     let text = crate::record::write_record(record).map_err(|e| {
         PipelineError::stage_error(stage, format!("serializing the execution record: {e}"))
     })?;
@@ -1322,6 +1459,122 @@ fn format_execute_defaults(
 /// no defaults for this format **and** no document scope, preserving the
 /// pre-Task-5 behavior exactly (a bare `ast.meta.get("execute").cloned()`)
 /// for every non-docx/pptx format.
+/// Build the per-document execute environment (GH #1131, bd-8fmuyh4d) and
+/// write the `QUARTO_EXECUTE_INFO` file into the document's temp dir.
+///
+/// Returns the variables every engine delivers to the code it runs; see
+/// [`crate::engine::execute_info`]. Nothing here touches q2's own process
+/// environment. A brand that fails to resolve is left out of the file
+/// rather than failing the render: the theme and Typst stages own brand
+/// diagnostics, and reporting it here too would duplicate them.
+#[cfg(not(target_arch = "wasm32"))]
+fn prepare_execute_env(
+    ctx: &mut StageContext,
+    meta: &quarto_pandoc_types::ConfigValue,
+    source_context: &quarto_source_map::SourceContext,
+    document_metadata: &std::collections::HashMap<
+        String,
+        crate::engine::ts_protocol::TsMetadataValue,
+    >,
+) -> Result<Vec<(String, String)>, PipelineError> {
+    use crate::engine::execute_info::{
+        BrandModesJson, EXECUTE_INFO_FILE_NAME, ExecuteInfoInput, FigOptions, FormatIdentity,
+        build_execute_info, path_env,
+    };
+    use crate::engine::knitr::format::ExecuteConfig;
+
+    let started = std::time::Instant::now();
+
+    let base_format = ctx.format.identifier.as_str();
+    // A dashboard is written by pandoc's `html` writer (as knitr's
+    // `format_config` reasons).
+    let writer = if base_format == "dashboard" {
+        "html"
+    } else {
+        base_format
+    };
+    let mut execute = ExecuteConfig::with_defaults_for_format(writer);
+    if let Some(scope) = merge_execute_scope(ctx.format.identifier, meta.get("execute").cloned()) {
+        execute.overlay_document_scope(&scope);
+    }
+
+    let brand = {
+        let brand_path_ctx = crate::config_paths::PathCtx::for_document(
+            Some(source_context),
+            &ctx.project.dir,
+            &ctx.document.input,
+        );
+        let resolve_brand_path = crate::config_paths::brand_path_resolver(meta, brand_path_ctx);
+        match quarto_sass::resolve_brand_modes(meta, ctx.runtime.as_ref(), &resolve_brand_path) {
+            Ok(modes) => modes.map(|modes| BrandModesJson {
+                light: brand_json(&modes.light),
+                dark: modes.dark.as_ref().map(brand_json),
+            }),
+            Err(e) => {
+                trace_event!(
+                    ctx,
+                    EventLevel::Debug,
+                    "execute info: brand not resolved ({e}); omitted"
+                );
+                None
+            }
+        }
+    };
+
+    let document_path =
+        std::path::absolute(&ctx.document.input).unwrap_or_else(|_| ctx.document.input.clone());
+    let metadata = match serde_json::to_value(document_metadata) {
+        Ok(serde_json::Value::Object(map)) => map,
+        _ => serde_json::Map::new(),
+    };
+    let identity = FormatIdentity {
+        target_format: ctx.format.target_format.clone(),
+        base_format: base_format.to_string(),
+        display_name: ctx.format.display_name.clone(),
+        extension_name: ctx.format.extension_name.clone(),
+    };
+    let info = build_execute_info(&ExecuteInfoInput {
+        document_path: &document_path,
+        metadata: &metadata,
+        identity: &identity,
+        writer,
+        execute: &execute,
+        brand: brand.as_ref(),
+    });
+    let bytes = serde_json::to_vec(&info)
+        .map_err(|e| PipelineError::other(format!("serialize execute info: {e}")))?;
+    let built = started.elapsed();
+
+    let info_path = ctx.temp_dir()?.join(EXECUTE_INFO_FILE_NAME);
+    ctx.runtime.file_write(&info_path, &bytes).map_err(|e| {
+        PipelineError::other(format!("write execute info {}: {e}", info_path.display()))
+    })?;
+
+    if std::env::var_os("QUARTO_PERF_STATS").is_some_and(|v| v == "1") {
+        eprintln!(
+            "perf.execute-info doc={} bytes={} build_us={} total_us={}",
+            document_path.display(),
+            bytes.len(),
+            built.as_micros(),
+            started.elapsed().as_micros()
+        );
+    }
+
+    let mut env = path_env(&ctx.project.dir, &document_path, &info_path);
+    env.extend(FigOptions::from_execute(&execute).env());
+    Ok(env)
+}
+
+/// One brand mode in Quarto 1's JSON shape: Q1 serializes its `Brand` class,
+/// whose `data` field is the brand as written (the field code cells read).
+#[cfg(not(target_arch = "wasm32"))]
+fn brand_json(brand: &quarto_brand::ResolvedBrand) -> serde_json::Value {
+    serde_json::json!({
+        "data": serde_json::to_value(&brand.brand).unwrap_or(serde_json::Value::Null),
+        "brandDir": brand.dir.as_ref().map(|d| d.to_string_lossy().into_owned()),
+    })
+}
+
 /// The metadata map sent to TS engines (`TsFormatInfo.metadata`): the
 /// merged document metadata, lowered, with its `execute` entry replaced by
 /// the format-merged scope ([`merge_execute_scope`]).
@@ -1358,6 +1611,33 @@ fn ts_document_metadata(
         }
     }
     map
+}
+
+/// The directory a document's code cells run in (GH #1202).
+///
+/// Matches Quarto 1 (`render-files.ts`, `command/render/project.ts`): the
+/// document's own directory, unless the document is part of a project whose
+/// `_quarto.yml` sets `project: execute-dir: project`, which runs it from
+/// the project root instead. Only the `project:` key counts, as in Quarto 1.
+pub fn resolve_execute_dir(
+    source_path: &std::path::Path,
+    project_dir: &std::path::Path,
+    is_single_file: bool,
+    project_metadata: Option<&quarto_pandoc_types::ConfigValue>,
+) -> std::path::PathBuf {
+    let wants_project = !is_single_file
+        && project_metadata
+            .and_then(|m| m.get("project"))
+            .and_then(|p| p.get("execute-dir"))
+            .and_then(|d| d.as_str())
+            == Some("project");
+    if wants_project {
+        return project_dir.to_path_buf();
+    }
+    match source_path.parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir.to_path_buf(),
+        _ => project_dir.to_path_buf(),
+    }
 }
 
 pub fn merge_execute_scope(
@@ -1603,6 +1883,7 @@ mod tests {
             warnings,
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         }
     }
 
@@ -2105,6 +2386,134 @@ mod tests {
         assert_eq!(
             kept_file.path, "/project/test.qmd",
             "kept original block must still attribute to the document"
+        );
+    }
+
+    /// bd-8svy3p89: an engine for the metadata round-trip tests. It claims
+    /// `{stub}` cells and returns its input passed through `transform`.
+    struct TransformEngine(fn(&str) -> String);
+    impl crate::engine::ExecutionEngine for TransformEngine {
+        fn name(&self) -> &str {
+            "stub"
+        }
+        fn execute(
+            &self,
+            input: &str,
+            _ctx: &crate::engine::ExecutionContext,
+        ) -> std::result::Result<crate::engine::ExecuteResult, crate::engine::ExecutionError>
+        {
+            Ok(crate::engine::ExecuteResult::new((self.0)(input)))
+        }
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            if language == "stub" {
+                crate::engine::LanguageClaim::Primary(1)
+            } else {
+                crate::engine::LanguageClaim::None
+            }
+        }
+        fn is_available(&self) -> bool {
+            true
+        }
+    }
+
+    /// Run a one-cell document whose merged metadata also holds `probe:`
+    /// (the values a project or extension would contribute) through the
+    /// engine stage with `TransformEngine(transform)`.
+    async fn run_with_probe_meta(
+        transform: fn(&str) -> String,
+        probe: &[(&str, quarto_pandoc_types::ConfigValue)],
+    ) -> DocumentAst {
+        let mut registry = crate::engine::EngineRegistry::new();
+        registry.register(std::sync::Arc::new(TransformEngine(transform)));
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context();
+        ctx.registry = std::sync::Arc::new(registry);
+
+        let content = b"---\ntitle: Before\nengine: stub\n---\n\n```{stub}\nx\n```\n";
+        let mut doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+        for (key, value) in probe {
+            doc_ast.ast.meta.insert_path(&["probe", key], value.clone());
+        }
+        let output = stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .unwrap();
+        output.into_document_ast().expect("Should be DocumentAst")
+    }
+
+    /// One value of each kind the round-trip used to mangle (the
+    /// investigation's probe matrix,
+    /// `claude-notes/plans/engine-metadata-round-trip-investigation/`).
+    fn probe_values() -> Vec<(&'static str, quarto_pandoc_types::ConfigValue)> {
+        use quarto_pandoc_types::ConfigValue;
+        use yaml_rust2::Yaml;
+        // A real (non-sentinel) span, as a project file would give.
+        let si = || quarto_source_map::SourceInfo::original(quarto_source_map::FileId(77), 3, 9);
+        let s = |v: &str| ConfigValue::new_scalar(Yaml::String(v.into()), si());
+        vec![
+            // GH #1152: an extension's rebased theme path.
+            (
+                "path-underscores",
+                ConfigValue::new_path("_extensions/a/_b.scss".into(), si()),
+            ),
+            (
+                "path-plain",
+                ConfigValue::new_path("styles/main.css".into(), si()),
+            ),
+            (
+                "glob",
+                ConfigValue::new_glob("posts/*_draft_*.qmd".into(), si()),
+            ),
+            ("expr", ConfigValue::new_expr("params$x".into(), si())),
+            ("url", s("https://example.com/a_b_/c")),
+            ("markdown-chars", s("a [b](c) `d`")),
+            ("html", s("<b>x</b>")),
+            ("cite", s("@ref")),
+            ("math", s("$x$")),
+            ("multiline", s("line1\nline2")),
+            ("empty", s("")),
+            ("bool", ConfigValue::new_scalar(Yaml::Boolean(true), si())),
+        ]
+    }
+
+    // bd-8svy3p89 (and GH #1152): the round-trip re-reads the merged
+    // metadata as document markdown. Values the engine did not change
+    // come back exactly as they went in: kind, text and span.
+    #[tokio::test]
+    async fn engine_round_trip_keeps_untouched_metadata() {
+        let probe = probe_values();
+        let result = run_with_probe_meta(|input| input.to_string(), &probe).await;
+        for (key, before) in &probe {
+            let after = result
+                .ast
+                .meta
+                .get_path(&["probe", key])
+                .unwrap_or_else(|| panic!("probe.{key} survives"));
+            assert_eq!(after, before, "probe.{key} changed across the engine run");
+        }
+    }
+
+    // bd-8svy3p89: a value the engine does change (as front-matter span
+    // evaluation does) is taken from the engine's output, and its
+    // untouched siblings are not.
+    #[tokio::test]
+    async fn engine_change_to_metadata_is_taken() {
+        let probe = probe_values();
+        let result = run_with_probe_meta(
+            |input| input.replacen("title: Before", "title: After", 1),
+            &probe,
+        )
+        .await;
+        let title = result.ast.meta.get("title").expect("title");
+        assert_eq!(title.as_plain_text().as_deref(), Some("After"));
+        let (_, path_before) = &probe[0];
+        assert_eq!(
+            result.ast.meta.get_path(&["probe", "path-underscores"]),
+            Some(path_before)
         );
     }
 
@@ -2612,6 +3021,79 @@ mod tests {
         fn is_available(&self) -> bool {
             true
         }
+    }
+
+    /// OPR-7i: an engine whose result carries derived page dependencies as well as an include of
+    /// its own that is identical to one of them.
+    struct MockDerivedEngine;
+
+    impl crate::engine::ExecutionEngine for MockDerivedEngine {
+        fn name(&self) -> &str {
+            "mock-derived"
+        }
+
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            if language == "mock-derived" {
+                crate::engine::LanguageClaim::Primary(1)
+            } else {
+                crate::engine::LanguageClaim::None
+            }
+        }
+
+        fn execute(
+            &self,
+            input: &str,
+            _ctx: &crate::engine::ExecutionContext,
+        ) -> std::result::Result<crate::engine::ExecuteResult, crate::engine::ExecutionError>
+        {
+            Ok(crate::engine::ExecuteResult {
+                markdown: input.to_string(),
+                includes: crate::stage::PandocIncludes {
+                    header_includes: vec!["<A/>".to_string()],
+                    ..Default::default()
+                },
+                derived_header_includes: vec!["<A/>".to_string(), "<B/>".to_string()],
+                ..Default::default()
+            })
+        }
+
+        fn is_available(&self) -> bool {
+            true
+        }
+    }
+
+    #[tokio::test]
+    async fn derived_page_dependencies_reach_the_head_once_and_skip_one_already_there() {
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(MockDerivedEngine));
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+        let content = b"---\nengine: mock-derived\n---\n\n```{mock-derived}\nx\n```\n";
+        EngineExecutionStage::new()
+            .run(
+                PipelineData::DocumentAst(parse_qmd_to_ast(content, "/project/test.qmd")),
+                &mut ctx,
+            )
+            .await
+            .unwrap();
+        // The engine's own include stays as it is; the derived text is added once, skipping the
+        // block that is already on the page.
+        assert_eq!(ctx.includes.header_includes, vec!["<A/>", "<B/>"]);
+    }
+
+    #[test]
+    fn derived_page_dependencies_stay_out_of_the_trace_capture() {
+        let result = crate::engine::ExecuteResult {
+            derived_header_includes: vec!["<B/>".to_string()],
+            ..Default::default()
+        };
+        let v = serde_json::to_value(&result).unwrap();
+        assert!(v.get("derived_header_includes").is_none(), "{v}");
+        assert!(!v.to_string().contains("<B/>"), "{v}");
     }
 
     /// Mock engine that appends a fresh paragraph to the input — lets us
@@ -3386,6 +3868,65 @@ mod tests {
         assert_eq!(ctx.includes.include_before[0], "<div>before</div>");
         assert_eq!(ctx.includes.include_after.len(), 1);
         assert_eq!(ctx.includes.include_after[0], "<div>after</div>");
+    }
+
+    // === execute dir (GH #1202) ===
+
+    fn project_meta(execute_dir: &str) -> quarto_pandoc_types::ConfigValue {
+        use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
+        let si = quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown());
+        let entry = |key: &str, value: ConfigValue| ConfigMapEntry {
+            key: key.to_string(),
+            key_source: si.clone(),
+            value,
+        };
+        ConfigValue::new_map(
+            vec![entry(
+                "project",
+                ConfigValue::new_map(
+                    vec![entry(
+                        "execute-dir",
+                        ConfigValue::new_string(execute_dir, si.clone()),
+                    )],
+                    si.clone(),
+                ),
+            )],
+            si,
+        )
+    }
+
+    #[test]
+    fn execute_dir_defaults_to_the_documents_directory() {
+        let project = PathBuf::from("/proj");
+        let doc = project.join("sub").join("page.qmd");
+        assert_eq!(
+            resolve_execute_dir(&doc, &project, false, None),
+            project.join("sub")
+        );
+        assert_eq!(
+            resolve_execute_dir(&doc, &project, false, Some(&project_meta("file"))),
+            project.join("sub")
+        );
+    }
+
+    #[test]
+    fn execute_dir_project_runs_from_the_project_root() {
+        let project = PathBuf::from("/proj");
+        let doc = project.join("sub").join("page.qmd");
+        assert_eq!(
+            resolve_execute_dir(&doc, &project, false, Some(&project_meta("project"))),
+            project
+        );
+    }
+
+    #[test]
+    fn execute_dir_project_is_ignored_outside_a_project() {
+        let dir = PathBuf::from("/single");
+        let doc = dir.join("doc.qmd");
+        assert_eq!(
+            resolve_execute_dir(&doc, &dir, true, Some(&project_meta("project"))),
+            dir
+        );
     }
 
     // === Phase 0C: SourceInfo in ExecutionContext tests ===

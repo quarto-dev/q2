@@ -1,0 +1,28 @@
+---
+title: "Typst: inline references with citeproc"
+format:
+  typst:
+    keep-typ: true
+citeproc: true
+references:
+  - id: smith2020
+    type: webpage
+    title: A page
+    author:
+      - family: Smith
+        given: Jane
+    issued:
+      date-parts: [[2020, 7, 12]]
+_quarto:
+  tests:
+    typst:
+      noErrorsOrWarnings: default
+      ensureTypstFileRegexMatches:
+        - ["Smith"]
+        - ['@smith2020']
+---
+
+bd-yjf99rzx: with `citeproc: true`, citeproc formats the citation, so the
+inline reference works and nothing is reported.
+
+See [@smith2020].

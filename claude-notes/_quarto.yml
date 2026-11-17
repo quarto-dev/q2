@@ -26,6 +26,8 @@ project:
     - "!plans/listing-table-fields-investigation/repro/**"
     - "!plans/llms-link-target-annotation-investigation/repro/**"
     - "!plans/sidebar-dir-index-md-investigation/repro/**"
+    - "!plans/navbar-dark-toggle-switch-investigation/repro-site/**"
+    - "!plans/navbar-dark-toggle-switch-investigation/repro-plain/**"
 
 
 website:

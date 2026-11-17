@@ -595,8 +595,9 @@ fn ipynb_parse_error_json_carries_cell_origin() {
 /// resolves to the notebook on disk.
 ///
 /// bd-ckbqmupi: hyperlinks are a *text-mode* behavior, so the link is
-/// checked on the human-readable stderr of a plain `q2 render` (emitted
-/// even when stderr is not a terminal). Under `--json-errors`,
+/// checked on the human-readable stderr of a plain `q2 render`. Since
+/// bd-be8ve52f (GH #1135) a captured stderr gets no hyperlinks by
+/// default, so the text run asks for them with `FORCE_HYPERLINK=1`. Under `--json-errors`,
 /// `rendered` is plain text: the same label with no escapes, while the
 /// link target travels structurally as `origin.notebook_path` (pinned
 /// by `ipynb_parse_error_json_carries_cell_origin`).
@@ -674,8 +675,15 @@ fn ipynb_diagnostic_hyperlinks_real_notebook() {
         "JSON rendered must show the plain label with no escapes; got:\n{json_rendered:?}"
     );
 
-    // Text mode: the label hyperlinks the real notebook.
-    let output = run_q2_render(&dir, &render_args);
+    // Text mode: the label hyperlinks the real notebook. stderr is
+    // captured (not a terminal), so links must be forced.
+    let output = Command::new(Q2_BIN)
+        .current_dir(&dir)
+        .arg("render")
+        .args(render_args)
+        .env("FORCE_HYPERLINK", "1")
+        .output()
+        .expect("spawn q2 binary");
     assert!(!output.status.success(), "expected non-zero exit");
     let stderr = String::from_utf8_lossy(&output.stderr);
     let rendered: &str = &stderr;

@@ -111,8 +111,12 @@ Made with Gordon on 2026-10-30.
    only the work that needs neither (KNR-1, Start condition). Its chunk keys are a
    harness-local ordinal; record ids come from the stage\'s shared unit list in KNR-3.
 2. **Structured outputs, no side channel.** knitr units hold nbformat outputs built
-   from captured pieces. knitr's finished markdown is not stored next to them. The one
-   exception is the per-chunk fallback unit (decision 8).
+   from captured pieces. knitr's finished markdown is not stored next to them. The exceptions
+   are the per-chunk fallback unit (decision 8) and, **amended 2026-11-09 (Gordon,
+   [OPR-7e](2026-11-09-opr-7e-cache-hits-as-records.md))**, a cached `cache=TRUE` chunk: its
+   record rides in knitr\'s own cache entry (or a sidecar beside it), is read back on a hit, and
+   is discarded whenever knitr invalidates the entry. That is how knitr\'s cache works; it is a
+   cache, never a store of record.
 3. **Capture on the q2 side.** q2 already patches knitr\'s namespace
    (`resources/rmd/patch.R`, `assignInNamespace`; it already replaces `sew` and
    `add_html_caption` and defines `wrap_asis_output`, and is byte-identical to Quarto 1\'s),
@@ -143,14 +147,19 @@ Made with Gordon on 2026-10-30.
    all-options rule read as stale.
 7. **knitr stays whole-document.** Reuse of a knitr record is whole document or
    nothing, as in the parent epic. Single-cell execution for knitr is out of scope.
-8. **Per-chunk fallback.** Where pieces cannot be captured (`child=`, knitr cache hits,
-   overridden hooks, LaTeX and not-yet-covered targets, and anything the harness shows is not
-   capturable), that chunk becomes a fallback unit with `text/x-quarto-markdown`. That mime is
+8. **Per-chunk fallback.** Where pieces cannot be captured (`child=`, knitr cache hits at
+   levels 1 and 2 and any hit OPR-7e does not record, overridden hooks, LaTeX and not-yet-covered
+   targets, and anything the harness shows is not capturable), that chunk becomes a fallback unit with `text/x-quarto-markdown`. That mime is
    the fallback marker (Gordon, 2026-11-02); no metadata key flags it. A record may mix structured and fallback units, but each unit uses
    exactly one mechanism, never both (parent risk 6). Fallback units are opaque to Positron
    and use the default (all-options) hash profile; structured units use the structured
    profile (decision 6). The rules per case and target are one table in KNR-3, and the chunk
    hook EXR-11 built stays permanently to write fallback units.
+   **Amended 2026-11-09 (Gordon, [OPR-7e](2026-11-09-opr-7e-cache-hits-as-records.md)):** a
+   level-3 (`cache=TRUE`) cache hit is a structured unit when its stored entry carries the
+   chunk\'s record, and a fallback unit (absent from the record, markdown in the skeleton, as
+   OPR-7b leaves it) when it does not. Levels 1 and 2 stay fallback. Each unit still uses exactly
+   one mechanism.
 9. **The oracle is q2\'s current knitr output, informed by Quarto 1 (2026-10-30).** The
    differential corpus compares the new path against q2\'s current knitr output (R code
    vendored from Quarto 1, and byte-identical to it today). Quarto 1 is a second reference,
@@ -334,7 +343,9 @@ Made with Gordon on 2026-10-30.
     [KNR-8](2026-10-30-knr-08-fallback-removal.md), modeled on
     [EXR-17](2026-10-28-exr-17-legacy-removal.md): no date, no count, an owner-decided
     trigger. KNR-6 sets up the instrument KNR-8\'s trigger reads (a counter of Rust-side
-    fallbacks).
+    fallbacks). **Amended 2026-11-09 (OPR-7e):** the shipped markdown of a cached level-3 chunk
+    is also persisted, beside its record, in knitr\'s cache entry; that copy lives and dies with
+    knitr\'s own invalidation (see decision 2).
 25. **Figure files keep the producer\'s own path, through an engine-neutral key (2026-11-02,
     Gordon; review 3 B5).** An output may carry `metadata.quarto_file_path`: the
     document-relative, forward-slash path where its producer wrote (or wants) the output\'s

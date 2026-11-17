@@ -183,6 +183,17 @@ pub trait ExecutionEngine: Send + Sync {
         None
     }
 
+    /// Kernel equivalence (RFU-2): is a unit of `language` that this engine owns ordinary
+    /// kernel code, so the same text gives the same outputs in a plain Positron kernel? The
+    /// Positron import gate admits imported outputs only for a unit whose owning engine
+    /// declares `Some(true)`.
+    ///
+    /// `None` means "undeclared" and is **not** admitted, so an engine added later takes
+    /// Positron outputs only by declaring. Default `None`.
+    fn kernel_equivalence(&self, _language: &str) -> Option<bool> {
+        None
+    }
+
     /// Whether this engine claims a particular non-QMD input file.
     ///
     /// Called during Pass-1 project scanning for files whose extension appears

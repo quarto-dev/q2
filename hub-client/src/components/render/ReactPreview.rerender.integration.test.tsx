@@ -57,8 +57,12 @@ vi.mock('@quarto/preview-runtime', () => ({
 }));
 
 // Hooks: keep them inert so the test isolates the render-trigger effect.
+// `attribution.current` is what the hook returns; the replay test below sets it.
+const attribution = vi.hoisted(() => ({
+  current: { payload: null as string | null, generating: false, pending: false },
+}));
 vi.mock('../../hooks/useAttribution', () => ({
-  useAttribution: () => ({ payload: null, generating: false }),
+  useAttribution: () => attribution.current,
 }));
 vi.mock('../../hooks/usePreference', () => ({
   usePreference: () => [false, vi.fn()],
@@ -95,6 +99,7 @@ describe('ReactPreview re-render on sibling change (bd-4jjckvwt)', () => {
   beforeEach(() => {
     renderPageInProjectWithAttribution.mockClear();
     renderPageForPreview.mockClear();
+    attribution.current = { payload: null, generating: false, pending: false };
   });
 
   it('re-renders the active deck when a sibling file (e.g. _brand.yml) changes', async () => {
@@ -128,5 +133,29 @@ describe('ReactPreview re-render on sibling change (bd-4jjckvwt)', () => {
     // The deck must re-render (→ recompile theme CSS with the new brand).
     // Pre-fix the effect omitted `fileContents`, so this never fired.
     await waitFor(() => expect(renderPageInProjectWithAttribution).toHaveBeenCalledTimes(2));
+  });
+
+  // Replay with the authors overlay on (bd-bay844no): a step must not be
+  // drawn before its own attribution is ready, or it shows the runs of the
+  // step before it.
+  it('holds the render of a replay step until its attribution is ready', async () => {
+    const fileContents = new Map<string, string>();
+    const props = baseProps(fileContents);
+    attribution.current = { payload: '{"step":1}', generating: false, pending: false };
+    const { rerender } = render(<ReactPreview {...props} attributionOn />);
+    await waitFor(() => expect(renderPageInProjectWithAttribution).toHaveBeenCalledTimes(1));
+
+    // Next step: new text, attribution still being built.
+    const nextContent = props.content + '\nmore\n';
+    attribution.current = { payload: null, generating: true, pending: true };
+    rerender(<ReactPreview {...props} attributionOn content={nextContent} />);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(renderPageInProjectWithAttribution).toHaveBeenCalledTimes(1);
+
+    // Attribution arrives: one render, with this step's payload.
+    attribution.current = { payload: '{"step":2}', generating: false, pending: false };
+    rerender(<ReactPreview {...props} attributionOn content={nextContent} />);
+    await waitFor(() => expect(renderPageInProjectWithAttribution).toHaveBeenCalledTimes(2));
+    expect(renderPageInProjectWithAttribution.mock.calls[1]).toContain('{"step":2}');
   });
 });

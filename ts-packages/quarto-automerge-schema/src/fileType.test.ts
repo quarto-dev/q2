@@ -9,7 +9,7 @@ import {
 
 /**
  * Extension-based file classification. The set of binary extensions
- * mirrors `BINARY_EXTENSIONS` in `crates/quarto-hub/src/resource.rs`
+ * mirrors `BINARY_EXTENSIONS` in `crates/quarto-project-files/src/lib.rs`
  * (the Rust side decides which project files sync as binary documents;
  * this side classifies uploads and displays). Keep the two in step.
  */

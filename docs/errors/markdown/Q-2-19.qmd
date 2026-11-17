@@ -18,8 +18,8 @@ categories:
 
 Quarto markdown supports an editorial-markup family for tracked
 changes: `[++inserted text]` for insertions, `[--deleted text]`
-for deletions, `[>>highlighted]` for highlights, and
-`[!!comment]` for editorial comments. This error fires when the
+for deletions, `[!!highlighted]` for highlights, and
+`[>>comment]` for editorial comments. This error fires when the
 insert form `[++ ...` is opened but never closed.
 
 ## Why this happens
@@ -43,5 +43,5 @@ opening bracket: `\[++text]`.
 ## Related
 
 - [`Q-2-20`](Q-2-20.qmd) — unclosed editorial delete (`[--`).
-- [`Q-2-21`](Q-2-21.qmd) — unclosed editorial comment (`[!!`).
-- [`Q-2-22`](Q-2-22.qmd) — unclosed editorial highlight (`[>>`).
+- [`Q-2-21`](Q-2-21.qmd) — unclosed editorial comment (`[>>`).
+- [`Q-2-22`](Q-2-22.qmd) — unclosed editorial highlight (`[!!`).

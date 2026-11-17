@@ -181,6 +181,10 @@ pub struct Navbar {
     /// variant (bd-0pic6 A4; folds into general `tools:` support when
     /// bd-fod3 lands — bd-ld-toggle-into-tools-hpae7m9r).
     pub dark_mode_toggle: bool,
+    /// Localized `toggle-dark-mode` term: the toggle switch's `title`
+    /// and `aria-label` (bd-kwgtllvn). Set by the generate transform
+    /// alongside `dark_mode_toggle`; the renderer falls back to English.
+    pub dark_toggle_label: Option<String>,
 }
 
 impl Navbar {
@@ -203,6 +207,7 @@ impl Navbar {
             left: Vec::new(),
             right: Vec::new(),
             dark_mode_toggle: false,
+            dark_toggle_label: None,
         }
     }
 
@@ -275,6 +280,7 @@ impl Navbar {
         if let Some(v) = cv.get("dark-mode-toggle").and_then(|v| v.as_bool()) {
             nav.dark_mode_toggle = v;
         }
+        nav.dark_toggle_label = cv.get("dark-toggle-label").and_then(|v| v.as_plain_text());
 
         nav
     }
@@ -380,6 +386,12 @@ impl Navbar {
         if self.dark_mode_toggle {
             entries.push(bool_entry("dark-mode-toggle", true, &info));
         }
+        push_optional_string(
+            &mut entries,
+            "dark-toggle-label",
+            &self.dark_toggle_label,
+            &info,
+        );
 
         ConfigValue::new_map(entries, info)
     }
@@ -809,6 +821,21 @@ mod tests {
             }
             _ => panic!("title did not round-trip"),
         }
+    }
+
+    /// bd-kwgtllvn: the localized dark-toggle label rides the
+    /// generate-transform → metadata → render-transform trip, like
+    /// `search-label`.
+    #[test]
+    fn roundtrip_preserves_dark_toggle_label() {
+        let original = Navbar {
+            dark_mode_toggle: true,
+            dark_toggle_label: Some("Dunkelmodus umschalten".to_string()),
+            ..Navbar::with_defaults()
+        };
+        let reparsed = Navbar::from_config_value(&original.to_config_value());
+        assert!(reparsed.dark_mode_toggle);
+        assert_eq!(reparsed.dark_toggle_label, original.dark_toggle_label);
     }
 
     #[test]

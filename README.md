@@ -4,7 +4,7 @@
 
 > **Experimental** - This project is under active development. It's not yet ready for production use.
 
-This repository is a Rust implementation of the next version of [Quarto](https://quarto.org). The goal is to replace parts of the TypeScript/Deno runtime with a unified Rust implementation.
+This repository is Quarto 2, the next version of [Quarto](https://quarto.org): a full rewrite of the Quarto CLI in Rust. See [What's next: Quarto 2](https://opensource.posit.co/blog/2026-04-06_whats-next-quarto-2/) for why.
 
 ## Installing
 
@@ -17,6 +17,17 @@ On Windows (PowerShell):
 ```powershell
 irm https://raw.githubusercontent.com/quarto-dev/q2/main/install.ps1 | iex
 ```
+
+**From PyPI** (any platform with Python 3.9+), as the `quarto2` package:
+
+```sh
+pip install quarto2          # or: uv tool install quarto2 / pipx install quarto2
+uvx --from quarto2 q2 --version   # one-off run, no install
+```
+
+The package downloads this release's binary from GitHub when it is
+installed and checks it against a SHA-256 checksum recorded in the
+package. Nightlies are not published to PyPI.
 
 **Nightly builds** — `main` as of last night, for trying what is not released yet:
 

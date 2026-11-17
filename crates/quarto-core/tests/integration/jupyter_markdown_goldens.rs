@@ -284,7 +284,7 @@ impl ExecutionEngine for StoredRecordJupyter {
             ctx.execute_scope.as_ref(),
             InlineTarget::from_format(&ctx.format),
             &ctx.format,
-            None,
+            &[],
             &mut fig,
         )
         .map_err(|e| ExecutionError::execution_failed("jupyter", e.to_string()))?;
@@ -441,11 +441,11 @@ fn scope(key: &str, value: bool) -> ConfigValue {
 }
 
 fn visible() -> CellVisibility {
-    CellVisibility::resolve(None)
+    CellVisibility::resolve(None, true)
 }
 
 fn hidden() -> CellVisibility {
-    CellVisibility::resolve(Some(&include_false()))
+    CellVisibility::resolve(Some(&include_false()), true)
 }
 
 fn include_false() -> ConfigValue {
@@ -487,7 +487,7 @@ fn splice_one(
         scope,
         InlineTarget::from_format("html"),
         "html",
-        None,
+        &[],
         fig,
     )
     .unwrap()
