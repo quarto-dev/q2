@@ -145,7 +145,9 @@ fn yaml_to_json(yaml: &Yaml) -> Value {
 /// Writer IO into an in-memory `Vec` does not fail in practice; on the
 /// unexpected error path we degrade to whatever was written so far rather than
 /// panicking inside a read-only query command.
-fn inlines_to_markdown(inlines: &[quarto_pandoc_types::inline::Inline]) -> String {
+/// Render inlines as markdown with the qmd writer (the `ProseMode::Value`
+/// projection). Public for the language server's wire schema (bd-kkmn4413).
+pub fn inlines_to_markdown(inlines: &[quarto_pandoc_types::inline::Inline]) -> String {
     let mut buf: Vec<u8> = Vec::new();
     let _ = qmd_writer::write_inlines(inlines, &mut buf);
     String::from_utf8_lossy(&buf).into_owned()

@@ -124,6 +124,7 @@ website:
     - id: tools
       title: "Tools"
       contents:
+        - tools/q2-lsp.qmd
         - tools/q2-mcp.qmd
         - tools/terminal-output.qmd
     - id: guide

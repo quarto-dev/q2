@@ -1,0 +1,132 @@
+---
+title: "The q2 language server"
+description: "What `q2 lsp` offers editors and developer tooling: project-aware diagnostics and outlines, and the `quarto/documentMetadata` and `quarto/documentProfile` protocol extensions for a document's merged metadata and Pass-1 profile."
+---
+
+## Overview
+
+`q2 lsp` runs a [Language Server
+Protocol](https://microsoft.github.io/language-server-protocol/) server over
+stdio. Editors use it for diagnostics and the document outline. Developer
+tooling can also use it to ask about a document: its merged metadata and its
+*profile*, the summary Quarto computes before rendering (title, authors,
+outline, comments, includes, links).
+
+The server analyses every document **inside its project**. It reads
+`_quarto.yml` and the `_metadata.yml` files that apply, picks the format
+`q2 render` would use, and follows `{{{< include >}}}` shortcodes. It analyses
+the text in the editor, including unsaved edits. An unsaved edit to an included
+file or to `_metadata.yml` updates the documents that depend on it.
+
+```bash
+q2 lsp
+```
+
+## Initialization options
+
+Pass these as `initializationOptions` in the `initialize` request:
+
+| Option | Meaning |
+| --- | --- |
+| `profile` | Active [project profiles](../guides/projects/profiles.qmd): a string or a list of strings. Defaults to `QUARTO_PROFILE`. |
+| `sweep` | When a project is opened, profile all of its documents in the background (default `true`). Set it to `false` for very large workspaces. |
+
+## Standard features
+
+- `textDocument/publishDiagnostics` reports parse, metadata, include and
+  language diagnostics for each open `.qmd` and `.md` document.
+- `textDocument/documentSymbol` returns the outline: headings, code cells
+  and cross-reference targets, numbered as in the rendered document.
+
+An open `_quarto.yml` or `_metadata.yml` counts for the documents that read
+it, but the server does not analyse it as a document.
+
+## Protocol extensions
+
+The server advertises its extensions in `ServerCapabilities.experimental`.
+Each entry gives a method's schema version, and clients should check it
+before calling:
+
+```json
+{ "experimental": { "quarto": { "documentMetadata": 1, "documentProfile": 1 } } }
+```
+
+Both methods accept the URI of any `.qmd` or `.md` file, whether or not it is
+open. For an open document the answer reflects the buffer, and `version` is
+its version. Otherwise the server reads the file, and `version` is `null`.
+Both methods take an optional `format`. When it is omitted, the server uses
+the document's own format, the one `q2 render` would pick.
+
+### `quarto/documentMetadata`
+
+Returns the document's **merged metadata**. That is the project config,
+`_metadata.yml` layers, front matter and `format.<name>` options, combined as
+a render combines them. It is the same value `q2 get-config` prints. Tools
+should use it instead of reimplementing how those layers combine.
+
+```jsonc
+// params
+{
+  "textDocument": { "uri": "file:///…/posts/a.qmd" },
+  "path": "author.0.name",   // optional: a dot path, as in get-config; "" for everything
+  "output": "value",          // optional: "value" (prose as markdown) or "pandoc"
+  "format": "html"            // optional
+}
+// result
+{ "uri": "…", "version": 3, "format": "html", "found": true, "value": "Ada Lovelace" }
+```
+
+`found` is `false`, with a `null` value, when `path` does not exist.
+
+### `quarto/documentProfile`
+
+Returns the document's profile.
+
+```jsonc
+// params
+{
+  "textDocument": { "uri": "file:///…/posts/a.qmd" },
+  "fields": ["title", "outline"],   // optional: keep only these profile fields
+  "format": "html"                  // optional
+}
+// result
+{
+  "uri": "…", "version": 3, "format": "html", "schemaVersion": 1,
+  "profile": { … },     // null when the document cannot be read; see diagnostics
+  "diagnostics": [ … ]  // LSP Diagnostic objects
+}
+```
+
+The profile's fields:
+
+| Field | Value |
+| --- | --- |
+| `sourcePath` | The document's project-relative path, with `/` separators. |
+| `outputHref` | Where other pages link to it, relative to the output directory. |
+| `format` | The format the profile was computed for. |
+| `title`, `subtitle`, `description`, `abstract` | `{ "text", "markdown" }`, or absent. |
+| `authors` | Display names. `authorsStructured` has the full author model. |
+| `date`, `image`, `order`, `draft`, `draftMode`, `categories`, `keywords` | As written in the metadata. |
+| `outline` | Headings: `{ title, level, id, location, children }`. |
+| `comments` | Editorial comments: `{ text, author, date, attributes, location }`. |
+| `aliases`, `resources` | `{ value, location }`: each value as written, and where it was written. |
+| `includes`, `bodyLinkTargets`, `navDependencies` | Project files: `{ path, uri }`. |
+| `alwaysRender`, `engineResolution` | Render-planning information. |
+
+A `location` is an LSP `Location`, `{ uri, range }`. A comment or heading
+that comes from an included file points into that file.
+
+### Errors
+
+A query that cannot be answered returns `InvalidParams` (`-32602`), and
+`data.kind` says why:
+
+- `unknownDocument`: an `untitled:` document that is not open, or a URI with
+  no path.
+- `unsupportedInput`: not a document the server analyses, for example a config
+  file or a notebook. Notebooks and scripts are not supported yet.
+
+### Versioning
+
+`schemaVersion` changes when the shape of a result changes in a way a client
+would notice. New fields can appear without a version change.

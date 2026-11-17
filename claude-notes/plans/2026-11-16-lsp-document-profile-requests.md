@@ -772,6 +772,40 @@ have it now and build the rest of the infrastructure on it.
   `initializationOptions.sweep: false` to turn it off. On claude-notes
   the first sweep takes about 0.7 s across 16 threads.
 
+## C4 as built (bd-kkmn4413)
+
+- **Outline spans.** `TocEntry` gains `source_info` (the heading's
+  span), and `DOCUMENT_PROFILE_VERSION` goes from 17 to 18 (D5).
+- **The wire schema.** `quarto_lsp_project::wire` defines
+  `WireProfile` (`WIRE_SCHEMA_VERSION = 1`), following D2. Every
+  `DocumentProfile` field is in `MAPPED_PROFILE_FIELDS` or in
+  `OMITTED_PROFILE_FIELDS`, with a reason, and a test parses the struct
+  to keep it that way.
+- **Locations come from the run.** They are resolved inside the analysis
+  run, while its `SourceContext` is available, and cached as
+  `DocumentResult::wire_profile`. A comment written in an included file
+  points at that file.
+- **Two requests.** `Workspace::document_profile` and
+  `Workspace::document_metadata` are typed queries.
+  `quarto/documentMetadata` uses `Pass1Document`-style authored
+  metadata from the same run (C1b), projected with
+  `pampa::config_json`. It accepts `path`, `output: value | pandoc` and
+  `format`.
+- **Format requests.** A `format` parameter analyses for that format.
+  Results are cached per requested format.
+- **Errors.** `InvalidParams`, with `data.kind` set to `unknownDocument`
+  or `unsupportedInput`.
+- **Capability.** `experimental.quarto = { documentProfile: 1,
+  documentMetadata: 1 }`.
+- **Docs.** `docs/tools/q2-lsp.qmd` is the protocol reference. There is
+  no general q2 changelog: `hub-client/changelog.md` covers hub UI
+  changes, so this epic adds no entry there.
+- **Not done.** The profile request has no `output: pandoc`: inlines are
+  `{ text, markdown }` only. Positions follow the server's existing
+  row/column convention, the same as its diagnostics and symbols;
+  whether that convention counts UTF-16 code units, as LSP requires, is
+  a question for the whole server, not for C4.
+
 ## Children
 
 Execution order is top to bottom.
