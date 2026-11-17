@@ -83,10 +83,14 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 .body figcaption[data-num]::before { content:attr(data-num); font-weight:600; color:#495057; }
 .body figcaption.empty::after { content:"Add a caption"; color:var(--faint); }
 .body figcaption.hide { display:none; }
-.body .missing { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; width:420px; max-width:100%; height:180px;
+/* A missing image has no size of its own: it's taken as 16:9, so resizing
+   it scales it evenly. Its text goes when it's too small to hold it. */
+.body .missing { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; width:420px; max-width:100%; aspect-ratio:16 / 9;
+  container-type:inline-size; overflow:hidden; text-align:center; padding:0 6px;
   background:repeating-linear-gradient(135deg, #f8f9fa 0 10px, #f1f3f5 10px 20px); border:1px dashed var(--faint); color:var(--muted); font-size:13px; line-height:1.3; }
 .body .missing svg { width:28px; height:28px; }
-.body .missing code { font:12px ui-monospace, Menlo, monospace; }
+.body .missing code { font:12px ui-monospace, Menlo, monospace; overflow-wrap:anywhere; }
+@container (max-width: 200px) { .body .missing span, .body .missing code { display:none; } .body .missing svg { width:20px; height:20px; } }
 
 /* An image in a line of text. */
 .body .inl { display:inline-block; position:relative; vertical-align:middle; line-height:0; border-radius:2px; cursor:default; }
@@ -528,6 +532,7 @@ function renderImage(src) {
   box.className = 'missing'
   box.innerHTML = ICON(ICONS.brokenImage) + '<span>Can\'t find</span><code></code>'
   box.querySelector('code').textContent = src
+  box.title = `Can't find ${src}`
   return box
 }
 
