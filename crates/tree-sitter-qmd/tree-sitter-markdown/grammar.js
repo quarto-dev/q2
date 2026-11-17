@@ -746,9 +746,16 @@ module.exports = grammar({
             choice(token(prec(1, new RustRegex("(?:[^ \\t\\n\\r'\"<>{}=\\\\]|\\\\.)(?:[^ \\t\\n\\r<>{}=\\\\]|\\\\.)*"))),
                    token(prec(1, /(?:[A-Za-z0-9_.~:/?#\]@!$%&()+,;-]|\[)+[?](?:[A-Za-z0-9_.~:/?#\]@!%$&()+,;?=-]|\[)+/))),
 
+        // The `_commonmark_*_quote_string` rules need at least one character
+        // between the quotes, so the empty strings are listed separately
+        // (as the attribute key/value rule does). Quarto 1 accepts
+        // `x=""` / `''` as empty-string arguments
+        // (bd-shortcode-empty-string-arg-4m36n6ur).
         shortcode_string: $ => choice(
             $._commonmark_single_quote_string,
             $._commonmark_double_quote_string,
+            "''",
+            '""',
         ),
         // // shortcode numbers are numbers as JSON sees them
         // // https://stackoverflow.com/a/13340826

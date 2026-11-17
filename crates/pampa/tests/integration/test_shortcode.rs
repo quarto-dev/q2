@@ -631,3 +631,42 @@ fn test_shortcode_name_is_not_unescaped() {
     let pandoc = parse_qmd("{{< my_shortcode-2 arg >}}");
     assert_eq!(get_first_shortcode(&pandoc).name, "my_shortcode-2");
 }
+
+// ============================================================================
+// Empty quoted arguments (bd-shortcode-empty-string-arg-4m36n6ur)
+// ============================================================================
+
+#[test]
+fn test_empty_keyword_arg() {
+    // The Posit Connect report: `x=""` was a fatal parse error. Quarto 1
+    // passes an empty string.
+    for src in [r#"{{< kbd x="" >}}"#, "{{< kbd x='' >}}"] {
+        let pandoc = parse_qmd(src);
+        let shortcode = get_first_shortcode(&pandoc);
+        assert_eq!(shortcode.name, "kbd");
+        assert!(shortcode.positional_args.is_empty());
+        match get_keyword_arg(shortcode, "x") {
+            Some(ShortcodeArg::String(s)) => assert_eq!(s, "", "{src}"),
+            other => panic!("expected x=\"\" in {src}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn test_empty_positional_args() {
+    let pandoc = parse_qmd(r#"{{< meta "" '' key >}}"#);
+    let shortcode = get_first_shortcode(&pandoc);
+    assert_eq!(get_positional_strings(shortcode), vec!["", "", "key"]);
+}
+
+#[test]
+fn test_empty_args_qmd_writer_roundtrip() {
+    let src = "{{< kbd \"\" x=\"\" >}}\n";
+    let pandoc = parse_qmd(src);
+    let mut buf = Vec::new();
+    pampa::writers::qmd::write(&pandoc, &mut buf).expect("Failed to write QMD");
+    let written = String::from_utf8(buf).unwrap();
+    assert_eq!(written, src);
+    let reparsed = parse_qmd(&written);
+    assert_eq!(get_first_shortcode(&reparsed), get_first_shortcode(&pandoc));
+}
