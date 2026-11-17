@@ -262,7 +262,12 @@ fn does_not_mark_inline_code_without_grammar() {
     let mut doc = empty_pandoc();
     doc.blocks.push(Block::Paragraph(Paragraph {
         content: Inlines::from(vec![Inline::Code(Box::new(Code {
-            attr: (String::new(), vec!["apache".to_string()], LinkedHashMap::new()).into(),
+            attr: (
+                String::new(),
+                vec!["apache".to_string()],
+                LinkedHashMap::new(),
+            )
+                .into(),
             text: "a = 1".to_string(),
             source_info: empty_source_info(),
             attr_source: empty_attr_source(),
