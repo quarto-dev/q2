@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Image mockups</title>
+<title>Blocks in the document mockup</title>
 <style>
 :root { --ink:#212529; --muted:#6c757d; --faint:#adb5bd; --line:#dee2e6; --accent:#2780e3; --chrome:#f6f7f9;
   --chip:#eef0f3; --sel:#9ec5f0; --sel-bg:#e7f1fc; --sel-ink:#145ca8; --warn:#b07b00; --warn-bg:#fff4d6; }
@@ -208,10 +208,9 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
     <div class="toolbar" id="toolbar"></div>
     <div class="scroller" id="scroller">
       <div class="tips">
-        Click an image to select it, or drag it to move it: into a line of text, or between lines. Click beside a figure for a caret in its line: type to put text there, Enter to split it off. Paste or drop an image file into the text, or type <code>![a picture](images/sales.svg)</code>.
-        Shift and an arrow select an image in a line. With an image selected: <kbd>⌘C</kbd> / <kbd>⌘X</kbd> copy or cut it (paste with <kbd>⌘V</kbd>, or <kbd>⌘⇧V</kbd> for the picture alone), <kbd>⌫</kbd> removes it, <kbd>↵</kbd> or typing goes into its caption, arrows move off it (through its caption), <kbd>⌘Z</kbd> undoes.
-        No image file to hand? <button id="sample">Copy a sample image</button> and paste it.
-        The choices on the left change how the document behaves; the address keeps them.
+        How figures sit in the text, as lines of it. Click beside a figure for a caret in its line: type to put text there, Enter to split it off; Backspace and Delete join lines across it. Arrow through it (before it, its caption, after it), and Shift and an arrow to select through it.
+        Drag an image to move it: into a line of text, or between lines. ⌘C, ⌘X and typing work on a selection with figures in it.
+        The choices on the left change how the document behaves; the address keeps them. The figure itself (its bar, menus, resizing) is in <a href="figure.html">figure.html</a>.
       </div>
       <div class="page" id="page">
         <div class="body" id="editor" contenteditable="true" spellcheck="false"></div>
@@ -226,44 +225,19 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 <script>
 // ---------------------------------------------------------------- options
 const GROUPS = [
-  { key: 'insert', title: 'Adding an image', options: [
-    ['panel', 'A panel from the toolbar', 'The image button opens a panel: upload a file, pick an image already in the project, or give a link. As in Google Docs.'],
-    ['picker', 'Straight to the file picker', "The image button opens the computer's file picker; the image goes in selected, ready for a caption. Images already in the project are only reachable by typing their path. As in Notion and Word."],
-  ]},
   { key: 'place', title: 'With the caret in a line of text', options: [
     ['block', 'Its own block', 'A new image always goes on a line of its own, splitting the paragraph at the caret. An image in a line of text from the source is still shown in the line. As in Notion.'],
     ['inline', 'In the line', 'A new image goes where the caret is: in a line of text it sits in the line like a word; in an empty paragraph it\'s a figure. As in Google Docs and Word ("In line with text").'],
-  ]},
-  { key: 'controls', title: "A selected image's controls", options: [
-    ['popover', 'Under the image', 'Size, alignment, alt text and the rest in a bar under the selected image. It moves with the image\'s bottom edge when the image is resized. As in Google Docs and Notion.'],
-    ['above', 'Over the image', 'The same bar above the image, whose top doesn\'t move when it\'s resized, so neither does the bar. It covers the line before the image instead of the one after.'],
-    ['hover', 'On the image, on hover', 'A small bar in the image\'s corner while the pointer is on it (or it\'s selected): caption, alignment (its own little menu), expand, download, and More, which is also what right-clicking shows. Drag the bars at its sides to resize it. Captions are typed in place. As in Notion.'],
-    ['toolbar', 'In the toolbar', 'The toolbar swaps its text buttons for the image\'s while one is selected. As in Word\'s "Picture Format".'],
   ]},
   { key: 'through', title: '→ through a figure', options: [
     ['around', 'Before, its caption, after', 'Before the image, through its caption, then after the figure: "after" is after everything in it.'],
     ['sides', 'Before, after, its caption', 'Before the image, after it, then down through its caption: the two sides of the image\'s line first.'],
   ]},
-  { key: 'resize', title: 'Resizing', options: [
-    ['both', 'Handles and sizes', 'Drag a corner (it snaps to a quarter, a third, a half…) or pick Small, Medium, Large or Full. Either writes width="…%". Double-click a handle for the image\'s own size.'],
-    ['presets', 'Sizes only', 'Small, Medium, Large or Full: four widths, nothing in between. Fewer choices, tidier documents.'],
-    ['handles', 'Handles only', 'Drag a corner; the label shows the width as you go. Double-click one for the image\'s own size.'],
-  ]},
-  { key: 'caption', title: 'Captions', options: [
-    ['below', 'Under the image', 'Typed in place under the image, where it shows. The Caption button, Enter or typing with the image selected goes into it ("Add a caption" until there\'s one), as does a new image; the arrows go through it like a line. As in Google Docs and Notion.'],
-    ['controls', 'In the controls', "A field with the image's other controls; the caption under the image is just shown."],
-  ]},
-  { key: 'alt', title: 'Alt text', options: [
-    ['field', 'Its own field', 'A field in the controls, written as fig-alt.'],
-    ['caption', 'The caption, unless asked', 'An image with a caption uses it, as qmd does when there\'s no fig-alt. An image without a caption, or in a line of text, has the field.'],
-  ]},
-  { key: 'xref', title: 'Figure numbers', options: [
-    ['toggle', 'A "Numbered" check box', 'Numbering a captioned figure gives it a #fig- label (from its caption) and "Figure 1:" before its caption, so @fig-… can refer to it.'],
-    ['none', 'Not in the editor yet', 'A label written in the source is kept and numbered, but the editor has no way to add one.'],
-  ]},
 ]
 const opts = Object.fromEntries(GROUPS.map((g) => [g.key, g.options[0][0]]))
 for (const [k, v] of new URLSearchParams(location.hash.slice(1))) if (k in opts) opts[k] = v
+// Settled, as in figure.html: the widget itself.
+Object.assign(opts, { controls: 'hover', resize: 'handles', caption: 'below', insert: 'panel', alt: 'field', xref: 'toggle' })
 
 function renderOptions() {
   const aside = document.getElementById('options')
@@ -2602,7 +2576,9 @@ function finishMove(at) {
 }
 
 // Copy a sample image, to try pasting.
-document.getElementById('sample').onclick = async (e) => {
+// (Only where the tips offer it.)
+const sampleButton = document.getElementById('sample')
+if (sampleButton) sampleButton.onclick = async (e) => {
   const button = e.target
   try {
     const img = new Image()
