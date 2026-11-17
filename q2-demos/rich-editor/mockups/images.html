@@ -1011,7 +1011,7 @@ function renderOverlay() {
   if (!el) return
   const frame = img.fig ? el.querySelector('.frame') : el
   const fr = frame.getBoundingClientRect()
-  if (img.fig && opts.resize !== 'presets' && !sel.caption) renderHandles(img.fig, frame, fr, origin)
+  if (opts.resize !== 'presets' && !sel.caption) renderHandles(img.fig ?? img.inl, frame, fr, origin)
   if (opts.controls !== 'toolbar') {
     const bar = document.createElement('div')
     bar.className = 'bubble wrap'
@@ -1051,8 +1051,11 @@ function placeHandle(h, r, o) {
   const left = h.classList.contains('l')
   if (h.classList.contains('bar')) {
     h.style.left = (left ? r.left - o.left + 6 : r.right - o.left - 12) + 'px'
-    h.style.top = (r.top + r.height / 2 - o.top - Math.min(48, r.height / 3) / 2) + 'px'
-    h.style.height = Math.min(48, r.height / 3) + 'px'
+    // A third of the image's height, up to 48px; at least 16px on a short
+    // image (one in a line of text, say), so there's something to hold.
+    const height = Math.min(48, Math.max(r.height / 3, Math.min(16, r.height - 4)))
+    h.style.top = (r.top + r.height / 2 - o.top - height / 2) + 'px'
+    h.style.height = height + 'px'
   } else {
     h.style.left = (left ? r.left - o.left - 8 : r.right - o.left - 4) + 'px'
     h.style.top = (r.bottom - o.top - 4) + 'px'
@@ -1068,6 +1071,7 @@ function resetSize(fig, frame) {
   const full = editor.getBoundingClientRect().width
   const to = Math.min(full, img ? img.naturalWidth : 420)
   fig.width = null
+  fig.height = null
   overlay.replaceChildren()
   frame.style.width = frame.getBoundingClientRect().width + 'px'
   frame.getBoundingClientRect()
@@ -1088,7 +1092,7 @@ function renderHandles(fig, frame, fr, origin, bars = false) {
       // event: the handles are drawn anew between the two clicks.)
       if (lastPress.k === fig.k && e.timeStamp - lastPress.at < 400) {
         lastPress = {}
-        if (fig.width) resetSize(fig, frame)
+        if (fig.width || fig.height) resetSize(fig, frame)
         return
       }
       lastPress = { k: fig.k, at: e.timeStamp }
@@ -1099,7 +1103,8 @@ function renderHandles(fig, frame, fr, origin, bars = false) {
       overlay.querySelectorAll('.hbar, .hmenu, .bridge, .bubble').forEach((el) => el.remove())
       const full = editor.getBoundingClientRect().width
       const startW = fr.width, startX = e.clientX
-      const grow = (fig.align === 'center' ? 2 : 1) * (side === 'r' ? 1 : -1)
+      // An image in a line grows from its left edge, like the text it's in.
+      const grow = (fig.kind === 'fig' && fig.align === 'center' ? 2 : 1) * (side === 'r' ? 1 : -1)
       // A figure aligned right grows from its left edge, and so on.
       const label = document.createElement('div')
       label.className = 'size-label'
@@ -1120,8 +1125,12 @@ function renderHandles(fig, frame, fr, origin, bars = false) {
         if (snap) w = snap
         if (!recorded) { record(); recorded = true }
         fig.width = w
+        // A width replaces a fixed height, which would stretch it.
+        fig.height = null
         frame.style.width = px + 'px'
-        frame.querySelector('img, .missing').style.width = '100%'
+        const media = frame.querySelector('img, .missing')
+        media.style.width = '100%'
+        media.style.height = ''
         const r = frame.getBoundingClientRect(), o = page.getBoundingClientRect()
         label.textContent = `${w}%`
         label.style.left = (r.left + r.width / 2 - o.left - label.offsetWidth / 2) + 'px'
@@ -1134,7 +1143,8 @@ function renderHandles(fig, frame, fr, origin, bars = false) {
         resizing = false
         h.removeEventListener('pointermove', move)
         h.removeEventListener('pointerup', up)
-        cancelAnimationFrame(move.queued)
+        // A move still waiting for its frame counts.
+        if (move.queued) { cancelAnimationFrame(move.queued); update() }
         if (!recorded) return render()
         // Ease from where the pointer left it to the width written down.
         overlay.replaceChildren()
@@ -1272,7 +1282,7 @@ function renderHover(origin) {
     bridge.style.height = fr.top - origin.top - top - bar.offsetHeight + 'px'
     overlay.append(bridge)
   }
-  if (fig) renderHandles(fig, el, fr, origin, true)
+  renderHandles(target, el, fr, origin, true)
 
   if (!menu || menu.k !== k) return
   const under = (button, box, centre) => {
