@@ -92,6 +92,11 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 
 /* Where a dragged file would go. */
 .drop-line { position:absolute; height:2px; background:var(--accent); pointer-events:none; z-index:5; border-radius:1px; }
+.move-ghost { position:fixed; z-index:200; pointer-events:none; width:120px; max-height:90px; overflow:hidden; border-radius:4px;
+  box-shadow:0 4px 14px rgba(0,0,0,.25); background:#fff; font:12px ui-monospace, Menlo, monospace; color:var(--muted); }
+.move-ghost img { width:100%; display:block; }
+.body.moving, .body.moving * { cursor:grabbing !important; }
+.body .moving-from { opacity:.35; }
 .drop-caret { position:absolute; width:2px; background:var(--accent); pointer-events:none; z-index:5; }
 
 /* Things laid over the page. */
@@ -183,7 +188,7 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
     <div class="toolbar" id="toolbar"></div>
     <div class="scroller" id="scroller">
       <div class="tips">
-        Click an image to select it. Paste or drop an image file into the text, or type <code>![a picture](images/sales.svg)</code>.
+        Click an image to select it, or drag it to move it. Paste or drop an image file into the text, or type <code>![a picture](images/sales.svg)</code>.
         With an image selected: <kbd>⌫</kbd> removes it, <kbd>↵</kbd> starts a paragraph after it, arrows move off it, <kbd>⌘Z</kbd> undoes.
         No image file to hand? <button id="sample">Copy a sample image</button> and paste it.
         The choices on the left change how the document behaves; the address keeps them.
@@ -541,7 +546,7 @@ function renderBlock(blk, b, nums) {
       if (img.tagName === 'IMG') { img.alt = x.alt; if (x.height) img.style.height = x.height }
       span.append(img)
       if (needsAlt(x, false) && opts.alt) span.append(altMark(() => { sel = { inl: x.k }; focusAlt = true; render() }))
-      span.onmousedown = (e) => { e.preventDefault(); sel = { inl: x.k }; panel = null; editor.focus({ preventScroll: true }); render() }
+      span.onmousedown = (e) => { e.preventDefault(); sel = { inl: x.k }; panel = null; editor.focus({ preventScroll: true }); clicked = true; render(); pressImage(e, x.k) }
       el.append(span)
     }
     normalizeText(el)
@@ -561,7 +566,7 @@ function renderBlock(blk, b, nums) {
   if (blk.width) img.style.width = '100%'
   frame.append(img)
   if (needsAlt(blk, true)) frame.append(altMark(() => { selectFigure(blk.k); focusAlt = true; render() }))
-  frame.onmousedown = (e) => { e.preventDefault(); sel = { fig: blk.k }; panel = null; editor.focus({ preventScroll: true }); render() }
+  frame.onmousedown = (e) => { e.preventDefault(); sel = { fig: blk.k }; panel = null; editor.focus({ preventScroll: true }); clicked = true; render(); pressImage(e, blk.k) }
   fig.append(frame)
   const cap = document.createElement('figcaption')
   cap.textContent = blk.caption
@@ -608,8 +613,12 @@ function render() {
   renderToolbar()
   renderSource()
   renderOverlay()
-  scrollSelectedIntoView()
+  // An image clicked is in view already: scrolling would move it from under
+  // the pointer, mid-drag. One selected with the keyboard may not be.
+  if (!clicked) scrollSelectedIntoView()
+  clicked = false
 }
+let clicked = false
 
 function scrollSelectedIntoView() {
   const el = sel.fig ? editor.querySelector(`figure[data-k="${sel.fig}"]`) : sel.inl ? editor.querySelector(`.inl[data-k="${sel.inl}"]`) : null
@@ -1549,11 +1558,14 @@ editor.addEventListener('dragover', (e) => {
   if (![...e.dataTransfer.types].includes('Files')) return
   e.preventDefault()
   dragging = true
-  const at = dropPoint(e)
+  markDrop(dropPoint(e), opts.place === 'block')
+})
+/** Where a dropped image would go: a bar for a line of its own, else a caret. */
+function markDrop(at, ownLine) {
   dropMark.remove()
   if (!at) return
   const o = page.getBoundingClientRect()
-  if (at.after || opts.place === 'block' || doc[at.b].items.length === 0) {
+  if (at.after || ownLine || doc[at.b].items.length === 0) {
     // A line of its own: a bar where it'd go.
     const el = editor.children[at.b]
     const r = el.getBoundingClientRect()
@@ -1584,7 +1596,7 @@ editor.addEventListener('dragover', (e) => {
     dropMark.style.width = ''
   }
   overlay.append(dropMark)
-})
+}
 editor.addEventListener('dragleave', (e) => { if (!editor.contains(e.relatedTarget)) { dropMark.remove(); dragging = false } })
 editor.addEventListener('drop', async (e) => {
   dropMark.remove()
@@ -1598,6 +1610,98 @@ editor.addEventListener('drop', async (e) => {
   else insertImage(path, at ? { b: at.b, o: at.o } : null)
   render()
 })
+
+// ------------------------------------------------------------- moving
+// Dragging an image moves it. A figure stays a figure: dropped in a line of
+// text, it splits it there (at either end, it goes before or after the
+// line); an image in a line stays in a line.
+let moving = null   // { k, fig, ghost, at }
+function pressImage(e, k) {
+  if (e.button !== 0) return
+  const x0 = e.clientX, y0 = e.clientY
+  const move = (ev) => {
+    if (!moving) {
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 5) return
+      startMove(k, ev)
+    }
+    moving.ghost.style.left = ev.clientX + 12 + 'px'
+    moving.ghost.style.top = ev.clientY + 12 + 'px'
+    const at = dropPoint(ev)
+    // Not onto itself; and an image in a line only into a line.
+    moving.at = at && !(moving.fig && doc[at.b] === moving.fig) && (moving.fig || !at.after) ? at : null
+    markDrop(moving.at, Boolean(moving.fig))
+  }
+  const up = () => {
+    document.removeEventListener('mousemove', move)
+    document.removeEventListener('mouseup', up)
+    if (!moving) return
+    const { at } = moving
+    moving.ghost.remove()
+    dropMark.remove()
+    editor.classList.remove('moving')
+    if (at) finishMove(at)
+    moving = null
+    dragging = false
+    render()
+  }
+  document.addEventListener('mousemove', move)
+  document.addEventListener('mouseup', up)
+}
+
+function startMove(k, ev) {
+  const fig = figByKey(k)
+  const src = fig ? fig.src : inlineByKey(k).img.src
+  // A small copy of the image follows the pointer.
+  const ghost = document.createElement('div')
+  ghost.className = 'move-ghost'
+  if (files[src]) ghost.append(Object.assign(document.createElement('img'), { src: files[src] }))
+  else ghost.textContent = src
+  document.body.append(ghost)
+  moving = { k, fig, ghost, at: null }
+  dragging = true
+  menu = null
+  hoverK = null
+  overlay.replaceChildren()
+  editor.classList.add('moving')
+  // The image stays where it was, faded, until it's dropped.
+  ;(fig ? editor.querySelector(`figure[data-k="${k}"] .frame`) : editor.querySelector(`.inl[data-k="${k}"]`))?.classList.add('moving-from')
+}
+
+function finishMove(at) {
+  const { k, fig } = moving
+  // Where it goes, held by the block (not its index), which may shift.
+  const target = doc[at.b]
+  if (fig) {
+    record()
+    doc.splice(figIndex(k), 1)
+    let b = doc.indexOf(target)
+    if (at.after || target.kind === 'fig') b++
+    else if (at.o === target.items.length) b++
+    else if (at.o > 0) {
+      // The middle of a line: split it there, without the spaces at the split.
+      const before = target.items.slice(0, at.o), after = target.items.slice(at.o)
+      while (before.at(-1) === ' ') before.pop()
+      while (after[0] === ' ') after.shift()
+      doc.splice(b, 1, { ...target, items: before }, { kind: 'text', tag: 'p', items: after })
+      b++
+    }
+    doc.splice(b, 0, fig)
+    sel = { fig: k }
+  } else {
+    record()
+    const from = inlineByKey(k)
+    const items = doc[from.b].items
+    const [img] = items.splice(from.o, 1)
+    let o = items === target.items && from.o < at.o ? at.o - 1 : at.o
+    // It leaves no double space behind.
+    if (items[from.o - 1] === ' ' && items[from.o] === ' ') {
+      items.splice(from.o, 1)
+      if (items === target.items && from.o < o) o--
+    }
+    target.items.splice(o, 0, img)
+    sel = { inl: k }
+  }
+}
 
 // Copy a sample image, to try pasting.
 document.getElementById('sample').onclick = async (e) => {
