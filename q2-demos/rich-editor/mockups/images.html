@@ -1177,10 +1177,10 @@ function renderHover(origin) {
     { name: 'expand', button: () => hoverButton('Expand', HOVER_ICONS.expand, expand, { disabled: !canExpand }) },
     { name: 'download', button: () => hoverButton('Download', HOVER_ICONS.download, () => download(target), { disabled: !have }) },
   ].filter(Boolean)
-  // Buttons 28px, 2px apart, 3px of padding (34px tall). 8px from the
+  // Buttons 28px, 2px apart, 3px of padding (34px tall). 3px from the
   // image's edges, or clear of its resize handles (12px in, 48px tall, half
   // way down) when the image is short enough for them to meet.
-  const inset = Math.max(2, Math.min(8, (fr.height - 34) / 2))
+  const inset = Math.max(2, Math.min(3, (fr.height - 34) / 2))
   const side = fig && inset + 34 > fr.height / 2 - 24 ? 18 : inset
   const fits = (n) => 6 + 28 * n + 2 * (n - 1) + 2 * side <= fr.width
   let shown = actions.length
