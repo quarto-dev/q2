@@ -1165,22 +1165,41 @@ function renderHover(origin) {
   const have = Boolean(files[target.src])
   const toggle = (kind) => () => { menu = menu?.kind === kind && menu.k === k && menu.x == null ? null : { kind, k }; renderOverlay() }
 
+  // The bar's actions, most needed first. What doesn't fit across the image
+  // goes into More, from the end: Download (More has it anyway), Expand,
+  // Alignment, Caption. More always stays.
+  const caption = () => { menu = null; sel = { fig: k, caption: true }; render() }
+  const expand = () => { menu = null; openViewer(target) }
+  const canExpand = have || /^https?:/.test(target.src)
+  const actions = [
+    fig && { name: 'caption', button: () => hoverButton('Caption', HOVER_ICONS.caption, caption, { pressed: Boolean(fig.caption) }) },
+    fig && { name: 'align', button: () => hoverButton('Alignment', ALIGN_ICONS[fig.align], toggle('align'), { pressed: menu?.kind === 'align' }) },
+    { name: 'expand', button: () => hoverButton('Expand', HOVER_ICONS.expand, expand, { disabled: !canExpand }) },
+    { name: 'download', button: () => hoverButton('Download', HOVER_ICONS.download, () => download(target), { disabled: !have }) },
+  ].filter(Boolean)
+  // Buttons 28px, 2px apart, 3px of padding (34px tall). 8px from the
+  // image's edges, or clear of its resize handles (12px in, 48px tall, half
+  // way down) when the image is short enough for them to meet.
+  const inset = Math.max(2, Math.min(8, (fr.height - 34) / 2))
+  const side = fig && inset + 34 > fr.height / 2 - 24 ? 18 : inset
+  const fits = (n) => 6 + 28 * n + 2 * (n - 1) + 2 * side <= fr.width
+  let shown = actions.length
+  if (fig) while (shown > 0 && !fits(shown + 1)) shown--
+  const overflow = actions.slice(shown).map((a) => a.name)
   const bar = hoverUi('hbar', k)
-  let alignButton = null, moreButton
-  if (fig) {
-    bar.append(hoverButton('Caption', HOVER_ICONS.caption, () => { menu = null; sel = { fig: k, caption: true }; render() }, { pressed: Boolean(fig.caption) }))
-    alignButton = hoverButton('Alignment', ALIGN_ICONS[fig.align], toggle('align'), { pressed: menu?.kind === 'align' })
-    bar.append(alignButton)
+  let alignButton = null
+  for (const a of actions.slice(0, shown)) {
+    const b = a.button()
+    if (a.name === 'align') alignButton = b
+    bar.append(b)
   }
-  bar.append(
-    hoverButton('Expand', HOVER_ICONS.expand, () => { menu = null; openViewer(target) }, { disabled: !have && !/^https?:/.test(target.src) }),
-    hoverButton('Download', HOVER_ICONS.download, () => download(target), { disabled: !have }),
-    (moreButton = hoverButton('More', HOVER_ICONS.more, toggle('more'), { pressed: menu?.kind === 'more' && menu.x == null })),
-  )
+  const moreButton = hoverButton('More', HOVER_ICONS.more, toggle('more'), { pressed: menu?.kind === 'more' && menu.x == null })
+  bar.append(moreButton)
   overlay.append(bar)
-  // In the image's top right corner; over a small image (or one in a line), above it.
-  let left = fr.right - origin.left - bar.offsetWidth - 8, top = fr.top - origin.top + 8
-  if (!fig || fr.width < bar.offsetWidth + 16 || fr.height < bar.offsetHeight + 16) {
+  // In the image's top right corner; above an image too small for even More
+  // (or one in a line of text).
+  let left = fr.right - origin.left - bar.offsetWidth - side, top = fr.top - origin.top + inset
+  if (!fig || fr.width < bar.offsetWidth + 2 * side || fr.height < bar.offsetHeight + 4) {
     left = fr.left + fr.width / 2 - origin.left - bar.offsetWidth / 2
     top = fr.top - origin.top - bar.offsetHeight - 6
   }
@@ -1220,12 +1239,12 @@ function renderHover(origin) {
       if (i) sub.append(Object.assign(document.createElement('span'), { className: 'vsep' }))
       sub.append(hoverButton(a === 'center' ? 'Centre' : a[0].toUpperCase() + a.slice(1), ALIGN_ICONS[a], () => { menu = null; setFig(k, { align: a }); render() }, { pressed: fig.align === a }))
     })
-    under(alignButton, sub, true)
+    under(alignButton ?? moreButton, sub, Boolean(alignButton))
   } else if (menu.kind === 'more') {
     const list = hoverUi('hmenu', k)
     const item = (icon, label, action, { disabled = false, danger = false, check = null, hint = '' } = {}) => {
       const b = document.createElement('button')
-      b.innerHTML = `<span class="icon">${MENU_ICONS[icon]}</span><span class="label"></span><span class="hint"></span>${check ? '<span class="mark">✓</span>' : ''}`
+      b.innerHTML = `<span class="icon">${MENU_ICONS[icon] ?? icon}</span><span class="label"></span><span class="hint"></span>${check ? '<span class="mark">✓</span>' : ''}`
       b.querySelector('.label').textContent = label
       b.querySelector('.hint').textContent = hint
       if (danger) b.classList.add('danger')
@@ -1234,6 +1253,11 @@ function renderHover(origin) {
       list.append(b)
     }
     const select = () => { sel = fig ? { fig: k } : { inl: k } }
+    // What the bar had no room for, first.
+    if (overflow.includes('caption')) item(HOVER_ICONS.caption, fig.caption ? 'Edit caption' : 'Add caption', caption)
+    if (overflow.includes('align')) item(ALIGN_ICONS[fig.align], 'Alignment', () => { menu = { kind: 'align', k }; renderOverlay() }, { hint: { left: 'Left', center: 'Centre', right: 'Right' }[fig.align] + ' ›' })
+    if (overflow.includes('expand')) item(HOVER_ICONS.expand, 'Expand', expand, { disabled: !canExpand })
+    if (overflow.some((n) => n !== 'download')) list.append(document.createElement('hr'))
     item('alt', 'Alt text…', () => { menu = { ...menu, kind: 'alt' }; renderOverlay() }, { hint: target.alt ? '' : 'none yet' })
     item('replace', 'Replace…', () => { menu = null; select(); replaceCommand(); render() })
     if (fig && fig.width) item('original', 'Original size', () => { menu = null; setFig(k, { width: null }); render() }, { hint: `now ${fig.width}%` })
