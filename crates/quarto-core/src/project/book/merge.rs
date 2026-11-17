@@ -444,6 +444,7 @@ mod tests {
             text: text.map(|s| s.to_string()),
             file: file.map(PathBuf::from),
             number,
+            heading_title: None,
         }
     }
 

@@ -13,7 +13,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use quarto_error_reporting::DiagnosticMessageBuilder;
+use quarto_pandoc_types::block::Block;
 use quarto_pandoc_types::config_value::ConfigValue;
+use quarto_pandoc_types::inlines_to_plain_text;
 use quarto_system_runtime::SystemRuntime;
 
 use crate::error::{ParseError, QuartoError, Result};
@@ -58,6 +60,10 @@ pub struct BookRenderItem {
     /// non-file items. Appendices get their own fresh 1-based sequence (Q1 presents
     /// these as letters elsewhere).
     pub number: Option<u32>,
+    /// The chapter's first-heading text ([`chapter_heading_title`]),
+    /// the sidebar label's fallback when the chapter has no metadata
+    /// `title`. `None` for non-file items and path-only builds.
+    pub heading_title: Option<String>,
 }
 
 impl BookRenderItem {
@@ -178,6 +184,7 @@ fn build_book_render_items(
             text: Some(format!("{appendices_title} {{.unnumbered}}")),
             file: None,
             number: None,
+            heading_title: None,
         });
         next_number = 1;
         find_inputs(
@@ -249,6 +256,7 @@ fn find_inputs(
                 text: Some(part_title),
                 file: href.map(PathBuf::from),
                 number: None,
+                heading_title: None,
             });
             if let Some(chapters) = entry.get("chapters").and_then(|c| c.as_array()) {
                 // Nested parts are unsupported (Q-5-34); detect before recursing.
@@ -334,18 +342,20 @@ fn find_inputs(
         // front-matter title or first heading decides. A read failure
         // leaves the chapter unnumbered, matching Q1's
         // `partitionedMarkdownForInput` failure path.
-        let number = if read_numbering {
-            match runtime.file_read_string(&full_path) {
-                Ok(content) if chapter_is_numbered(&content) => {
-                    let n = *next_number;
-                    *next_number += 1;
-                    Some(n)
-                }
-                _ => None,
-            }
+        let content = if read_numbering {
+            runtime.file_read_string(&full_path).ok()
         } else {
             None
         };
+        let number = match &content {
+            Some(content) if chapter_is_numbered(content) => {
+                let n = *next_number;
+                *next_number += 1;
+                Some(n)
+            }
+            _ => None,
+        };
+        let heading_title = content.as_deref().and_then(chapter_heading_title);
 
         items.push(BookRenderItem {
             kind,
@@ -353,6 +363,7 @@ fn find_inputs(
             text: entry.get("text").and_then(|t| t.as_plain_text()),
             file: Some(PathBuf::from(href)),
             number,
+            heading_title,
         });
     }
     Ok(())
@@ -405,13 +416,13 @@ pub fn chapter_is_numbered(content: &str) -> bool {
     if let Some(fm) = front_matter
         && let Some(title) = front_matter_title(&fm)
     {
-        return !pandoc_attr_classes(&title)
+        return !parse_pandoc_title(&title)
+            .classes
             .is_some_and(|classes| classes.iter().any(|c| c == "unnumbered"));
     }
-    match first_atx_heading_attr_classes(body) {
-        Some(classes) => !classes.iter().any(|c| c == "unnumbered"),
-        None => true,
-    }
+    !first_heading(body)
+        .and_then(|h| h.classes)
+        .is_some_and(|classes| classes.iter().any(|c| c == "unnumbered"))
 }
 
 /// Split leading YAML front matter from the body. Returns
@@ -446,13 +457,25 @@ fn front_matter_title(yaml: &str) -> Option<String> {
     value.get("title")?.as_str().map(|s| s.to_string())
 }
 
-/// Attr classes of the first ATX heading in `body`, fence-aware so a
-/// `#`-looking line inside a code block is never mistaken for the
-/// heading. Port of Q1's `markdownWithExtractedHeading` (ATX arm only —
-/// setext headings carry no attr, so they always read as numbered
-/// either way) plus `parsePandocTitle`.
-fn first_atx_heading_attr_classes(body: &str) -> Option<Vec<String>> {
+/// The document's first heading, as Q1's `markdownWithExtractedHeading`
+/// finds it, already run through [`parse_pandoc_title`].
+struct FirstHeading {
+    /// Heading text with the `#` prefix and trailing `{attrs}` removed;
+    /// `None` for a heading that is nothing but an attr block.
+    text: Option<String>,
+    /// Attr classes; `None` when the heading carries no attr block
+    /// (always the case for setext headings).
+    classes: Option<Vec<String>>,
+}
+
+/// First heading of `body` (front matter already removed), fence-aware
+/// so a `#`-looking line inside a code block is never mistaken for the
+/// heading. Port of Q1's `markdownWithExtractedHeading`: an ATX line
+/// (`#`s at column 0, then whitespace) or a setext underline (`===` /
+/// `---`) whose previous line is non-empty, whichever comes first.
+fn first_heading(body: &str) -> Option<FirstHeading> {
     let mut fence: Option<(char, usize)> = None;
+    let mut prev_line: Option<&str> = None;
     for line in body.lines() {
         // Fence marker: up to 3 leading spaces (CommonMark), then a run
         // of 3+ backticks/tildes, all the same char.
@@ -474,6 +497,7 @@ fn first_atx_heading_attr_classes(body: &str) -> Option<Vec<String>> {
                 {
                     fence = None;
                 }
+                prev_line = Some(line);
                 continue;
             }
             None => {
@@ -481,6 +505,7 @@ fn first_atx_heading_attr_classes(body: &str) -> Option<Vec<String>> {
                     && n >= 3
                 {
                     fence = Some((c, n));
+                    prev_line = Some(line);
                     continue;
                 }
             }
@@ -488,56 +513,110 @@ fn first_atx_heading_attr_classes(body: &str) -> Option<Vec<String>> {
         // ATX heading (Q1's regex allows no leading spaces).
         let hashes = line.chars().take_while(|c| *c == '#').count();
         if hashes >= 1 && line.chars().nth(hashes).is_some_and(char::is_whitespace) {
-            return pandoc_attr_classes(line);
+            return Some(parse_pandoc_title(line));
         }
+        // Setext underline: the previous line is the heading text. Q1
+        // tests the previous line for truthiness only, so an empty line
+        // (or a lone `---` at the top) is not a heading.
+        let trimmed = line.trim_end();
+        let is_underline = !trimmed.is_empty()
+            && (trimmed.chars().all(|c| c == '=') || trimmed.chars().all(|c| c == '-'));
+        if is_underline && let Some(prev) = prev_line.filter(|p| !p.is_empty()) {
+            return Some(FirstHeading {
+                text: Some(prev.to_string()),
+                classes: None,
+            });
+        }
+        prev_line = Some(line);
     }
     None
 }
 
-/// Attr classes parsed from a `# ... {attrs}` title line, port of Q1's
-/// `parsePandocTitle` (`^\#{1,}\s(?:(.*)\s)?\{(.*)\}$`) plus the class
-/// half of `pandocAttrParseText`. Returns `None` when the title carries
-/// no parseable attr block (numbered, per Q1's `!attr?...` fallthrough).
-fn pandoc_attr_classes(title: &str) -> Option<Vec<String>> {
+/// A chapter's title as its first heading gives it, for chapters with
+/// no front-matter `title:` (Q1's `inputTargetIndex` falls back to
+/// `markdown.headingText`). Q1 takes the heading's markdown minus the
+/// `#` prefix and `{attrs}`; this projects that markdown to plain text,
+/// the form a front-matter title takes in the sidebar
+/// ([`crate::document_profile::DocumentProfile::title_text`]).
+pub fn chapter_heading_title(content: &str) -> Option<String> {
+    let (_, body) = partition_front_matter(content);
+    let markdown = first_heading(body)?.text?;
+    Some(markdown_plain_text(&markdown)).filter(|t| !t.is_empty())
+}
+
+/// One line of inline markdown as plain text; the input itself when it
+/// doesn't parse to a single paragraph.
+fn markdown_plain_text(markdown: &str) -> String {
+    let parsed = pampa::readers::qmd::read(
+        markdown.as_bytes(),
+        false,
+        "<chapter-heading>",
+        &mut std::io::sink(),
+        true,
+        None,
+    );
+    match parsed
+        .ok()
+        .as_ref()
+        .map(|(ast, _, _)| ast.blocks.as_slice())
+    {
+        Some([Block::Paragraph(p)]) => inlines_to_plain_text(&p.content),
+        Some([Block::Plain(p)]) => inlines_to_plain_text(&p.content),
+        _ => markdown.trim().to_string(),
+    }
+}
+
+/// Port of Q1's `parsePandocTitle` (`^\#{1,}\s(?:(.*)\s)?\{(.*)\}$`)
+/// plus the class half of `pandocAttrParseText`. With an attr block,
+/// the heading is the text before it; without one, the line minus its
+/// leading `#`s.
+fn parse_pandoc_title(title: &str) -> FirstHeading {
     let t = title.trim();
+    let strip_hashes = || Some(t.trim_start_matches('#').trim().to_string());
     // Prefix: 1+ '#' then a whitespace char.
     let hashes = t.chars().take_while(|c| *c == '#').count();
-    if hashes == 0 {
-        return None;
-    }
     let after = &t[hashes..];
-    if !after.chars().next().is_some_and(char::is_whitespace) {
-        return None;
+    if hashes == 0 || !after.chars().next().is_some_and(char::is_whitespace) {
+        return FirstHeading {
+            text: strip_hashes(),
+            classes: None,
+        };
     }
     let rest = after.trim_start();
     // Attr block: `{...}` at end of line, the `{` either at the start
     // or preceded by whitespace (the greedy `(?:(.*)\s)?` in Q1's
     // regex picks the rightmost such `{`).
-    if !rest.ends_with('}') {
-        return None;
-    }
-    let mut attr_raw: Option<&str> = None;
-    for (i, c) in rest.char_indices().rev() {
-        if c != '{' {
-            continue;
-        }
-        let preceded_ok = i == 0
-            || rest[..i]
-                .chars()
-                .next_back()
-                .is_some_and(char::is_whitespace);
-        if preceded_ok {
-            attr_raw = Some(&rest[i + 1..rest.len() - 1]);
-            break;
-        }
-    }
-    let attr_raw = attr_raw?;
+    let attr_start = rest
+        .ends_with('}')
+        .then(|| {
+            rest.char_indices().rev().find(|&(i, c)| {
+                c == '{'
+                    && (i == 0
+                        || rest[..i]
+                            .chars()
+                            .next_back()
+                            .is_some_and(char::is_whitespace))
+            })
+        })
+        .flatten()
+        .map(|(i, _)| i);
+    let Some(i) = attr_start else {
+        return FirstHeading {
+            text: strip_hashes(),
+            classes: None,
+        };
+    };
+    let attr_raw = &rest[i + 1..rest.len() - 1];
     // Classes: whitespace-separated tokens starting with '.'.
     let classes: Vec<String> = attr_raw
         .split_whitespace()
         .filter_map(|tok| tok.strip_prefix('.').map(|s| s.to_string()))
         .collect();
-    Some(classes)
+    let text = rest[..i].trim();
+    FirstHeading {
+        text: (!text.is_empty()).then(|| text.to_string()),
+        classes: Some(classes),
+    }
 }
 
 /// Build a coded error for the book chapter-list walk, with an empty
@@ -831,6 +910,105 @@ mod tests {
         assert!(chapter_is_numbered(
             "```markdown\n# Fake {.unnumbered}\n```\n\n# Real\n"
         ));
+    }
+
+    // === chapter_heading_title (port of Q1 headingText) ===
+
+    #[test]
+    fn heading_title_strips_hashes_and_attrs() {
+        assert_eq!(
+            chapter_heading_title("# Introduction {#sec-intro}\n\nBody.\n").as_deref(),
+            Some("Introduction")
+        );
+        assert_eq!(
+            chapter_heading_title("# Preface {.unnumbered}\n").as_deref(),
+            Some("Preface")
+        );
+        assert_eq!(
+            chapter_heading_title("Some text.\n\n## Later heading\n").as_deref(),
+            Some("Later heading")
+        );
+        // Inline markup reads as plain text, like a front-matter title.
+        assert_eq!(
+            chapter_heading_title("# The *R* `lm()` language\n").as_deref(),
+            Some("The R lm() language")
+        );
+        // Braces that aren't a trailing attr block stay in the text.
+        assert_eq!(
+            chapter_heading_title("# The {x} set\n").as_deref(),
+            Some("The {x} set")
+        );
+    }
+
+    #[test]
+    fn heading_title_reads_the_body_after_front_matter() {
+        assert_eq!(
+            chapter_heading_title("---\nauthor: A\n---\n\n# Intro\n").as_deref(),
+            Some("Intro")
+        );
+        assert_eq!(chapter_heading_title("---\ntitle: T\n---\n\nBody.\n"), None);
+    }
+
+    #[test]
+    fn heading_title_skips_fenced_code() {
+        assert_eq!(
+            chapter_heading_title("```markdown\n# Fake\n```\n\n# Real\n").as_deref(),
+            Some("Real")
+        );
+    }
+
+    #[test]
+    fn heading_title_reads_setext_headings() {
+        assert_eq!(
+            chapter_heading_title("Introduction\n============\n\n# Later\n").as_deref(),
+            Some("Introduction")
+        );
+        assert_eq!(
+            chapter_heading_title("Methods\n-------\n").as_deref(),
+            Some("Methods")
+        );
+        // An underline after a blank line is not a heading.
+        assert_eq!(chapter_heading_title("\n---\n\nText.\n"), None);
+    }
+
+    #[test]
+    fn heading_title_is_none_for_an_attr_only_heading() {
+        assert_eq!(chapter_heading_title("# {.unnumbered}\n"), None);
+    }
+
+    #[test]
+    fn book_render_items_carry_heading_titles() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("index.qmd"), "# Preface {.unnumbered}\n").unwrap();
+        std::fs::write(root.join("intro.qmd"), "# Introduction {#sec-intro}\n").unwrap();
+        std::fs::write(
+            root.join("yamltitle.qmd"),
+            "---\ntitle: Has YAML title\n---\n\nBody.\n",
+        )
+        .unwrap();
+        let book = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "chapters".to_string(),
+                key_source: SourceInfo::generated(By::programmatic_config()),
+                value: ConfigValue::new_array(
+                    ["index.qmd", "intro.qmd", "yamltitle.qmd"]
+                        .iter()
+                        .map(|f| {
+                            ConfigValue::new_string(
+                                *f,
+                                SourceInfo::generated(By::programmatic_config()),
+                            )
+                        })
+                        .collect(),
+                    SourceInfo::generated(By::programmatic_config()),
+                ),
+            }],
+            SourceInfo::generated(By::programmatic_config()),
+        );
+        let items = book_render_items(root, &book, "Appendices", &NativeRuntime::new()).unwrap();
+        let titles: Vec<_> = items.iter().map(|i| i.heading_title.as_deref()).collect();
+        assert_eq!(titles, vec![Some("Preface"), Some("Introduction"), None]);
     }
 
     #[test]
