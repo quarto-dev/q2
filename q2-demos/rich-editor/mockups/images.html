@@ -151,7 +151,7 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 .hmenu input:focus { border-color:var(--accent); }
 /* As in Notion: dark and see-through, so the image shows through, with a
    white edge to stand out on dark images too. */
-.vhandle { position:absolute; width:8px; border-radius:4px; background:rgba(15,15,15,.6); border:1px solid #fff; box-shadow:0 0 2px rgba(0,0,0,.35); cursor:ew-resize; pointer-events:auto; z-index:11; }
+.vhandle { position:absolute; width:6px; border-radius:3px; background:rgba(15,15,15,.6); border:1px solid #fff; box-shadow:0 0 2px rgba(0,0,0,.35); cursor:ew-resize; pointer-events:auto; z-index:11; }
 .viewer { position:fixed; inset:0; z-index:100; background:rgba(15,15,15,.92); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; }
 .viewer img { max-width:90vw; max-height:82vh; background:#fff; box-shadow:0 8px 30px rgba(0,0,0,.4); }
 .viewer .cap { color:#e9e9e7; font-size:14px; }
@@ -1011,7 +1011,7 @@ const SNAPS = [25, 33, 50, 67, 75, 100]
 function placeHandle(h, r, o) {
   const left = h.classList.contains('l')
   if (h.classList.contains('bar')) {
-    h.style.left = (left ? r.left - o.left + 6 : r.right - o.left - 14) + 'px'
+    h.style.left = (left ? r.left - o.left + 6 : r.right - o.left - 12) + 'px'
     h.style.top = (r.top + r.height / 2 - o.top - Math.min(48, r.height / 3) / 2) + 'px'
     h.style.height = Math.min(48, r.height / 3) + 'px'
   } else {
