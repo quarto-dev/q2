@@ -203,7 +203,7 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
     <div class="scroller" id="scroller">
       <div class="tips">
         Click an image to select it, or drag it to move it: into a line of text, or between lines. Paste or drop an image file into the text, or type <code>![a picture](images/sales.svg)</code>.
-        With an image selected: <kbd>⌫</kbd> removes it, <kbd>↵</kbd> starts a paragraph after it, arrows move off it, <kbd>⌘Z</kbd> undoes.
+        Shift and an arrow select an image in a line. With an image selected: <kbd>⌫</kbd> removes it, <kbd>↵</kbd> starts a paragraph after it, arrows move off it, <kbd>⌘Z</kbd> undoes.
         No image file to hand? <button id="sample">Copy a sample image</button> and paste it.
         The choices on the left change how the document behaves; the address keeps them.
       </div>
@@ -1663,6 +1663,10 @@ editor.addEventListener('keydown', (e) => {
   // Backspace or Delete next to an image in a line: select it first.
   const near = e.key === 'Backspace' ? blk.items[o - 1] : e.key === 'Delete' ? blk.items[o] : null
   if (near && typeof near === 'object') { e.preventDefault(); sel = { inl: near.k }; render(); return }
+  // Shift and an arrow onto an image in a line selects it, as it would a
+  // character; plain arrows go past it like one.
+  const over = e.shiftKey && !mod && !e.altKey ? (e.key === 'ArrowRight' ? blk.items[o] : e.key === 'ArrowLeft' ? blk.items[o - 1] : null) : null
+  if (over && typeof over === 'object') { e.preventDefault(); moved = true; sel = { inl: over.k }; render(); return }
   // Arrows onto a figure from the line next to it.
   const el = blockEl(b)
   if ((e.key === 'ArrowDown' && atEdge(el, 1)) || (e.key === 'ArrowRight' && o === blk.items.length)) {
