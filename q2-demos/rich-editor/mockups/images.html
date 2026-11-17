@@ -1786,9 +1786,11 @@ editor.addEventListener('paste', async (e) => {
   }
   const file = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'))
   if (!file) {
-    // Text only, as plain text.
+    // Text only, as plain text; but an image's Markdown, alone, is the image.
     e.preventDefault()
     const t = e.clipboardData.getData('text/plain')
+    const md = parseImageMarkdown(t)
+    if (md) return pasteImage({ shape: 'figure', image: md, file: null }, false)
     if (t) document.execCommand('insertText', false, t)
     return
   }
@@ -1900,6 +1902,27 @@ function pasteImage(p, plain) {
   render()
 }
 
+/**
+ * An image's Markdown, and nothing else: ![text](path){attributes}, as a
+ * figure's fields (the brackets as its caption). The editor itself would
+ * parse it with q2; this reads what the editor writes: a #label, width as a
+ * percentage, height, fig-align and fig-alt.
+ */
+function parseImageMarkdown(text) {
+  const m = /^!\[([^\]]*)\]\(([^)\s]+)\)(?:\{([^}]*)\})?$/.exec(text.trim())
+  if (!m) return null
+  const f = { src: m[2], caption: m[1], alt: '', id: null, width: null, height: null, align: 'center' }
+  for (const a of (m[3] ?? '').matchAll(/#([\w-]+)|([\w-]+)=(?:"((?:[^"\\]|\\.)*)"|(\S+))/g)) {
+    if (a[1]) { f.id = a[1]; continue }
+    const v = (a[3] ?? a[4]).replace(/\\"/g, '"')
+    if (a[2] === 'width' && /^\d+(\.\d+)?%$/.test(v)) f.width = Math.round(parseFloat(v))
+    else if (a[2] === 'height') f.height = v
+    else if (a[2] === 'fig-align' && ['left', 'center', 'right'].includes(v)) f.align = v
+    else if (a[2] === 'fig-alt') f.alt = v
+  }
+  return f
+}
+
 /** ⌘⇧V: a copied image as the picture alone; anything else as plain text. */
 async function pastePlain() {
   try {
@@ -1919,6 +1942,8 @@ async function pastePlain() {
       }
     }
     const t = await navigator.clipboard.readText()
+    const md = parseImageMarkdown(t)
+    if (md) return pasteImage({ shape: 'figure', image: md, file: null }, true)
     if (t) document.execCommand('insertText', false, t)
   } catch {
     toast("The browser didn't let the editor read the clipboard")
