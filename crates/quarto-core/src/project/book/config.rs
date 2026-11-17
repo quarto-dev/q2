@@ -171,10 +171,10 @@ pub fn decorated_chapter_text(prefix: &str, title: &str) -> ConfigValue {
 /// `ProjectType.navItemText` — Q2 bakes it here instead, since chapter
 /// numbers are fully known at config-translation time (design doc §4).
 ///
-/// A chapter whose title can't be determined here (no explicit `text:`
-/// and no profile title) stays a bare-href entry: the sidebar's own
-/// enrichment fills in the plain title at generate time — undecorated,
-/// a documented fallback.
+/// The title is the explicit `text:`, else the profile title, else the
+/// chapter's first heading (Q1's `inputTargetIndex` order). A chapter
+/// with none of these stays a bare-href entry, and the sidebar's own
+/// enrichment labels it at generate time.
 fn chapter_to_sidebar_item(
     entry: &ConfigValue,
     render_items: &[BookRenderItem],
@@ -218,27 +218,39 @@ fn chapter_to_sidebar_item(
     }
 
     let explicit_text = entry.get("text").and_then(|t| t.as_plain_text());
-    let label_prefix = render_items
-        .iter()
-        .find(|i| {
-            i.file
-                .as_ref()
-                .is_some_and(|f| f.as_path() == Path::new(&href))
-        })
-        .and_then(chapter_label_prefix);
-    let title = explicit_text.clone().or_else(|| {
+    let render_item = render_items.iter().find(|i| {
+        i.file
+            .as_ref()
+            .is_some_and(|f| f.as_path() == Path::new(&href))
+    });
+    let label_prefix = render_item.and_then(chapter_label_prefix);
+    let profile_title = || {
         index.and_then(|idx| {
             idx.lookup_by_source(Path::new(&href))
                 .and_then(|p| p.title_text())
         })
-    });
+    };
+    // Q1's `inputTargetIndex`: metadata `title`, else the first heading.
+    // Unlike a profile title, the sidebar's enrichment can't recover a
+    // heading title, so one found here is always written out.
+    let (title, write_plain_title) = match explicit_text.clone() {
+        Some(text) => (Some(text), true),
+        None => match profile_title() {
+            Some(title) => (Some(title), false),
+            None => {
+                let heading = render_item.and_then(|i| i.heading_title.clone());
+                let found = heading.is_some();
+                (heading, found)
+            }
+        },
+    };
 
     match (label_prefix, title) {
         (Some(prefix), Some(title)) => new_map(vec![
             ("href", ConfigValue::new_string(href, gen_si())),
             ("text", decorated_chapter_text(&prefix, &title)),
         ]),
-        (None, Some(title)) if explicit_text.is_some() => new_map(vec![
+        (None, Some(title)) if write_plain_title => new_map(vec![
             ("href", ConfigValue::new_string(href, gen_si())),
             ("text", ConfigValue::new_string(title, gen_si())),
         ]),
@@ -593,6 +605,7 @@ mod tests {
             text: None,
             file: Some(PathBuf::from(file)),
             number,
+            heading_title: None,
         }
     }
 
@@ -667,6 +680,7 @@ mod tests {
                 text: Some("Part I".to_string()),
                 file: None,
                 number: None,
+                heading_title: None,
             },
             chapter(BookRenderItemKind::Chapter, "chap1.qmd", Some(2)),
             chapter(BookRenderItemKind::Chapter, "chap2.qmd", Some(3)),
@@ -805,6 +819,51 @@ mod tests {
         assert_eq!(
             decorated_parts(app_contents[2].get("text").unwrap()),
             ("B".to_string(), "Second".to_string())
+        );
+    }
+
+    fn with_heading(mut item: BookRenderItem, heading: &str) -> BookRenderItem {
+        item.heading_title = Some(heading.to_string());
+        item
+    }
+
+    #[test]
+    fn heading_title_labels_chapters_without_a_metadata_title() {
+        // GH #1234: chapters titled by their first heading (no front-matter
+        // `title:`, so no profile title) are labelled by that heading, as
+        // in Q1 — decorated when numbered, plain when not.
+        let book = map(vec![(
+            "chapters",
+            arr(vec![s("index.qmd"), s("intro.qmd"), s("yamltitle.qmd")]),
+        )]);
+        let render_items = vec![
+            with_heading(chapter(BookRenderItemKind::Index, "index.qmd", None), "Preface"),
+            with_heading(
+                chapter(BookRenderItemKind::Chapter, "intro.qmd", Some(1)),
+                "Introduction",
+            ),
+            with_heading(
+                chapter(BookRenderItemKind::Chapter, "yamltitle.qmd", Some(2)),
+                "Body heading",
+            ),
+        ];
+        let index = index_of(&[("yamltitle.qmd", "Has YAML title")]);
+        let contents = book_sidebar_contents(&book, &render_items, Some(&index), "Appendices");
+
+        let preface_text = contents[0].get("text").unwrap();
+        assert_eq!(preface_text.as_plain_text().as_deref(), Some("Preface"));
+        assert!(!matches!(
+            preface_text.value,
+            ConfigValueKind::PandocInlines(_)
+        ));
+        assert_eq!(
+            decorated_parts(contents[1].get("text").unwrap()),
+            ("1".to_string(), "Introduction".to_string())
+        );
+        // A metadata title beats the first heading.
+        assert_eq!(
+            decorated_parts(contents[2].get("text").unwrap()),
+            ("2".to_string(), "Has YAML title".to_string())
         );
     }
 
