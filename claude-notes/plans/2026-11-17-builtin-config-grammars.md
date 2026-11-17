@@ -93,8 +93,63 @@ is judged too high.
 
 - [x] Docs built-in language table; smoke fixture `01` prose; smoke README.
 - [x] Grammar crate scout table.
-- [ ] `cargo nextest run -p quarto-highlight -p quarto-core -p pampa -p quarto`.
-- [ ] `cargo xtask verify` (full, including the hub WASM build). Record the
+- [x] `cargo nextest run -p quarto-highlight -p quarto-core -p pampa -p quarto`.
+- [x] `cargo xtask verify` (full, including the hub WASM build). Record the
       WASM size before and after.
-- [ ] End-to-end `q2 render` of a probe document, output inspected.
+- [x] End-to-end `q2 render` of a probe document, output inspected.
 - [ ] PR, then watch CI.
+
+## Results
+
+### Verification (2026-11-17)
+
+`cargo xtask verify` was green apart from two kinds of failure, both
+resolved:
+
+- Tests broken by this change and fixed in follow-up commits: the TS
+  user-grammar tests still pointed at the removed toml fixture, and
+  `shortcode_text_contexts::fenced_code_block_substitutes_meta_shortcode`
+  matched raw HTML that is now split by `hl-*` spans. The TS mirror of
+  the capture extraction (`ts-packages/preview-runtime/src/userGrammar/Highlight.ts`)
+  also needed the `spell`/`nospell` drop.
+- `docs_serve_cli::open_is_serve_and_deep_links_a_page` failed once with
+  `ConnectionReset` and passed on rerun; it is unrelated and filed as
+  bd-gr1v3kbh.
+
+After the fixes: `cargo nextest run --workspace --no-fail-fast` had one
+failure (the shortcode test, then fixed and rerun green), and
+`npm run test:ci` in `hub-client` and `npm test -w ts-packages/preview-runtime`
+passed. The wasm32 hub build linked all five grammars, and
+`highlight.wasm.test.ts` (driven by `builtin-snippets.json`) passed against
+it.
+
+Windows cross-check: `cargo clippy --target x86_64-pc-windows-msvc` cannot
+run from macOS for this crate, because every grammar crate (including the
+existing json and lua ones) compiles C in its build script. The change adds
+no platform-specific Rust.
+
+### Hub WASM size
+
+`wasm_quarto_hub_client_bg.wasm` after `wasm-opt -Oz`:
+
+| Build | Bytes | gzip -9 |
+|---|---|---|
+| `main` (59be796b2) | 42,204,297 | 11,673,361 |
+| ini, toml, xml, dockerfile | 42,376,836 (+172,539) | 11,717,644 (+44,283) |
+| plus powershell | 43,867,013 (+1,490,177) | 11,825,276 (+107,632) |
+
+PowerShell is about 90% of the added bytes.
+
+### End-to-end render
+
+`cargo run --bin q2 -- render probe.qmd` with `ini`, `conf`, `Dockerfile`,
+`xml`, `powershell` and `apache` blocks. Output inspected; spans per block:
+
+```text
+ini        -> comment "; Connect config", punctuation-bracket, type "Server", property "Address", operator
+conf       -> type "listen", operator, string "\"0.0.0.0:3939\""
+Dockerfile -> comment "# base image", keyword "FROM", operator ":"
+xml        -> tag "config", tag "item", property "key", string "a", markup "1", punctuation
+powershell -> variable "$env:CONNECT_SERVER", string "\"https://connect.example.com\""
+apache     -> (none; pre.sourceCode wrapper only, as before)
+```
