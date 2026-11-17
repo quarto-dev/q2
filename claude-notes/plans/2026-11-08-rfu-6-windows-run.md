@@ -59,4 +59,49 @@ Item 8\'s deletion of `commands/record.rs` moved the old export-command entries 
 
 ## Notes from the run
 
-(Gordon fills in.)
+**Two Windows runs on a stale base.** Run `20261116-121918-GWWIN` (no pandoc or typst) and run `20261116-235123-GWWIN`
+(pandoc 3.12.1 and typst 0.15.1 installed) used an experiment branch cut from `feature/one-presenter` at `8f17e950d`,
+which is 175 commits before the integration tip and 252 before `epic-closeout` (`d1e14d69d`). Neither run exercised the
+finished epic. Treat the results as a map of Windows problems, not as results for the current code; no box is ticked
+from them. The machine was Windows on x86\_64 with node 24, uv 0.13.7 and git 2.47.1, `core.autocrlf` set to `input`.
+The run tooling is on the temporary branch `rfu/6-windows-tooling` and never lands.
+
+| item | run 2 result | what it ran |
+|---|---|---|
+| build | PASS | `cargo build` of the touched crates |
+| box 1, hub-provider `canonicalize` | FAIL | the probe test `a_figure_reported_under_the_materialized_root_is_captured` |
+| box 2, `positron_cache` URI rule | PASS | 18 tests |
+| box 4, `convert_positron_cli` | FAIL | 21 passed, 1 failed |
+| box 5, `kill` and `pgrep` gates | PASS | both tests skip at their `cfg!(unix)` guard, so Windows runs no `kill` or `pgrep` |
+| box 6, `record/sources` and `capture_driver` | FAIL | `capture_driver::` 55 passed, 1 failed |
+| box 7, CRLF | PASS, partial | 26 tests passed with `autocrlf=input`, so the CRLF checkout was not exercised |
+| box 8, clippy | PASS | clean on the host target |
+| box 8, nextest | FAIL | 10181 run; 96 failed with the tools installed (337 without) |
+
+**Findings that still apply to the current code.** Checked against `epic-closeout` by reading:
+
+- **Box 1 (a real defect).** `crates/quarto-hub-provider/src/execute.rs` calls `.canonicalize()` at lines 349, 549 and 644.
+  On Windows that returns a `\\?\` verbatim path, so the prefix comparison in the capture collector drops a figure the
+  engine reported as `C:\...\doc_files`, with no warning. The probe test fails with `files: []`.
+  `quarto_system_runtime::canonical::canonicalize` (dunce) returns the plain form.
+- **Box 4 (a test defect).** `convert_positron_cli.rs:61` canonicalizes the temp directory in `doc()`, so the expected
+  `--source-uri` becomes `//?/C:/...` while the product correctly wrote `C:/...`.
+- **Box 6 (cause unknown).** `capture_driver::tests::a_record_only_cache_entry_is_published` panics with
+  `Cannot start a runtime from within a runtime`. Not yet known whether `epic-closeout` still does it.
+
+**Already fixed after the base was cut.** Four failures from the runs have fixes on `epic-closeout`: the three
+`execute::` tests (`7830b6efc`, which also failed on macOS), the julia handshake test (`043cccfa4`), and the Jupyter
+record goldens (`6b84fd6aa`).
+
+**Where the 96 came from.** By the commit that first added each test, 14 trace to these epics (EXR 3, RIU 4, RFU 2,
+OPR 5, KNR 0) and 82 predate them (books, glob, `metadata_layers`, `preview_out`, `route_tests`, `lmd_snapshots`,
+`pandoc_request_*`, and others from August to mid-October). Of 285 suspect tests rerun on macOS, only the three
+`execute::` failures failed. All other failures are Windows-specific, mostly `\\?\` against plain `C:\` paths,
+Unix-shaped path expectations, and CRLF in captured script output. The 82 are out of scope here.
+
+**Tooling observations.** Leaked Python kernels from two nextest `LEAK` tests held PowerShell's stdout pipe open and
+hung the script for hours; waiting on the `cmd` process instead fixed it. The machine has no pandoc, typst, julia or
+Rscript, and `python3` is the Microsoft Store stub.
+
+**What remains.** Every box stays open. [The Windows fixes plan](2026-11-17-windows-epic-fixes.md) reruns the checks on
+`epic-closeout` and fixes what the epics caused. Close this plan from that rerun.
