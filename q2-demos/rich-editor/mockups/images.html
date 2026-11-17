@@ -115,6 +115,40 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 .handle.r { cursor:nwse-resize; }
 .size-label { position:absolute; pointer-events:none; background:#343a40; color:#fff; font:12px/1 system-ui, sans-serif; padding:4px 6px; border-radius:4px; z-index:7; }
 
+/* The hover bar, its menus, and the viewer: as in Notion. */
+.hbar { position:absolute; pointer-events:auto; display:flex; align-items:center; gap:2px; background:#fff; border-radius:8px; padding:4px;
+  box-shadow:0 0 0 1px rgba(15,15,15,.06), 0 3px 10px rgba(15,15,15,.14); z-index:12; }
+.hbar button { width:32px; height:32px; display:grid; place-items:center; padding:0; border:0; background:none; border-radius:6px; cursor:pointer; color:#37352f; position:relative; }
+.hbar button:hover:not(:disabled), .hbar button[aria-pressed="true"] { background:#efeeec; }
+.hbar button:disabled { color:var(--faint); cursor:default; }
+.hbar svg { width:21px; height:21px; display:block; }
+.hbar .vsep { width:1px; height:20px; background:var(--line); margin:0 4px; }
+.hbar button[data-tip]::after, .viewer button[data-tip]::after { content:attr(data-tip); position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%);
+  background:#343a40; color:#fff; font:12px/1 system-ui, sans-serif; padding:5px 7px; border-radius:4px; white-space:nowrap; pointer-events:none; visibility:hidden; z-index:40; }
+.hbar button[data-tip]:hover::after, .viewer button[data-tip]:hover::after { visibility:visible; transition:visibility 0s .5s; }
+.hmenu { position:absolute; pointer-events:auto; display:flex; flex-direction:column; background:#fff; border-radius:8px; padding:4px; min-width:220px; z-index:13;
+  box-shadow:0 0 0 1px rgba(15,15,15,.06), 0 3px 10px rgba(15,15,15,.14); font-size:14px; }
+.hmenu button { display:flex; align-items:center; gap:6px; padding:6px 8px; border:0; background:none; border-radius:5px; font:inherit; text-align:left; cursor:pointer; color:#37352f; }
+.hmenu button:hover:not(:disabled) { background:#efeeec; }
+.hmenu button:disabled { color:var(--faint); cursor:default; }
+.hmenu .mark { width:14px; flex:none; color:var(--accent); }
+.hmenu .label { flex:1; }
+.hmenu .hint { color:var(--faint); font-size:12px; }
+.hmenu .danger { color:#c4342d; }
+.hmenu hr { border:0; border-top:1px solid var(--line); margin:4px 0; }
+.hmenu label { font-size:12px; color:var(--muted); padding:4px 6px 6px; }
+.hmenu input { margin:0 4px 4px; font:14px system-ui, sans-serif; padding:6px 8px; border:1px solid var(--line); border-radius:5px; outline:none; width:300px; }
+.hmenu input:focus { border-color:var(--accent); }
+.vhandle { position:absolute; width:8px; border-radius:4px; background:#fff; border:1.5px solid #37352f; box-shadow:0 0 0 1px #fff; cursor:ew-resize; pointer-events:auto; z-index:11; }
+.viewer { position:fixed; inset:0; z-index:100; background:rgba(15,15,15,.92); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; }
+.viewer img { max-width:90vw; max-height:82vh; background:#fff; box-shadow:0 8px 30px rgba(0,0,0,.4); }
+.viewer .cap { color:#e9e9e7; font-size:14px; }
+.viewer .tools { position:absolute; top:14px; right:16px; display:flex; gap:4px; }
+.viewer .tools button { width:36px; height:36px; display:grid; place-items:center; padding:0; border:0; background:none; border-radius:6px; color:#fff; cursor:pointer; position:relative; }
+.viewer .tools button:hover:not(:disabled) { background:#3a3a3a; }
+.viewer .tools button:disabled { color:#777; }
+.viewer .tools svg { width:22px; height:22px; }
+
 /* The insert-an-image panel. */
 .insert { flex-direction:column; align-items:stretch; padding:0; width:420px; white-space:normal; }
 .insert .tabs { display:flex; border-bottom:1px solid var(--line); padding:0 6px; }
@@ -173,6 +207,7 @@ const GROUPS = [
   { key: 'controls', title: "A selected image's controls", options: [
     ['popover', 'Under the image', 'Size, alignment, alt text and the rest in a bar under the selected image. It moves with the image\'s bottom edge when the image is resized. As in Google Docs and Notion.'],
     ['above', 'Over the image', 'The same bar above the image, whose top doesn\'t move when it\'s resized, so neither does the bar. It covers the line before the image instead of the one after.'],
+    ['hover', 'On the image, on hover', 'A small bar in the image\'s corner while the pointer is on it (or it\'s selected): caption, alignment (its own little menu), expand, download, and More, which is also what right-clicking shows. Drag the bars at its sides to resize it. Captions are typed in place. As in Notion.'],
     ['toolbar', 'In the toolbar', 'The toolbar swaps its text buttons for the image\'s while one is selected. As in Word\'s "Picture Format".'],
   ]},
   { key: 'resize', title: 'Resizing', options: [
@@ -362,7 +397,7 @@ function insertImage(src, at = sel.caret) {
 function selectFigure(k, fresh = false) {
   sel = { fig: k }
   // A new image, in place-the-caption mode: straight into its caption.
-  if (fresh && opts.caption === 'below') sel.caption = true
+  if (fresh && captionInPlace()) sel.caption = true
 }
 
 function removeImage() {
@@ -400,6 +435,8 @@ function stepFrom(b, dir) {
   return true
 }
 
+/** Whether captions are typed under the image (always, with the hover bar). */
+const captionInPlace = () => opts.caption === 'below' || opts.controls === 'hover'
 const SIZES = [['Small', 25], ['Medium', 50], ['Large', 75], ['Full', 100]]
 const TEXT_HEIGHT = '1.4em'
 function setFig(k, change, typing = false) {
@@ -524,7 +561,7 @@ function renderBlock(blk, b, nums) {
   const cap = document.createElement('figcaption')
   cap.textContent = blk.caption
   if (nums.has(blk.k)) cap.dataset.num = `Figure ${nums.get(blk.k)}: `
-  if (opts.caption === 'below') {
+  if (captionInPlace()) {
     cap.contentEditable = 'true'
     if (!blk.caption) cap.className = selected ? 'empty' : 'hide'
   } else {
@@ -776,8 +813,8 @@ function refreshCaptions() {
     if (cap.textContent !== blk.caption && document.activeElement !== cap) cap.textContent = blk.caption
     if (nums.has(blk.k)) cap.dataset.num = `Figure ${nums.get(blk.k)}: `
     else delete cap.dataset.num
-    cap.classList.toggle('hide', !blk.caption && !(opts.caption === 'below' && sel.fig === blk.k))
-    cap.classList.toggle('empty', !blk.caption && opts.caption === 'below' && sel.fig === blk.k)
+    cap.classList.toggle('hide', !blk.caption && !(captionInPlace() && sel.fig === blk.k))
+    cap.classList.toggle('empty', !blk.caption && captionInPlace() && sel.fig === blk.k)
     el.querySelector('.alt-mark')?.remove()
     if (needsAlt(blk, true)) el.querySelector('.frame').append(altMark(() => { selectFigure(blk.k); focusAlt = true; render() }))
   }
@@ -928,6 +965,7 @@ function renderOverlay() {
     }
     return
   }
+  if (opts.controls === 'hover') return renderHover(origin)
   const img = selectedImage()
   if (!img) return
   const el = selectedEl()
@@ -953,14 +991,28 @@ const selectedEl = () => (sel.fig ? editor.querySelector(`figure[data-k="${sel.f
 // Drag a corner: the width as a share of the page's text, snapping to the
 // common ones, from the side the image grows from.
 const SNAPS = [25, 33, 50, 67, 75, 100]
-function renderHandles(fig, frame, fr, origin) {
+// With the hover bar, they're bars inside the image's sides, as in Notion.
+function placeHandle(h, r, o) {
+  const left = h.classList.contains('l')
+  if (h.classList.contains('bar')) {
+    h.style.left = (left ? r.left - o.left + 6 : r.right - o.left - 14) + 'px'
+    h.style.top = (r.top + r.height / 2 - o.top - Math.min(48, r.height / 3) / 2) + 'px'
+    h.style.height = Math.min(48, r.height / 3) + 'px'
+  } else {
+    h.style.left = (left ? r.left - o.left - 8 : r.right - o.left - 4) + 'px'
+    h.style.top = (r.bottom - o.top - 4) + 'px'
+  }
+}
+let resizing = false
+function renderHandles(fig, frame, fr, origin, bars = false) {
   for (const side of ['l', 'r']) {
     const h = document.createElement('div')
-    h.className = 'handle ' + side
-    h.style.left = (side === 'l' ? fr.left - origin.left - 8 : fr.right - origin.left - 4) + 'px'
-    h.style.top = (fr.bottom - origin.top - 4) + 'px'
+    h.className = (bars ? 'vhandle bar ' : 'handle ') + side
+    h.dataset.hoverK = fig.k
+    placeHandle(h, fr, origin)
     h.onpointerdown = (e) => {
       e.preventDefault()
+      resizing = true
       h.setPointerCapture(e.pointerId)
       const full = editor.getBoundingClientRect().width
       const startW = fr.width, startX = e.clientX
@@ -983,19 +1035,208 @@ function renderHandles(fig, frame, fr, origin) {
         label.textContent = `${w}%`
         label.style.left = (r.left + r.width / 2 - o.left - label.offsetWidth / 2) + 'px'
         label.style.top = (r.top - o.top + 8) + 'px'
-        for (const hh of overlay.querySelectorAll('.handle')) {
-          hh.style.left = (hh.classList.contains('l') ? r.left - o.left - 8 : r.right - o.left - 4) + 'px'
-          hh.style.top = (r.bottom - o.top - 4) + 'px'
-        }
+        for (const hh of overlay.querySelectorAll('.handle, .vhandle')) placeHandle(hh, r, o)
         renderSource()
       }
-      const up = () => { h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); render() }
+      const up = () => { resizing = false; h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); render() }
       h.addEventListener('pointermove', move)
       h.addEventListener('pointerup', up)
     }
     overlay.append(h)
   }
 }
+
+// ------------------------------------------------------------- hover bar
+// The image under the pointer, and the menu open from its bar: { kind:
+// 'align' | 'more' | 'alt', k, x?, y? } (x and y when it was right-clicked).
+let hoverK = null, menu = null, hoverTimer = null
+const STROKE = (body) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`
+const ALIGN_ICONS = {
+  left: STROKE('<path d="M4 4.5h16M4 19.5h16"/><rect x="4" y="8" width="9" height="8" rx="1"/>'),
+  center: STROKE('<path d="M4 4.5h16M4 19.5h16"/><rect x="7.5" y="8" width="9" height="8" rx="1"/>'),
+  right: STROKE('<path d="M4 4.5h16M4 19.5h16"/><rect x="11" y="8" width="9" height="8" rx="1"/>'),
+}
+const HOVER_ICONS = {
+  caption: STROKE('<rect x="4" y="4" width="16" height="10" rx="1"/><path d="M4 17.5h16M4 20.5h10"/>'),
+  expand: STROKE('<circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5M10.5 8v5M8 10.5h5"/>'),
+  download: STROKE('<path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/>'),
+  more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>',
+  close: STROKE('<path d="M6 6l12 12M18 6 6 18"/>'),
+}
+
+/** What the pointer is over: an image, or the bar and menus of one. */
+document.addEventListener('mousemove', (e) => {
+  if (opts.controls !== 'hover' || resizing || dragging) return
+  const t = e.target
+  const ui = t.closest?.('[data-hover-k]')
+  const k = ui ? Number(ui.dataset.hoverK) : Number(t.closest?.('#editor figure .frame')?.closest('figure').dataset.k ?? t.closest?.('#editor .inl')?.dataset.k ?? 0) || null
+  if (k === hoverK) { clearTimeout(hoverTimer); return }
+  clearTimeout(hoverTimer)
+  // Leaving goes after a moment, so the pointer can cross a gap to the bar.
+  if (k) { hoverK = k; renderOverlay() }
+  else hoverTimer = setTimeout(() => { hoverK = null; renderOverlay() }, 250)
+})
+
+function hoverUi(cls, k) {
+  const el = document.createElement('div')
+  el.className = 'hover-ui ' + cls
+  el.dataset.hoverK = k
+  el.addEventListener('mousedown', (e) => { if (e.target.nodeName !== 'INPUT') e.preventDefault() })
+  return el
+}
+function hoverButton(name, icon, action, { pressed = false, disabled = false } = {}) {
+  const b = document.createElement('button')
+  b.innerHTML = icon
+  b.setAttribute('aria-label', name)
+  b.dataset.tip = name
+  b.setAttribute('aria-pressed', String(pressed))
+  b.disabled = disabled
+  b.onclick = action
+  return b
+}
+
+function renderHover(origin) {
+  if (focusAlt) { focusAlt = false; menu = { kind: 'alt', k: sel.fig || sel.inl } }
+  const k = menu?.k ?? hoverK ?? (sel.fig || sel.inl)
+  if (!k) return
+  const fig = figByKey(k), at = fig ? null : inlineByKey(k)
+  if (!fig && !at) { menu = null; return }
+  const target = fig ?? at.img
+  const el = fig ? editor.querySelector(`figure[data-k="${k}"] .frame`) : editor.querySelector(`.inl[data-k="${k}"]`)
+  if (!el) return
+  const fr = el.getBoundingClientRect()
+  const have = Boolean(files[target.src])
+  const toggle = (kind) => () => { menu = menu?.kind === kind && menu.k === k && menu.x == null ? null : { kind, k }; renderOverlay() }
+
+  const bar = hoverUi('hbar', k)
+  let alignButton = null, moreButton
+  if (fig) {
+    bar.append(hoverButton('Caption', HOVER_ICONS.caption, () => { menu = null; sel = { fig: k, caption: true }; render() }, { pressed: Boolean(fig.caption) }))
+    alignButton = hoverButton('Alignment', ALIGN_ICONS[fig.align], toggle('align'), { pressed: menu?.kind === 'align' })
+    bar.append(alignButton)
+  }
+  bar.append(
+    hoverButton('Expand', HOVER_ICONS.expand, () => { menu = null; openViewer(target) }, { disabled: !have && !/^https?:/.test(target.src) }),
+    hoverButton('Download', HOVER_ICONS.download, () => download(target), { disabled: !have }),
+    (moreButton = hoverButton('More', HOVER_ICONS.more, toggle('more'), { pressed: menu?.kind === 'more' && menu.x == null })),
+  )
+  overlay.append(bar)
+  // In the image's top right corner; over a small image (or one in a line), above it.
+  let left = fr.right - origin.left - bar.offsetWidth - 8, top = fr.top - origin.top + 8
+  if (!fig || fr.width < bar.offsetWidth + 16 || fr.height < bar.offsetHeight + 16) {
+    left = fr.left + fr.width / 2 - origin.left - bar.offsetWidth / 2
+    top = fr.top - origin.top - bar.offsetHeight - 6
+  }
+  bar.style.left = Math.max(8, Math.min(left, origin.width - bar.offsetWidth - 8)) + 'px'
+  bar.style.top = top + 'px'
+  if (fig) renderHandles(fig, el, fr, origin, true)
+
+  if (!menu || menu.k !== k) return
+  const under = (button, box, centre) => {
+    overlay.append(box)
+    const br = button.getBoundingClientRect(), bb = bar.getBoundingClientRect()
+    const x = centre ? br.left + br.width / 2 - box.offsetWidth / 2 : br.right - box.offsetWidth
+    box.style.left = Math.max(8, Math.min(x - origin.left, origin.width - box.offsetWidth - 8)) + 'px'
+    box.style.top = (bb.bottom - origin.top + 6) + 'px'
+  }
+  const atPointer = (box) => {
+    overlay.append(box)
+    box.style.left = Math.max(8, Math.min(menu.x - origin.left, origin.width - box.offsetWidth - 8)) + 'px'
+    box.style.top = (menu.y - origin.top + 4) + 'px'
+  }
+
+  if (menu.kind === 'align' && fig) {
+    // Its own little bar, centred under the button, the current one marked.
+    const sub = hoverUi('hbar', k)
+    ;['left', 'center', 'right'].forEach((a, i) => {
+      if (i) sub.append(Object.assign(document.createElement('span'), { className: 'vsep' }))
+      sub.append(hoverButton(a === 'center' ? 'Centre' : a[0].toUpperCase() + a.slice(1), ALIGN_ICONS[a], () => { menu = null; setFig(k, { align: a }); render() }, { pressed: fig.align === a }))
+    })
+    under(alignButton, sub, true)
+  } else if (menu.kind === 'more') {
+    const list = hoverUi('hmenu', k)
+    const item = (label, action, { disabled = false, danger = false, check = null, hint = '' } = {}) => {
+      const b = document.createElement('button')
+      b.innerHTML = `<span class="mark">${check === null ? '' : check ? '✓' : ''}</span><span class="label"></span><span class="hint"></span>`
+      b.querySelector('.label').textContent = label
+      b.querySelector('.hint').textContent = hint
+      if (danger) b.classList.add('danger')
+      b.disabled = disabled
+      b.onclick = action
+      list.append(b)
+    }
+    const select = () => { sel = fig ? { fig: k } : { inl: k } }
+    item('Alt text…', () => { menu = { ...menu, kind: 'alt' }; renderOverlay() }, { hint: target.alt ? '' : 'none yet' })
+    item('Replace…', () => { menu = null; select(); replaceCommand(); render() })
+    if (fig && fig.width) item('Original size', () => { menu = null; setFig(k, { width: null }); render() }, { hint: `now ${fig.width}%` })
+    if (fig && opts.xref === 'toggle') item('Numbered', () => { setFig(k, { id: fig.id ? null : slug(fig.caption) }); render() }, { check: Boolean(fig.id && fig.caption), disabled: !fig.caption, hint: fig.caption ? (fig.id ? '#' + fig.id : '') : 'needs a caption' })
+    if (!fig) item('Own line', () => { menu = null; inlineToFigure({ at }); render() })
+    list.append(document.createElement('hr'))
+    item('Download', () => { menu = null; download(target); renderOverlay() }, { disabled: !have })
+    item('Delete', () => { menu = null; hoverK = null; select(); removeImage(); render() }, { danger: true, hint: '⌫' })
+    menu.x == null ? under(moreButton, list, false) : atPointer(list)
+  } else if (menu.kind === 'alt') {
+    const box = hoverUi('hmenu', k)
+    const label = Object.assign(document.createElement('label'), { textContent: 'Alt text: what the image shows, for those who can\'t see it' })
+    const input = Object.assign(document.createElement('input'), { value: target.alt, placeholder: 'A description of the image' })
+    input.addEventListener('input', () => { record(true); target.alt = input.value; lastState = snapshot(); renderSource(); refreshCaptions() })
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); menu = null; render() }
+    })
+    box.append(label, input)
+    menu.x == null ? under(moreButton, box, false) : atPointer(box)
+    input.focus({ preventScroll: true })
+  }
+}
+
+// Right-clicking an image shows its More menu, where the pointer is.
+editor.addEventListener('contextmenu', (e) => {
+  if (opts.controls !== 'hover') return
+  const figEl = e.target.closest('figure .frame')?.closest('figure'), inl = e.target.closest('.inl')
+  const k = Number((figEl ?? inl)?.dataset.k)
+  if (!k) return
+  e.preventDefault()
+  menu = { kind: 'more', k, x: e.clientX, y: e.clientY }
+  hoverK = k
+  renderOverlay()
+})
+
+// Clicking elsewhere, or Escape, puts a menu away.
+document.addEventListener('mousedown', (e) => {
+  if (!menu || e.target.closest('.hover-ui')) return
+  menu = null
+  renderOverlay()
+})
+
+function download(target) {
+  const a = document.createElement('a')
+  a.href = files[target.src] ?? target.src
+  a.download = target.src.split('/').pop()
+  a.click()
+}
+
+/** The image on its own, over the dimmed page. */
+let viewer = null
+function openViewer(target) {
+  viewer = document.createElement('div')
+  viewer.className = 'viewer'
+  const tools = document.createElement('div')
+  tools.className = 'tools'
+  tools.append(hoverButton('Download', HOVER_ICONS.download, () => download(target), { disabled: !files[target.src] }), hoverButton('Close (Esc)', HOVER_ICONS.close, closeViewer))
+  const img = Object.assign(document.createElement('img'), { src: files[target.src] ?? target.src, alt: target.alt || target.caption || '' })
+  viewer.append(tools, img)
+  if (target.caption) viewer.append(Object.assign(document.createElement('div'), { className: 'cap', textContent: target.caption }))
+  viewer.onclick = (e) => { if (e.target === viewer) closeViewer() }
+  document.body.append(viewer)
+  renderOverlay()
+}
+function closeViewer() { viewer?.remove(); viewer = null; editor.focus({ preventScroll: true }); render() }
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return
+  if (viewer) { e.preventDefault(); e.stopPropagation(); closeViewer() }
+  else if (menu) { e.preventDefault(); e.stopPropagation(); menu = null; renderOverlay() }
+}, true)
 
 // ----------------------------------------------------------------- source
 const q = (s) => `"${s.replace(/"/g, '\\"')}"`
@@ -1122,7 +1363,7 @@ editor.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); if (stepFrom(b, -1)) render(); return }
     if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
       e.preventDefault()
-      if (opts.caption === 'below' && e.key === 'ArrowDown') { sel.caption = true; render(); return }
+      if (captionInPlace() && e.key === 'ArrowDown') { sel.caption = true; render(); return }
       if (stepFrom(b, 1) || (paragraphAfter(img.fig.k), true)) render()
       return
     }
