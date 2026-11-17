@@ -1363,6 +1363,10 @@ jobs:
             eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           fi
           brew tap-new --no-git local/q2-ci
+          # Homebrew 7 refuses to load formulae from untrusted taps, and a
+          # tap-new tap is never trusted. (`brew install quarto-dev/tap/q2`
+          # trusts the tap itself, so users don't need this step.)
+          brew trust --tap local/q2-ci
           cp "$RUNNER_TEMP/formula/q2.rb" "$(brew --repository local/q2-ci)/Formula/q2.rb"
           brew style local/q2-ci/q2
           brew audit --strict --online local/q2-ci/q2
