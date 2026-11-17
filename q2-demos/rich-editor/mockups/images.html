@@ -1401,6 +1401,9 @@ editor.addEventListener('input', (e) => {
     const f = figByKey(Number(cap.closest('figure').dataset.k))
     record(true)
     f.caption = cap.textContent
+    // Emptied, the browser leaves a <br> to hold the line open, and "Add a
+    // caption" would go on a line after it: empty it, keeping the caret.
+    if (!f.caption && cap.firstChild) { cap.replaceChildren(); getSelection().collapse(cap, 0) }
     // An id needs a caption; one typed back keeps its old number.
     renderSource()
     refreshCaptions()
