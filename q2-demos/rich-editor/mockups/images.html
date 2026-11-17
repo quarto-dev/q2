@@ -69,9 +69,12 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 .body figure .frame { position:relative; max-width:100%; line-height:0; border-radius:2px; cursor:default; }
 .body figure img { max-width:100%; display:block; }
 /* Selected: a light blue wash over the image and a little past its edges,
-   as in Notion. See-through on purpose: it mustn't hide the image. */
-.body figure.sel .frame::after, .body .inl.sel::after { content:""; position:absolute; inset:-4px; border-radius:4px;
+   as in Notion. See-through on purpose: it mustn't hide the image. A
+   figure's covers its caption too, which goes with it (.sel-wash, drawn
+   over the page, since the figure itself is as wide as the text). */
+.body .inl.sel::after, .sel-wash { content:""; position:absolute; inset:-4px; border-radius:4px;
   background:rgba(35,131,226,.16); pointer-events:none; }
+.sel-wash { inset:auto; z-index:1; }
 /* With the hover bar, its handles and bar show the image is live instead. */
 .body:not(.hover-bar) figure:not(.sel) .frame:hover { outline:2px solid var(--sel); outline-offset:2px; }
 .body figcaption { font-size:.9em; color:#5c636a; margin-top:8px; text-align:center; outline:none; min-width:12ch; line-height:1.4; user-select:text; white-space:pre-wrap; }
@@ -841,6 +844,7 @@ function refreshCaptions() {
     el.querySelector('.alt-mark')?.remove()
     if (needsAlt(blk, true)) el.querySelector('.frame').append(altMark(() => { selectFigure(blk.k); focusAlt = true; render() }))
   }
+  washFigure()
 }
 
 function inlineToFigure({ at }) {
@@ -974,6 +978,7 @@ function place(el, rect, where = 'below') {
 function renderOverlay() {
   overlay.replaceChildren()
   const origin = page.getBoundingClientRect()
+  washFigure(origin)
   if (panel?.kind === 'insert') {
     const box = renderInsertPanel()
     if (panel.anchor === 'toolbar') {
@@ -1009,6 +1014,22 @@ function renderOverlay() {
   if (focusCaption) { focusCaption = false; document.querySelector('.field[data-which="caption"]')?.focus() }
 }
 
+/** The selected figure's wash: over its image and its caption, if it shows. */
+function washFigure(origin = page.getBoundingClientRect()) {
+  overlay.querySelector('.sel-wash')?.remove()
+  if (!sel.fig || sel.caption || moving) return
+  const fig = editor.querySelector(`figure[data-k="${sel.fig}"]`)
+  if (!fig) return
+  const rects = [fig.querySelector('.frame').getBoundingClientRect()]
+  const cap = fig.querySelector('figcaption')
+  if (cap && !cap.classList.contains('hide')) rects.push(cap.getBoundingClientRect())
+  const left = Math.min(...rects.map((r) => r.left)) - 4, right = Math.max(...rects.map((r) => r.right)) + 4
+  const top = rects[0].top - 4, bottom = rects.at(-1).bottom + 4
+  const wash = Object.assign(document.createElement('div'), { className: 'sel-wash' })
+  Object.assign(wash.style, { left: left - origin.left + 'px', top: top - origin.top + 'px', width: right - left + 'px', height: bottom - top + 'px' })
+  overlay.prepend(wash)
+}
+
 const selectedEl = () => (sel.fig ? editor.querySelector(`figure[data-k="${sel.fig}"]`) : sel.inl ? editor.querySelector(`.inl[data-k="${sel.inl}"]`) : null)
 
 // Drag a corner: the width as a share of the page's text, snapping to the
@@ -1037,6 +1058,9 @@ function renderHandles(fig, frame, fr, origin, bars = false) {
       e.preventDefault()
       resizing = true
       h.setPointerCapture(e.pointerId)
+      // Out of the way while resizing: the image's bar and menus.
+      menu = null
+      overlay.querySelectorAll('.hbar, .hmenu, .bridge, .bubble').forEach((el) => el.remove())
       const full = editor.getBoundingClientRect().width
       const startW = fr.width, startX = e.clientX
       const grow = (fig.align === 'center' ? 2 : 1) * (side === 'r' ? 1 : -1)
@@ -1059,6 +1083,7 @@ function renderHandles(fig, frame, fr, origin, bars = false) {
         label.style.left = (r.left + r.width / 2 - o.left - label.offsetWidth / 2) + 'px'
         label.style.top = (r.top - o.top + 8) + 'px'
         for (const hh of overlay.querySelectorAll('.handle, .vhandle')) placeHandle(hh, r, o)
+        washFigure(o)
         renderSource()
       }
       const up = () => { resizing = false; h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); render() }
