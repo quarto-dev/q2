@@ -74,7 +74,7 @@ This plan builds only what book mode (P1–P7) actually needs. **Explicitly not 
 
 ## Details
 
-This phase touches only Q2's native HTML crossref pipeline. It does not touch `feature/pandoc-writer-hybrid`'s Pandoc-hybrid formats at all — confirmed in the design conversation that Typst and EPUB already have working `@sec-`/number-sections behavior via their own independent mechanisms (Typst's native `section-numbering` metadata passthrough; EPUB via the already-vendored, unsuppressed `sections.lua`). This plan exists purely to unblock P4 (multi-file HTML book mode)'s "Section N.M"/"Chapter N" presentation, which Q2's native writer cannot produce today for *any* document, book or not.
+This phase touches only Q2's native HTML crossref pipeline. It does not touch `feature/pandoc-writer-hybrid`'s Pandoc-hybrid formats at all — confirmed in the design conversation that Typst and EPUB already have working `@sec-`/number-sections behavior via their own independent mechanisms (Typst's native `section-numbering` metadata passthrough; EPUB via the already-vendored, unsuppressed `sections.lua`). This plan exists purely to unblock P4 (multi-file HTML book mode)\'s "Section N.M"/"Chapter N" presentation, which Q2's native writer cannot produce today for *any* document, book or not.
 
 ## Task 5 end-to-end verification (2026-09-23)
 

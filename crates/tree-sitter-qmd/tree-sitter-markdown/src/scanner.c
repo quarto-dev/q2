@@ -179,6 +179,11 @@ typedef enum {
     // option. See grammar.js (`pandoc_paragraph`) and
     // parse_pipe_table_or_word_apostrophe below.
     PARAGRAPH_START,
+    // bd-apostrophe-after-span-6l9c8c26: a `'` directly after the end of an
+    // inline construct (`_book_'s`, `[book](url)'s`), read as an apostrophe.
+    // The grammar makes it valid only in that position; see
+    // `_inline_element` in grammar.js and parse_single_quote below.
+    SPAN_APOSTROPHE,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -298,6 +303,7 @@ static char* token_names[] = {
     "INDENTED_CODE_BLOCK_DISALLOWED", // simply for good error reporting
     "CAPTION_START",
     "PARAGRAPH_START",
+    "SPAN_APOSTROPHE",
 };
 
 #endif
@@ -2774,14 +2780,41 @@ static bool parse_open_square_brace(Scanner *s, TSLexer *lexer, const bool *vali
     return false;   
 }
 
+// A `'` is one of three things.
+//
+// bd-apostrophe-after-span-6l9c8c26: directly after the end of an inline
+// construct it is an apostrophe (`_book_'s`, `[book](url)'s`, `` `a.rs`'s ``,
+// `_books_' premises`), as in Pandoc. "Directly after an inline construct"
+// is not something the scanner can see: it cannot look behind, and closers
+// such as the `)` of a link or the `}` of an attribute are lexed by the
+// internal lexer. The grammar supplies it instead: SPAN_APOSTROPHE is a
+// valid symbol only in the parse states that follow a `_closable_inline`
+// (grammar.js, `_inline_element`). Three more conditions apply:
+//   - no single-quoted span is open (Scanner.single_quote_depth, the same
+//     count GH #943 uses): inside one, `'_book_'`, the mark is the closer;
+//   - no whitespace was skipped on the way here. scan() consumes leading
+//     whitespace before dispatching, so without this `_a_ 'quoted'` would
+//     reach this branch in the state right after the emphasis closer;
+//   - not error recovery, where every symbol is valid and the parse state
+//     says nothing. TRIGGER_ERROR is used by no grammar rule, so it is
+//     valid only then.
+// The token is the `'` alone. What follows is lexed as usual and pampa
+// merges the adjacent Strs (`'s` becomes one Str). In particular a word
+// that follows and itself ends in `'` is picked up by the GH #943 rule, so
+// `_a_'b'` reads as Pandoc reads it, `’b’`, not as a stray opener.
+//
+// Otherwise it is a quote mark: a closer if the grammar allows one here,
+// else an opener.
 static bool parse_single_quote(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
-    // unused
-    (void)(s);
-
     if (lexer->lookahead != '\'') {
         return false;
     }
     lexer->advance(lexer, false);
+    if (valid_symbols[SPAN_APOSTROPHE] && !valid_symbols[TRIGGER_ERROR] &&
+        s->single_quote_depth == 0 && s->ws_before_token == 0) {
+        lexer->mark_end(lexer);
+        EMIT_TOKEN(SPAN_APOSTROPHE);
+    }
     // prioritize close over open so 'word' works as expected.
     if (valid_symbols[SINGLE_QUOTE_CLOSE]) {
         lexer->mark_end(lexer);

@@ -11,9 +11,10 @@
 //! The decision is made by the tree-sitter external scanner from the start
 //! of the word (it cannot look behind): see `scan_word_then_apostrophe` in
 //! `crates/tree-sitter-qmd/tree-sitter-markdown/src/scanner.c`. A `'` with
-//! whitespace before it, after a closing delimiter, or after a word the
-//! scanner does not recognise (digit-initial, non-ASCII) keeps its old
-//! reading, so those cases still error; they are pinned here on purpose.
+//! whitespace before it, or after a word the scanner does not recognise
+//! (digit-initial, non-ASCII) keeps its old reading, so those cases still
+//! error; they are pinned here on purpose. A `'` after a closing delimiter
+//! is handled separately (`test_apostrophe_after_closer.rs`).
 
 use pampa::pandoc::{Block, Inline};
 use pampa::readers;
@@ -163,8 +164,9 @@ fn quotes_still_pair() {
 fn quote_marks_not_after_a_word_keep_their_errors() {
     // Whitespace before the mark: still a quote that never closes.
     assert_fails_with("a ' b.\n", "Q-2-10");
-    // After a closing delimiter (GH #221's other half): still an opener.
-    assert_fails_with("`a.rs`'s file\n", "Q-2-7");
+    // (A mark directly after a closing delimiter, GH #221's other half,
+    // is an apostrophe since bd-apostrophe-after-span-6l9c8c26: see
+    // test_apostrophe_after_closer.rs.)
     // Known limit: the scanner counts open single quotes but not the
     // constructs nested inside them, so a possessive inside an emphasis
     // inside a quote is still read as the quote's closer (pandoc reads it

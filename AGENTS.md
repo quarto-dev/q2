@@ -71,8 +71,8 @@ We use plans for additional context and bookkeeping. Write plans to
 in the strands.
 
 `claude-notes/` renders as a Quarto 2 website, so every note is a qmd
-document. Write qmd, not GitHub Markdown: no indented code blocks, escape an
-apostrophe after a code span (`` `a.rs`\'s ``), and so on. The list is in
+document. Write qmd, not GitHub Markdown: no indented code blocks, escape a `$`
+that is not math (`\$5`), and so on. The list is in
 `claude-notes/instructions/writing-notes.md`; the user-facing page it points
 at is `q2 agents-info guides/authoring/migrating-markdown.md`. Check a note
 with `q2 render --strict <file>`; CI runs `q2 render --strict claude-notes`
