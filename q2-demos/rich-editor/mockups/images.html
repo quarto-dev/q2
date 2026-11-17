@@ -125,6 +125,7 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 .handle { position:absolute; width:12px; height:12px; background:#fff; border:2px solid var(--accent); border-radius:2px; pointer-events:auto; z-index:6; }
 .handle.l { cursor:nesw-resize; }
 .handle.r { cursor:nwse-resize; }
+.size-label.snap { background:var(--accent); }
 .size-label { position:absolute; pointer-events:none; background:#343a40; color:#fff; font:12px/1 system-ui, sans-serif; padding:4px 6px; border-radius:4px; z-index:7; }
 
 /* The hover bar, its menus, and the viewer: as in Notion. */
@@ -1072,25 +1073,47 @@ function renderHandles(fig, frame, fr, origin, bars = false) {
       const label = document.createElement('div')
       label.className = 'size-label'
       overlay.append(label)
-      let recorded = false
+      let recorded = false, pending = null
+      // While dragging, the image follows the pointer to the pixel; the width
+      // written down (a whole percent, snapped to the common ones) is only
+      // shown in the label, and taken on release. At most once a frame.
       const move = (ev) => {
-        let w = Math.round(((startW + (ev.clientX - startX) * grow) / full) * 100)
-        w = Math.max(10, Math.min(100, w))
+        pending = ev.clientX
+        if (pending !== null && !move.queued) move.queued = requestAnimationFrame(update)
+      }
+      const update = () => {
+        move.queued = 0
+        const px = Math.max(full * 0.1, Math.min(full, startW + (pending - startX) * grow))
+        let w = Math.round((px / full) * 100)
         const snap = SNAPS.find((s) => Math.abs(s - w) <= 2)
         if (snap) w = snap
         if (!recorded) { record(); recorded = true }
         fig.width = w
-        frame.style.width = w + '%'
+        frame.style.width = px + 'px'
         frame.querySelector('img, .missing').style.width = '100%'
         const r = frame.getBoundingClientRect(), o = page.getBoundingClientRect()
         label.textContent = `${w}%`
+        label.classList.toggle('snap', Boolean(snap))
         label.style.left = (r.left + r.width / 2 - o.left - label.offsetWidth / 2) + 'px'
         label.style.top = (r.top - o.top + 8) + 'px'
         for (const hh of overlay.querySelectorAll('.handle, .vhandle')) placeHandle(hh, r, o)
         washFigure(o)
         renderSource()
       }
-      const up = () => { resizing = false; h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); render() }
+      const up = () => {
+        resizing = false
+        h.removeEventListener('pointermove', move)
+        h.removeEventListener('pointerup', up)
+        cancelAnimationFrame(move.queued)
+        if (!recorded) return render()
+        // Ease from where the pointer left it to the width written down.
+        overlay.replaceChildren()
+        frame.style.width = frame.getBoundingClientRect().width + 'px'
+        frame.getBoundingClientRect()
+        frame.style.transition = 'width .12s ease-out'
+        frame.style.width = fig.width + '%'
+        setTimeout(render, 130)
+      }
       h.addEventListener('pointermove', move)
       h.addEventListener('pointerup', up)
     }
