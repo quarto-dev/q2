@@ -171,8 +171,8 @@ const GROUPS = [
     ['inline', 'In the line', 'A new image goes where the caret is: in a line of text it sits in the line like a word; in an empty paragraph it\'s a figure. As in Google Docs and Word ("In line with text").'],
   ]},
   { key: 'controls', title: "A selected image's controls", options: [
-    ['popover', 'Under the image', 'Size, alignment, alt text and the rest in a bar under the selected image, across the middle of the text. A size or alignment chosen with the pointer on the bar leaves it where it is until the pointer leaves. As in Google Docs and Notion.'],
-    ['above', 'Over the image', 'The same bar above the image, where the image\'s top doesn\'t move when it\'s resized. It covers the line before the image instead of the one after.'],
+    ['popover', 'Under the image', 'Size, alignment, alt text and the rest in a bar under the selected image. It moves with the image\'s bottom edge when the image is resized. As in Google Docs and Notion.'],
+    ['above', 'Over the image', 'The same bar above the image, whose top doesn\'t move when it\'s resized, so neither does the bar. It covers the line before the image instead of the one after.'],
     ['toolbar', 'In the toolbar', 'The toolbar swaps its text buttons for the image\'s while one is selected. As in Word\'s "Picture Format".'],
   ]},
   { key: 'resize', title: 'Resizing', options: [
@@ -903,10 +903,10 @@ function renderInsertPanel() {
 }
 
 // ---------------------------------------------------------------- overlay
-function place(el, rect, where = 'below', across = rect) {
+function place(el, rect, where = 'below') {
   overlay.append(el)
   const origin = page.getBoundingClientRect()
-  const left = Math.max(8, Math.min(across.left + across.width / 2 - el.offsetWidth / 2 - origin.left, origin.width - el.offsetWidth - 8))
+  const left = Math.max(8, Math.min(rect.left + rect.width / 2 - el.offsetWidth / 2 - origin.left, origin.width - el.offsetWidth - 8))
   el.style.left = left + 'px'
   el.style.top = (where === 'above' ? rect.top - origin.top - el.offsetHeight - 8 : rect.bottom - origin.top + 8) + 'px'
 }
@@ -936,33 +936,18 @@ function renderOverlay() {
   const fr = frame.getBoundingClientRect()
   if (img.fig && opts.resize !== 'presets' && !sel.caption) renderHandles(img.fig, frame, fr, origin)
   if (opts.controls !== 'toolbar') {
-    const k = img.fig ? img.fig.k : img.inl.k
     const bar = document.createElement('div')
     bar.className = 'bubble wrap'
     bar.addEventListener('mousedown', (e) => { if (e.target.nodeName !== 'INPUT') e.preventDefault() })
     bar.append(...imageControls(img, false))
-    // A figure's bar is across the middle of the text, so aligning the
-    // figure doesn't move it; an image in a line's is across the image.
-    const across = img.fig ? editor.getBoundingClientRect() : el.getBoundingClientRect()
-    if (opts.controls === 'above') place(bar, fr, 'above', across)
-    else if (held?.k === k) {
-      // The pointer's on it: it stays put, over the image if need be.
-      overlay.append(bar)
-      bar.style.left = held.left
-      bar.style.top = held.top
-    } else place(bar, el.getBoundingClientRect(), 'below', across)
-    if (opts.controls === 'popover') bar.addEventListener('mouseenter', () => { held = { k, left: bar.style.left, top: bar.style.top } })
+    // Over the image itself, or under the whole figure, caption included.
+    if (opts.controls === 'above') place(bar, fr, 'above')
+    else place(bar, el.getBoundingClientRect())
   }
   if (focusAlt) { focusAlt = false; document.querySelector('.field[data-which="alt"]')?.focus() }
   if (focusCaption) { focusCaption = false; document.querySelector('.field[data-which="caption"]')?.focus() }
 }
 
-let held = null   // where the bar under an image stays while the pointer is on it
-// Watched on the page, not the bar: the bar is drawn anew on each click, and
-// a new one under a still pointer is never entered, so never left.
-document.addEventListener('mousemove', (e) => {
-  if (held && !e.target.closest('.bubble')) { held = null; renderOverlay() }
-})
 const selectedEl = () => (sel.fig ? editor.querySelector(`figure[data-k="${sel.fig}"]`) : sel.inl ? editor.querySelector(`.inl[data-k="${sel.inl}"]`) : null)
 
 // Drag a corner: the width as a share of the page's text, snapping to the
