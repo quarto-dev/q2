@@ -12,13 +12,14 @@ intended source of truth — lift them as-is.
 |---|---|
 | `01-builtin-python.qmd` | Built-in Python grammar, default theme. The baseline case. |
 | `02-inline-code.qmd` | Inline `` `foo()`{.python} `` highlighting. |
-| `03-user-grammar/` | A user-supplied TOML grammar dropped into `_quarto/grammars/`. |
+| `03-user-grammar/` | A user-supplied Java properties grammar dropped into `_quarto/grammars/`. |
 | `04-filter/` | A Lua filter that produces `data-hl-spans` directly — shows the filter-authored extension point with a simple literal-word matcher. |
 | `05-theme-none.qmd` | `theme: none` emits `hl-*` classes but does NOT ship default highlight colors (user takes over theming). |
 | `06-filter-severity/` | A structured-log filter: multiple capture names (`severity.err`, `severity.warning`, `timestamp`, …). Intended as a more realistic copy-paste reference for users writing custom Lua filter highlighters. |
 | `09-builtin-rust.qmd` | Built-in Rust grammar via the canonical `rust` class and the `rs` alias. |
 | `10-syntax-highlighting-key.qmd` | `syntax-highlighting:` (Quarto 1's current name; `highlight-style:` is the alias) selects the HTML palette. |
 | `11-builtin-qmd.qmd` | Built-in qmd composite (GH #1081) via `qmd` and the `markdown` / `md` aliases: structure, front matter as YAML, and an embedded code cell with its `#|` options. |
+| `12-builtin-config-languages.qmd` | Built-in config-file grammars: `ini`, `toml` and its `conf` alias, `xml`, and `dockerfile` (matched case-insensitively as `Dockerfile`). |
 
 See the Phase 3.5 plan at
 `claude-notes/plans/2026-04-20-syntax-highlighting-phase-3.5.md`

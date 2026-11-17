@@ -1,0 +1,32 @@
+---
+source: crates/quarto-highlight/tests/integration/golden.rs
+assertion_line: 49
+description: "key = \"value\"\n"
+---
+[
+  [
+    0,
+    3,
+    "type"
+  ],
+  [
+    3,
+    4,
+    "property"
+  ],
+  [
+    4,
+    5,
+    "operator"
+  ],
+  [
+    5,
+    6,
+    "property"
+  ],
+  [
+    6,
+    13,
+    "string"
+  ]
+]

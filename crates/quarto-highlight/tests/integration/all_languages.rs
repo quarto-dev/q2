@@ -16,8 +16,12 @@ use quarto_highlight::{encoding, highlight, is_language_supported};
 fn cases() -> &'static [(&'static str, &'static str, &'static str)] {
     &[
         ("bash", "echo \"hi\"\n", "string"),
+        ("conf", "key = \"value\"\n", "string"),
         ("css", "p { color: red; }\n", "property"),
+        ("dockerfile", "FROM ubuntu:22.04\n", "keyword"),
+        ("Dockerfile", "FROM ubuntu:22.04\n", "keyword"),
         ("html", "<p class=\"x\">hi</p>\n", "tag"),
+        ("ini", "[server]\nport = 8080\n", "property"),
         ("javascript", "const x = 1;\n", "keyword"),
         ("jsx", "const e = <div>hi</div>;\n", "keyword"),
         ("json", r#"{"name": "value"}"#, "string"),
@@ -29,9 +33,11 @@ fn cases() -> &'static [(&'static str, &'static str, &'static str)] {
         ("rust", "fn main() {}\n", "keyword"),
         ("rs", "fn main() {}\n", "keyword"),
         ("sql", "SELECT 1;\n", "keyword"),
+        ("toml", "name = \"x\"\n", "string"),
         ("tsx", "const e = <div>hi</div>;\n", "keyword"),
         ("typescript", "const x: number = 1;\n", "keyword"),
         ("ts", "const x: number = 1;\n", "keyword"),
+        ("xml", "<a href=\"x\">t</a>\n", "tag"),
         ("yaml", "\"quoted\": value\n", "string"),
         ("yml", "\"quoted\": value\n", "string"),
     ]
@@ -73,4 +79,33 @@ fn every_grammar_parses_its_query_and_emits_expected_capture() {
 #[test]
 fn unknown_language_still_returns_none() {
     assert!(highlight("klingon", "K'tah!").unwrap().is_none());
+}
+
+/// The ini and dockerfile upstream queries capture comments as
+/// `(comment) @comment @spell`. `spell` is a Neovim spell-check directive,
+/// not a highlight class; if it survived it would win the equal-extent
+/// tie-break and leave every comment uncolored.
+#[test]
+fn spell_co_captures_do_not_hide_comments() {
+    for (class, source, comment) in [
+        ("ini", "; a comment\n[s]\nk = v\n", "; a comment"),
+        ("dockerfile", "# a comment\nFROM x\n", "# a comment"),
+    ] {
+        let encoded = highlight(class, source)
+            .unwrap_or_else(|e| panic!("`{class}` highlight errored: {e}"))
+            .unwrap_or_else(|| panic!("`{class}` is not registered"));
+        let spans = encoding::decode(&encoded).expect("valid JSON");
+        let start = source.find(comment).unwrap();
+        assert!(
+            // The comment node may extend over the line break.
+            spans.iter().any(|s| s.start == start
+                && s.end >= start + comment.len()
+                && s.capture == "comment"),
+            "`{class}`: expected the comment as `comment`, got {spans:?}"
+        );
+        assert!(
+            spans.iter().all(|s| s.capture != "spell"),
+            "`{class}`: `spell` leaked into the spans: {spans:?}"
+        );
+    }
 }

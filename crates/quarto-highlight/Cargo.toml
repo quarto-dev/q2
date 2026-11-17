@@ -41,6 +41,14 @@ tree-sitter-lmd.workspace = true
 # qmd (GH #1081): the composite for `qmd` / `markdown` / `md` blocks.
 tree-sitter-qmd.workspace = true
 tree-sitter-rust = "0.24"
+# Config-file languages (bd-z6xw3psd; survey in
+# claude-notes/research/2026-11-17-highlight-grammar-coverage-survey.md).
+tree-sitter-ini = "1.4"
+tree-sitter-toml-ng = "0.7"
+tree-sitter-xml = "0.7"
+# Dockerfile: the maintained fork of camdencheek/tree-sitter-dockerfile,
+# whose crate is stuck on tree-sitter 0.20.
+tree-sitter-containerfile = "0.9"
 
 # Native-only: wasmtime-backed user-grammar loader. The `wasm` feature on
 # tree-sitter pulls in wasmtime-c-api, which itself has transitive deps

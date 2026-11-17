@@ -17,6 +17,10 @@ Scouted 2026-04-19 for wiring into `quarto-highlight`. Versions/commits verified
 | Julia | `tree-sitter-julia` | `0.23.1` | `tree_sitter_julia::LANGUAGE` | tree-sitter/tree-sitter-julia | `e0f9dcd180fdcfcfa8d79a3531e11d99e79321d3` | `queries/highlights.scm` | MIT |
 | Lua | `tree-sitter-lua` | `0.5.0` | `tree_sitter_lua::LANGUAGE` | MunifTanjim/tree-sitter-lua | `4fbec840c34149b7d5fe10097c93a320ee4af053` | `queries/highlights.scm` | MIT |
 | Rust | `tree-sitter-rust` | `0.24.2` | `tree_sitter_rust::LANGUAGE` | tree-sitter/tree-sitter-rust | `77a3747266f4d621d0757825e6b11edcbf991ca5` | `queries/highlights.scm` (crate constant `HIGHLIGHTS_QUERY`) | MIT |
+| INI | `tree-sitter-ini` | `1.4.0` | `tree_sitter_ini::LANGUAGE` | justinmk/tree-sitter-ini | (crates.io release) | `queries/highlights.scm` (crate constant `HIGHLIGHTS_QUERY`) | Apache-2.0 |
+| TOML | `tree-sitter-toml-ng` | `0.7.0` | `tree_sitter_toml_ng::LANGUAGE` | tree-sitter-grammars/tree-sitter-toml | (crates.io release) | `queries/highlights.scm` (crate constant `HIGHLIGHTS_QUERY`) | MIT |
+| XML | `tree-sitter-xml` | `0.7.0` | `tree_sitter_xml::LANGUAGE_XML` | tree-sitter-grammars/tree-sitter-xml | (crates.io release) | `queries/xml/highlights.scm` (crate constant `XML_HIGHLIGHT_QUERY`) | MIT |
+| Dockerfile | `tree-sitter-containerfile` | `0.9.2` | `tree_sitter_containerfile::LANGUAGE` | wharflab/tree-sitter-containerfile | (crates.io release) | `queries/highlights.scm` (crate constant `HIGHLIGHTS_QUERY`) | MIT |
 
 ## Caveats to verify at build time
 
@@ -25,3 +29,5 @@ Scouted 2026-04-19 for wiring into `quarto-highlight`. Versions/commits verified
 - Some crates (TypeScript 0.23.x, HTML 0.23.x, Julia 0.23.x, JSON 0.24.x) may internally pin tree-sitter at <0.25. Cargo will error on the resolver if they do; in that case we either upgrade the grammar crate to a 0.25-compatible version if one exists, or accept duplicate tree-sitter versions (not viable — Language types would not be interchangeable).
 
 _Rust row added 2026-09-08 (bd-202u5bld); its external scanner uses the same `isw*` libc calls as bash, served on wasm32 by `crates/wasm-c-shim`. Grammar ABI 15, same as python 0.25._
+
+_INI, TOML, XML and Dockerfile rows added 2026-11-17 (bd-z6xw3psd); the survey behind them is `claude-notes/research/2026-11-17-highlight-grammar-coverage-survey.md`. containerfile needs `memchr` and `iswxdigit` from the wasm32 headers in `crates/tree-sitter-language-wasm-shim`._

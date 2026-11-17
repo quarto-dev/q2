@@ -220,12 +220,13 @@ fn annotate_block_with_classes(classes: &[&str], text: &str) -> Attr {
 #[test]
 fn marks_pandoc_known_language_without_grammar() {
     for classes in [
-        &["ini"][..],
+        &["apache"][..],
         &["default"],
-        &["INI"],
-        &["conf"],
-        &["toml"],
-        &["cell-code", "toml"],
+        &["APACHE"],
+        // Known to Pandoc only through INI's `*.cfg` glob.
+        &["cfg"],
+        &["makefile"],
+        &["cell-code", "makefile"],
     ] {
         let attr = annotate_block_with_classes(classes, "a = 1\n");
         assert_eq!(get_hl_attr(&attr), Some("[]"), "{classes:?}");
@@ -261,7 +262,7 @@ fn does_not_mark_inline_code_without_grammar() {
     let mut doc = empty_pandoc();
     doc.blocks.push(Block::Paragraph(Paragraph {
         content: Inlines::from(vec![Inline::Code(Box::new(Code {
-            attr: (String::new(), vec!["ini".to_string()], LinkedHashMap::new()).into(),
+            attr: (String::new(), vec!["apache".to_string()], LinkedHashMap::new()).into(),
             text: "a = 1".to_string(),
             source_info: empty_source_info(),
             attr_source: empty_attr_source(),

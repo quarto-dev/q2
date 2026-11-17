@@ -165,4 +165,12 @@ static inline bool iswspace(wint_t wch) {
   }
 }
 
+// Added for tree-sitter-containerfile, which upstream tree-sitter-language
+// 0.1.9 declares too. Kept static inline like the helpers above, so it needs
+// no link-level symbol.
+static inline bool iswxdigit(wint_t wch) {
+  return (wch >= L'0' && wch <= L'9') || (wch >= L'a' && wch <= L'f') ||
+         (wch >= L'A' && wch <= L'F');
+}
+
 #endif // TREE_SITTER_WASM_WCTYPE_H_

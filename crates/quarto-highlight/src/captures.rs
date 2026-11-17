@@ -36,6 +36,9 @@ pub(crate) fn captures_from_tree(
     while let Some((m, capture_index)) = it.next() {
         let cap = m.captures[*capture_index];
         let name = names.get(cap.index as usize).copied().unwrap_or("unknown");
+        if is_directive_capture(name) {
+            continue;
+        }
         let node = cap.node;
         spans.push(HighlightSpan {
             start: node.start_byte(),
@@ -44,6 +47,18 @@ pub(crate) fn captures_from_tree(
         });
     }
     spans
+}
+
+/// Captures that are editor directives rather than highlight classes.
+///
+/// Neovim-style queries (which many upstream grammars ship, e.g.
+/// tree-sitter-ini and tree-sitter-containerfile) tag nodes for spell
+/// checking with `@spell` / `@nospell`, usually alongside a real capture on
+/// the same node: `(comment) @comment @spell`. Kept, the directive would be
+/// an equal-extent twin of the real capture and win `flatten_spans`'s
+/// later-capture tie-break, leaving the node uncolored.
+fn is_directive_capture(name: &str) -> bool {
+    matches!(name, "spell" | "nospell")
 }
 
 /// Collapse nested/overlapping capture spans into a flat, non-overlapping,
@@ -139,6 +154,27 @@ mod tests {
             end,
             capture: capture.to_string(),
         }
+    }
+
+    /// Neovim's `@spell` / `@nospell` are spell-check directives that ride
+    /// along with a real capture on the same node. They are not highlight
+    /// classes, so extraction drops them rather than letting them win the
+    /// equal-extent tie-break over the real capture.
+    #[test]
+    fn captures_from_tree_drops_spell_directives() {
+        let language: tree_sitter::Language = tree_sitter_python::LANGUAGE.into();
+        let query = Query::new(
+            &language,
+            "(comment) @comment @spell\n(string) @string @nospell",
+        )
+        .expect("query compiles");
+        let source = "# hi\nx = \"s\"\n";
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&language).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+        let spans = captures_from_tree(&query, tree.root_node(), source.as_bytes());
+        let names: Vec<&str> = spans.iter().map(|s| s.capture.as_str()).collect();
+        assert_eq!(names, vec!["comment", "string"], "got {spans:?}");
     }
 
     #[test]

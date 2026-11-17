@@ -175,7 +175,10 @@ fn extract_builtin_captures(
 static BUILTIN_ALIASES: &[(&str, &[&str])] = &[
     ("bash", &["sh"]),
     ("css", &[]),
+    // Class names match case-insensitively, so `Dockerfile` resolves here.
+    ("dockerfile", &[]),
     ("html", &[]),
+    ("ini", &[]),
     ("javascript", &["js", "jsx"]),
     ("json", &[]),
     ("julia", &["jl"]),
@@ -188,8 +191,11 @@ static BUILTIN_ALIASES: &[(&str, &[&str])] = &[
     ("r", &[]),
     ("rust", &["rs"]),
     ("sql", &[]),
+    // `conf` follows Pandoc, which resolves it through TOML's `*.conf` glob.
+    ("toml", &["conf"]),
     ("tsx", &[]),
     ("typescript", &["ts"]),
+    ("xml", &[]),
     ("yaml", &["yml"]),
 ];
 
@@ -208,7 +214,9 @@ static BUILTIN_BUILDERS: &[(
 )] = &[
     ("bash", crate::langs::bash::build),
     ("css", crate::langs::css::build),
+    ("dockerfile", crate::langs::dockerfile::build),
     ("html", crate::langs::html::build),
+    ("ini", crate::langs::ini::build),
     ("javascript", crate::langs::javascript::build),
     ("json", crate::langs::json::build),
     ("julia", crate::langs::julia::build),
@@ -218,8 +226,10 @@ static BUILTIN_BUILDERS: &[(
     ("r", crate::langs::r::build),
     ("rust", crate::langs::rust::build),
     ("sql", crate::langs::sql::build),
+    ("toml", crate::langs::toml::build),
     ("tsx", crate::langs::tsx::build),
     ("typescript", crate::langs::typescript::build),
+    ("xml", crate::langs::xml::build),
     ("yaml", crate::langs::yaml::build),
 ];
 

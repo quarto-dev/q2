@@ -3,33 +3,29 @@ title: "A user-supplied grammar"
 format: html
 ---
 
-TOML is not one of Quarto's built-in highlighting languages. This
-project adds it by shipping a tree-sitter grammar in
-`_quarto/grammars/toml/`: the compiled `toml.wasm` and its
-`highlights.scm` query. Any code block marked `toml` now picks it up:
+Java properties files are not one of Quarto's built-in highlighting
+languages. This project adds them by shipping a tree-sitter grammar in
+`_quarto/grammars/properties/`: the compiled `properties.wasm` and its
+`highlights.scm` query. Any code block marked `properties` now picks it
+up:
 
-```toml
-# Site configuration
-[server]
-host = "localhost"
-port = 8080
-debug = false
-started = 2026-11-05T09:30:00Z
-
-[[server.routes]]
-path = "/docs"
-cache = { enabled = true, max-age = 3600 }
+```properties
+# Application settings
+server.port = 8080
+server.address = localhost
+app.name = Report Builder
+app.data-dir = ${HOME}/reports
 ```
 
-Inline code works the same way: `retries = 3`{.toml}.
+Inline code works the same way: `retries = 3`{.properties}.
 
 The grammar's capture names become CSS classes: a capture `@name.sub`
 is emitted as `<span class="hl-name-sub">`. This grammar's query
-captures TOML keys as `@type`, so the style block below sets `.hl-type`
-in bold; the colors come from the default palette.
+captures keys as `@property`, so the style block below sets
+`.hl-property` in bold; the colors come from the default palette.
 
 ```{=html}
 <style>
-.hl-type { font-weight: 600; }
+.hl-property { font-weight: 600; }
 </style>
 ```
