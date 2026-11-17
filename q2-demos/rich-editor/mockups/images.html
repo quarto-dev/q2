@@ -206,7 +206,7 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
     <div class="scroller" id="scroller">
       <div class="tips">
         Click an image to select it, or drag it to move it: into a line of text, or between lines. Paste or drop an image file into the text, or type <code>![a picture](images/sales.svg)</code>.
-        Shift and an arrow select an image in a line. With an image selected: <kbd>⌘C</kbd> / <kbd>⌘X</kbd> copy or cut it (paste with <kbd>⌘V</kbd>, or <kbd>⌘⇧V</kbd> for the picture alone), <kbd>⌫</kbd> removes it, <kbd>↵</kbd> starts a paragraph after it, arrows move off it, <kbd>⌘Z</kbd> undoes.
+        Shift and an arrow select an image in a line. With an image selected: <kbd>⌘C</kbd> / <kbd>⌘X</kbd> copy or cut it (paste with <kbd>⌘V</kbd>, or <kbd>⌘⇧V</kbd> for the picture alone), <kbd>⌫</kbd> removes it, <kbd>↵</kbd> or typing goes into its caption, arrows move off it (through its caption), <kbd>⌘Z</kbd> undoes.
         No image file to hand? <button id="sample">Copy a sample image</button> and paste it.
         The choices on the left change how the document behaves; the address keeps them.
       </div>
@@ -243,7 +243,7 @@ const GROUPS = [
     ['handles', 'Handles only', 'Drag a corner; the label shows the width as you go. Double-click one for the image\'s own size.'],
   ]},
   { key: 'caption', title: 'Captions', options: [
-    ['below', 'Under the image', 'Typed in place under the image, where it shows. The Caption button, or ↓ with the image selected, goes into it ("Add a caption" until there\'s one), as does a new image. As in Google Docs and Notion.'],
+    ['below', 'Under the image', 'Typed in place under the image, where it shows. The Caption button, Enter or typing with the image selected goes into it ("Add a caption" until there\'s one), as does a new image; the arrows go through it like a line. As in Google Docs and Notion.'],
     ['controls', 'In the controls', "A field with the image's other controls; the caption under the image is just shown."],
   ]},
   { key: 'alt', title: 'Alt text', options: [
@@ -1681,17 +1681,26 @@ editor.addEventListener('keydown', (e) => {
       else if (e.key.length === 1 || e.key === 'Enter') { sel = { caret: { b, o: img.at.o + 1 } }; render() }
       return
     }
-    if (e.key === 'Enter') { e.preventDefault(); paragraphAfter(img.fig.k); render(); return }
+    // Enter, or typing, goes into its caption (a paragraph after it is ↓ or
+    // the caret at its right side away). Where captions aren't typed in
+    // place, they start a paragraph after it.
+    if (e.key === 'Enter') { e.preventDefault(); if (captionInPlace()) sel.caption = true; else paragraphAfter(img.fig.k); render(); return }
+    if (e.key.length === 1) {
+      e.preventDefault()
+      if (captionInPlace()) { setFig(img.fig.k, { caption: img.fig.caption + e.key }, true); sel = { fig: img.fig.k, caption: true } }
+      else paragraphAfter(img.fig.k, [e.key])
+      render()
+      return
+    }
     if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); if (stepFrom(b, -1)) render(); return }
     if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
       e.preventDefault()
-      if (captionInPlace() && e.key === 'ArrowDown') { sel.caption = true; render(); return }
+      // ↓ goes through its caption, if it has one, as it would a line.
+      if (captionInPlace() && e.key === 'ArrowDown' && img.fig.caption) { sel.caption = true; render(); return }
       if (stepFrom(b, 1) || (paragraphAfter(img.fig.k), true)) render()
       return
     }
     if (e.key === 'Escape') { e.preventDefault(); stepFrom(b, 1) || paragraphAfter(img.fig.k); render(); return }
-    // Typing with a figure selected starts a paragraph after it.
-    if (e.key.length === 1) { e.preventDefault(); paragraphAfter(img.fig.k, [e.key]); render(); return }
     e.preventDefault()
     return
   }
@@ -1749,7 +1758,9 @@ editor.addEventListener('keydown', (e) => {
   if ((e.key === 'ArrowDown' && atEdge(el, 1)) || (e.key === 'ArrowRight' && o === blk.items.length)) {
     if (doc[b + 1]?.kind === 'fig') { e.preventDefault(); sel = { fig: doc[b + 1].k }; render() }
   } else if ((e.key === 'ArrowUp' && atEdge(el, -1)) || (e.key === 'ArrowLeft' && o === 0)) {
-    if (doc[b - 1]?.kind === 'fig') { e.preventDefault(); sel = { fig: doc[b - 1].k }; render() }
+    // ↑ goes through a caption on the way, as ↓ does; ← goes to the figure.
+    const f = doc[b - 1]
+    if (f?.kind === 'fig') { e.preventDefault(); sel = e.key === 'ArrowUp' && f.caption && captionInPlace() ? { fig: f.k, caption: true } : { fig: f.k }; render() }
   }
 })
 
