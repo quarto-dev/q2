@@ -107,6 +107,27 @@
   justify-content: center;
 }
 
+/* "or, continue offline…" — the quiet alternative under the sign-in
+   button. The control is a button styled as an italic text link. */
+.ls-offline {
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin: 14px 0 0;
+}
+
+.ls-offline-link {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-style: italic;
+  color: var(--accent-secondary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .ls-footnote {
   border-top: 1px solid color-mix(in srgb, var(--border-color) 50%, var(--bg-modal));
   padding-top: 14px;

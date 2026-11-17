@@ -148,7 +148,7 @@ export const syncStatus = {
   /** Reason shown beside "Offline" when the user is signed out. */
   notSignedIn: 'not signed in',
   syncedAgo: (ago: string) => `synced ${ago}`,
-  neverSynced: 'not synced yet',
+  neverSynced: 'not synced',
   synced: 'Synced',
   justNow: 'just now',
   underMinuteAgo: '<1 minute ago',
@@ -252,6 +252,13 @@ export const landing = {
     'Share a link and your team can collaborate on the same project in real time.',
   inviteOnly: 'quarto-hub.com is experimental and currently available by invite only.',
   learnMore: 'Learn more about Quarto Hub',
+  /**
+   * The way past the sign-in button: "or, <continue offline…>." Only the
+   * middle part is the control (and is set in italics); the lead and the
+   * period are plain text around it.
+   */
+  continueOfflineLead: 'or,',
+  continueOffline: 'continue offline, without collaboration, without signing in',
 } as const;
 
 /**

@@ -36,6 +36,7 @@ import { ViewModeProvider } from './components/ViewModeContext';
 import { readAuthErrorReason, authErrorMessage } from './auth/authError';
 import { useAuthProvider } from './auth/AuthProvider';
 import { SignInStatusProvider, type SignInStatusValue } from './components/auth/SignInStatus';
+import { LoginScreen } from './components/auth/LoginScreen';
 import {
   connect,
   disconnect,
@@ -169,6 +170,12 @@ function App() {
   // stay in the sync client; the counter tells the image viewer to re-read.
   const [binaryFileVersions, setBinaryFileVersions] = useState<Map<string, number>>(new Map());
   const [showSaveToast, setShowSaveToast] = useState(false);
+  // Landing screen dismissed with "continue offline": the signed-out,
+  // local-only app shows instead. Not persisted, and it does not need to
+  // be: dismissing lets the personal root be created (see
+  // useAutoEstablishRoot below), and the landing screen only shows while
+  // this browser has no project set.
+  const [continuedOffline, setContinuedOffline] = useState(false);
   const [screenName, setScreenName] = useState<string | undefined>();
   const [cursorColor, setCursorColor] = useState<string | undefined>();
   // Local user id → stable Automerge author when auth is disabled (local-prod).
@@ -329,9 +336,21 @@ function App() {
     }
   }, [screenName, cursorColor, resolveAuthorId, projectSetActions]);
 
+  // The landing screen shows only while this browser has no project set,
+  // so a signed-out visitor's root must not be created behind it: setup
+  // waits until they sign in or choose "continue offline". Invite boots
+  // are exempt — their card, not the landing screen, is what shows, and
+  // its CTA needs the root.
+  const setupAwaitsLandingChoice =
+    AUTH_ENABLED && signedIn === false && continuedOffline === false && bootIsInvite === false;
+  // True once the collections hook has reported anything but `loading`;
+  // keeps the boot spinner below from reappearing on a later retry().
+  const projectSetResolvedRef = useRef(false);
+  if (projectSetState.status !== 'loading') projectSetResolvedRef.current = true;
+
   useAutoEstablishRoot({
     status: projectSetState.status,
-    enabled: !bootLinksProjectSet,
+    enabled: !bootLinksProjectSet && setupAwaitsLandingChoice === false,
     createProjectSet: projectSetActions.createProjectSet,
     migrateProjects: projectSetActions.migrateProjects,
     // E2E builds skip seeding: every Playwright test boots a fresh profile,
@@ -1097,8 +1116,32 @@ function App() {
         />
       );
     }
-    // Otherwise fall through: optional auth shows the projects home with a
-    // sign-in button (local-only until the user signs in).
+    // Signed out with no project set yet (a first visit): the landing /
+    // sign-in screen. "Continue offline" dismisses it, which lets the root
+    // be created, so it does not return on the next open. A browser that
+    // already has a project set falls through to the optional-auth app:
+    // projects home with a sign-in button, local-only until sign-in.
+    const projectSetStatus = projectSetState.status;
+    if (projectSetStatus === 'loading' && projectSetResolvedRef.current === false) {
+      // Not known yet whether a project set exists; avoid flashing the
+      // home (or the landing screen) before it is.
+      return (
+        <div className="project-selector" style={{ alignItems: 'center', justifyContent: 'center' }}>
+          <LoadingIndicator />
+        </div>
+      );
+    }
+    const noProjectSet =
+      projectSetStatus === 'needs-setup' || projectSetStatus === 'needs-migration';
+    if (noProjectSet && continuedOffline === false) {
+      return (
+        <LoginScreen
+          errorReason={authErrorReason}
+          message={sessionExpired ? signInStatusStrings.sessionExpired : undefined}
+          onContinueOffline={() => setContinuedOffline(true)}
+        />
+      );
+    }
   }
 
   // Sign-in status for the shared SignInStatus component (projects-home

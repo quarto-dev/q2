@@ -71,9 +71,9 @@ describe('SyncStatusBadge', () => {
     // Verbose offline renders the label and the rest as separate
     // elements; the joined sentence is the accessible name.
     expect(screen.getByText('Offline')).toBeDefined();
-    expect(screen.getByText('not synced yet')).toBeDefined();
+    expect(screen.getByText('not synced')).toBeDefined();
     expect(screen.getByRole('button').getAttribute('aria-label')).toMatch(
-      /^Offline — not synced yet/,
+      /^Offline — not synced/,
     );
   });
 
@@ -81,7 +81,7 @@ describe('SyncStatusBadge', () => {
     mocks.wsReadyState = 3; // CLOSED
     mocks.lastRemoteChangeAt = null;
     render(<SyncStatusBadge scope="project" />);
-    expect(screen.getByText('not synced yet')).toBeDefined();
+    expect(screen.getByText('not synced')).toBeDefined();
     expect(screen.queryByText(/Offline/)).toBeNull();
     expect(screen.getByRole('button').getAttribute('aria-label')).toMatch(/^Offline/);
   });
