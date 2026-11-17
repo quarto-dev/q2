@@ -33,10 +33,12 @@ git -C /Users/gordon/src/q2/.worktrees/workspace-1 merge --ff-only rfu/6-windows
 
 Item 8\'s deletion of `commands/record.rs` moved the old export-command entries to `convert` (RFU-1).
 
-- [ ] `crates/quarto-hub-provider/src/execute.rs:~331` and `:~527`: `canonicalize()` returns a `\\?\` verbatim path on
+- [x] `crates/quarto-hub-provider/src/execute.rs:~331` and `:~527`: `canonicalize()` returns a `\\?\` verbatim path on
       Windows; check the "outside the document directory" comparison.
-- [ ] `crates/quarto-core/src/positron_cache.rs:~150` (`vscode_file_uri`) and the `%APPDATA%` rule: drive letter, `%3A`
+  (Run 3, 2026-11-17: the probe test `a_figure_reported_under_the_materialized_root_is_captured` and all 31 `execute::` tests pass on Windows.)
+- [x] `crates/quarto-core/src/positron_cache.rs:~150` (`vscode_file_uri`) and the `%APPDATA%` rule: drive letter, `%3A`
       and non-ASCII are unverified.
+  (Run 3: 18 tests pass. Non-ASCII user names were not exercised.)
 - [x] The `--source-uri` default: forward slashes, agreed; implemented by RFU-1 (its test is portable).
 - [x] The CLI test file that replaced `record_export_positron_cli.rs` (RFU-1): any `python3` use (the old file used it
       near line 250) and any literal `/some/dir` path (old line ~113).
@@ -44,8 +46,9 @@ Item 8\'s deletion of `commands/record.rs` moved the old export-command entries 
 - [x] `crates/quarto-core/tests/integration/julia_engine_e2e.rs:~1075-1098`: `kill` and `pgrep` with no `cfg(unix)` gate;
       confirm they cannot run on Windows with Julia installed.
   (Reconciled 2026-11-16: only an `#[ignore]`d test behind `QUARTO_PC4A_LIVE=1` with `if !cfg!(unix)` guards reaches `kill` and `pgrep`.)
-- [ ] `crates/quarto-core/src/record/sources.rs:~49,~101-107,~179-199` and
+- [x] `crates/quarto-core/src/record/sources.rs:~49,~101-107,~179-199` and
       `crates/quarto-preview/src/capture_driver.rs:~2932-2934`: native-separator display and a self-consistent URI test.
+  (Run 3: `record::sources::` 28 and `capture_driver::` 56 pass, 0 fail; the nested-runtime panic from run 2 does not recur.)
 - [ ] CRLF: `positron-conformance/crlf.qmd` and `positron-cache/*.ipynb` under `autocrlf`.
   (Reconciled 2026-11-16: `.gitattributes` now pins `positron-conformance/**` and `positron-cache/**` to `text eol=lf` and leaves `crlf.qmd` as committed (`-text`); `git add --renormalize` changes no fixture. A Windows run still has to confirm it, so the box stays open.)
 - [ ] Then the epic\'s command, once: `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub
@@ -105,3 +108,33 @@ Rscript, and `python3` is the Microsoft Store stub.
 
 **What remains.** Every box stays open. [The Windows fixes plan](2026-11-17-windows-epic-fixes.md) reruns the checks on
 `epic-closeout` and fixes what the epics caused. Close this plan from that rerun.
+
+## Run 3: the finished epics (2026-11-17)
+
+Run `20261117-021842-GWWIN` used `rfu/6-windows-tooling` at `b237e8862`, cut from `epic-closeout`, with pandoc 3.12.1 and
+typst 0.15.1 installed by `-WithTools`; `core.autocrlf` is `input`, so box 7 is still unexercised. This is the first run
+on the current code, and the boxes ticked above come from it.
+
+| item | result |
+|---|---|
+| build, clippy (host target) | PASS |
+| box 1, `execute::` and the probe test | PASS, 31 tests |
+| box 2, `positron_cache` | PASS, 18 tests |
+| box 4, `convert_positron_cli` | FAIL, 21 passed and 1 failed (a test defect, below) |
+| box 5, unix gates | PASS (both tests skip) |
+| box 6, `record::sources`, `capture_driver`, `record_gate`, `render_record_sources_cli` | PASS (28, 56, 5, 11) |
+| box 7, CRLF | PASS with the caveat; the CRLF checkout was not exercised |
+| box 8, nextest | FAIL, 91 of 10511 failed |
+
+**What changed since run 2.** 96 failures became 91. Gone: the three `execute::` tests and the probe test (box 1 was not
+a defect on this code), the julia handshake test, `capture_driver::a_record_only_cache_entry_is_published` (box 6),
+and the `pandoc_request_books` parity golden. New: `commands::render_dry_run::tests::would_render_lines_are_project_relative`
+(from `q2 render --dry-run`, #1213, not an epic) and `live_reexecute::the_cache_does_not_answer_a_re_execute_under_engine_only_sources`
+(a 20 s timeout waiting for an engine run; the test came from bd-twox482l, and the machine has no julia or R, so it may
+be environmental).
+
+**Still failing from the epics.** `convert_positron_cli::the_source_uri_default_is_...` (box 4, `\\?\` from the test's own
+`canonicalize`); OPR-5 `metadata_layers` and the two `record::source_key` tests (`\\?\` against plain paths, plus a
+`./nope` message); RIU-1 `engine_record_stage::an_unwritable_record_location_warns_and_the_render_succeeds`; EXR
+`front_matter_provenance` (`file id must be registered`); and both `jupyter_markdown_goldens` tests, which still fail
+on Windows after `6b84fd6aa` (a `twenty-cells` golden differs). The other failures are the older ones from run 2.
