@@ -3,7 +3,10 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use quarto_pandoc_types::{Block, CodeBlock, ConfigValue, ConfigValueKind, Inline, Pandoc};
+use crate::ast_walk::{ListVisitor, block_children_mut, inline_children_mut};
+use quarto_pandoc_types::{
+    Block, CodeBlock, ConfigValue, ConfigValueKind, Inline, Inlines, Pandoc,
+};
 use quarto_source_map::{Anchor, AnchorRole, By, FileId, SourceInfo};
 use regex::Regex;
 use smallvec::smallvec;
@@ -125,18 +128,28 @@ static UNMASK_OPENER_RE: LazyLock<Regex> = LazyLock::new(|| {
 ///
 /// **Accepted limitation:** two inline expressions written with no character
 /// between them (`` `r x``r y` ``) leave the second unmasked, because its
-/// opening backtick is the first one's closing backtick. `INLINE_R_PATTERN`
-/// and Quarto 1's handler share this property; it is the pathological case
-/// of a guard expressed as a consumed character rather than a lookbehind,
+/// opening backtick is the first one's closing backtick. Quarto 1's handler,
+/// Jupyter's scanner and `INLINE_R_PATTERN` skip the second span too, so it is
+/// not evaluated there; knitr's own pattern has no backtick guard and does
+/// evaluate it. The guard is a consumed character rather than a lookbehind,
 /// which Rust's `regex` crate does not offer.
+///
+/// The same pattern also finds a span shown inside a code span: the code
+/// span's text `` `{python} x` `` holds the opening backtick the pattern needs.
 static MASK_INLINE_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&crate::engine::patterns::mask_inline_pattern())
         .expect("MASK_INLINE_RE must compile")
 });
 
 /// Rewrite executable fence openers that appear *inside* a markdown-displaying
-/// code block so no engine's cell scanner claims them, and restore them
-/// byte-exactly afterwards.
+/// code block, and executable spans shown inside a *code span*
+/// (`` `{python} x` `` as the text of ``` `` `{python} x` `` ```), so no
+/// engine's scanner claims them, and restore them byte-exactly afterwards.
+/// One inline walker (`InlineMasker`, built on `ast_walk`) reaches every
+/// inline list in the body and in metadata; see `Mode` for which `Code`
+/// inlines it masks. Quarto 1 evaluates the nested form too; q2 diverges on
+/// purpose, and the no-inner-backtick forms (``` ``{python} 1+1`` ```) stay
+/// evaluated.
 ///
 /// API (pinned by the plan):
 ///   `mask(&mut Pandoc) -> Vec<usize>` — rewrites in-scope blocks in place and
@@ -258,6 +271,19 @@ pub fn mask_foreign_meta(meta: &mut ConfigValue, own: FileId) -> bool {
             }
             changed
         }
+        // The document's own parsed values: a span is the author's to run, but
+        // one shown inside a code span is an example (`NestedOnly`). An own raw
+        // string (`!str`) is left alone (plan decision 7).
+        ConfigValueKind::PandocInlines(inlines) if is_own => {
+            let mut m = InlineMasker::new(Mode::NestedOnly, false);
+            m.inlines(inlines);
+            m.changed
+        }
+        ConfigValueKind::PandocBlocks(blocks) if is_own => {
+            let mut m = InlineMasker::new(Mode::NestedOnly, false);
+            m.blocks(blocks);
+            m.changed
+        }
         _ if is_own => false,
         ConfigValueKind::Scalar {
             yaml: Yaml::String(s),
@@ -272,48 +298,118 @@ pub fn mask_foreign_meta(meta: &mut ConfigValue, own: FileId) -> bool {
                 true
             }
         }
-        ConfigValueKind::PandocInlines(inlines) => mask_inlines(inlines),
+        // Foreign parsed values: a whole span (`WholeOrNested`) or one shown in
+        // a code span. Code blocks are not masked here: a metadata value is not
+        // a display context.
+        ConfigValueKind::PandocInlines(inlines) => {
+            let mut m = InlineMasker::new(Mode::WholeOrNested, false);
+            m.inlines(inlines);
+            m.changed
+        }
         ConfigValueKind::PandocBlocks(blocks) => {
-            // Blocks parsed from a foreign value carry spans as `Code` inlines
-            // inside paragraphs; reuse the block walker's container recursion
-            // would mask code blocks, which is not wanted here, so handle the
-            // common leaf containers only.
-            let mut changed = false;
-            for b in blocks {
-                match b {
-                    Block::Paragraph(p) => changed |= mask_inlines(&mut p.content),
-                    Block::Plain(p) => changed |= mask_inlines(&mut p.content),
-                    _ => {}
-                }
-            }
-            changed
+            let mut m = InlineMasker::new(Mode::WholeOrNested, false);
+            m.blocks(blocks);
+            m.changed
         }
         _ => false,
     }
 }
 
-fn mask_inlines(inlines: &mut [Inline]) -> bool {
-    let mut changed = false;
-    for inline in inlines {
-        match inline {
-            Inline::Code(c) if MASK_INLINE_RE.is_match(&format!("`{}`", c.text)) => {
-                c.text = format!("{MASK_MARKER} {}", c.text);
-                changed = true;
-            }
-            Inline::Emph(x) => changed |= mask_inlines(&mut x.content),
-            Inline::Strong(x) => changed |= mask_inlines(&mut x.content),
-            Inline::Underline(x) => changed |= mask_inlines(&mut x.content),
-            Inline::Strikeout(x) => changed |= mask_inlines(&mut x.content),
-            Inline::Superscript(x) => changed |= mask_inlines(&mut x.content),
-            Inline::Subscript(x) => changed |= mask_inlines(&mut x.content),
-            Inline::SmallCaps(x) => changed |= mask_inlines(&mut x.content),
-            Inline::Quoted(x) => changed |= mask_inlines(&mut x.content),
-            Inline::Link(x) => changed |= mask_inlines(&mut x.content),
-            Inline::Span(x) => changed |= mask_inlines(&mut x.content),
-            _ => {}
+/// Which `Code` inlines the walker masks.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    /// The `Code` text contains an executable span (`` `{python} x` `` shown
+    /// as the text of a code span). A plain `Code` whose text *is* a span runs.
+    NestedOnly,
+    /// As `NestedOnly`, or the whole code span is a span. Foreign metadata:
+    /// q1 evaluates only the document's own values.
+    WholeOrNested,
+}
+
+/// One walker over every inline list under a block or a metadata value, built
+/// on `ast_walk`'s child enumeration so no container is missed (cites, notes,
+/// image alt text, captions, custom-node slots, CriticMarkup, ...).
+struct InlineMasker {
+    mode: Mode,
+    /// Also mask display `CodeBlock`s met on the way (the body; not metadata).
+    code_blocks: bool,
+    changed: bool,
+}
+
+impl InlineMasker {
+    fn new(mode: Mode, code_blocks: bool) -> Self {
+        Self {
+            mode,
+            code_blocks,
+            changed: false,
         }
     }
-    changed
+
+    fn mask_code(&self, c: &mut quarto_pandoc_types::Code) -> bool {
+        if self.mode == Mode::WholeOrNested && MASK_INLINE_RE.is_match(&format!("`{}`", c.text)) {
+            c.text = format!("{MASK_MARKER} {}", c.text);
+            return true;
+        }
+        if MASK_INLINE_RE.is_match(&c.text) {
+            let replacement = format!("${{1}}`{MASK_MARKER} ${{2}}`");
+            c.text = MASK_INLINE_RE
+                .replace_all(&c.text, replacement.as_str())
+                .into_owned();
+            return true;
+        }
+        false
+    }
+}
+
+impl ListVisitor for InlineMasker {
+    fn inlines(&mut self, list: &mut Inlines) {
+        for inline in list.iter_mut() {
+            if let Inline::Code(c) = inline {
+                self.changed |= self.mask_code(c);
+            } else {
+                inline_children_mut(inline, self);
+            }
+        }
+    }
+
+    fn blocks(&mut self, list: &mut Vec<Block>) {
+        for block in list.iter_mut() {
+            if matches!(block, Block::CodeBlock(_)) {
+                if self.code_blocks && mask_display_code_block(block) {
+                    self.changed = true;
+                }
+            } else {
+                self.descend(block);
+            }
+        }
+    }
+}
+
+impl InlineMasker {
+    /// Walk `block`'s child lists. A `Header` whose id was auto-generated from
+    /// its text keeps that property: the writer prints an id only when it
+    /// differs from the one the text would generate, and masking changes the
+    /// text. Recomputing it keeps `unmask(write(masked))` byte-exact.
+    fn descend(&mut self, block: &mut Block) {
+        let before = self.changed;
+        self.changed = false;
+        let auto_id = match block {
+            Block::Header(h) => {
+                h.attr_source.id.is_none()
+                    && !h.attr.0.is_empty()
+                    && h.attr.0 == pampa::utils::autoid::auto_generated_id(&h.content)
+            }
+            _ => false,
+        };
+        block_children_mut(block, self);
+        if self.changed
+            && auto_id
+            && let Block::Header(h) = block
+        {
+            h.attr.0 = pampa::utils::autoid::auto_generated_id(&h.content);
+        }
+        self.changed |= before;
+    }
 }
 
 /// Stamp `block`'s `SourceInfo` as `Generated`, anchored back at `original`
@@ -343,7 +439,8 @@ fn mark_generated(block: &mut Block, original: SourceInfo) {
 /// The two passes cannot interfere: a masked opener reads
 /// `{.lang q2-nested-executable}`, where the marker is preceded by a space,
 /// never a backtick, and a masked inline expression carries no `{.lang …}`
-/// shape at all.
+/// shape at all (a span in a code span is masked as `` `MARKER {lang} x` ``,
+/// and the writer then pads the code span with a space).
 pub fn unmask(s: &str) -> String {
     let openers_restored = UNMASK_OPENER_RE.replace_all(s, "{$1$2}");
     openers_restored.replace(&inline_mask_prefix(), "`")
@@ -386,135 +483,45 @@ fn mask_code_block_text(cb: &mut CodeBlock) -> bool {
     }
 }
 
-/// Recurse into `block`, masking any in-scope nested `CodeBlock`s in place.
-/// Returns whether `block` itself, or anything nested inside it, changed —
-/// the top-level caller uses this to report the *ancestor's* index (H7),
-/// since the qmd writer's piece loop is top-level-only.
+/// Mask a display `CodeBlock` (text openers and spans) and stamp it
+/// `Generated`. Returns whether anything changed. Out-of-scope blocks (a real
+/// cell) are left alone.
+fn mask_display_code_block(block: &mut Block) -> bool {
+    if !is_in_scope_for_masking(block) {
+        return false;
+    }
+    let original = block.source_info().clone();
+    let Block::CodeBlock(cb) = block else {
+        unreachable!("caller passes a CodeBlock");
+    };
+    if !mask_code_block_text(cb) {
+        return false;
+    }
+    // This block's own text changed — stamp its SourceInfo directly
+    // (spec § Provenance). If this CodeBlock is itself the top-level
+    // block, `mask`'s caller sees it already Generated and skips its
+    // own ancestor-stamping step.
+    mark_generated(block, original);
+    true
+}
+
+/// Mask everything under `block`: display `CodeBlock`s anywhere (including
+/// inside an inline note, as for block footnotes) and `Code` inlines holding a
+/// nested span, in every inline list the walker reaches. Returns whether
+/// `block` itself, or anything nested inside it, changed — the top-level
+/// caller uses this to report the *ancestor's* index (H7), since the qmd
+/// writer's piece loop is top-level-only.
+///
+/// A `RawBlock` is out of scope, deliberately (spec § Scope): masking a
+/// RawBlock's `{=markdown}` text would free its nested cell as a genuine
+/// top-level cell once the writer emits the RawBlock unfenced.
 fn mask_block(block: &mut Block) -> bool {
-    if let Block::CodeBlock(_) = block {
-        if !is_in_scope_for_masking(block) {
-            return false;
-        }
-        let original = block.source_info().clone();
-        let Block::CodeBlock(cb) = block else {
-            unreachable!("matched CodeBlock above");
-        };
-        if !mask_code_block_text(cb) {
-            return false;
-        }
-        // This block's own text changed — stamp its SourceInfo directly
-        // (spec § Provenance). If this CodeBlock is itself the top-level
-        // block, `mask`'s caller sees it already Generated and skips its
-        // own ancestor-stamping step.
-        mark_generated(block, original);
-        return true;
+    let mut masker = InlineMasker::new(Mode::NestedOnly, true);
+    if matches!(block, Block::CodeBlock(_)) {
+        return mask_display_code_block(block);
     }
-
-    match block {
-        // Out of scope, deliberately (spec § Scope): masking a RawBlock's
-        // `{=markdown}` text would free its nested cell as a genuine
-        // top-level cell once the writer emits the RawBlock unfenced.
-        Block::RawBlock(_) => false,
-        Block::BlockQuote(b) => mask_blocks(&mut b.content),
-        Block::Div(b) => mask_blocks(&mut b.content),
-        Block::OrderedList(b) => {
-            let mut changed = false;
-            for item in &mut b.content {
-                changed |= mask_blocks(item);
-            }
-            changed
-        }
-        Block::BulletList(b) => {
-            let mut changed = false;
-            for item in &mut b.content {
-                changed |= mask_blocks(item);
-            }
-            changed
-        }
-        Block::DefinitionList(b) => {
-            let mut changed = false;
-            for (_term, defs) in &mut b.content {
-                for item in defs {
-                    changed |= mask_blocks(item);
-                }
-            }
-            changed
-        }
-        Block::Table(t) => mask_table(t),
-        Block::Figure(f) => {
-            let mut changed = mask_blocks(&mut f.content);
-            if let Some(long) = f.caption.long.as_mut() {
-                changed |= mask_blocks(long);
-            }
-            changed
-        }
-        Block::NoteDefinitionFencedBlock(b) => mask_blocks(&mut b.content),
-        Block::Custom(c) => mask_custom(c),
-        _ => false,
-    }
-}
-
-/// Mask every block in a container's block list; returns whether any of
-/// them (or their descendants) changed. Does not short-circuit — every
-/// element is visited regardless of earlier results, since masking has
-/// side effects on each element independently.
-fn mask_blocks(blocks: &mut [Block]) -> bool {
-    let mut changed = false;
-    for block in blocks.iter_mut() {
-        if mask_block(block) {
-            changed = true;
-        }
-    }
-    changed
-}
-
-fn mask_table(table: &mut quarto_pandoc_types::Table) -> bool {
-    let mut changed = false;
-    // T24: the table's own long-form caption, mirroring the Figure arm above
-    // (`Caption.long: Option<Blocks>` — same type as Figure's caption).
-    if let Some(long) = table.caption.long.as_mut() {
-        changed |= mask_blocks(long);
-    }
-    for row in &mut table.head.rows {
-        changed |= mask_row(row);
-    }
-    for body in &mut table.bodies {
-        for row in &mut body.head {
-            changed |= mask_row(row);
-        }
-        for row in &mut body.body {
-            changed |= mask_row(row);
-        }
-    }
-    for row in &mut table.foot.rows {
-        changed |= mask_row(row);
-    }
-    changed
-}
-
-fn mask_row(row: &mut quarto_pandoc_types::Row) -> bool {
-    let mut changed = false;
-    for cell in &mut row.cells {
-        changed |= mask_blocks(&mut cell.content);
-    }
-    changed
-}
-
-fn mask_custom(custom: &mut quarto_pandoc_types::CustomNode) -> bool {
-    let mut changed = false;
-    for slot in custom.slots.values_mut() {
-        match slot {
-            quarto_pandoc_types::Slot::Block(b) => {
-                changed |= mask_block(b);
-            }
-            quarto_pandoc_types::Slot::Blocks(bs) => {
-                changed |= mask_blocks(bs);
-            }
-            // Inline/Inlines slots can't contain a CodeBlock.
-            quarto_pandoc_types::Slot::Inline(_) | quarto_pandoc_types::Slot::Inlines(_) => {}
-        }
-    }
-    changed
+    masker.descend(block);
+    masker.changed
 }
 
 #[cfg(test)]
@@ -1453,5 +1460,321 @@ mod tests {
             masked_text,
             "the masked display block must be left alone by the inline scanner"
         );
+    }
+
+    // ── Nested inline spans: an executable span shown inside a code span ────
+    //
+    // bd-unt56ts1. `` `{python} x` `` written as the *text* of a code span is
+    // an example, not a unit; the mask must reach every inline list.
+
+    mod nested_inline {
+        use super::*;
+        use quarto_pandoc_types::attr::{Attr, AttrSourceInfo};
+        use quarto_pandoc_types::block::{DefinitionList, LineBlock, Paragraph};
+        use quarto_pandoc_types::inline::{Citation, CitationMode, Cite, Code, Insert};
+
+        const NESTED: &str = "`{python} x`";
+
+        fn code(text: &str) -> Inline {
+            Inline::Code(Box::new(Code {
+                attr: Attr::default(),
+                text: text.to_string(),
+                source_info: SourceInfo::for_test(),
+                attr_source: AttrSourceInfo::empty(),
+            }))
+        }
+
+        fn para(content: Vec<Inline>) -> Block {
+            Block::Paragraph(Paragraph {
+                content,
+                source_info: SourceInfo::for_test(),
+            })
+        }
+
+        fn doc_of(blocks: Vec<Block>) -> Pandoc {
+            let mut doc = parse_qmd("Body\n");
+            doc.blocks = blocks;
+            doc
+        }
+
+        /// Every `Code` text under the document's blocks, in any inline list.
+        fn code_texts(doc: &mut Pandoc) -> Vec<String> {
+            let mut out = Vec::new();
+            crate::ast_walk::for_each_inline_list_mut(&mut doc.blocks, &mut |list| {
+                for i in list.iter() {
+                    if let Inline::Code(c) = i {
+                        out.push(c.text.clone());
+                    }
+                }
+            });
+            out
+        }
+
+        fn nested_is_masked(texts: &[String]) -> bool {
+            texts
+                .iter()
+                .any(|t| t.contains(MASK_MARKER) && t.contains("{python} x"))
+        }
+
+        #[test]
+        fn repro_paragraph_is_masked_and_stamped_generated() {
+            let src = "Write `` `{python} x` `` to show it.\n\nSome unrelated prose.\n";
+            let (mut doc, ctx) = parse_qmd_with_context(src);
+            let changed = mask(&mut doc);
+            assert_eq!(changed, vec![0]);
+            let (buf, source_info) =
+                pampa::writers::qmd::write_with_source_info(&doc).expect("serialize");
+            let text = String::from_utf8(buf).unwrap();
+            let at = text.find(MASK_MARKER).expect("marker in masked text");
+            assert_eq!(source_info.map_offset(at, &ctx), None);
+            assert!(matches!(
+                doc.blocks[0].source_info(),
+                SourceInfo::Generated(_)
+            ));
+            assert!(!matches!(
+                doc.blocks[1].source_info(),
+                SourceInfo::Generated(_)
+            ));
+        }
+
+        #[test]
+        fn plain_span_is_not_masked() {
+            // guard: the plain span still runs.
+            let mut doc = parse_qmd("A `{python} 1+1` span.\n");
+            assert!(mask(&mut doc).is_empty());
+            assert!(
+                code_texts(&mut doc)
+                    .iter()
+                    .all(|t| !t.contains(MASK_MARKER))
+            );
+        }
+
+        #[test]
+        fn classic_r_nested_is_masked_and_plain_r_is_not() {
+            let mut nested = parse_qmd("Write `` `r x` `` here.\n");
+            assert!(!mask(&mut nested).is_empty());
+            assert!(
+                code_texts(&mut nested)
+                    .iter()
+                    .any(|t| t.contains(MASK_MARKER))
+            );
+            let mut plain = parse_qmd("Write `r x` here.\n");
+            assert!(mask(&mut plain).is_empty());
+        }
+
+        const N: &str = "`` `{python} x` ``";
+
+        fn positions() -> Vec<(&'static str, String)> {
+            vec![
+                ("header", format!("## Title {N}\n")),
+                ("emph", format!("*a {N} b*\n")),
+                ("link", format!("[a {N}](http://example.com)\n")),
+                ("image alt", format!("![a {N}](img.png)\n")),
+                ("table cell", format!("| a | b |\n|---|---|\n| {N} | y |\n")),
+                (
+                    "table caption",
+                    format!("| a | b |\n|---|---|\n| x | y |\n\n: Cap {N}\n"),
+                ),
+                ("list item", format!("- item {N}\n")),
+                ("block quote", format!("> quote {N}\n")),
+                ("inline note", format!("Text^[note {N}] here.\n")),
+                (
+                    "footnote definition",
+                    format!("Text[^1] here.\n\n[^1]: Def {N}\n"),
+                ),
+                ("figure caption", format!("![Cap {N}](img.png)\n")),
+                (
+                    "callout body",
+                    format!("::: {{.callout-note}}\nBody {N}\n:::\n"),
+                ),
+                (
+                    "callout title",
+                    format!("::: {{.callout-note}}\n## Title {N}\n\nBody\n:::\n"),
+                ),
+                (
+                    "tabset heading",
+                    format!("::: {{.panel-tabset}}\n## Tab {N}\n\nBody\n:::\n"),
+                ),
+                ("span", format!("[a {N}]{{.cls}}\n")),
+                ("strong", format!("**a {N}**\n")),
+                ("div", format!("::: {{.d}}\nBody {N}\n:::\n")),
+            ]
+        }
+
+        #[test]
+        fn nested_form_is_masked_at_every_position_and_round_trips() {
+            let dashes = regex::Regex::new(r"-{3,}").unwrap();
+            for (name, qmd) in positions() {
+                let doc = parse_qmd(&qmd);
+                let original = serialize(&doc);
+                let mut masked = doc.clone();
+                let changed = mask(&mut masked);
+                assert!(!changed.is_empty(), "{name}: mask did not fire\n{qmd}");
+                let text = serialize(&masked);
+                assert!(text.contains(MASK_MARKER), "{name}: no marker:\n{text}");
+                // A pipe table pads each column to its widest cell, and a masked
+                // cell is wider, so after `unmask` only the padding differs. Every
+                // consumer derives both sides of its comparison from the same
+                // masked serialization, so padding is immaterial; compare tables
+                // with whitespace runs and delimiter dashes collapsed.
+                let norm = |t: &str| -> String {
+                    if name.starts_with("table") {
+                        let t = t.split_whitespace().collect::<Vec<_>>().join(" ");
+                        // The delimiter row's dashes widen with the column too.
+                        dashes.replace_all(&t, "---").into_owned()
+                    } else {
+                        t.to_string()
+                    }
+                };
+                assert_eq!(norm(&unmask(&text)), norm(&original), "{name}: round trip");
+            }
+        }
+
+        #[test]
+        fn every_code_with_a_scanner_span_is_masked() {
+            // Invariant: whatever container holds it, a Code whose text holds a
+            // unit-scanner span ends up masked.
+            for (name, qmd) in positions() {
+                let mut doc = parse_qmd(&qmd);
+                mask(&mut doc);
+                let texts = code_texts(&mut doc);
+                for t in &texts {
+                    if !crate::engine::units::scan_units(t).is_empty() {
+                        assert!(t.contains(MASK_MARKER), "{name}: unmasked {t:?}");
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn ast_constructed_positions_are_masked() {
+            let cite = Inline::Cite(Box::new(Cite {
+                citations: vec![Citation {
+                    id: "k".into(),
+                    prefix: vec![code(NESTED)],
+                    suffix: vec![code(NESTED)],
+                    mode: CitationMode::NormalCitation,
+                    note_num: 0,
+                    hash: 0,
+                    id_source: None,
+                }],
+                content: vec![],
+                source_info: SourceInfo::for_test(),
+            }));
+            let insert = Inline::Insert(Box::new(Insert {
+                attr: Attr::default(),
+                content: vec![code(NESTED)],
+                source_info: SourceInfo::for_test(),
+                attr_source: AttrSourceInfo::empty(),
+            }));
+            let cases: Vec<(&str, Block)> = vec![
+                (
+                    "line block",
+                    Block::LineBlock(LineBlock {
+                        content: vec![vec![code(NESTED)]],
+                        source_info: SourceInfo::for_test(),
+                    }),
+                ),
+                (
+                    "definition list term",
+                    Block::DefinitionList(DefinitionList {
+                        content: vec![(vec![code(NESTED)], vec![vec![para(vec![])]])],
+                        source_info: SourceInfo::for_test(),
+                    }),
+                ),
+                ("cite", para(vec![cite])),
+                ("critic insert", para(vec![insert])),
+            ];
+            for (name, block) in cases {
+                let mut doc = doc_of(vec![block]);
+                assert!(!mask(&mut doc).is_empty(), "{name}: mask did not fire");
+                assert!(nested_is_masked(&code_texts(&mut doc)), "{name}");
+            }
+        }
+
+        #[test]
+        fn caption_short_is_masked_on_table_and_figure() {
+            for src in ["| a |\n|---|\n| x |\n\n: Cap\n", "![Cap](img.png)\n"] {
+                let mut doc = parse_qmd(src);
+                match &mut doc.blocks[0] {
+                    Block::Table(t) => t.caption.short = Some(vec![code(NESTED)]),
+                    Block::Figure(f) => f.caption.short = Some(vec![code(NESTED)]),
+                    other => panic!("unexpected block {other:?}"),
+                }
+                assert!(!mask(&mut doc).is_empty(), "{src}");
+                let found = match &doc.blocks[0] {
+                    Block::Table(t) => t.caption.short.clone(),
+                    Block::Figure(f) => f.caption.short.clone(),
+                    _ => None,
+                }
+                .unwrap();
+                assert!(nested_is_masked(&[match &found[0] {
+                    Inline::Code(c) => c.text.clone(),
+                    _ => String::new(),
+                }]));
+            }
+        }
+
+        #[test]
+        fn code_block_inside_inline_note_is_masked() {
+            // Decision (plan step 2.1): recursing into `Inline::Note` masks a
+            // display CodeBlock inside an inline footnote, as block footnotes do.
+            let display = Block::CodeBlock(Box::new(quarto_pandoc_types::CodeBlock {
+                attr: Attr::default(),
+                text: "```{python}\nx\n```\n".to_string(),
+                source_info: SourceInfo::for_test(),
+                attr_source: AttrSourceInfo::empty(),
+            }));
+            let note = Inline::Note(quarto_pandoc_types::inline::Note {
+                content: vec![display],
+                source_info: SourceInfo::for_test(),
+            });
+            let mut doc = doc_of(vec![para(vec![note])]);
+            assert_eq!(mask(&mut doc), vec![0]);
+            let Block::Paragraph(p) = &doc.blocks[0] else {
+                panic!()
+            };
+            let Inline::Note(n) = &p.content[0] else {
+                panic!()
+            };
+            let Block::CodeBlock(cb) = &n.content[0] else {
+                panic!()
+            };
+            assert!(cb.text.contains(MASK_MARKER), "{}", cb.text);
+        }
+
+        #[test]
+        fn own_metadata_nested_is_masked_and_plain_is_not() {
+            let mut doc = parse_qmd("---\ntitle: \"A `` `{python} x` `` b\"\n---\n\nBody\n");
+            let original = serialize(&doc);
+            assert!(mask_foreign_meta(&mut doc.meta, FileId(0)));
+            let text = serialize(&doc);
+            assert!(text.contains(MASK_MARKER), "{text}");
+            assert_eq!(unmask(&text), original);
+
+            let mut plain = parse_qmd("---\ntitle: \"A `{python} x` b\"\n---\n\nBody\n");
+            assert!(!mask_foreign_meta(&mut plain.meta, FileId(0)));
+        }
+
+        #[test]
+        fn foreign_inlines_and_blocks_leaves_mask_nested() {
+            let mut inl = ConfigValue::new_inlines(vec![code(NESTED)], SourceInfo::for_test());
+            assert!(mask_foreign_meta(&mut inl, FileId(0)));
+
+            let quote = Block::BlockQuote(quarto_pandoc_types::block::BlockQuote {
+                content: vec![para(vec![code(NESTED)])],
+                source_info: SourceInfo::for_test(),
+            });
+            let mut blk = ConfigValue::new_blocks(vec![quote], SourceInfo::for_test());
+            assert!(mask_foreign_meta(&mut blk, FileId(0)));
+        }
+
+        #[test]
+        fn foreign_whole_span_still_masks() {
+            // guard: the existing wrapped match.
+            let mut inl =
+                ConfigValue::new_inlines(vec![code("{python} x")], SourceInfo::for_test());
+            assert!(mask_foreign_meta(&mut inl, FileId(0)));
+        }
     }
 }

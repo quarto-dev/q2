@@ -99,6 +99,16 @@ fn render_html(tmp: &TempDir, name: &str, content: &str) -> String {
 /// render on this machine (vacuity note 3) — a render error there is a
 /// legitimate RED, not a harness bug.
 fn render_html_result(tmp: &TempDir, name: &str, content: &str) -> Result<String, String> {
+    render_format_result(tmp, name, content, "html")
+}
+
+/// Render `content` to `format` through the real render path.
+fn render_format_result(
+    tmp: &TempDir,
+    name: &str,
+    content: &str,
+    format: &str,
+) -> Result<String, String> {
     let input = tmp.path().join(name);
     std::fs::write(&input, content).unwrap();
 
@@ -108,7 +118,7 @@ fn render_html_result(tmp: &TempDir, name: &str, content: &str) -> Result<String
 
     let result = render_document_to_file(
         &input,
-        "html",
+        format,
         &RenderToFileOptions::default(),
         Some(&project),
         runtime.clone(),
@@ -633,5 +643,197 @@ fn t26_displayed_inline_expression_shows_original_spelling_no_marker() {
         !html.contains("q2-nested-executable"),
         "the internal mask marker must never survive into the rendered HTML; \
          html:\n{html}"
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// bd-unt56ts1 — an executable span shown inside a code span
+//
+// `` `{python} 1+1` `` (a code span whose text is a span) is an example, not
+// a unit. Plan: `claude-notes/plans/2026-11-16-nested-inline-span-mask.md`.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// `true` when a Jupyter `python3` kernel is usable. Modeled on
+/// `capture_splice_engines.rs`; a missing kernel skips, never fails.
+fn jupyter_python_available() -> bool {
+    if !quarto_core::engine::EngineRegistry::default()
+        .get("jupyter")
+        .is_some_and(|e| e.is_available())
+    {
+        return false;
+    }
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime for kernelspec probe");
+    match rt.block_on(quarto_core::engine::jupyter::find_kernelspec("python3")) {
+        Ok(_) => true,
+        Err(quarto_core::engine::jupyter::JupyterError::KernelspecNotFound { .. }) => false,
+        Err(e) => panic!("kernelspec discovery failed: {e}"),
+    }
+}
+
+const JUPYTER_FM: &str = "---\ntitle: Nested\nengine: jupyter\njupyter: python3\n---\n\n";
+const NESTED_PY: &str = "`` `{python} 1+1` ``";
+
+fn no_marker(html: &str) {
+    assert!(
+        !html.contains("q2-nested-executable"),
+        "the mask marker must never reach the output; html:\n{html}"
+    );
+}
+
+#[test]
+fn nested_inline_jupyter_shows_the_span_and_runs_a_plain_one() {
+    if !jupyter_python_available() {
+        eprintln!("SKIP: jupyter python3 not available");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let doc = format!("{JUPYTER_FM}Write {NESTED_PY} to show it, and `{{python}} 40+2` runs.\n");
+    let html = render_html(&tmp, "nested_j.qmd", &doc);
+    assert!(
+        html.contains("<code>`{python} 1+1`</code>"),
+        "nested span must render literally; html:\n{html}"
+    );
+    assert!(
+        html.contains("42"),
+        "plain span must still run; html:\n{html}"
+    );
+    no_marker(&html);
+}
+
+#[test]
+fn nested_inline_jupyter_include_and_title() {
+    if !jupyter_python_available() {
+        eprintln!("SKIP: jupyter python3 not available");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    std::fs::write(
+        tmp.path().join("inc.qmd"),
+        format!("Included {NESTED_PY} here.\n"),
+    )
+    .unwrap();
+    let doc = format!(
+        "---\ntitle: \"T {NESTED_PY} x\"\nengine: jupyter\njupyter: python3\n---\n\n\
+         {{{{< include inc.qmd >}}}}\n"
+    );
+    let html = render_html(&tmp, "nested_inc.qmd", &doc);
+    assert!(
+        html.matches("<code>`{python} 1+1`</code>").count() >= 2,
+        "include and title block must both show the span literally; html:\n{html}"
+    );
+    let title = html
+        .split("<title>")
+        .nth(1)
+        .and_then(|t| t.split("</title>").next())
+        .unwrap_or("");
+    assert!(
+        title.contains("{python} 1+1"),
+        "<title> must show the span literally, got {title:?}"
+    );
+    assert!(
+        !html.contains("<code>2</code>"),
+        "span was evaluated; html:\n{html}"
+    );
+    no_marker(&html);
+}
+
+#[test]
+fn nested_inline_markdown_output_has_no_marker() {
+    if !jupyter_python_available() {
+        eprintln!("SKIP: jupyter python3 not available");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let doc = format!("{JUPYTER_FM}Write {NESTED_PY} here.\n");
+    let md = render_format_result(&tmp, "nested_md.qmd", &doc, "markdown")
+        .unwrap_or_else(|e| panic!("markdown render must succeed: {e}"));
+    no_marker(&md);
+    assert!(md.contains("{python} 1+1"), "output:\n{md}");
+}
+
+#[test]
+fn nested_inline_alone_without_cells_renders_unchanged() {
+    // guard: no executable cell or live span anywhere.
+    let tmp = TempDir::new().unwrap();
+    let doc = format!("---\ntitle: Ctrl\n---\n\nWrite {NESTED_PY} here.\n");
+    let html = render_html(&tmp, "nested_ctrl.qmd", &doc);
+    assert!(
+        html.contains("<code>`{python} 1+1`</code>"),
+        "html:\n{html}"
+    );
+    no_marker(&html);
+}
+
+#[test]
+fn nested_inline_knitr_brace_and_classic_spellings() {
+    if !knitr_render_available() {
+        eprintln!("SKIP: knitr (Rscript + package) not available");
+        return;
+    }
+    let live = "```{r}\n#| echo: false\nv <- paste0(\"INLINE\", \"RAN\")\n```\n\n";
+    for (name, shown) in [("brace", "`` `{r} v` ``"), ("classic", "`` `r v` ``")] {
+        let tmp = TempDir::new().unwrap();
+        let doc = format!(
+            "---\ntitle: K\nengine: knitr\n---\n\n{live}Write {shown} here, plain `r 40+2`.\n"
+        );
+        let html = render_html(&tmp, &format!("nested_k_{name}.qmd"), &doc);
+        assert!(
+            !html.contains("INLINERAN"),
+            "{name}: nested span was evaluated; html:\n{html}"
+        );
+        assert!(
+            display_text(&html).contains(&shown.replace("`` ", "").replace(" ``", "")),
+            "{name}: nested span must be shown; html:\n{html}"
+        );
+        assert!(
+            html.contains("42"),
+            "{name}: plain span must run; html:\n{html}"
+        );
+        no_marker(&html);
+    }
+}
+
+#[test]
+fn nested_inline_julia_stays_literal_and_plain_runs() {
+    // guard: Julia already leaves the nested form literal. Needs a live
+    // `{julia}` cell and `daemon: false`; skips without QUARTO_JULIA_PROJECT.
+    if !crate::julia_engine_e2e::julia_available() {
+        eprintln!("SKIP: julia not available");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let head = "---\nengine: julia\nexecute:\n  daemon: false\n---\n\n";
+    let cell = "```{julia}\n1 + 1\n```\n\n";
+    let shown = "`` `{julia} 1+1` ``";
+    let doc = format!("{head}{cell}Write {shown}, and `{{julia}} 40+2` runs.\n");
+    let html = render_html(&tmp, "nested_julia.qmd", &doc);
+    assert!(html.contains("<code>`{julia} 1+1`</code>"), "html:\n{html}");
+    assert!(html.contains("42"), "plain span must run; html:\n{html}");
+    no_marker(&html);
+
+    // Sole top-level block is a Div (bd-quydz82t starvation shape).
+    let doc = format!("{head}::: {{.d}}\n{cell}Write {shown} here.\n:::\n");
+    let html = render_html(&tmp, "nested_julia_div.qmd", &doc);
+    assert!(html.contains("<code>`{julia} 1+1`</code>"), "html:\n{html}");
+    no_marker(&html);
+}
+
+#[test]
+fn nested_inline_error_in_live_span_next_to_masked_one_keeps_its_location() {
+    // guard: passes before and after.
+    if !jupyter_python_available() {
+        eprintln!("SKIP: jupyter python3 not available");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let doc = format!("{JUPYTER_FM}Shown {NESTED_PY}.\n\nBroken `{{python}} 1/0` here.\n");
+    let err = render_html_result(&tmp, "nested_err.qmd", &doc).err();
+    let msg = err.expect("a failing live span must fail the render");
+    assert!(
+        msg.contains("nested_err.qmd:9:19"),
+        "the live span's own line and column (9:19, measured before the fix) must survive: {msg}"
     );
 }
