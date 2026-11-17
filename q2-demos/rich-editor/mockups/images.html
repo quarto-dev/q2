@@ -102,8 +102,6 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 .move-ghost { position:fixed; z-index:200; pointer-events:none; width:120px; max-height:90px; overflow:hidden; border-radius:4px;
   box-shadow:0 4px 14px rgba(0,0,0,.25); background:#fff; font:12px ui-monospace, Menlo, monospace; color:var(--muted); }
 .move-ghost img { width:100%; display:block; }
-.move-ghost::after { content:attr(data-as); display:block; font:12px system-ui, sans-serif; color:#343a40; padding:3px 6px; background:#fff; }
-.move-ghost[data-as=""]::after { display:none; }
 .body.moving, .body.moving * { cursor:grabbing !important; }
 .body .moving-from { opacity:.35; }
 .drop-caret { position:absolute; width:2px; background:var(--accent); pointer-events:none; z-index:5; }
@@ -1758,7 +1756,6 @@ function pressImage(e, k) {
     const at = movePoint(ev)
     // Not onto itself.
     moving.at = at && !(moving.fig && doc[at.b] === moving.fig) ? at : null
-    moving.ghost.dataset.as = moving.at ? (moving.at.edge ? 'Own line' : 'In the line') : ''
     markMove(moving.at)
   }
   const up = () => {
