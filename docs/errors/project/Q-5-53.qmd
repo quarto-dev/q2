@@ -1,0 +1,58 @@
+---
+title: "Project Does Not Declare a Quarto Version"
+description: "`_quarto.yml` has no `quarto-required` key, so the project is presumed to be a Quarto 1 project."
+code: Q-5-53
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-53` — Project Does Not Declare a Quarto Version
+
+> `_quarto.yml` has no `quarto-required` key, so the project is
+> presumed to be a Quarto 1 project.
+
+## What this means
+
+Quarto 2 is not fully backwards compatible with Quarto 1, so a project
+says which major version it is written for with `quarto-required` in
+`_quarto.yml`. This project's `_quarto.yml` has no such line.
+
+Quarto 1 releases that predate Quarto 2 cannot be changed, so a
+`_quarto.yml` without the declaration might belong to a project written
+for any of them. Quarto 2 presumes it is a Quarto 1 project. It still
+renders the project, and reports this warning once per render.
+
+## How to fix it
+
+If the project is meant for Quarto 2, add one line to `_quarto.yml`:
+
+```yaml
+quarto-required: "^2"
+```
+
+Quarto 1 (version 1.4 and later) then refuses to render the project,
+instead of rendering it with different results.
+
+Only the project's own `_quarto.yml` counts. The line has no effect in
+a profile file, `_quarto.yml.local`, `_metadata.yml`, a document's
+front matter or `-M`. See
+[Declaring the Quarto version of a project](../../guides/projects/quarto-version.qmd).
+
+If the project is a Quarto 1 project that you render with Quarto 2 on
+purpose, silence the warning in `_quarto.yml`:
+
+```yaml
+diagnostics:
+  Q-5-53:
+    level: off
+    reason: "a Quarto 1 project we render with both versions"
+```
+
+## Related errors
+
+- [`Q-5-54`](Q-5-54.qmd) — the range admits both Quarto 1 and Quarto 2.
+- [`Q-5-55`](Q-5-55.qmd) — the range admits no Quarto 2 version.
+- [`Q-5-56`](Q-5-56.qmd) — the value is not a version range.

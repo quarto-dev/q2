@@ -3,3 +3,4 @@ project:
 website:
   title: No repo url
   repo-actions: [edit, source]
+quarto-required: "^2"

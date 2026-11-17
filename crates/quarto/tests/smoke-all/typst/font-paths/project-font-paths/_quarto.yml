@@ -3,3 +3,4 @@ project:
 format:
   typst:
     font-paths: /artifacts/fonts
+quarto-required: "^2"

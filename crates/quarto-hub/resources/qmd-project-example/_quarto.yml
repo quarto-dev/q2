@@ -19,3 +19,4 @@ format:
 
 
 
+quarto-required: "^2"

@@ -13,6 +13,7 @@ supports-hyperlinks = "3.2"
 dirs = "6"
 thiserror.workspace = true
 serde.workspace = true
+nodejs-semver.workspace = true
 
 [lints]
 workspace = true

@@ -7471,7 +7471,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-lsp-project"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "pampa",
  "pollster",
@@ -7680,7 +7680,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-project-files"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "tempfile",
  "tracing",
@@ -7862,6 +7862,7 @@ version = "0.46.0"
 dependencies = [
  "anstyle-query",
  "dirs",
+ "nodejs-semver",
  "serde",
  "supports-hyperlinks",
  "thiserror 2.0.21",

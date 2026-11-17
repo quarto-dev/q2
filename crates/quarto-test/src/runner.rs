@@ -796,7 +796,7 @@ Content here.
         let project_root = temp.path();
         fs::write(
             project_root.join("_quarto.yml"),
-            "project:\n  type: book\nbook:\n  title: Project Cache Test\n  chapters: [index.qmd, sibling.qmd, skipped.qmd]\nformat: html\n",
+            "quarto-required: \"^2\"\nproject:\n  type: book\nbook:\n  title: Project Cache Test\n  chapters: [index.qmd, sibling.qmd, skipped.qmd]\nformat: html\n",
         )
         .unwrap();
         let index = project_root.join("index.qmd");
@@ -865,7 +865,7 @@ Content here.
         let project_root = temp.path();
         fs::write(
             project_root.join("_quarto.yml"),
-            "project:\n  type: book\nbook:\n  title: Skip Test\n  chapters: [skipped.qmd]\nformat: html\n",
+            "quarto-required: \"^2\"\nproject:\n  type: book\nbook:\n  title: Skip Test\n  chapters: [skipped.qmd]\nformat: html\n",
         )
         .unwrap();
         let skipped = project_root.join("skipped.qmd");
@@ -898,7 +898,7 @@ Content here.
         let project_root = temp.path();
         fs::write(
             project_root.join("_quarto.yml"),
-            "project:\n  type: book\nbook:\n  title: Format Test\n  chapters: [index.qmd]\nformat:\n  typst:\n    keep-typ: true\n",
+            "quarto-required: \"^2\"\nproject:\n  type: book\nbook:\n  title: Format Test\n  chapters: [index.qmd]\nformat:\n  typst:\n    keep-typ: true\n",
         )
         .unwrap();
         let index = project_root.join("index.qmd");
@@ -936,7 +936,7 @@ Content here.
             fs::write(
                 project_root.join("_quarto.yml"),
                 format!(
-                    "project:\n  type: book\nbook:\n  title: T\n  chapters: [index.qmd]\n{format_line}"
+                    "quarto-required: \"^2\"\nproject:\n  type: book\nbook:\n  title: T\n  chapters: [index.qmd]\n{format_line}"
                 ),
             )
             .unwrap();
@@ -954,7 +954,7 @@ Content here.
         let project_root = temp.path();
         fs::write(
             project_root.join("_quarto.yml"),
-            "project:\n  type: book\nbook:\n  title: Failure Test\n  chapters: [index.qmd]\nformat: html\n",
+            "quarto-required: \"^2\"\nproject:\n  type: book\nbook:\n  title: Failure Test\n  chapters: [index.qmd]\nformat: html\n",
         )
         .unwrap();
         let index = project_root.join("index.qmd");
@@ -989,7 +989,7 @@ Content here.
         let project_root = temp.path();
         fs::write(
             project_root.join("_quarto.yml"),
-            "project:\n  type: book\nbook:\n  title: Should Error Test\n  chapters: [index.qmd, chapter2.qmd]\nformat: html\n",
+            "quarto-required: \"^2\"\nproject:\n  type: book\nbook:\n  title: Should Error Test\n  chapters: [index.qmd, chapter2.qmd]\nformat: html\n",
         )
         .unwrap();
         let index = project_root.join("index.qmd");

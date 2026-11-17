@@ -1,2 +1,3 @@
 project:
   title: link-external Tests
+quarto-required: "^2"

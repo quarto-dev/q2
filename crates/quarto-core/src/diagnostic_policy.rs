@@ -62,12 +62,15 @@
 //!   25–30 warnings in the tree are still built with a bare
 //!   `DiagnosticMessage::warning(...)` and no `.with_code(...)`; those are
 //!   invisible to any code-keyed policy. `bd-m2w7a` tracks the backfill.
-//! - **Project-*scoped* diagnostics are out of reach in v1.**
-//!   `ProjectRenderSummary::project_diagnostics` and the config-diagnostic
-//!   `eprintln!` path in `quarto render` do not flow through
-//!   `run_pipeline`. Note this is *not* the same as "suppression written
-//!   in `_quarto.yml` doesn't work" — that works, because project config
-//!   is the first layer of the per-document metadata merge.
+//! - **Project-*scoped* diagnostics are governed by the project config
+//!   only.** `ProjectRenderSummary::project_diagnostics` does not flow
+//!   through `run_pipeline`; the orchestrator applies a policy read from
+//!   the merged project config to it at the end of every render
+//!   (`finish_project_diagnostics` in `project/orchestrator.rs`,
+//!   bd-gw8fmaz3), so a `diagnostics:` entry in `_quarto.yml` silences a
+//!   project-scoped warning but one in a document's front matter does
+//!   not. The config-diagnostic `eprintln!` path in `quarto render`
+//!   (`config_diagnostics`, Q-5-11, Q-5-18) is still out of reach.
 
 use hashlink::LinkedHashMap;
 use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage, DiagnosticMessageBuilder};

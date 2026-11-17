@@ -1,0 +1,47 @@
+---
+title: "Invalid `quarto-required` Value"
+description: "`quarto-required` in `_quarto.yml` must be a version range string."
+code: Q-5-56
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-56` — Invalid `quarto-required` Value
+
+> `quarto-required` in `_quarto.yml` must be a version range string,
+> such as `"^2"`.
+
+## What this means
+
+`quarto-required` holds a version range written as a string, in the
+syntax npm uses (`"^2"`, `">=2.1"`, `"2.x"`). This value is not one:
+it is a number, a list or another non-string value, an empty string,
+or text that is not a range.
+
+```yaml
+quarto-required: 2      # Q-5-56: a number, not a string
+quarto-required: "two"  # Q-5-56: not a version range
+```
+
+Quarto 1 rejects these values too: a non-string value fails its
+configuration check.
+
+## How to fix it
+
+For a Quarto 2 project, write:
+
+```yaml
+quarto-required: "^2"
+```
+
+Quote the range. Unquoted, a bare number such as `2` is read as a
+number.
+
+See [Declaring the Quarto version of a project](../../guides/projects/quarto-version.qmd).
+
+## Related errors
+
+- [`Q-5-53`](Q-5-53.qmd) — no `quarto-required` at all.

@@ -1006,6 +1006,34 @@ struct NamedFile {
     membership: crate::project::book::BookMembership,
 }
 
+/// The last step of every project render, whichever dispatch it took
+/// ([`ProjectPipeline::run`] and [`ProjectPipeline::run_with_book_support`]
+/// both end here, exactly once per render):
+///
+/// 1. prepend the Quarto-version declaration warnings (Q-5-53..56,
+///    bd-gw8fmaz3) — a property of the project's `_quarto.yml`, so it is
+///    reported once per render rather than once per document, and on every
+///    host (CLI render, dry run, hub, `q2 preview`);
+/// 2. apply the project's `diagnostics:` policy to the project-scoped
+///    diagnostics. Per-document diagnostics get their policy in
+///    `run_pipeline`; project-scoped ones never pass through it, so without
+///    this step a project could not silence them. The policy is read from
+///    the merged project config (profiles and `_quarto.yml.local`
+///    included); a document's front matter cannot silence a project-scoped
+///    warning. Malformed policy entries are not reported here — every
+///    document's metadata merge already reports them (Q-5-27).
+///
+/// Runs before the CLI's `--strict` promotion, so a silenced warning stays
+/// silent under `--strict`, as per-document suppression does.
+fn finish_project_diagnostics<O>(project: &ProjectContext, summary: &mut ProjectRenderSummary<O>) {
+    let marker = super::version_marker::version_marker_diagnostics(&project.config);
+    summary.project_diagnostics.splice(0..0, marker);
+    if let Some(metadata) = &project.config.metadata {
+        let (policy, _) = crate::diagnostic_policy::DiagnosticPolicy::from_metadata(metadata);
+        policy.apply(&mut summary.project_diagnostics);
+    }
+}
+
 /// What [`ProjectPipeline::run_head`] hands on to Pass 2 and the tail.
 struct RunHeadState {
     initial_diagnostics: Vec<DiagnosticMessage>,
@@ -1267,6 +1295,7 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
         }
         if let Ok(summary) = &mut result {
             summary.project_diagnostics.extend(scope_diagnostics);
+            finish_project_diagnostics(self.project, summary);
         }
         if let Err(e) = self.project.registry.shutdown_all() {
             tracing::warn!("engine registry shutdown_all failed at end of project render: {e}");
@@ -2095,11 +2124,14 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         // explicit `registry.shutdown_all()` (not Drop) to reap TS-engine Node
         // subprocesses at end-of-render. Best-effort: log at WARN and continue;
         // the host's own Drop is the backstop if this errs.
-        let result = if self.dry_run {
+        let mut result = if self.dry_run {
             self.run_dry().await
         } else {
             self.run_inner().await
         };
+        if let Ok(summary) = &mut result {
+            finish_project_diagnostics(self.project, summary);
+        }
         if let Err(e) = self.project.registry.shutdown_all() {
             tracing::warn!("engine registry shutdown_all failed at end of project render: {e}");
         }

@@ -15,3 +15,4 @@ website:
       - other.qmd
       - reviewed.qmd
       - reviewed-section/page.qmd
+quarto-required: "^2"

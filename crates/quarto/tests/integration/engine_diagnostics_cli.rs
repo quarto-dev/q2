@@ -91,7 +91,7 @@ fn project_with_legacy_engine(docs: &[(&str, &str)]) -> TempDir {
     );
     write_file(
         &tmp.path().join("_quarto.yml"),
-        "project:\n  type: default\n",
+        "quarto-required: \"^2\"\nproject:\n  type: default\n",
     );
     for (name, contents) in docs {
         write_file(&tmp.path().join(name), contents);

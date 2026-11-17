@@ -8,3 +8,4 @@ format:
 _quarto:
   tests:
     noErrors: true
+quarto-required: "^2"

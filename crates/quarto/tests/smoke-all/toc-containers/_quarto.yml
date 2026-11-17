@@ -1,2 +1,3 @@
 project:
   title: TOC container tests
+quarto-required: "^2"

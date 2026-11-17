@@ -15,3 +15,4 @@ format:
   html:
     toc: true
     toc-depth: 3
+quarto-required: "^2"
