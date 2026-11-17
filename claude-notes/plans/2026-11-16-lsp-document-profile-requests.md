@@ -1,7 +1,10 @@
 # `q2 lsp`: a project-aware server over the VFS, with custom `quarto/*` requests
 
 **Epic:** bd-3f6ijnw9
-**Status:** architecture agreed (decisions recorded 2026-11-16). Execution not yet started.
+**Status:** C1–C4 landed on `main` on 2026-11-17 in #1237 (squash commit
+`9cdfb4add`), with C1b and the flaky-test fix bd-n735u7ml. Follow-ups
+F1–F4 are open under the epic. The design sections below record what was
+decided; the "As built" sections record what changed while building.
 **Revision:** 4 (2026-11-16).
 
 - Revision 1 proposed two per-document requests on the current server.
@@ -17,9 +20,8 @@
   mode it reads through to automerge rather than copying into a VFS.
 
 **Related:** bd-xaxuifhm (`q2 hub-lsp`, a hub peer answering
-`quarto/projectComments`; separate workstream, branch
-`origin/feature/bd-xaxuifhm-hub-lsp`, plan
-`claude-notes/plans/2026-11-09-hub-lsp-analysis-peer.md` on that branch),
+`quarto/projectComments`; separate workstream, merged as #1224; plan
+`claude-notes/plans/2026-11-09-hub-lsp-analysis-peer.md`),
 bd-5d7frwlo (the LSP hard-codes `html` and a minimal project), bd-yttl
 (expose `CrossrefIndex` from LSP analysis),
 `2026-11-09-reusable-hub-client-infrastructure.md` (consumers: Connect,
@@ -808,15 +810,15 @@ have it now and build the rest of the infrastructure on it.
 
 ## Children
 
-Execution order is top to bottom.
+Execution order is top to bottom. C1–C4 landed in #1237; F1–F4 are open.
 
 | # | Strand | Scope | Depends on |
 | --- | --- | --- | --- |
-| C1 (bd-n0uth2zt) | Prep | Move the LSP test files into `tests/integration/`. Extract `quarto_core::pass1::profile_document`. Move `quarto_hub::discovery` into a new light crate, `quarto-project-files` (D3), and make the hub use it. | none |
-| C1b (bd-xzsnuoqq) | Head phases | Name the head pipeline's phases (`build_ingest_stages`, then `AuthoredMetadataStage`, then enrich, then the profile checkpoint, then Pass-1 analyses). Record authored metadata on a `DocumentAst` side-channel and on `Pass1Document`. `q2 get-config` runs the ingest prefix. This fixes `q2 get-config` on `.ipynb`, which failed with Q-2-2 because get-config skipped source conversion. | C1 |
-| C2 (bd-c1gyrfvt) | `SessionRuntime` | Native and WASM `SystemRuntime` over EditorLayer ▷ BaseLayer ▷ inner, generalizing `OverlayRuntime`. The VFS-backed `BaseLayer` records binaries as present with metadata and reads their bytes on demand (D2). Tests: every trait method is written out; `ProjectContext` discovery plus Pass 1 over the runtime equals disk; attached mode never falls through for project paths. | C1 |
-| C3 (bd-ojsx06at) | Worker and sessions | New crate `quarto-lsp-project`. The `lsp-server` main loop is the worker (D1). `Workspace`, `ProjectSession`, `Mount`, `DiskFeeder` (client file watching, `notify` fallback), invalidation, sweeps fanned out to rayon. Non-QMD inputs are refused through a session capability flag (D6). Review the host boundary for a server manager (D9). Existing diagnostics and symbols are rerouted through sessions (fixes bd-5d7frwlo in the LSP). Existing LSP tests pass unchanged, plus an `exit`-with-open-stdin test. | C2 |
-| C4 (bd-kkmn4413) | First requests | Wire schema plus field-coverage test, `quarto/documentMetadata` (a requirement, D7), `quarto/documentProfile`, the outline span on `TocEntry` with a profile version bump (D5), the `experimental` capability, and the protocol reference doc. | C3 |
+| C1 (bd-n0uth2zt), landed | Prep | Move the LSP test files into `tests/integration/`. Extract `quarto_core::pass1::profile_document`. Move `quarto_hub::discovery` into a new light crate, `quarto-project-files` (D3), and make the hub use it. | none |
+| C1b (bd-xzsnuoqq), landed | Head phases | Name the head pipeline's phases (`build_ingest_stages`, then `AuthoredMetadataStage`, then enrich, then the profile checkpoint, then Pass-1 analyses). Record authored metadata on a `DocumentAst` side-channel and on `Pass1Document`. `q2 get-config` runs the ingest prefix. This fixes `q2 get-config` on `.ipynb`, which failed with Q-2-2 because get-config skipped source conversion. | C1 |
+| C2 (bd-c1gyrfvt), landed | `SessionRuntime` | Native and WASM `SystemRuntime` over EditorLayer ▷ BaseLayer ▷ inner, generalizing `OverlayRuntime`. The VFS-backed `BaseLayer` records binaries as present with metadata and reads their bytes on demand (D2). Tests: every trait method is written out; `ProjectContext` discovery plus Pass 1 over the runtime equals disk; attached mode never falls through for project paths. | C1 |
+| C3 (bd-ojsx06at), landed | Worker and sessions | New crate `quarto-lsp-project`. The `lsp-server` main loop is the worker (D1). `Workspace`, `ProjectSession`, `Mount`, `DiskFeeder` (client file watching, `notify` fallback), invalidation, sweeps fanned out to rayon. Non-QMD inputs are refused through a session capability flag (D6). Review the host boundary for a server manager (D9). Existing diagnostics and symbols are rerouted through sessions (fixes bd-5d7frwlo in the LSP). Existing LSP tests pass unchanged, plus an `exit`-with-open-stdin test. | C2 |
+| C4 (bd-kkmn4413), landed | First requests | Wire schema plus field-coverage test, `quarto/documentMetadata` (a requirement, D7), `quarto/documentProfile`, the outline span on `TocEntry` with a profile version bump (D5), the `experimental` capability, and the protocol reference doc. | C3 |
 | F1 (bd-xdjbcw1g) | Project requests | The later requests above. `quarto/projectComments` reports each comment under its own file and also names the documents that include that file (D8). | C4 |
 | F2 (bd-8ykghou3) | Project-aware LSP features | `@ref` completion and definition across files, document links, `workspace/symbol`, cross-document link diagnostics. | C3, uses F1 indexes |
 | F3 (bd-43pywabl) | Attached mode | `HubFeeder` over a samod `Repo` (in-process or dialed), read-through `BaseLayer` keyed by heads, the `automerge:` `Mount` (Q4), preview session advertisement, folding `quarto-hub-lsp` into it. | C3, bd-xaxuifhm |
