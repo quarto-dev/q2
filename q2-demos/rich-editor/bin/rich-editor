@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Open a file in the rich-editor prototype: `rich-editor <file>`.
+# Symlink this script onto your PATH to run it from anywhere.
+set -euo pipefail
+here="$(cd "$(dirname "$(realpath "$0")")/.." && pwd)"
+export RICH_EDITOR_CWD="$PWD"
+cd "$here"
+NODE_OPTIONS="--conditions=source ${NODE_OPTIONS:-}" exec npx --no-install tsx scripts/open.ts "$@"

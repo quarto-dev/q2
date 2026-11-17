@@ -237,6 +237,19 @@ besides an optional React hook, so it could become its own package.
    `index.qmd`. A `server` without a `doc` makes the tutorial there (for
    example, on a local hub: `npm run local-prod` in `hub-client/`).
 
+## Opening a file on your machine
+
+`bin/rich-editor <file>` opens any file in the editor, in your browser,
+and keeps the two in step until Ctrl-C: edits are written to the file as
+they're made, and changes to the file from elsewhere (a text editor, git)
+show in the editor. It runs a sync hub on 127.0.0.1 and the dev server
+in one process, so nothing leaves the machine. To run it from anywhere,
+link it onto your `PATH`:
+
+```bash
+ln -s "$PWD/bin/rich-editor" ~/.local/bin/rich-editor
+```
+
 ## Trying it together
 
 The build (`dist/`) is a static site, and a document doesn't need a hub,
