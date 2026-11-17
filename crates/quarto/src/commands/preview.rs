@@ -1132,7 +1132,9 @@ pub(crate) fn resolve_project_and_initial_page(canonical: &Path) -> Result<Resol
 /// directory, or `None` if the walk reaches the filesystem root without
 /// finding one.
 fn find_project_root_above(start: &Path) -> Option<PathBuf> {
-    let runtime = quarto_system_runtime::NativeRuntime::new();
+    // Only existence checks, but preview builds every runtime through the
+    // factory (runtime_factory_lint).
+    let runtime = quarto_preview::render_flags::native_runtime();
     quarto_core::project::discovery::find_project_root(start, &runtime)
         .ok()
         .flatten()
