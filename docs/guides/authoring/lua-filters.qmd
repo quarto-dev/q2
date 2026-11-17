@@ -300,6 +300,29 @@ an equation unnumbered. The attribute exists only once cross-references
 have been resolved, so list the filter *after* the `quarto` entry in
 `filters:`; a filter listed before it runs too early to see the number.
 
+## Image sizes in HTML output
+
+The HTML `width` and `height` attributes accept only a whole number of
+pixels. For HTML formats (`html`, `revealjs` and `dashboard`), Quarto
+therefore rewrites an image's sizes before your post filters run:
+
+- A plain number or a `px` value stays an attribute, rounded down to
+  a whole number: `{width=750px}` becomes `width="750"`.
+- Any other value moves into the image's `style` attribute exactly as
+  written, after any `style` you gave the image: `{width=60%}` becomes
+  `style="width:60%"`, and `{height=3in}` becomes `style="height:3in"`.
+
+A filter listed *before* the `quarto` entry in `filters:` sees the sizes
+as the author wrote them. A filter listed *after* it sees the rewritten
+form, so `el.attributes.width` is `nil` for a percentage and `"750"` for
+`750px`. In that position, read and change the size through
+`el.attributes.style` instead. A post filter that sets `width` itself
+gets exactly the value it sets.
+
+This differs from Quarto 1. There, Pandoc did the same rewriting when it
+wrote the HTML, after every filter had run, so post filters still saw
+`width="60%"`. Other formats are unaffected.
+
 ## Parsing strings: `pandoc.read`
 
 `pandoc.read(text, format)` parses a string into a document, so a filter or

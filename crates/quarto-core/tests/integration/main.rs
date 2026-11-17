@@ -88,6 +88,7 @@ pub mod hephaestus_render;
 pub mod html_citations;
 pub mod html_text;
 pub mod idempotence;
+pub mod image_dimensions_pipeline;
 pub mod import_finish;
 pub mod import_media;
 pub mod import_read;
