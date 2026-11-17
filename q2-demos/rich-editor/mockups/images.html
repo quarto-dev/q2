@@ -205,7 +205,7 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
     <div class="toolbar" id="toolbar"></div>
     <div class="scroller" id="scroller">
       <div class="tips">
-        Click an image to select it, or drag it to move it: into a line of text, or between lines. Paste or drop an image file into the text, or type <code>![a picture](images/sales.svg)</code>.
+        Click an image to select it, or drag it to move it: into a line of text, or between lines. Click beside a figure for a caret in its line: type to put text there, Enter to split it off. Paste or drop an image file into the text, or type <code>![a picture](images/sales.svg)</code>.
         Shift and an arrow select an image in a line. With an image selected: <kbd>⌘C</kbd> / <kbd>⌘X</kbd> copy or cut it (paste with <kbd>⌘V</kbd>, or <kbd>⌘⇧V</kbd> for the picture alone), <kbd>⌫</kbd> removes it, <kbd>↵</kbd> or typing goes into its caption, arrows move off it (through its caption), <kbd>⌘Z</kbd> undoes.
         No image file to hand? <button id="sample">Copy a sample image</button> and paste it.
         The choices on the left change how the document behaves; the address keeps them.
@@ -460,15 +460,6 @@ function paragraphAfter(k, items = []) {
   sel = { caret: { b, o: items.length } }
 }
 
-/** Arrows off a selected figure, or from text onto one. */
-function stepFrom(b, dir) {
-  const n = b + dir
-  if (!doc[n]) return false
-  if (doc[n].kind === 'fig') sel = { fig: doc[n].k }
-  else sel = { caret: { b: n, o: dir > 0 ? 0 : doc[n].items.length } }
-  return true
-}
-
 /** Whether captions are typed under the image (always, with the hover bar). */
 const captionInPlace = () => opts.caption === 'below' || opts.controls === 'hover'
 const SIZES = [['Small', 25], ['Medium', 50], ['Large', 75], ['Full', 100]]
@@ -619,6 +610,7 @@ function normalizeText(el) { el.normalize() }
 
 let focusAlt = false, focusCaption = false
 function render() {
+  normalize()
   lastState = snapshot()
   const nums = numbers()
   editor.replaceChildren(...doc.map((blk, b) => renderBlock(blk, b, nums)))
@@ -631,7 +623,7 @@ function render() {
     cap.focus({ preventScroll: true })
     const r = document.createRange()
     r.selectNodeContents(cap)
-    r.collapse(false)
+    r.collapse(sel.capAt === 'start')
     getSelection().removeAllRanges()
     getSelection().addRange(r)
   } else if (sel.fig || sel.inl || sel.gap) {
@@ -1051,32 +1043,82 @@ function drawGap(origin) {
   overlay.append(caret)
 }
 
-/** Keys at a gap caret. */
-function gapKey(e) {
-  const k = sel.gap, before = sel.side === 'before'
-  const b = figIndex(k)
-  const key = e.key
-  if (e.metaKey || e.ctrlKey || e.altKey) return false
-  const newPara = (items, keepGap) => {
-    record()
-    const at = before ? b : b + 1
-    doc.splice(at, 0, { kind: 'text', tag: 'p', items })
-    sel = keepGap ? { gap: k, side: 'before' } : { caret: { b: at, o: items.length } }
+// --------------------------------------------------- moving past figures
+// A figure is a paragraph that holds only an image, drawn as a figure (as
+// Quarto renders one). The caret has a place either side of the image, the
+// start and end of that line (sel.gap, side): typing there puts text in the
+// line, so it's an image in a line, and Enter splits it back off; Backspace
+// and Delete join lines across it as they would any. ←/→ go before the
+// image, after it, into its caption, then on; ↑/↓ visit its line once
+// (before the image, whichever way they come), then its caption. Neither
+// selects it, any more than they'd select a word: a click, a drag over it,
+// or Shift with an arrow does.
+const hasCaption = (f) => captionInPlace() && Boolean(f.caption)
+const landing = (f) => ({ gap: f.k, side: 'before' })
+
+/** Arrive at block n by ↓ (dir 1) or ↑ (dir -1). */
+function arriveVertical(n, dir) {
+  const blk = doc[n]
+  if (!blk) return false
+  if (blk.kind === 'text') sel = { caret: { b: n, o: dir > 0 ? 0 : blk.items.length } }
+  else sel = dir < 0 && hasCaption(blk) ? { fig: blk.k, caption: true, capAt: 'end' } : landing(blk)
+  return true
+}
+/** Arrive at block n by → (dir 1) or ← (dir -1): the nearest place in reading order. */
+function arriveHorizontal(n, dir) {
+  const blk = doc[n]
+  if (!blk) return false
+  if (blk.kind === 'text') sel = { caret: { b: n, o: dir > 0 ? 0 : blk.items.length } }
+  else if (dir > 0) sel = { gap: blk.k, side: 'before' }
+  else sel = hasCaption(blk) ? { fig: blk.k, caption: true, capAt: 'end' } : { gap: blk.k, side: 'after' }
+  return true
+}
+/** Lines b and b + 1 as one, the caret where they met. */
+function joinLines(b) {
+  const one = doc[b], two = doc[b + 1]
+  if (!one || !two) return
+  record()
+  const items = (x) => (x.kind === 'text' ? x.items : [toInline(x)])
+  const o = items(one).length
+  doc.splice(b, 2, { kind: 'text', tag: one.kind === 'text' ? one.tag : 'p', items: [...items(one), ...items(two)] })
+  sel = { caret: { b, o } }
+}
+/** A paragraph that holds only an image is a figure; a caret in it, at its side. */
+function normalize() {
+  for (let b = 0; b < doc.length; b++) {
+    const blk = doc[b]
+    if (blk.kind !== 'text' || blk.tag !== 'p' || blk.items.length !== 1 || typeof blk.items[0] !== 'object') continue
+    const img = blk.items[0]
+    doc[b] = toFigure(img)
+    if (sel.caret?.b === b) sel = { gap: img.k, side: sel.caret.o === 0 ? 'before' : 'after' }
+    else if (sel.inl === img.k) sel = { fig: img.k }
   }
-  if (key === 'Enter') newPara([], before)
-  else if (key.length === 1) newPara([key], false)
-  else if ((key === 'ArrowRight' && before) || (key === 'ArrowLeft' && !before)) sel = { fig: k }
-  else if (key === 'ArrowLeft' || key === 'ArrowUp') { if (!stepFrom(b, -1)) sel = { fig: k } }
-  else if (key === 'ArrowRight' || key === 'ArrowDown') { if (!stepFrom(b, 1)) paragraphAfter(k) }
+}
+
+/** Keys at the caret beside a figure's image. */
+function gapKey(e) {
+  const k = sel.gap, before = sel.side === 'before', key = e.key
+  const b = figIndex(k), f = doc[b]
+  if (e.metaKey || e.ctrlKey || e.altKey) return false
+  if (key.length === 1) {
+    // Text in its line: an image in a line now, until Enter splits it off.
+    record()
+    doc[b] = { kind: 'text', tag: 'p', items: before ? [key, toInline(f)] : [toInline(f), key] }
+    sel = { caret: { b, o: before ? 1 : 2 } }
+  } else if (key === 'Enter') {
+    record()
+    if (before) doc.splice(b, 0, para('p'))
+    else { doc.splice(b + 1, 0, para('p')); sel = { caret: { b: b + 1, o: 0 } } }
+  } else if (e.shiftKey && ((key === 'ArrowRight' && before) || (key === 'ArrowLeft' && !before) || key === 'ArrowUp' || key === 'ArrowDown')) sel = { fig: k }
+  else if (key === 'ArrowRight') { if (before) sel = { gap: k, side: 'after' }; else if (hasCaption(f)) sel = { fig: k, caption: true, capAt: 'start' }; else arriveHorizontal(b + 1, 1) }
+  else if (key === 'ArrowLeft') { if (!before) sel = { gap: k, side: 'before' }; else arriveHorizontal(b - 1, -1) }
+  else if (key === 'ArrowDown') { if (hasCaption(f)) sel = { fig: k, caption: true, capAt: 'start' }; else arriveVertical(b + 1, 1) }
+  else if (key === 'ArrowUp') arriveVertical(b - 1, -1)
+  // Towards the image, Backspace and Delete select it first, as in a line.
   else if ((key === 'Delete' && before) || (key === 'Backspace' && !before)) sel = { fig: k }
-  else if (key === 'Backspace' || key === 'Delete') {
-    // Away from the figure: an empty paragraph there goes; else the caret
-    // goes into what's there.
-    const n = before ? b - 1 : b + 1
-    const there = doc[n]
-    if (there?.kind === 'text' && there.items.length === 0) { record(); doc.splice(n, 1) }
-    else if (there) stepFrom(b, before ? -1 : 1)
-  } else if (key === 'Escape') sel = { fig: k }
+  else if (key === 'Backspace') { if (b > 0) joinLines(b - 1) }
+  else if (key === 'Delete') joinLines(b)
+  else if (key === 'Escape') sel = { fig: k }
   else return false
   e.preventDefault()
   render()
@@ -1623,7 +1665,9 @@ editor.addEventListener('input', (e) => {
       return
     }
   }
-  if (!tidy) render()
+  // A line left holding only an image is a figure now.
+  const lone = doc.some((blk) => blk.kind === 'text' && blk.tag === 'p' && blk.items.length === 1 && typeof blk.items[0] === 'object')
+  if (!tidy || lone) render()
   else { renderSource(); renderToolbar() }
 })
 
@@ -1646,13 +1690,23 @@ editor.addEventListener('keydown', (e) => {
       if (doc[b + 1]?.kind === 'text') sel = { caret: { b: b + 1, o: 0 } }
       else paragraphAfter(k)
       render()
-    } else if ((e.key === 'Backspace' && !cap.textContent) || e.key === 'Escape' || (e.key === 'ArrowUp' && atEdge(cap, -1))) {
+    } else if ((e.key === 'Backspace' && !cap.textContent) || e.key === 'Escape') {
       e.preventDefault()
       sel = { fig: k }
       render()
-    } else if ((e.key === 'ArrowDown' || e.key === 'ArrowRight') && atEdge(cap, 1)) {
+    } else if (e.key === 'ArrowUp' && atEdge(cap, -1)) {
       e.preventDefault()
-      if (stepFrom(b, 1)) render()
+      sel = landing(doc[b])
+      render()
+    } else if (e.key === 'ArrowDown' && atEdge(cap, 1)) {
+      e.preventDefault()
+      if (arriveVertical(b + 1, 1)) render()
+    } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.shiftKey) {
+      // Out of its ends: back beside the image, or on to what's next.
+      const s = getSelection()
+      const at = s.rangeCount && s.isCollapsed ? caretOffset(cap, s.focusNode, s.focusOffset) : -1
+      if (e.key === 'ArrowLeft' && at === 0) { e.preventDefault(); sel = { gap: k, side: 'after' }; render() }
+      else if (e.key === 'ArrowRight' && at === cap.textContent.length) { e.preventDefault(); if (arriveHorizontal(b + 1, 1)) render() }
     }
     return
   }
@@ -1692,15 +1746,18 @@ editor.addEventListener('keydown', (e) => {
       render()
       return
     }
-    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); if (stepFrom(b, -1)) render(); return }
-    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+    // ← and → leave it at that side, as a selection collapses; ↑ and ↓ move
+    // on, ↓ through its caption.
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); sel = { gap: img.fig.k, side: e.key === 'ArrowLeft' ? 'before' : 'after' }; render(); return }
+    if (e.key === 'ArrowUp') { e.preventDefault(); if (arriveVertical(b - 1, -1)) render(); return }
+    if (e.key === 'ArrowDown') {
       e.preventDefault()
-      // ↓ goes through its caption, if it has one, as it would a line.
-      if (captionInPlace() && e.key === 'ArrowDown' && img.fig.caption) { sel.caption = true; render(); return }
-      if (stepFrom(b, 1) || (paragraphAfter(img.fig.k), true)) render()
+      if (hasCaption(img.fig)) sel = { fig: img.fig.k, caption: true, capAt: 'start' }
+      else if (!arriveVertical(b + 1, 1)) return
+      render()
       return
     }
-    if (e.key === 'Escape') { e.preventDefault(); stepFrom(b, 1) || paragraphAfter(img.fig.k); render(); return }
+    if (e.key === 'Escape') { e.preventDefault(); sel = { gap: img.fig.k, side: 'after' }; render(); return }
     e.preventDefault()
     return
   }
@@ -1709,11 +1766,13 @@ editor.addEventListener('keydown', (e) => {
   const caret = readCaret()
   if (!caret) return
   const { b, o } = caret
-  const blk = doc[b]
+  let blk = doc[b]
   if (e.key === 'Enter') {
     e.preventDefault()
-    readDocument()
     if (!caret.collapsed) { document.execCommand('delete'); return }
+    // The paragraph as the page has it now (reading it makes new blocks).
+    readDocument()
+    blk = doc[b]
     record()
     const rest = blk.items.splice(o)
     doc.splice(b + 1, 0, { kind: 'text', tag: blk.tag === 'h2' && rest.length === 0 ? 'p' : blk.tag, items: rest })
@@ -1726,9 +1785,8 @@ editor.addEventListener('keydown', (e) => {
     e.preventDefault()
     const prev = doc[b - 1]
     if (prev.kind === 'fig') {
-      // Into a figure: select it first. An empty paragraph goes.
-      if (blk.items.length === 0) { record(); doc.splice(b, 1) }
-      sel = { fig: prev.k }
+      // Onto a figure's line, as onto any: the image is in this line now.
+      joinLines(b - 1)
     } else {
       record()
       sel = { caret: { b: b - 1, o: prev.items.length } }
@@ -1741,7 +1799,7 @@ editor.addEventListener('keydown', (e) => {
   if (e.key === 'Delete' && o === blk.items.length && doc[b + 1]) {
     e.preventDefault()
     const next = doc[b + 1]
-    if (next.kind === 'fig') sel = { fig: next.k }
+    if (next.kind === 'fig') joinLines(b)
     else { record(); blk.items.push(...next.items); doc.splice(b + 1, 1); sel = { caret: { b, o } } }
     render()
     return
@@ -1753,15 +1811,22 @@ editor.addEventListener('keydown', (e) => {
   // character; plain arrows go past it like one.
   const over = e.shiftKey && !mod && !e.altKey ? (e.key === 'ArrowRight' ? blk.items[o] : e.key === 'ArrowLeft' ? blk.items[o - 1] : null) : null
   if (over && typeof over === 'object') { e.preventDefault(); moved = true; sel = { inl: over.k }; render(); return }
-  // Arrows onto a figure from the line next to it.
+  // Arrows onto a figure from the line next to it: see arriveVertical and
+  // arriveHorizontal. With Shift, over it: it's selected.
+  if (mod || e.altKey) return
   const el = blockEl(b)
-  if ((e.key === 'ArrowDown' && atEdge(el, 1)) || (e.key === 'ArrowRight' && o === blk.items.length)) {
-    if (doc[b + 1]?.kind === 'fig') { e.preventDefault(); sel = { fig: doc[b + 1].k }; render() }
-  } else if ((e.key === 'ArrowUp' && atEdge(el, -1)) || (e.key === 'ArrowLeft' && o === 0)) {
-    // ↑ goes through a caption on the way, as ↓ does; ← goes to the figure.
-    const f = doc[b - 1]
-    if (f?.kind === 'fig') { e.preventDefault(); sel = e.key === 'ArrowUp' && f.caption && captionInPlace() ? { fig: f.k, caption: true } : { fig: f.k }; render() }
-  }
+  const down = (e.key === 'ArrowDown' && atEdge(el, 1)) || (e.key === 'ArrowRight' && o === blk.items.length)
+  const up = (e.key === 'ArrowUp' && atEdge(el, -1)) || (e.key === 'ArrowLeft' && o === 0)
+  const f = down ? doc[b + 1] : up ? doc[b - 1] : null
+  if (f?.kind !== 'fig') return
+  e.preventDefault()
+  moved = true
+  if (e.shiftKey) sel = { fig: f.k }
+  else if (e.key === 'ArrowDown') arriveVertical(b + 1, 1)
+  else if (e.key === 'ArrowUp') arriveVertical(b - 1, -1)
+  else if (e.key === 'ArrowRight') arriveHorizontal(b + 1, 1)
+  else arriveHorizontal(b - 1, -1)
+  render()
 })
 
 /** Whether the caret is on the first (dir < 0) or last line of `el`. */
