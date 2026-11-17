@@ -83,6 +83,7 @@ These live in repo settings and rarely change. Verify with
 | `QUARTO_HUB_MCP_CLIENT_ID` | secret | Bundled Google OAuth client id (public client; secret only to dodge `GOCSPX-` scanners). |
 | `QUARTO_HUB_MCP_CLIENT_SECRET` | secret | Bundled client secret (same). |
 | `QUARTO_HUB_SERVER` | variable | `wss://quarto-hub.com/ws`. |
+| `HOMEBREW_TAP_TOKEN` | secret | Fine-grained token, Contents read/write on `quarto-dev/homebrew-tap` only. The `homebrew-tap` job pushes the formula with it; unset, that job skips (the `homebrew-formula` and `homebrew-test` jobs still run). |
 | PyPI trusted publisher | pypi.org / test.pypi.org | Project `quarto2`, repo `quarto-dev/q2`, workflow `publish-pypi.yml`, environments `pypi` / `testpypi`. No token or secret exists; uploads authenticate through GitHub OIDC. |
 | `pypi`, `testpypi` | GitHub environments | Targets of the upload job in `publish-pypi.yml`. `pypi` has a required reviewer for now. |
 

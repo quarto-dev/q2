@@ -25,6 +25,7 @@ pub mod extension_config_spans;
 pub mod format_resolution_cli;
 pub mod founding_crash_config_span_e2e;
 pub mod get_config_cli;
+pub mod homebrew_formula;
 pub mod hub_lsp_cli;
 pub mod json_errors;
 pub mod julia_targets_cli;
