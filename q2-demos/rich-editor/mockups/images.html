@@ -1,0 +1,1357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image mockups</title>
+<style>
+:root { --ink:#212529; --muted:#6c757d; --faint:#adb5bd; --line:#dee2e6; --accent:#2780e3; --chrome:#f6f7f9;
+  --chip:#eef0f3; --sel:#9ec5f0; --sel-bg:#e7f1fc; --sel-ink:#145ca8; --warn:#b07b00; --warn-bg:#fff4d6; }
+* { box-sizing: border-box; }
+body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:#fff; }
+.app { display:grid; grid-template-columns: 280px 1fr 340px; height:100vh; }
+aside { background:var(--chrome); border-right:1px solid var(--line); padding:16px; overflow:auto; font-size:14px; }
+aside h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:18px 0 8px; }
+aside h2:first-child { margin-top:0; }
+.opt { display:block; padding:8px 10px; border-radius:6px; cursor:pointer; margin-bottom:4px; }
+.opt:hover { background:#eceef1; }
+.opt.on { background:#fff; box-shadow:0 0 0 1px var(--line); }
+.opt b { display:block; font-weight:600; }
+.opt span { color:var(--muted); font-size:12.5px; line-height:1.35; display:block; margin-top:2px; }
+.opt span.why { font-style:italic; color:#8a6d00; }
+details.archived { margin-top:22px; border-top:1px solid var(--line); padding-top:12px; }
+details.archived summary { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); cursor:pointer; margin-bottom:8px; }
+.reset { margin-top:12px; font:inherit; font-size:13px; padding:4px 10px; border:1px solid var(--line); background:#fff; border-radius:5px; cursor:pointer; }
+
+/* Toolbar, as in the editor (and inlines.html). */
+.toolbar { display:flex; gap:3px; align-items:center; padding:7px 16px; border-bottom:1px solid var(--line); background:#fff; position:relative; min-height:45px; flex-wrap:wrap; }
+.toolbar button, .bubble button { font:13px system-ui, sans-serif; border:1px solid transparent; background:none; padding:4px 9px; border-radius:5px; cursor:pointer; color:#343a40; display:inline-flex; align-items:center; gap:6px; }
+.toolbar button:hover:not(:disabled), .bubble button:hover:not(:disabled) { background:#f1f3f5; }
+.toolbar button:disabled, .bubble button:disabled { color:var(--faint); cursor:default; }
+.toolbar button[aria-pressed="true"], .bubble button[aria-pressed="true"] { background:var(--sel-bg); border-color:#c5dcf5; color:var(--sel-ink); }
+.toolbar .style { width:150px; justify-content:space-between; border-color:var(--line); }
+.toolbar .style svg { width:8px; height:8px; }
+button.icon { padding:4px !important; position:relative; color:#444746; }
+button.icon svg { width:20px; height:20px; display:block; }
+button.icon[data-tip]::after { content:attr(data-tip); position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%);
+  background:#343a40; color:#fff; font:12px/1 system-ui, sans-serif; padding:5px 7px; border-radius:4px; white-space:nowrap;
+  pointer-events:none; visibility:hidden; z-index:40; }
+button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0s .35s; }
+.toolbar .sep, .bubble .bsep { width:1px; height:20px; background:var(--line); margin:0 6px; flex:none; }
+.toolbar .ctx { font-size:12px; color:var(--muted); padding:0 4px 0 2px; }
+
+.center { display:flex; flex-direction:column; min-width:0; min-height:0; }
+.scroller { flex:1; overflow:auto; position:relative; }
+.tips { max-width:760px; margin:16px auto 0; padding:9px 14px; background:#fff8e1; border:1px solid #f3e1a6; border-radius:6px; font-size:13px; color:#5c4b00; line-height:1.6; }
+.tips kbd, .tips code { font:11.5px ui-monospace, Menlo, monospace; border:1px solid #d9c98f; border-radius:3px; padding:0 4px; background:#fffdf3; }
+.tips kbd { border-bottom-width:2px; }
+.tips button { font:inherit; font-size:12px; padding:1px 7px; border:1px solid #d9c98f; border-radius:4px; background:#fffdf3; color:#5c4b00; cursor:pointer; }
+.source { border-left:1px solid var(--line); background:var(--chrome); padding:16px; overflow:auto; }
+.source h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:18px 0 10px; }
+.source h2:first-child { margin-top:0; }
+.source .blk { font:12.5px/1.5 ui-monospace, Menlo, monospace; white-space:pre-wrap; margin:0 0 12px; padding:1px 4px; border-radius:3px; min-height:1lh; overflow-wrap:anywhere; }
+.source .cur { background:var(--sel-bg); }
+.source .files { font:12.5px/1.7 ui-monospace, Menlo, monospace; color:#495057; }
+.source .files .new { color:#2b8a3e; }
+
+/* The document. */
+.page { position:relative; max-width:800px; margin:0 auto; padding:36px 40px 240px; }
+.body { outline:none; font-size:17px; line-height:1.5; }
+.body > :first-child { margin-top:0; }
+.body p { margin:0 0 17px; min-height:1lh; white-space:pre-wrap; }
+.body h2 { font-size:1.6rem; font-weight:600; line-height:1.2; margin:1.8rem 0 .75rem; border-bottom:1px solid var(--line); padding-bottom:.25rem; white-space:pre-wrap; }
+
+/* A figure: an image on a line of its own. It can't be edited as text; its
+   caption can (in "Under the image" mode). */
+.body figure { margin:0 0 20px; display:flex; flex-direction:column; align-items:center; user-select:none; }
+.body figure.left { align-items:flex-start; }
+.body figure.right { align-items:flex-end; }
+.body figure .frame { position:relative; max-width:100%; line-height:0; border-radius:2px; cursor:default; }
+.body figure img { max-width:100%; display:block; }
+.body figure.sel .frame, .body .inl.sel { outline:2px solid var(--accent); outline-offset:2px; }
+.body figure:not(.sel) .frame:hover { outline:2px solid var(--sel); outline-offset:2px; }
+.body figcaption { font-size:.9em; color:#5c636a; margin-top:8px; text-align:center; outline:none; min-width:12ch; line-height:1.4; user-select:text; white-space:pre-wrap; }
+.body figure.left figcaption { text-align:left; }
+.body figure.right figcaption { text-align:right; }
+.body figcaption[data-num]::before { content:attr(data-num); font-weight:600; color:#495057; }
+.body figcaption.empty::after { content:"Add a caption"; color:var(--faint); }
+.body figcaption.hide { display:none; }
+.body .missing { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; width:420px; max-width:100%; height:180px;
+  background:repeating-linear-gradient(135deg, #f8f9fa 0 10px, #f1f3f5 10px 20px); border:1px dashed var(--faint); color:var(--muted); font-size:13px; line-height:1.3; }
+.body .missing svg { width:28px; height:28px; }
+.body .missing code { font:12px ui-monospace, Menlo, monospace; }
+/* An image with no alt text: a mark on its corner. */
+.alt-mark { position:absolute; top:6px; left:6px; font:600 10px/1 system-ui, sans-serif; letter-spacing:.04em; background:var(--warn-bg); color:var(--warn);
+  border:1px solid #f0d58a; border-radius:3px; padding:3px 4px; pointer-events:auto; cursor:pointer; }
+.inl .alt-mark { top:-6px; left:-6px; font-size:8px; padding:1px 2px; }
+
+/* An image in a line of text. */
+.body .inl { display:inline-block; position:relative; vertical-align:middle; line-height:0; border-radius:2px; cursor:default; }
+.body .inl img { display:block; max-width:100%; }
+.body .inl:not(.sel):hover { outline:2px solid var(--sel); outline-offset:2px; }
+
+/* Where a dragged file would go. */
+.drop-line { position:absolute; height:2px; background:var(--accent); pointer-events:none; z-index:5; border-radius:1px; }
+.drop-caret { position:absolute; width:2px; background:var(--accent); pointer-events:none; z-index:5; }
+
+/* Things laid over the page. */
+.overlay { position:absolute; inset:0; pointer-events:none; z-index:3; }
+.bubble { position:absolute; pointer-events:auto; background:#fff; border:1px solid var(--line); border-radius:7px; box-shadow:0 4px 14px rgba(0,0,0,.12);
+  padding:4px 6px; display:flex; align-items:center; gap:2px; font-size:13px; white-space:nowrap; z-index:10; }
+.bubble.wrap { flex-wrap:wrap; white-space:normal; max-width:720px; row-gap:4px; }
+.seg { display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+.seg button { border-radius:0 !important; border:0 !important; padding:3px 8px !important; }
+.seg button + button { border-left:1px solid var(--line) !important; }
+.seg button[aria-pressed="true"] { background:var(--sel-bg); color:var(--sel-ink); }
+.field { font:13px system-ui, sans-serif; padding:3px 7px; border:1px solid var(--line); border-radius:4px; outline:none; width:170px; }
+.field:focus { border-color:var(--accent); }
+.field.need { border-color:#f0d58a; background:var(--warn-bg); }
+.toolbar .field { width:130px !important; }
+.check { font-size:13px; display:inline-flex; align-items:center; gap:5px; padding:0 6px; color:#343a40; cursor:pointer; }
+.check.off { color:var(--faint); cursor:default; }
+.handle { position:absolute; width:12px; height:12px; background:#fff; border:2px solid var(--accent); border-radius:2px; pointer-events:auto; z-index:6; }
+.handle.l { cursor:nesw-resize; }
+.handle.r { cursor:nwse-resize; }
+.size-label { position:absolute; pointer-events:none; background:#343a40; color:#fff; font:12px/1 system-ui, sans-serif; padding:4px 6px; border-radius:4px; z-index:7; }
+
+/* The insert-an-image panel. */
+.insert { flex-direction:column; align-items:stretch; padding:0; width:420px; white-space:normal; }
+.insert .tabs { display:flex; border-bottom:1px solid var(--line); padding:0 6px; }
+.insert .tabs button { border-radius:0; border:0; border-bottom:2px solid transparent; padding:8px 10px; color:var(--muted); }
+.insert .tabs button[aria-selected="true"] { color:var(--ink); border-bottom-color:var(--accent); }
+.insert .pane { padding:12px; display:flex; flex-direction:column; gap:8px; }
+.insert .drop { border:1.5px dashed var(--faint); border-radius:6px; padding:22px; text-align:center; color:var(--muted); line-height:1.5; }
+.insert .drop.over { border-color:var(--accent); background:var(--sel-bg); }
+.insert .drop button { color:var(--accent); padding:0; text-decoration:underline; }
+.insert .note { font-size:12px; color:var(--muted); }
+.insert .note code { font:11.5px ui-monospace, Menlo, monospace; }
+.insert .grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+.insert .grid button { flex-direction:column; align-items:stretch; padding:4px; border:1px solid var(--line); gap:4px; }
+.insert .grid button:hover { border-color:var(--sel); }
+.insert .grid img { width:100%; height:70px; object-fit:contain; background:#f8f9fa; }
+.insert .grid span { font:11px ui-monospace, Menlo, monospace; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.insert .row { display:flex; gap:6px; }
+.insert .row .field { flex:1; width:auto; }
+.insert .apply { background:var(--accent); color:#fff; }
+.insert .apply:hover { background:#1f6fc5 !important; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside id="options"></aside>
+  <div class="center">
+    <div class="toolbar" id="toolbar"></div>
+    <div class="scroller" id="scroller">
+      <div class="tips">
+        Click an image to select it. Paste or drop an image file into the text, or type <code>![a picture](images/sales.svg)</code>.
+        With an image selected: <kbd>⌫</kbd> removes it, <kbd>↵</kbd> starts a paragraph after it, arrows move off it, <kbd>⌘Z</kbd> undoes.
+        No image file to hand? <button id="sample">Copy a sample image</button> and paste it.
+        The choices on the left change how the document behaves; the address keeps them.
+      </div>
+      <div class="page" id="page">
+        <div class="body" id="editor" contenteditable="true" spellcheck="false"></div>
+        <div class="overlay" id="overlay"></div>
+      </div>
+    </div>
+  </div>
+  <div class="source"><h2>Source (qmd)</h2><div id="source-blocks"></div><h2>Project files</h2><div class="files" id="files"></div></div>
+</div>
+<input type="file" id="file" accept="image/*" hidden>
+
+<script>
+// ---------------------------------------------------------------- options
+const GROUPS = [
+  { key: 'insert', title: 'Adding an image', options: [
+    ['panel', 'A panel from the toolbar', 'The image button opens a panel: upload a file, pick an image already in the project, or give a link. As in Google Docs.'],
+    ['picker', 'Straight to the file picker', "The image button opens the computer's file picker; the image goes in selected, ready for a caption. Images already in the project are only reachable by typing their path. As in Notion and Word."],
+  ]},
+  { key: 'place', title: 'With the caret in a line of text', options: [
+    ['block', 'Its own block', 'A new image always goes on a line of its own, splitting the paragraph at the caret. An image in a line of text from the source is still shown in the line. As in Notion.'],
+    ['inline', 'In the line', 'A new image goes where the caret is: in a line of text it sits in the line like a word; in an empty paragraph it\'s a figure. As in Google Docs and Word ("In line with text").'],
+  ]},
+  { key: 'controls', title: "A selected image's controls", options: [
+    ['popover', 'Under the image', 'Size, alignment, alt text and the rest in a bar under the selected image. As in Google Docs and Notion.'],
+    ['toolbar', 'In the toolbar', 'The toolbar swaps its text buttons for the image\'s while one is selected. As in Word\'s "Picture Format".'],
+  ]},
+  { key: 'resize', title: 'Resizing', options: [
+    ['both', 'Handles and sizes', 'Drag a corner (it snaps to a quarter, a third, a half…) or pick Small, Medium, Large or Full. Either writes width="…%".'],
+    ['presets', 'Sizes only', 'Small, Medium, Large or Full: four widths, nothing in between. Fewer choices, tidier documents.'],
+    ['handles', 'Handles only', 'Drag a corner; the label shows the width as you go.'],
+  ]},
+  { key: 'caption', title: 'Captions', options: [
+    ['below', 'Under the image', 'Typed in place under the image, where it shows. Selecting an image without one shows "Add a caption". As in Google Docs and Notion.'],
+    ['controls', 'In the controls', "A field with the image's other controls; the caption under the image is just shown."],
+  ]},
+  { key: 'alt', title: 'Alt text', options: [
+    ['field', 'Its own field', 'A field in the controls, written as fig-alt. An image without it has a mark on its corner until it has some.'],
+    ['caption', 'The caption, unless asked', 'An image with a caption uses it, as qmd does when there\'s no fig-alt. An image without a caption, or in a line of text, has the field.'],
+  ]},
+  { key: 'xref', title: 'Figure numbers', options: [
+    ['toggle', 'A "Numbered" check box', 'Numbering a captioned figure gives it a #fig- label (from its caption) and "Figure 1:" before its caption, so @fig-… can refer to it.'],
+    ['none', 'Not in the editor yet', 'A label written in the source is kept and numbered, but the editor has no way to add one.'],
+  ]},
+]
+const opts = Object.fromEntries(GROUPS.map((g) => [g.key, g.options[0][0]]))
+for (const [k, v] of new URLSearchParams(location.hash.slice(1))) if (k in opts) opts[k] = v
+
+function renderOptions() {
+  const aside = document.getElementById('options')
+  aside.replaceChildren()
+  // An option with a fourth entry was decided against: it's kept, with that
+  // reason, under "Archived".
+  const card = (g, [value, name, why, archived], into) => {
+    const el = document.createElement('label')
+    el.className = 'opt' + (opts[g.key] === value ? ' on' : '')
+    el.innerHTML = '<b></b><span></span>'
+    el.children[0].textContent = archived ? `${g.title}: ${name}` : name
+    el.children[1].textContent = why
+    if (archived) el.append(Object.assign(document.createElement('span'), { className: 'why', textContent: archived }))
+    el.onclick = () => {
+      opts[g.key] = value
+      history.replaceState(null, '', '#' + new URLSearchParams(opts))
+      renderOptions()
+      panel = null
+      render()
+    }
+    into.append(el)
+  }
+  for (const g of GROUPS) {
+    aside.append(Object.assign(document.createElement('h2'), { textContent: g.title }))
+    for (const o of g.options) if (!o[3]) card(g, o, aside)
+  }
+  const reset = Object.assign(document.createElement('button'), { className: 'reset', textContent: 'Reset the document' })
+  reset.onclick = () => { start(); render() }
+  aside.append(reset)
+  const archived = GROUPS.flatMap((g) => g.options.filter((o) => o[3]).map((o) => [g, o]))
+  if (archived.length) {
+    const box = document.createElement('details')
+    box.className = 'archived'
+    box.innerHTML = '<summary>Archived</summary>'
+    for (const [g, o] of archived) { card(g, o, box); if (opts[g.key] === o[0]) box.open = true }
+    aside.append(box)
+  }
+}
+
+// ------------------------------------------------------------ the project
+// The images in the project, by path. A path with no entry is missing.
+const svg = (w, h, body) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${body}</svg>`)
+const SALES = svg(640, 360, `<rect width="640" height="360" fill="#fff"/>
+  <g stroke="#dee2e6">${[0, 1, 2, 3, 4].map((i) => `<line x1="60" x2="610" y1="${300 - i * 60}" y2="${300 - i * 60}"/>`).join('')}</g>
+  <g fill="#6c757d" font-family="system-ui,sans-serif" font-size="14" text-anchor="end">${[0, 1, 2, 3, 4].map((i) => `<text x="50" y="${305 - i * 60}">${i * 25}</text>`).join('')}</g>
+  ${[['Q1', 70], ['Q2', 110], ['Q3', 150], ['Q4', 205]].map(([q, v], i) => `<rect x="${95 + i * 130}" y="${300 - v * 2.4}" width="80" height="${v * 2.4}" fill="#2780e3"/><text x="${135 + i * 130}" y="325" fill="#495057" font-family="system-ui,sans-serif" font-size="15" text-anchor="middle">${q}</text>`).join('')}`)
+const MOUNTAINS = svg(800, 450, `<defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4b183"/><stop offset=".6" stop-color="#fde2c4"/></linearGradient></defs>
+  <rect width="800" height="450" fill="url(#s)"/><circle cx="560" cy="190" r="48" fill="#fff2d9"/>
+  <path d="M0 330 L150 170 L250 260 L380 120 L520 290 L620 210 L800 330 V450 H0Z" fill="#6b7f99"/>
+  <path d="M0 380 L120 300 L260 360 L420 260 L600 370 L720 320 L800 360 V450 H0Z" fill="#3e4f66"/>
+  <path d="M380 120 L415 170 L398 165 L380 185 L362 162 L348 160Z" fill="#fff"/>`)
+const LOGO = svg(110, 32, `<circle cx="16" cy="16" r="14" fill="#75AADB"/><path d="M16 2 A14 14 0 0 1 30 16 H16Z" fill="#4a7fb5"/><path d="M2 16 A14 14 0 0 0 16 30 V16Z" fill="#4a7fb5"/>
+  <text x="38" y="23" font-family="system-ui,sans-serif" font-size="18" font-weight="600" fill="#447099">quarto</text>`)
+const SAMPLE = svg(600, 400, `<rect width="600" height="400" fill="#e7f5ee"/><circle cx="300" cy="200" r="120" fill="#40c057"/><circle cx="260" cy="170" r="16" fill="#fff"/><circle cx="340" cy="170" r="16" fill="#fff"/><path d="M240 240 Q300 290 360 240" stroke="#fff" stroke-width="14" fill="none" stroke-linecap="round"/>`)
+let files
+
+// ------------------------------------------------------------------ model
+// The document is a list of blocks. A text block (p, h2) holds `items`: one
+// character each, or an image in the line. A figure is an image on a line of
+// its own, with a caption.
+let nextKey = 1
+const key = () => nextKey++
+const text = (s) => s.split('')
+const inline = (src, alt, height = null) => ({ k: key(), src, alt, height })
+const para = (tag, ...parts) => ({ kind: 'text', tag, items: parts.flatMap((p) => (typeof p === 'string' ? text(p) : [p])) })
+const figure = (src, f = {}) => ({ kind: 'fig', k: key(), src, alt: '', caption: '', id: null, width: null, align: 'center', ...f })
+
+let doc, sel, hist, panel
+// `sel` is where the caret or selection is: { caret: {b, o} }, a text range
+// left to the browser ({ range: true }), a selected figure ({ fig: k }), a
+// selected image in a line ({ inl: k }), or the caret in a figure's caption
+// ({ fig: k, caption: true }).
+function start() {
+  files = { 'images/sales.svg': SALES, 'images/mountains.svg': MOUNTAINS, 'images/logo.svg': LOGO }
+  nextKey = 1
+  doc = [
+    para('h2', 'Figures'),
+    para('p', 'A figure is an image on a line of its own. Click one to select it, then resize it, align it, or change its caption.'),
+    figure('images/sales.svg', { caption: 'Sales by quarter', id: 'fig-sales', width: 75, alt: 'Bar chart of sales by quarter, rising each quarter from about 30 to about 85.' }),
+    para('p', 'Put the caret at the start of this paragraph and press Backspace, or select the picture below and press Delete. It has no caption and no alt text yet.'),
+    figure('images/mountains.svg', { width: 50 }),
+    para('h2', 'Images in a line'),
+    para('p', 'The ', inline('images/logo.svg', 'Quarto', '1.4em'), ' logo sits in the line like a word. Put the caret in the middle of this sentence and add an image to see where it goes.'),
+    para('h2', 'A missing image'),
+    figure('images/diagram.png', { caption: 'How the parts fit together', alt: 'A diagram of the system.' }),
+    para('p', 'Its file isn\'t in the project: it shows where it was, with a way to replace it.'),
+  ]
+  sel = { caret: { b: 1, o: 0 } }
+  hist = { past: [], future: [], typing: false, at: 0 }
+  panel = null
+}
+
+const figByKey = (k) => doc.find((blk) => blk.kind === 'fig' && blk.k === k)
+const figIndex = (k) => doc.findIndex((blk) => blk.kind === 'fig' && blk.k === k)
+function inlineByKey(k) {
+  for (let b = 0; b < doc.length; b++) {
+    if (doc[b].kind !== 'text') continue
+    const o = doc[b].items.findIndex((x) => typeof x === 'object' && x.k === k)
+    if (o >= 0) return { b, o, img: doc[b].items[o] }
+  }
+  return null
+}
+/** The image the controls are for: a figure or an image in a line. */
+function selectedImage() {
+  if (sel.fig) { const f = figByKey(sel.fig); return f && { fig: f } }
+  if (sel.inl) { const at = inlineByKey(sel.inl); return at && { inl: at.img, at } }
+  return null
+}
+
+// ---------------------------------------------------------------- history
+const snapshot = () => JSON.stringify({ doc, sel, nextKey })
+function restore(s) { ;({ doc, sel, nextKey } = JSON.parse(s)); hist.typing = false; panel = null }
+/** Before a change. Typing in a run is one step. */
+function record(typing = false) {
+  const now = Date.now()
+  const merge = typing && hist.typing && now - hist.at < 1500
+  hist.typing = typing
+  hist.at = now
+  if (merge) return
+  hist.past.push(lastState ?? snapshot())
+  hist.future = []
+}
+function undo() { if (hist.past.length) { hist.future.push(snapshot()); restore(hist.past.pop()); render() } }
+function redo() { if (hist.future.length) { hist.past.push(snapshot()); restore(hist.future.pop()); render() } }
+// The state as it was rendered last, since the browser has already changed
+// the page by the time an `input` event comes.
+let lastState = null
+
+// ------------------------------------------------------------------ edits
+/** Put an image in at the caret (or at `at`), as the options say. */
+function insertImage(src, at = sel.caret) {
+  record()
+  panel = null
+  if (!at) {
+    // No caret: after the selected figure, or at the end.
+    const b = sel.fig ? figIndex(sel.fig) + 1 : doc.length
+    doc.splice(b, 0, figure(src))
+    return selectFigure(doc[b].k, true)
+  }
+  const blk = doc[at.b]
+  if (blk.kind !== 'text') { doc.splice(at.b + 1, 0, figure(src)); return selectFigure(doc[at.b + 1].k, true) }
+  const empty = blk.items.length === 0
+  if (opts.place === 'inline' && !empty) {
+    // Text height, so it doesn't push the line apart: written down, since
+    // without a height it renders at its own size.
+    const img = inline(src, '', TEXT_HEIGHT)
+    blk.items.splice(at.o, 0, img)
+    sel = { inl: img.k }
+    return
+  }
+  // A line of its own: the text before the caret, the figure, the text after,
+  // without the spaces at the split.
+  const before = blk.items.slice(0, at.o), after = blk.items.slice(at.o)
+  while (before.at(-1) === ' ') before.pop()
+  while (after[0] === ' ') after.shift()
+  const fig = figure(src)
+  const out = []
+  if (before.length) out.push({ ...blk, items: before })
+  out.push(fig)
+  if (after.length || at.b === doc.length - 1) out.push({ kind: 'text', tag: before.length || blk.tag === 'p' ? 'p' : blk.tag, items: after })
+  doc.splice(at.b, 1, ...out)
+  selectFigure(fig.k, true)
+}
+
+function selectFigure(k, fresh = false) {
+  sel = { fig: k }
+  // A new image, in place-the-caption mode: straight into its caption.
+  if (fresh && opts.caption === 'below') sel.caption = true
+}
+
+function removeImage() {
+  const img = selectedImage()
+  if (!img) return
+  record()
+  if (img.fig) {
+    const b = figIndex(img.fig.k)
+    doc.splice(b, 1)
+    if (!doc.some((blk) => blk.kind === 'text')) doc.push(para('p'))
+    // The caret where the figure was: the start of what followed it.
+    const next = doc.findIndex((blk, i) => i >= b && blk.kind === 'text')
+    const prev = doc.findLastIndex((blk, i) => i < b && blk.kind === 'text')
+    sel = next >= 0 ? { caret: { b: next, o: 0 } } : { caret: { b: prev, o: doc[prev].items.length } }
+  } else {
+    doc[img.at.b].items.splice(img.at.o, 1)
+    sel = { caret: { b: img.at.b, o: img.at.o } }
+  }
+}
+
+/** A new paragraph after the selected figure, the caret in it. */
+function paragraphAfter(k, items = []) {
+  record()
+  const b = figIndex(k) + 1
+  doc.splice(b, 0, { kind: 'text', tag: 'p', items })
+  sel = { caret: { b, o: items.length } }
+}
+
+/** Arrows off a selected figure, or from text onto one. */
+function stepFrom(b, dir) {
+  const n = b + dir
+  if (!doc[n]) return false
+  if (doc[n].kind === 'fig') sel = { fig: doc[n].k }
+  else sel = { caret: { b: n, o: dir > 0 ? 0 : doc[n].items.length } }
+  return true
+}
+
+const SIZES = [['Small', 25], ['Medium', 50], ['Large', 75], ['Full', 100]]
+const TEXT_HEIGHT = '1.4em'
+function setFig(k, change, typing = false) {
+  record(typing)
+  Object.assign(figByKey(k), change)
+}
+
+function slug(s) {
+  const words = s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').split(/\s+/).filter(Boolean).slice(0, 3)
+  let id = 'fig-' + (words.join('-') || 'figure')
+  for (let i = 2; doc.some((blk) => blk.kind === 'fig' && blk.id === id); i++) id = id.replace(/-\d+$/, '') + '-' + i
+  return id
+}
+
+// ----------------------------------------------------------------- files
+let pastes = 0
+function addFile(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg')
+      // A pasted image comes as "image.png": name it after the paste.
+      let name = /^image\.\w+$/.test(file.name) || !file.name ? `pasted-${++pastes}.${ext}` : file.name.toLowerCase().replace(/[^a-z0-9.-]+/g, '-')
+      let path = 'images/' + name
+      for (let i = 2; path in files && files[path] !== reader.result; i++) path = 'images/' + name.replace(/(\.\w+)$/, `-${i}$1`)
+      files[path] = reader.result
+      added.add(path)
+      resolve(path)
+    }
+    reader.readAsDataURL(file)
+  })
+}
+const added = new Set()
+
+// ----------------------------------------------------------------- render
+const editor = document.getElementById('editor')
+const overlay = document.getElementById('overlay')
+const page = document.getElementById('page')
+const scroller = document.getElementById('scroller')
+
+const ICON = (d) => `<svg viewBox="0 0 24 24" fill="currentColor"><path d="${d}"/></svg>`
+const ICONS = {
+  bold: 'M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z',
+  italic: 'M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z',
+  link: 'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z',
+  image: 'M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4.86 8.86-3 3.87L9 13.14 6 17h12l-3.86-5.14z',
+  brokenImage: 'M21 5v6.59l-3-3.01-4 4.01-4-4-4 4-3-3.01V5c0-1.1.9-2 2-2h14c1.1 0 2 .9 2 2zm-3 6.42 3 3.01V19c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2v-6.58l3 2.99 4-4 4 4 4-3.99z',
+  left: 'M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z',
+  center: 'M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z',
+  right: 'M3 21h18v-2H3v2zm6-4h12v-2H9v2zm-6-4h18v-2H3v2zm6-4h12V7H9v2zM3 3v2h18V3H3z',
+  delete: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
+  bullets: 'M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 19h14v-2H7v2zm0-6h14v-2H7v2zm0-8v2h14V5H7z',
+  quote: 'M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z',
+}
+
+/** Figure numbers, as they'd render. */
+function numbers() {
+  const out = new Map()
+  let n = 0
+  for (const blk of doc) if (blk.kind === 'fig' && blk.id && blk.caption) out.set(blk.k, ++n)
+  return out
+}
+/** Whether an image still needs alt text, under the current options. */
+function needsAlt(img, isFig) {
+  if (img.alt) return false
+  return !(opts.alt === 'caption' && isFig && img.caption)
+}
+
+function altMark(onclick) {
+  const mark = document.createElement('span')
+  mark.className = 'alt-mark'
+  mark.textContent = 'ALT'
+  mark.title = 'No alt text: select the image to add some'
+  mark.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); onclick() }
+  return mark
+}
+
+function renderImage(src) {
+  if (files[src]) { const img = document.createElement('img'); img.src = files[src]; img.draggable = false; return img }
+  const box = document.createElement('div')
+  box.className = 'missing'
+  box.innerHTML = ICON(ICONS.brokenImage) + '<span>Can\'t find</span><code></code>'
+  box.querySelector('code').textContent = src
+  return box
+}
+
+function renderBlock(blk, b, nums) {
+  if (blk.kind === 'text') {
+    const el = document.createElement(blk.tag)
+    for (const x of blk.items) {
+      if (typeof x === 'string') { el.append(x); continue }
+      const span = document.createElement('span')
+      span.className = 'inl' + (sel.inl === x.k ? ' sel' : '')
+      span.contentEditable = 'false'
+      span.dataset.k = x.k
+      const img = renderImage(x.src)
+      if (img.tagName === 'IMG') { img.alt = x.alt; if (x.height) img.style.height = x.height }
+      span.append(img)
+      if (needsAlt(x, false) && opts.alt) span.append(altMark(() => { sel = { inl: x.k }; focusAlt = true; render() }))
+      span.onmousedown = (e) => { e.preventDefault(); sel = { inl: x.k }; panel = null; editor.focus({ preventScroll: true }); render() }
+      el.append(span)
+    }
+    normalizeText(el)
+    if (blk.items.length === 0) el.append(document.createElement('br'))
+    return el
+  }
+  const fig = document.createElement('figure')
+  fig.contentEditable = 'false'
+  fig.dataset.k = blk.k
+  const selected = sel.fig === blk.k
+  fig.className = (blk.align === 'center' ? '' : blk.align) + (selected && !sel.caption ? ' sel' : '')
+  const frame = document.createElement('div')
+  frame.className = 'frame'
+  const img = renderImage(blk.src)
+  if (img.tagName === 'IMG') img.alt = blk.alt || blk.caption
+  if (blk.width) frame.style.width = blk.width + '%'
+  if (blk.width) img.style.width = '100%'
+  frame.append(img)
+  if (needsAlt(blk, true)) frame.append(altMark(() => { selectFigure(blk.k); focusAlt = true; render() }))
+  frame.onmousedown = (e) => { e.preventDefault(); sel = { fig: blk.k }; panel = null; editor.focus({ preventScroll: true }); render() }
+  fig.append(frame)
+  const cap = document.createElement('figcaption')
+  cap.textContent = blk.caption
+  if (nums.has(blk.k)) cap.dataset.num = `Figure ${nums.get(blk.k)}: `
+  if (opts.caption === 'below') {
+    cap.contentEditable = 'true'
+    if (!blk.caption) cap.className = selected ? 'empty' : 'hide'
+  } else {
+    if (!blk.caption) cap.className = 'hide'
+    cap.onmousedown = (e) => { e.preventDefault(); sel = { fig: blk.k }; focusCaption = true; editor.focus({ preventScroll: true }); render() }
+  }
+  fig.append(cap)
+  return fig
+}
+
+/** Adjacent text nodes in one, so offsets are simple. */
+function normalizeText(el) { el.normalize() }
+
+let focusAlt = false, focusCaption = false
+function render() {
+  lastState = snapshot()
+  const nums = numbers()
+  editor.replaceChildren(...doc.map((blk, b) => renderBlock(blk, b, nums)))
+  if (sel.caret) {
+    editor.focus({ preventScroll: true })
+    setCaret(sel.caret)
+  } else if (sel.caption) {
+    const cap = editor.querySelector(`figure[data-k="${sel.fig}"] figcaption`)
+    cap.focus({ preventScroll: true })
+    const r = document.createRange()
+    r.selectNodeContents(cap)
+    r.collapse(false)
+    getSelection().removeAllRanges()
+    getSelection().addRange(r)
+  } else if (sel.fig || sel.inl) {
+    if (document.activeElement === document.body || editor.contains(document.activeElement) || document.activeElement === editor) {
+      editor.focus({ preventScroll: true })
+      getSelection().removeAllRanges()
+    }
+  }
+  renderToolbar()
+  renderSource()
+  renderOverlay()
+  scrollSelectedIntoView()
+}
+
+function scrollSelectedIntoView() {
+  const el = sel.fig ? editor.querySelector(`figure[data-k="${sel.fig}"]`) : sel.inl ? editor.querySelector(`.inl[data-k="${sel.inl}"]`) : null
+  if (!el) return
+  const r = el.getBoundingClientRect(), s = scroller.getBoundingClientRect()
+  if (r.top < s.top + 8 || r.bottom > s.bottom - 80) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+}
+
+// --------------------------------------------- reading the page back in
+/** The text block element for block `b`. */
+const blockEl = (b) => editor.children[b]
+
+function caretOffset(el, node, offset) {
+  const r = document.createRange()
+  r.setStart(el, 0)
+  r.setEnd(node, offset)
+  const frag = r.cloneContents()
+  return frag.textContent.length + frag.querySelectorAll('.inl').length
+}
+
+/** Where the caret is in the model, if it's in a text block. */
+function readCaret() {
+  const s = getSelection()
+  if (!s.rangeCount || !s.focusNode) return null
+  const el = (s.focusNode.nodeType === 1 ? s.focusNode : s.focusNode.parentElement)?.closest('#editor > p, #editor > h2')
+  if (!el) return null
+  const b = [...editor.children].indexOf(el)
+  return { b, o: caretOffset(el, s.focusNode, s.focusOffset), collapsed: s.isCollapsed }
+}
+
+function setCaret({ b, o }) {
+  const el = blockEl(b)
+  if (!el) return
+  let count = 0
+  const r = document.createRange()
+  let placed = false
+  for (const [i, node] of [...el.childNodes].entries()) {
+    if (node.nodeType === 3) {
+      if (o <= count + node.length) { r.setStart(node, o - count); placed = true; break }
+      count += node.length
+    } else if (node.classList?.contains('inl')) {
+      if (o === count) { r.setStart(el, i); placed = true; break }
+      count++
+    }
+  }
+  if (!placed) r.setStart(el, el.lastChild?.nodeName === 'BR' ? el.childNodes.length - 1 : el.childNodes.length)
+  r.collapse(true)
+  const s = getSelection()
+  s.removeAllRanges()
+  s.addRange(r)
+}
+
+/** The model of a text block, from what the browser made of it. */
+function readText(el, old) {
+  const byKey = new Map(old.flatMap((blk) => (blk.kind === 'text' ? blk.items.filter((x) => typeof x === 'object') : [])).map((x) => [String(x.k), x]))
+  const items = []
+  const walk = (node) => {
+    for (const n of node.childNodes) {
+      if (n.nodeType === 3) items.push(...n.data.replace(/​/g, '').split(''))
+      else if (n.classList?.contains('inl')) { const x = byKey.get(n.dataset.k); if (x) items.push(x) }
+      else if (n.nodeName !== 'BR') walk(n)
+    }
+  }
+  walk(el)
+  return items
+}
+
+/** After the browser edits the page: the document from the page. */
+function readDocument() {
+  const old = doc
+  const out = []
+  let tidy = true
+  for (const el of editor.children) {
+    if (el.nodeName === 'FIGURE') {
+      const f = old.find((blk) => blk.kind === 'fig' && String(blk.k) === el.dataset.k)
+      if (f) out.push(f)
+      continue
+    }
+    if (el.nodeName !== 'P' && el.nodeName !== 'H2') tidy = false
+    out.push({ kind: 'text', tag: el.nodeName === 'H2' ? 'h2' : 'p', items: readText(el, old) })
+  }
+  // Text typed straight into the editor, outside any block.
+  if ([...editor.childNodes].some((n) => n.nodeType === 3 && n.data.trim())) tidy = false
+  if (out.length === 0) out.push(para('p'))
+  doc = out
+  return tidy
+}
+
+// ---------------------------------------------------------------- toolbar
+function iconButton(name, icon, pressed, action, tip = name) {
+  const button = document.createElement('button')
+  button.className = 'icon'
+  button.dataset.tip = tip
+  button.setAttribute('aria-label', name)
+  if (pressed !== null) button.setAttribute('aria-pressed', String(pressed))
+  button.innerHTML = ICON(ICONS[icon])
+  button.onmousedown = (e) => e.preventDefault()
+  if (action) button.onclick = action
+  else button.disabled = true
+  return button
+}
+const sep = (cls = 'sep') => Object.assign(document.createElement('span'), { className: cls })
+
+let imageButton = null
+function renderToolbar() {
+  const bar = document.getElementById('toolbar')
+  const style = document.createElement('button')
+  style.className = 'style'
+  style.disabled = true
+  const at = sel.caret ? doc[sel.caret.b] : null
+  const label = sel.fig ? 'Figure' : at?.tag === 'h2' ? 'Heading 2' : 'Paragraph'
+  style.innerHTML = `<span>${label}</span><svg viewBox="0 0 8 8"><path d="M1 2.5 4 5.5 7 2.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`
+  imageButton = iconButton('Image', 'image', panel?.kind === 'insert', imageCommand, 'Image')
+  const img = selectedImage()
+  if (opts.controls === 'toolbar' && img) {
+    // The image's controls in place of the text's, as a tab of their own.
+    bar.replaceChildren(Object.assign(document.createElement('span'), { className: 'ctx', textContent: img.fig ? 'Figure' : 'Image' }), ...imageControls(img, true))
+    return
+  }
+  bar.replaceChildren(style, sep(), iconButton('Bold', 'bold', false, null), iconButton('Italic', 'italic', false, null), iconButton('Link', 'link', false, null),
+    imageButton, sep(), iconButton('Bulleted list', 'bullets', null, null), iconButton('Quote', 'quote', null, null))
+}
+
+/** Do `action` from a control, then show the result. */
+function act(action) { return () => { action(); render() } }
+
+/** The controls for a selected image, in the popover or the toolbar. */
+function imageControls(img, inToolbar) {
+  const out = []
+  const fig = img.fig
+  const target = fig ?? img.inl
+  const textButton = (label, pressed, action, tip) => {
+    const b = document.createElement('button')
+    b.textContent = label
+    if (pressed !== null) b.setAttribute('aria-pressed', String(pressed))
+    if (tip) b.title = tip
+    b.onmousedown = (e) => e.preventDefault()
+    b.onclick = action
+    return b
+  }
+  if (fig) {
+    if (opts.resize !== 'handles') {
+      const seg = document.createElement('span')
+      seg.className = 'seg'
+      // Short names in the toolbar, where room is tight.
+      for (const [name, w] of SIZES) seg.append(textButton(inToolbar && w < 100 ? name[0] : name, fig.width === w, act(() => setFig(fig.k, { width: w })), `${name}: width="${w}%"`))
+      out.push(seg)
+    } else if (fig.width) {
+      out.push(textButton('Original size', null, act(() => setFig(fig.k, { width: null })), 'No width: the image at its own size, up to the page width'))
+    }
+    out.push(sep(inToolbar ? 'sep' : 'bsep'))
+    for (const a of ['left', 'center', 'right']) {
+      const b = iconButton(`Align ${a}`, a, fig.align === a, act(() => setFig(fig.k, { align: a })), a === 'center' ? 'Centre' : a[0].toUpperCase() + a.slice(1))
+      out.push(b)
+    }
+    out.push(sep(inToolbar ? 'sep' : 'bsep'))
+  }
+  if (img.inl) {
+    const seg = document.createElement('span')
+    seg.className = 'seg'
+    for (const [name, h, tip] of [['Text height', TEXT_HEIGHT, `height="${TEXT_HEIGHT}"`], ['Own size', null, 'No height: the image at its own size']])
+      seg.append(textButton(name, img.inl.height === h, act(() => { record(); img.inl.height = h }), tip))
+    out.push(seg, sep(inToolbar ? 'sep' : 'bsep'))
+  }
+  if (fig && opts.caption === 'controls') out.push(textField('Caption', fig.caption, (v) => setFig(fig.k, { caption: v }, true), 'caption'))
+  const altShown = !(opts.alt === 'caption' && fig && fig.caption)
+  if (altShown) out.push(textField('Alt text', target.alt, (v) => { record(true); target.alt = v }, 'alt', needsAlt(target, Boolean(fig))))
+  if (fig && opts.xref === 'toggle') {
+    const box = document.createElement('label')
+    box.className = 'check' + (fig.caption ? '' : ' off')
+    box.title = fig.caption ? (fig.id ? `#${fig.id}: refer to it with @${fig.id}` : 'Give it a #fig- label so it\'s numbered') : 'A figure needs a caption to be numbered'
+    const input = Object.assign(document.createElement('input'), { type: 'checkbox', checked: Boolean(fig.id && fig.caption), disabled: !fig.caption })
+    input.onchange = act(() => setFig(fig.k, { id: input.checked ? slug(fig.caption) : null }))
+    box.append(input, 'Numbered')
+    out.push(box)
+  }
+  if (img.inl) out.push(textButton('Own line', null, act(() => inlineToFigure(img)), 'Put it on a line of its own, as a figure'))
+  out.push(sep(inToolbar ? 'sep' : 'bsep'))
+  out.push(textButton('Replace…', null, () => { replaceCommand(); render() }))
+  out.push(iconButton('Remove', 'delete', null, act(removeImage), 'Remove (⌫)'))
+  return out
+}
+
+function textField(name, value, onInput, which, need = false) {
+  const input = Object.assign(document.createElement('input'), { className: 'field' + (need ? ' need' : ''), value, placeholder: name + '…' })
+  input.setAttribute('aria-label', name)
+  input.dataset.which = which
+  if (which === 'caption') input.style.width = '220px'
+  input.addEventListener('input', () => { onInput(input.value); lastState = snapshot(); input.classList.remove('need'); renderSource(); refreshCaptions() })
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation()
+    if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); editor.focus({ preventScroll: true }); render() }
+  })
+  input.addEventListener('mousedown', (e) => e.stopPropagation())
+  return input
+}
+
+/** Captions and numbers redrawn without rebuilding the controls being typed in. */
+function refreshCaptions() {
+  const nums = numbers()
+  for (const blk of doc) {
+    if (blk.kind !== 'fig') continue
+    const el = editor.querySelector(`figure[data-k="${blk.k}"]`)
+    if (!el) continue
+    const cap = el.querySelector('figcaption')
+    if (cap.textContent !== blk.caption && document.activeElement !== cap) cap.textContent = blk.caption
+    if (nums.has(blk.k)) cap.dataset.num = `Figure ${nums.get(blk.k)}: `
+    else delete cap.dataset.num
+    cap.classList.toggle('hide', !blk.caption && !(opts.caption === 'below' && sel.fig === blk.k))
+    cap.classList.toggle('empty', !blk.caption && opts.caption === 'below' && sel.fig === blk.k)
+    el.querySelector('.alt-mark')?.remove()
+    if (needsAlt(blk, true)) el.querySelector('.frame').append(altMark(() => { selectFigure(blk.k); focusAlt = true; render() }))
+  }
+}
+
+function inlineToFigure({ at }) {
+  record()
+  const blk = doc[at.b]
+  const img = blk.items[at.o]
+  const before = blk.items.slice(0, at.o), after = blk.items.slice(at.o + 1)
+  const fig = figure(img.src, { alt: img.alt })
+  const out = []
+  if (before.length) out.push({ ...blk, items: before })
+  out.push(fig)
+  if (after.length) out.push({ kind: 'text', tag: 'p', items: after })
+  doc.splice(at.b, 1, ...out)
+  sel = { fig: fig.k }
+}
+
+// ------------------------------------------------------------- inserting
+let replacing = null   // the image being replaced, when the panel or picker is for that
+function imageCommand() {
+  replacing = null
+  const caret = readCaret()
+  if (caret) sel = { caret }
+  if (opts.insert === 'picker') return pickFile()
+  panel = panel?.kind === 'insert' ? null : { kind: 'insert', tab: 'upload', anchor: 'toolbar' }
+  render()
+}
+function replaceCommand() {
+  const img = selectedImage()
+  replacing = img && (img.fig ? img.fig.k : img.inl.k)
+  if (opts.insert === 'picker') return pickFile()
+  panel = { kind: 'insert', tab: 'project', anchor: 'image' }
+}
+function pickFile() {
+  const input = document.getElementById('file')
+  input.value = ''
+  input.click()
+}
+document.getElementById('file').addEventListener('change', async (e) => {
+  const file = e.target.files[0]
+  if (file) choose(await addFile(file))
+})
+
+/** The image chosen in the panel or picker: put in, or put in place of another. */
+function choose(src) {
+  if (replacing !== null) {
+    record()
+    const f = figByKey(replacing)
+    if (f) f.src = src
+    else { const at = inlineByKey(replacing); if (at) at.img.src = src }
+    replacing = null
+    panel = null
+  } else insertImage(src)
+  render()
+}
+
+function renderInsertPanel() {
+  const box = document.createElement('div')
+  box.className = 'bubble insert'
+  box.addEventListener('mousedown', (e) => { if (e.target.nodeName !== 'INPUT') e.preventDefault() })
+  const tabs = document.createElement('div')
+  tabs.className = 'tabs'
+  for (const [tab, name] of [['upload', 'Upload'], ['project', 'From the project'], ['link', 'From a link']]) {
+    const b = Object.assign(document.createElement('button'), { textContent: name })
+    b.setAttribute('aria-selected', String(panel.tab === tab))
+    b.onclick = () => { panel.tab = tab; renderOverlay() }
+    tabs.append(b)
+  }
+  const pane = document.createElement('div')
+  pane.className = 'pane'
+  if (panel.tab === 'upload') {
+    const drop = document.createElement('div')
+    drop.className = 'drop'
+    drop.innerHTML = 'Drop an image here, or <button>choose a file</button>'
+    drop.querySelector('button').onclick = pickFile
+    drop.ondragover = (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.add('over') }
+    drop.ondragleave = () => drop.classList.remove('over')
+    drop.ondrop = async (e) => {
+      e.preventDefault(); e.stopPropagation()
+      const file = [...e.dataTransfer.files].find((f) => f.type.startsWith('image/'))
+      if (file) choose(await addFile(file))
+    }
+    const note = document.createElement('div')
+    note.className = 'note'
+    note.innerHTML = 'It\'s copied into <code>images/</code> beside the document.'
+    pane.append(drop, note)
+  } else if (panel.tab === 'project') {
+    const grid = document.createElement('div')
+    grid.className = 'grid'
+    for (const path of Object.keys(files)) {
+      const b = document.createElement('button')
+      const img = Object.assign(document.createElement('img'), { src: files[path], alt: '' })
+      b.append(img, Object.assign(document.createElement('span'), { textContent: path.replace(/^images\//, '') }))
+      b.title = path
+      b.onclick = () => choose(path)
+      grid.append(b)
+    }
+    pane.append(grid)
+  } else {
+    const row = document.createElement('div')
+    row.className = 'row'
+    const input = Object.assign(document.createElement('input'), { className: 'field', placeholder: 'https://… or a path in the project' })
+    const go = Object.assign(document.createElement('button'), { className: 'apply', textContent: replacing !== null ? 'Replace' : 'Insert' })
+    const submit = () => { const v = input.value.trim(); if (v) choose(v) }
+    go.onclick = submit
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter') { e.preventDefault(); submit() }
+      if (e.key === 'Escape') { e.preventDefault(); panel = null; render() }
+    })
+    input.addEventListener('mousedown', (e) => e.stopPropagation())
+    row.append(input, go)
+    const note = document.createElement('div')
+    note.className = 'note'
+    note.textContent = 'A link is written as it is: the image is fetched when the document renders.'
+    pane.append(row, note)
+    requestAnimationFrame(() => input.focus())
+  }
+  box.append(tabs, pane)
+  return box
+}
+
+// ---------------------------------------------------------------- overlay
+function place(el, rect, where = 'below') {
+  overlay.append(el)
+  const origin = page.getBoundingClientRect()
+  const left = Math.max(8, Math.min(rect.left + rect.width / 2 - el.offsetWidth / 2 - origin.left, origin.width - el.offsetWidth - 8))
+  el.style.left = left + 'px'
+  el.style.top = (where === 'above' ? rect.top - origin.top - el.offsetHeight - 8 : rect.bottom - origin.top + 8) + 'px'
+}
+
+function renderOverlay() {
+  overlay.replaceChildren()
+  const origin = page.getBoundingClientRect()
+  if (panel?.kind === 'insert') {
+    const box = renderInsertPanel()
+    if (panel.anchor === 'toolbar') {
+      // Under the image button, in the page's coordinates.
+      overlay.append(box)
+      const r = imageButton.getBoundingClientRect()
+      box.style.left = Math.max(8, Math.min(r.left - origin.left, origin.width - box.offsetWidth - 8)) + 'px'
+      box.style.top = (scroller.getBoundingClientRect().top - origin.top + 6) + 'px'
+    } else {
+      const el = selectedEl()
+      if (el) place(box, el.getBoundingClientRect())
+    }
+    return
+  }
+  const img = selectedImage()
+  if (!img) return
+  const el = selectedEl()
+  if (!el) return
+  const frame = img.fig ? el.querySelector('.frame') : el
+  const fr = frame.getBoundingClientRect()
+  if (img.fig && opts.resize !== 'presets' && !sel.caption) renderHandles(img.fig, frame, fr, origin)
+  if (opts.controls === 'popover') {
+    const bar = document.createElement('div')
+    bar.className = 'bubble wrap'
+    bar.addEventListener('mousedown', (e) => { if (e.target.nodeName !== 'INPUT') e.preventDefault() })
+    bar.append(...imageControls(img, false))
+    // Under the whole figure, caption included.
+    place(bar, el.getBoundingClientRect())
+  }
+  if (focusAlt) { focusAlt = false; document.querySelector('.field[data-which="alt"]')?.focus() }
+  if (focusCaption) { focusCaption = false; document.querySelector('.field[data-which="caption"]')?.focus() }
+}
+
+const selectedEl = () => (sel.fig ? editor.querySelector(`figure[data-k="${sel.fig}"]`) : sel.inl ? editor.querySelector(`.inl[data-k="${sel.inl}"]`) : null)
+
+// Drag a corner: the width as a share of the page's text, snapping to the
+// common ones, from the side the image grows from.
+const SNAPS = [25, 33, 50, 67, 75, 100]
+function renderHandles(fig, frame, fr, origin) {
+  for (const side of ['l', 'r']) {
+    const h = document.createElement('div')
+    h.className = 'handle ' + side
+    h.style.left = (side === 'l' ? fr.left - origin.left - 8 : fr.right - origin.left - 4) + 'px'
+    h.style.top = (fr.bottom - origin.top - 4) + 'px'
+    h.onpointerdown = (e) => {
+      e.preventDefault()
+      h.setPointerCapture(e.pointerId)
+      const full = editor.getBoundingClientRect().width
+      const startW = fr.width, startX = e.clientX
+      const grow = (fig.align === 'center' ? 2 : 1) * (side === 'r' ? 1 : -1)
+      // A figure aligned right grows from its left edge, and so on.
+      const label = document.createElement('div')
+      label.className = 'size-label'
+      overlay.append(label)
+      let recorded = false
+      const move = (ev) => {
+        let w = Math.round(((startW + (ev.clientX - startX) * grow) / full) * 100)
+        w = Math.max(10, Math.min(100, w))
+        const snap = SNAPS.find((s) => Math.abs(s - w) <= 2)
+        if (snap) w = snap
+        if (!recorded) { record(); recorded = true }
+        fig.width = w
+        frame.style.width = w + '%'
+        frame.querySelector('img, .missing').style.width = '100%'
+        const r = frame.getBoundingClientRect(), o = page.getBoundingClientRect()
+        label.textContent = `${w}%`
+        label.style.left = (r.left + r.width / 2 - o.left - label.offsetWidth / 2) + 'px'
+        label.style.top = (r.top - o.top + 8) + 'px'
+        for (const hh of overlay.querySelectorAll('.handle')) {
+          hh.style.left = (hh.classList.contains('l') ? r.left - o.left - 8 : r.right - o.left - 4) + 'px'
+          hh.style.top = (r.bottom - o.top - 4) + 'px'
+        }
+        renderSource()
+      }
+      const up = () => { h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); render() }
+      h.addEventListener('pointermove', move)
+      h.addEventListener('pointerup', up)
+    }
+    overlay.append(h)
+  }
+}
+
+// ----------------------------------------------------------------- source
+const q = (s) => `"${s.replace(/"/g, '\\"')}"`
+function imageQmd(src, bracket, attrs) {
+  const a = attrs.filter(Boolean)
+  return `![${bracket}](${src})` + (a.length ? `{${a.join(' ')}}` : '')
+}
+function toQmd(blk) {
+  if (blk.kind === 'fig') {
+    // An image alone in a paragraph: its brackets are the caption, and alt
+    // text goes in fig-alt (else qmd reads the caption as the alt text).
+    const alt = blk.alt && !(opts.alt === 'caption' && blk.caption && blk.alt === blk.caption) ? `fig-alt=${q(blk.alt)}` : null
+    return imageQmd(blk.src, blk.caption, [blk.id && blk.caption ? `#${blk.id}` : null, blk.width ? `width=${q(blk.width + '%')}` : null,
+      blk.align !== 'center' ? `fig-align=${q(blk.align)}` : null, alt])
+  }
+  let out = ''
+  for (const x of blk.items) out += typeof x === 'string' ? x : imageQmd(x.src, x.alt, [x.height ? `height=${q(x.height)}` : null])
+  return (blk.tag === 'h2' ? '## ' : '') + out
+}
+
+function renderSource() {
+  const current = sel.caret?.b ?? (sel.fig ? figIndex(sel.fig) : sel.inl ? inlineByKey(sel.inl)?.b : -1)
+  document.getElementById('source-blocks').replaceChildren(...doc.map((blk, b) => {
+    const el = document.createElement('div')
+    el.className = 'blk' + (b === current ? ' cur' : '')
+    el.textContent = toQmd(blk)
+    return el
+  }))
+  const used = new Set(doc.flatMap((blk) => (blk.kind === 'fig' ? [blk.src] : blk.items.filter((x) => typeof x === 'object').map((x) => x.src))))
+  const list = document.getElementById('files')
+  list.replaceChildren(...['document.qmd', ...Object.keys(files)].map((path) => {
+    const el = document.createElement('div')
+    el.textContent = path + (path === 'document.qmd' || used.has(path) ? '' : '  (unused)')
+    if (added.has(path)) el.className = 'new'
+    return el
+  }))
+}
+
+// ----------------------------------------------------------------- events
+editor.addEventListener('input', (e) => {
+  const cap = e.target.closest?.('figcaption') ?? (document.activeElement?.closest?.('figcaption'))
+  if (cap) {
+    const f = figByKey(Number(cap.closest('figure').dataset.k))
+    record(true)
+    f.caption = cap.textContent
+    // An id needs a caption; one typed back keeps its old number.
+    renderSource()
+    refreshCaptions()
+    renderOverlay()
+    lastState = snapshot()
+    return
+  }
+  const caret = readCaret()
+  record(true)
+  const tidy = readDocument()
+  lastState = snapshot()
+  if (caret) sel = { caret }
+  // Markdown for an image, just closed, becomes the image.
+  if (caret && caret.collapsed && doc[caret.b]?.kind === 'text') {
+    const items = doc[caret.b].items
+    let s = caret.o
+    while (s > 0 && typeof items[s - 1] === 'string') s--
+    const m = /!\[([^\]]*)\]\(([^)\s]+)\)$/.exec(items.slice(s, caret.o).join(''))
+    if (m) {
+      // Undo gives the typed Markdown back.
+      lastState = snapshot()
+      const at = s + m.index
+      items.splice(at, m[0].length)
+      insertImage(m[2], { b: caret.b, o: at })
+      // The brackets were alt text in a line, or a caption on a line of its own.
+      const img = selectedImage()
+      if (img?.fig) { img.fig.caption = m[1]; sel = { fig: img.fig.k } }
+      else if (img?.inl) img.inl.alt = m[1]
+      render()
+      return
+    }
+  }
+  if (!tidy) render()
+  else { renderSource(); renderToolbar() }
+})
+
+editor.addEventListener('keydown', (e) => {
+  const mod = e.metaKey || e.ctrlKey
+  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return }
+  if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return }
+  if (e.key === 'Escape' && panel) { e.preventDefault(); panel = null; render(); return }
+
+  // In a caption.
+  const cap = e.target.closest?.('figcaption')
+  if (cap) {
+    const k = Number(cap.closest('figure').dataset.k)
+    const b = figIndex(k)
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (doc[b + 1]?.kind === 'text') sel = { caret: { b: b + 1, o: 0 } }
+      else paragraphAfter(k)
+      render()
+    } else if ((e.key === 'Backspace' && !cap.textContent) || e.key === 'Escape' || (e.key === 'ArrowUp' && atEdge(cap, -1))) {
+      e.preventDefault()
+      sel = { fig: k }
+      render()
+    } else if ((e.key === 'ArrowDown' || e.key === 'ArrowRight') && atEdge(cap, 1)) {
+      e.preventDefault()
+      if (stepFrom(b, 1)) render()
+    }
+    return
+  }
+
+  // An image selected.
+  const img = selectedImage()
+  if (img) {
+    if (mod || e.altKey) return
+    const b = img.fig ? figIndex(img.fig.k) : img.at.b
+    if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); removeImage(); render(); return }
+    if (img.inl) {
+      // An image in a line: arrows step over it.
+      if (['ArrowLeft', 'ArrowUp'].includes(e.key)) { e.preventDefault(); sel = { caret: { b, o: img.at.o } }; render() }
+      else if (['ArrowRight', 'ArrowDown'].includes(e.key)) { e.preventDefault(); sel = { caret: { b, o: img.at.o + 1 } }; render() }
+      else if (e.key === 'Escape') { e.preventDefault(); sel = { caret: { b, o: img.at.o + 1 } }; render() }
+      else if (e.key.length === 1 || e.key === 'Enter') { sel = { caret: { b, o: img.at.o + 1 } }; render() }
+      return
+    }
+    if (e.key === 'Enter') { e.preventDefault(); paragraphAfter(img.fig.k); render(); return }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); if (stepFrom(b, -1)) render(); return }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      e.preventDefault()
+      if (opts.caption === 'below' && e.key === 'ArrowDown') { sel.caption = true; render(); return }
+      if (stepFrom(b, 1) || (paragraphAfter(img.fig.k), true)) render()
+      return
+    }
+    if (e.key === 'Escape') { e.preventDefault(); stepFrom(b, 1) || paragraphAfter(img.fig.k); render(); return }
+    // Typing with a figure selected starts a paragraph after it.
+    if (e.key.length === 1) { e.preventDefault(); paragraphAfter(img.fig.k, [e.key]); render(); return }
+    e.preventDefault()
+    return
+  }
+
+  // In text.
+  const caret = readCaret()
+  if (!caret) return
+  const { b, o } = caret
+  const blk = doc[b]
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    readDocument()
+    if (!caret.collapsed) { document.execCommand('delete'); return }
+    record()
+    const rest = blk.items.splice(o)
+    doc.splice(b + 1, 0, { kind: 'text', tag: blk.tag === 'h2' && rest.length === 0 ? 'p' : blk.tag, items: rest })
+    sel = { caret: { b: b + 1, o: 0 } }
+    render()
+    return
+  }
+  if (!caret.collapsed) return
+  if (e.key === 'Backspace' && o === 0 && b > 0) {
+    e.preventDefault()
+    const prev = doc[b - 1]
+    if (prev.kind === 'fig') {
+      // Into a figure: select it first. An empty paragraph goes.
+      if (blk.items.length === 0) { record(); doc.splice(b, 1) }
+      sel = { fig: prev.k }
+    } else {
+      record()
+      sel = { caret: { b: b - 1, o: prev.items.length } }
+      prev.items.push(...blk.items)
+      doc.splice(b, 1)
+    }
+    render()
+    return
+  }
+  if (e.key === 'Delete' && o === blk.items.length && doc[b + 1]) {
+    e.preventDefault()
+    const next = doc[b + 1]
+    if (next.kind === 'fig') sel = { fig: next.k }
+    else { record(); blk.items.push(...next.items); doc.splice(b + 1, 1); sel = { caret: { b, o } } }
+    render()
+    return
+  }
+  // Backspace or Delete next to an image in a line: select it first.
+  const near = e.key === 'Backspace' ? blk.items[o - 1] : e.key === 'Delete' ? blk.items[o] : null
+  if (near && typeof near === 'object') { e.preventDefault(); sel = { inl: near.k }; render(); return }
+  // Arrows onto a figure from the line next to it.
+  const el = blockEl(b)
+  if ((e.key === 'ArrowDown' && atEdge(el, 1)) || (e.key === 'ArrowRight' && o === blk.items.length)) {
+    if (doc[b + 1]?.kind === 'fig') { e.preventDefault(); sel = { fig: doc[b + 1].k }; render() }
+  } else if ((e.key === 'ArrowUp' && atEdge(el, -1)) || (e.key === 'ArrowLeft' && o === 0)) {
+    if (doc[b - 1]?.kind === 'fig') { e.preventDefault(); sel = { fig: doc[b - 1].k }; render() }
+  }
+})
+
+/** Whether the caret is on the first (dir < 0) or last line of `el`. */
+function atEdge(el, dir) {
+  const s = getSelection()
+  if (!s.rangeCount) return true
+  const r = s.getRangeAt(0).cloneRange()
+  let rect = r.getClientRects()[0]
+  if (!rect) {
+    // An empty range has no box everywhere: measure a character beside it.
+    const node = r.startContainer
+    if (node.nodeType === 3 && node.length) {
+      const at = Math.min(r.startOffset, node.length - 1)
+      r.setStart(node, at); r.setEnd(node, at + 1)
+      rect = r.getBoundingClientRect()
+    } else return true
+  }
+  const box = el.getBoundingClientRect()
+  const line = parseFloat(getComputedStyle(el).lineHeight) || 24
+  return dir < 0 ? rect.top - box.top < line * 0.8 : box.bottom - rect.bottom < line * 0.8
+}
+
+// The caret moved: a selected image isn't any more. Only a click in the text
+// or a key moves it off an image: focusing the editor puts the caret at its
+// start, after the image was selected.
+let moved = false
+editor.addEventListener('mousedown', (e) => { if (!e.target.closest('figure .frame, .inl')) moved = true })
+editor.addEventListener('keydown', () => { moved = true }, true)
+document.addEventListener('selectionchange', () => {
+  if (dragging) return
+  const s = getSelection()
+  if (!s.rangeCount || !editor.contains(s.anchorNode)) return
+  if ((sel.fig || sel.inl) && !moved) { if (!sel.caption) s.removeAllRanges(); return }
+  moved = false
+  const inCaption = (s.anchorNode.nodeType === 1 ? s.anchorNode : s.anchorNode.parentElement)?.closest('figcaption')
+  if (inCaption) {
+    const k = Number(inCaption.closest('figure').dataset.k)
+    if (sel.fig !== k || !sel.caption) { sel = { fig: k, caption: true }; renderToolbar(); renderSource(); refreshCaptions(); renderOverlay() }
+    return
+  }
+  const caret = readCaret()
+  if (!caret) return
+  const was = sel
+  sel = caret.collapsed ? { caret: { b: caret.b, o: caret.o } } : { range: true, caret: null }
+  if (was.fig || was.inl || panel?.anchor === 'image') {
+    panel = null
+    // Unselect without rebuilding the text the caret is in.
+    editor.querySelectorAll('.sel').forEach((n) => n.classList.remove('sel'))
+    refreshCaptions()
+    renderOverlay()
+  }
+  renderToolbar()
+  renderSource()
+})
+
+// Clicking outside the page puts the insert panel away.
+document.addEventListener('mousedown', (e) => {
+  if (!panel) return
+  if (e.target.closest('.bubble') || e.target.closest('#toolbar')) return
+  panel = null
+  renderOverlay()
+  renderToolbar()
+})
+
+// Paste and drop: image files go in where the caret (or the drop) is.
+editor.addEventListener('paste', async (e) => {
+  const file = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'))
+  if (!file) {
+    // Text only, as plain text.
+    e.preventDefault()
+    const t = e.clipboardData.getData('text/plain')
+    if (t) document.execCommand('insertText', false, t)
+    return
+  }
+  e.preventDefault()
+  const caret = readCaret()
+  const at = caret ? { b: caret.b, o: caret.o } : null
+  const path = await addFile(file)
+  if (at) sel = { caret: at }
+  insertImage(path, at ?? undefined)
+  render()
+})
+
+let dragging = false
+const dropMark = document.createElement('div')
+function dropPoint(e) {
+  const p = document.caretPositionFromPoint ? document.caretPositionFromPoint(e.clientX, e.clientY) : document.caretRangeFromPoint(e.clientX, e.clientY)
+  const node = p && (p.offsetNode ?? p.startContainer), offset = p && (p.offset ?? p.startOffset)
+  const el = node && (node.nodeType === 1 ? node : node.parentElement)?.closest('#editor > p, #editor > h2')
+  if (el) return { b: [...editor.children].indexOf(el), o: caretOffset(el, node, offset), node, offset }
+  // Over a figure: after it.
+  const fig = document.elementFromPoint(e.clientX, e.clientY)?.closest('#editor > figure')
+  if (fig) return { b: [...editor.children].indexOf(fig), after: true }
+  return null
+}
+editor.addEventListener('dragover', (e) => {
+  if (![...e.dataTransfer.types].includes('Files')) return
+  e.preventDefault()
+  dragging = true
+  const at = dropPoint(e)
+  dropMark.remove()
+  if (!at) return
+  const o = page.getBoundingClientRect()
+  if (at.after || opts.place === 'block' || doc[at.b].items.length === 0) {
+    // A line of its own: a bar where it'd go.
+    const el = editor.children[at.b]
+    const r = el.getBoundingClientRect()
+    dropMark.className = 'drop-line'
+    dropMark.style.left = (r.left - o.left) + 'px'
+    dropMark.style.width = r.width + 'px'
+    dropMark.style.height = ''
+    dropMark.style.top = ((at.after || at.o > 0 ? r.bottom + 6 : r.top - 8) - o.top) + 'px'
+    if (!at.after && at.o > 0 && at.o < doc[at.b].items.length) {
+      // In the middle of a paragraph: it splits there, so mark the point.
+      const range = document.createRange()
+      range.setStart(at.node, at.offset)
+      const cr = range.getClientRects()[0] ?? range.getBoundingClientRect()
+      dropMark.className = 'drop-caret'
+      dropMark.style.left = (cr.left - o.left) + 'px'
+      dropMark.style.width = ''
+      dropMark.style.top = (cr.top - o.top) + 'px'
+      dropMark.style.height = cr.height + 'px'
+    }
+  } else {
+    const range = document.createRange()
+    range.setStart(at.node, at.offset)
+    const cr = range.getClientRects()[0] ?? range.getBoundingClientRect()
+    dropMark.className = 'drop-caret'
+    dropMark.style.left = (cr.left - o.left) + 'px'
+    dropMark.style.top = (cr.top - o.top) + 'px'
+    dropMark.style.height = cr.height + 'px'
+    dropMark.style.width = ''
+  }
+  overlay.append(dropMark)
+})
+editor.addEventListener('dragleave', (e) => { if (!editor.contains(e.relatedTarget)) { dropMark.remove(); dragging = false } })
+editor.addEventListener('drop', async (e) => {
+  dropMark.remove()
+  dragging = false
+  const file = [...e.dataTransfer.files].find((f) => f.type.startsWith('image/'))
+  if (!file) return
+  e.preventDefault()
+  const at = dropPoint(e)
+  const path = await addFile(file)
+  if (at?.after) { sel = { fig: doc[at.b].k }; insertImage(path, null) }
+  else insertImage(path, at ? { b: at.b, o: at.o } : null)
+  render()
+})
+
+// Copy a sample image, to try pasting.
+document.getElementById('sample').onclick = async (e) => {
+  const button = e.target
+  try {
+    const img = new Image()
+    img.src = SAMPLE
+    await img.decode()
+    const canvas = Object.assign(document.createElement('canvas'), { width: 600, height: 400 })
+    canvas.getContext('2d').drawImage(img, 0, 0)
+    const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'))
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+    button.textContent = 'Copied: now paste'
+  } catch {
+    button.textContent = "Couldn't copy here"
+  }
+  setTimeout(() => (button.textContent = 'Copy a sample image'), 2500)
+}
+
+window.addEventListener('resize', () => renderOverlay())
+// A link to other choices, followed from this page.
+window.addEventListener('hashchange', () => location.reload())
+
+start()
+renderOptions()
+render()
+</script>
+</body>
+</html>
