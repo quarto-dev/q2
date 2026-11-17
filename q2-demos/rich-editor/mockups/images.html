@@ -125,7 +125,6 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 .handle { position:absolute; width:12px; height:12px; background:#fff; border:2px solid var(--accent); border-radius:2px; pointer-events:auto; z-index:6; }
 .handle.l { cursor:nesw-resize; }
 .handle.r { cursor:nwse-resize; }
-.size-label.snap { background:var(--accent); }
 .size-label { position:absolute; pointer-events:none; background:#343a40; color:#fff; font:12px/1 system-ui, sans-serif; padding:4px 6px; border-radius:4px; z-index:7; }
 
 /* The hover bar, its menus, and the viewer: as in Notion. */
@@ -1093,7 +1092,6 @@ function renderHandles(fig, frame, fr, origin, bars = false) {
         frame.querySelector('img, .missing').style.width = '100%'
         const r = frame.getBoundingClientRect(), o = page.getBoundingClientRect()
         label.textContent = `${w}%`
-        label.classList.toggle('snap', Boolean(snap))
         label.style.left = (r.left + r.width / 2 - o.left - label.offsetWidth / 2) + 'px'
         label.style.top = (r.top - o.top + 8) + 'px'
         for (const hh of overlay.querySelectorAll('.handle, .vhandle')) placeHandle(hh, r, o)
