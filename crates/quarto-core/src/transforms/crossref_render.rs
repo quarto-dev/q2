@@ -38,7 +38,7 @@
 //! a format-specific pipeline.
 
 use quarto_pandoc_types::attr::{Attr, AttrSourceInfo, TargetSourceInfo};
-use quarto_pandoc_types::block::{Block, Blocks, Div, Figure, Header};
+use quarto_pandoc_types::block::{Block, Blocks, Div, Figure, Header, Plain};
 use quarto_pandoc_types::caption::Caption;
 use quarto_pandoc_types::custom::{CustomNode, Slot};
 use quarto_pandoc_types::inline::{Inline, Inlines, Link, Space, Span, Str};
@@ -102,8 +102,93 @@ impl AstTransform for CrossrefRenderTransform {
             chapter_seed: ctx.chapter_seed,
         };
         render_blocks(&mut ast.blocks, terms.as_ref(), &mut fs);
+        // Revealjs is left out: `reveal-auto-stretch` runs after this pass
+        // and reads a slide's lone image as a bare paragraph, which a
+        // figure wrapper would hide from it.
+        if fs.html_float_dom && !crate::format::is_revealjs_target(&ctx.format.target_format) {
+            wrap_aligned_lone_images(&mut ast.blocks);
+        }
         Ok(())
     }
+}
+
+/// Q1 `render_html_fixups` (`quarto-post/html.lua`, `Para`): a paragraph
+/// whose only inline is an image, or a link (e.g. a lightbox) around
+/// only an image, is wrapped in a figure when that image is aligned.
+/// Without the wrapper an uncaptioned `![](x.png){fig-align="center"}`
+/// stays inline and the alignment has no effect.
+///
+/// The shape matches a standalone captioned figure's,
+/// `Div(.quarto-figure .quarto-figure-<align>) > Figure`, except that the
+/// image keeps its paragraph (Q1's `<figure><p><img></p></figure>`) and
+/// there is no caption. The theme's `.quarto-figure-<align> > figure > p`
+/// rules do the aligning.
+///
+/// Runs after floats are rendered, so a float's image has already
+/// given up its `fig-align` to the float's own wrapper.
+fn wrap_aligned_lone_images(blocks: &mut Blocks) {
+    crate::ast_walk::for_each_block_list_mut(blocks, &mut |list| {
+        for block in list.iter_mut() {
+            let Block::Paragraph(p) = block else {
+                continue;
+            };
+            let Some(classes) = take_lone_image_alignment(&mut p.content) else {
+                continue;
+            };
+            let source_info = p.source_info.clone();
+            let para = std::mem::replace(
+                block,
+                Block::Plain(Plain {
+                    content: Vec::new(),
+                    source_info: source_info.clone(),
+                }),
+            );
+            let figure = Block::Figure(Box::new(Figure {
+                attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()).into(),
+                caption: Caption {
+                    short: None,
+                    long: None,
+                    source_info: source_info.clone(),
+                },
+                content: vec![para],
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty(),
+            }));
+            *block = Block::Div(Box::new(Div {
+                attr: (String::new(), classes, hashlink::LinkedHashMap::new()).into(),
+                content: vec![figure],
+                source_info,
+                attr_source: AttrSourceInfo::empty(),
+            }));
+        }
+    });
+}
+
+/// The wrapper classes for a paragraph that is a lone, aligned image —
+/// Q1's `needs_forward_align` / `forward_align`. `fig-align` becomes
+/// `quarto-figure quarto-figure-<align>` and is stripped from the image;
+/// `quarto-figure*` classes already on the image are copied over as well.
+/// `None` when the paragraph is not that shape or the image is not aligned.
+fn take_lone_image_alignment(content: &mut Inlines) -> Option<Vec<String>> {
+    let img = match content.as_mut_slice() {
+        [Inline::Image(img)] => img,
+        [Inline::Link(link)] => match link.content.as_mut_slice() {
+            [Inline::Image(img)] => img,
+            _ => return None,
+        },
+        _ => return None,
+    };
+    let mut classes = Vec::new();
+    if let Some(align) = img.attr.2.remove("fig-align") {
+        classes.push("quarto-figure".to_string());
+        classes.push(format!("quarto-figure-{align}"));
+    }
+    for c in &img.attr.1 {
+        if c.starts_with("quarto-figure") && !classes.contains(c) {
+            classes.push(c.clone());
+        }
+    }
+    (!classes.is_empty()).then_some(classes)
 }
 
 fn render_blocks(blocks: &mut Blocks, terms: Option<&LanguageTerms>, fs: &mut FloatState) {
@@ -573,7 +658,9 @@ fn harvest_figure_attrs(blocks: &mut Blocks) -> Option<HarvestedFigureAttrs> {
             // A mermaid diagram carries its cell's `fig-align` as a code
             // block attribute (`codeblock_shorthand`, bd-2pmjmjmj) — the
             // diagram's stand-in for an image's own `fig-align`.
-            Block::CodeBlock(cb) if cb.attr.1.iter().any(|c| c == "mermaid") => {
+            // A Graphviz (`dot`) diagram carries it the same way
+            // (bd-ijlapt70).
+            Block::CodeBlock(cb) if cb.attr.1.iter().any(|c| c == "mermaid" || c == "dot") => {
                 return Some(HarvestedFigureAttrs {
                     align: cb.attr.2.remove("fig-align"),
                     style: None,
@@ -3434,6 +3521,196 @@ mod tests {
             })
             .collect();
         assert_eq!(parts, vec!["of Theorem 1", "."]);
+    }
+
+    // === Uncaptioned aligned images (Q1 `render_html_fixups` `Para`) ===
+
+    fn image_with(kvs: &[(&str, &str)], classes: &[&str]) -> Inline {
+        let mut attr: LinkedHashMap<String, String> = LinkedHashMap::new();
+        for (k, v) in kvs {
+            attr.insert(k.to_string(), v.to_string());
+        }
+        Inline::Image(Box::new(quarto_pandoc_types::inline::Image {
+            attr: (
+                String::new(),
+                classes.iter().map(|c| c.to_string()).collect(),
+                attr,
+            )
+                .into(),
+            content: vec![],
+            target: ("img.png".to_string(), String::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        }))
+    }
+
+    fn link_around(inner: Inline) -> Inline {
+        Inline::Link(Box::new(Link {
+            attr: (
+                String::new(),
+                vec!["lightbox".to_string()],
+                LinkedHashMap::new(),
+            )
+                .into(),
+            content: vec![inner],
+            target: ("img.png".to_string(), String::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        }))
+    }
+
+    fn para_of(content: Vec<Inline>) -> Block {
+        Block::Paragraph(Paragraph {
+            content,
+            source_info: si(),
+        })
+    }
+
+    /// The `Div > Figure > Paragraph > image` shape, or a panic naming
+    /// what was found instead. Returns the wrapper and the paragraph.
+    fn aligned_figure_shape(block: &Block) -> (&Div, &Paragraph) {
+        let Block::Div(outer) = block else {
+            panic!("expected a wrapper Div, got {block:?}");
+        };
+        let [Block::Figure(fig)] = outer.content.as_slice() else {
+            panic!("expected a lone Figure in the wrapper: {:?}", outer.content);
+        };
+        assert!(
+            fig.caption.long.is_none() && fig.caption.short.is_none(),
+            "the figure has no caption: {:?}",
+            fig.caption
+        );
+        let [Block::Paragraph(p)] = fig.content.as_slice() else {
+            panic!(
+                "expected the image's paragraph inside the figure: {:?}",
+                fig.content
+            );
+        };
+        (outer, p)
+    }
+
+    fn lone_image(p: &Paragraph) -> &quarto_pandoc_types::inline::Image {
+        match p.content.as_slice() {
+            [Inline::Image(img)] => img,
+            [Inline::Link(l)] => match l.content.as_slice() {
+                [Inline::Image(img)] => img,
+                other => panic!("expected a lone image in the link: {other:?}"),
+            },
+            other => panic!("expected a lone image: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn uncaptioned_fig_align_image_is_wrapped_in_aligned_figure() {
+        let blocks = vec![para_of(vec![image_with(
+            &[("fig-align", "center"), ("width", "80%")],
+            &[],
+        )])];
+        let ast = run_full(blocks).await;
+        let (outer, p) = aligned_figure_shape(&ast.blocks[0]);
+        assert_eq!(outer.attr.1, vec!["quarto-figure", "quarto-figure-center"]);
+        let img = lone_image(p);
+        assert!(
+            !img.attr.2.contains_key("fig-align"),
+            "fig-align is consumed: {:?}",
+            img.attr.2
+        );
+        assert_eq!(img.attr.2.get("width").map(String::as_str), Some("80%"));
+    }
+
+    #[test]
+    fn linked_image_with_fig_align_is_wrapped() {
+        // A lightbox puts a link around the image before crossref-render.
+        let mut blocks = vec![para_of(vec![link_around(image_with(
+            &[("fig-align", "right")],
+            &[],
+        ))])];
+        wrap_aligned_lone_images(&mut blocks);
+        let (outer, p) = aligned_figure_shape(&blocks[0]);
+        assert_eq!(outer.attr.1, vec!["quarto-figure", "quarto-figure-right"]);
+        assert!(matches!(p.content.as_slice(), [Inline::Link(_)]));
+    }
+
+    #[test]
+    fn quarto_figure_class_on_image_is_forwarded() {
+        // Q1's `needs_forward_align` also fires on a `quarto-figure*` class.
+        let mut blocks = vec![para_of(vec![image_with(&[], &["quarto-figure-left"])])];
+        wrap_aligned_lone_images(&mut blocks);
+        let (outer, p) = aligned_figure_shape(&blocks[0]);
+        assert_eq!(outer.attr.1, vec!["quarto-figure-left"]);
+        assert_eq!(lone_image(p).attr.1, vec!["quarto-figure-left"]);
+    }
+
+    #[test]
+    fn images_that_are_not_lone_or_not_aligned_are_left_alone() {
+        let text = Inline::Str(Str {
+            text: "Inline".to_string(),
+            source_info: si(),
+        });
+        let mut blocks = vec![
+            // No alignment.
+            para_of(vec![image_with(&[("width", "80%")], &[])]),
+            // Aligned, but sharing the paragraph with text.
+            para_of(vec![text, image_with(&[("fig-align", "center")], &[])]),
+        ];
+        let before = blocks.clone();
+        wrap_aligned_lone_images(&mut blocks);
+        assert_eq!(blocks, before);
+    }
+
+    #[test]
+    fn nested_lone_aligned_image_is_wrapped() {
+        let mut blocks = vec![Block::Div(Box::new(Div {
+            attr: attr_id(""),
+            content: vec![para_of(vec![image_with(&[("fig-align", "center")], &[])])],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        }))];
+        wrap_aligned_lone_images(&mut blocks);
+        let Block::Div(d) = &blocks[0] else {
+            unreachable!()
+        };
+        aligned_figure_shape(&d.content[0]);
+    }
+
+    #[tokio::test]
+    async fn captioned_fig_align_float_is_not_double_wrapped() {
+        // The float takes the image's fig-align for its own wrapper first,
+        // so the image's paragraph inside it stays a paragraph.
+        let blocks = vec![Block::Div(Box::new(Div {
+            attr: attr_id("fig-a"),
+            content: vec![
+                para_of(vec![image_with(&[("fig-align", "left")], &[])]),
+                para("Cap"),
+            ],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        }))];
+        let ast = run_full(blocks).await;
+        let (outer, _) = float_shape(&ast.blocks[0]);
+        assert_classes(&outer.attr, &["quarto-figure-left"], "outer div");
+        let wrappers = count_aligned_wrappers(&ast.blocks);
+        assert_eq!(
+            wrappers, 1,
+            "only the float's own wrapper: {:?}",
+            ast.blocks
+        );
+    }
+
+    fn count_aligned_wrappers(blocks: &Blocks) -> usize {
+        blocks
+            .iter()
+            .map(|b| match b {
+                Block::Div(d) => {
+                    usize::from(d.attr.1.iter().any(|c| c.starts_with("quarto-figure-")))
+                        + count_aligned_wrappers(&d.content)
+                }
+                Block::Figure(f) => count_aligned_wrappers(&f.content),
+                _ => 0,
+            })
+            .sum()
     }
 
     // === Equation rendering tests ===

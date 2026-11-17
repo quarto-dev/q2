@@ -70,6 +70,7 @@ pub mod engine_resolution_corpus;
 pub mod engine_stage_driver;
 pub mod engine_visibility;
 pub mod equation_numbering_pipeline;
+pub mod execute_dir;
 pub mod execution_policy;
 pub mod extension_metadata;
 pub mod fail_fast;

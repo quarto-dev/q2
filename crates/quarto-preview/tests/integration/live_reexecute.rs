@@ -230,6 +230,7 @@ async fn boot(
 ) -> Booted {
     let data = tempfile::TempDir::with_prefix("q2-live-data-").unwrap();
     let config = PreviewConfig {
+        upstream: None,
         render: RenderFlags {
             to: None,
             metadata,

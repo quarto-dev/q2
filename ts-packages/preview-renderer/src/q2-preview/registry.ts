@@ -5,7 +5,7 @@ import * as Custom from './custom';
 import { CustomBlock, CustomInline } from './dispatchers';
 import { CommentBlock } from './custom/CommentBlock';
 import { CommentInline } from './custom/CommentSpan';
-import { MermaidCodeBlock } from './blocks/MermaidCodeBlock';
+import { DiagramCodeBlock } from './blocks/DiagramCodeBlock';
 import { HepImage } from './inlines/HepImage';
 import { PreviewDocument } from './PreviewDocument';
 
@@ -47,7 +47,9 @@ export const previewRegistry: FormatRegistry = {
     // everything else to Blocks.CodeBlock. Overrides the plain entry
     // from the `...Blocks` spread; user render-components overrides
     // of `CodeBlock` still layer on top via mergedPreviewRegistry.
-    CodeBlock: MermaidCodeBlock,
+    // bd-ijlapt70: the entry is the diagram dispatcher, which sends
+    // ```dot blocks to Graphviz and the rest to the mermaid wrapper.
+    CodeBlock: DiagramCodeBlock,
     // bd-sxiv2tio: hephaestus-aware Image wrapper — mounts a local
     // `.hep` plot document as a live SVG via the npm hephaestus-svg-wasm
     // client, delegates every other target to Inlines.Image. Overrides

@@ -207,3 +207,21 @@ describe('dashboard shell in a website', () => {
         expect(document.body.classList.contains('nav-fixed')).toBe(true);
     });
 });
+
+describe('dashboard body classes', () => {
+    it('adds a user body-classes to the computed classes (GH #1218)', () => {
+        const meta = {
+            title: MS('Dash'),
+            'body-classes': MS('my-dash'),
+            rendered: MAP({
+                navigation: MAP({
+                    navbar: MS('<nav class="navbar" id="site-nav"></nav>'),
+                }),
+            }),
+        };
+        mount([DIV(['bslib-grid'], [PLAIN(STR('Body'))])], meta, true);
+        expect(document.body.className).toBe(
+            'quarto-dashboard dashboard-fill my-dash fullcontent nav-fixed quarto-light',
+        );
+    });
+});

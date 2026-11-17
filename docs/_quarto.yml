@@ -56,6 +56,7 @@ website:
             - guides/projects/book.qmd
             - guides/projects/preview.qmd
             - guides/projects/render-options.qmd
+            - guides/projects/dry-run.qmd
             - guides/projects/paths.qmd
             - guides/projects/directory-metadata.qmd
             - guides/projects/listings.qmd

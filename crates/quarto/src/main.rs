@@ -226,6 +226,17 @@ enum Commands {
         /// Skip the project's `pre-render` and `post-render` scripts.
         #[arg(long = "no-render-scripts")]
         no_render_scripts: bool,
+
+        /// Check the render without producing output: discover the
+        /// project, resolve formats, parse every file and merge its
+        /// metadata, then report every problem found and exit. No code is
+        /// executed, no pre-/post-render script runs and nothing is
+        /// written. Problems only a full render finds (engine, filter,
+        /// template and cross-reference errors) are not reported. With
+        /// -v, lists the files a render would produce; with
+        /// --json-errors, prints a JSON summary on stdout
+        #[arg(long = "dry-run", conflicts_with = "clean_cache")]
+        dry_run: bool,
     },
 
     /// Start a live preview of a Quarto document or project.
@@ -422,6 +433,26 @@ enum Commands {
         /// `--ui editor`, `--join` or `--no-project`.
         #[arg(long, conflicts_with_all = ["join", "no_project"])]
         profile: Vec<String>,
+
+        /// Preview a project that lives on an existing sync server (a
+        /// `q2 hub`) instead of a local directory. Takes the hub's
+        /// websocket URL, e.g. `ws://127.0.0.1:3000/ws`; requires
+        /// --project. The preview mirrors that project's documents: the
+        /// viewer follows it, --allow-edit and --ui editor write edits to
+        /// it. Nothing on this machine is read or written. The hub must
+        /// not require sign-in (yet).
+        #[arg(
+            long,
+            value_name = "WS_URL",
+            requires = "project",
+            conflicts_with_all = ["path", "no_project", "join", "static_mode", "share", "to", "metadata", "profile"]
+        )]
+        hub_url: Option<String>,
+
+        /// With --hub-url: the project to preview — its index document id
+        /// (`automerge:…` or bare) or a hub share URL (`…/#/share/<id>?…`).
+        #[arg(long, value_name = "ID_OR_SHARE_URL", requires = "hub_url")]
+        project: Option<String>,
     },
 
     /// Serve a Shiny interactive document
@@ -673,6 +704,26 @@ enum Commands {
 
     /// Start the Quarto Language Server Protocol server
     Lsp,
+
+    /// Answer questions about hub projects over LSP on stdio.
+    ///
+    /// Joins a hub's sync websocket as a client peer. The LSP client names
+    /// projects as workspace folders (`automerge:<index-doc-id>`) and asks
+    /// about them with custom requests, such as `quarto/projectComments`;
+    /// the server sends `quarto/documentsChanged` when their documents
+    /// change. Meant to be run by a program that hosts a hub, not by hand.
+    #[command(name = "hub-lsp")]
+    HubLsp {
+        /// The hub's sync websocket URL, e.g. ws://127.0.0.1:40404/ws.
+        #[arg(long)]
+        server: String,
+
+        /// Send handshake header NAME with the contents of the file at PATH
+        /// (trailing newline removed). Repeatable. Values come from files so
+        /// that secrets stay off the command line.
+        #[arg(long = "header-file", value_name = "NAME=PATH")]
+        header_file: Vec<String>,
+    },
 
     /// Print a document's merged configuration as JSON.
     ///
@@ -1852,10 +1903,27 @@ fn run() -> Result<()> {
     // when set, takes precedence and is parsed directly by
     // `try_from_default_env`. This matches the long-standing
     // convention in the workspace.
+    //
+    // `q2 render --dry-run --json-errors` keeps stderr pure NDJSON even
+    // under `-v` (bd-render-dry-run-dyiq7d08): there `-v` only adds the
+    // would-render list to the stdout JSON summary, so the default log
+    // filter stays in place. `RUST_LOG` still wins when set.
+    let log_verbosity = if matches!(
+        cli.command,
+        Commands::Render {
+            dry_run: true,
+            json_errors: true,
+            ..
+        }
+    ) {
+        0
+    } else {
+        cli.verbose
+    };
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| quarto_util::verbose_to_filter(cli.verbose).into()),
+                .unwrap_or_else(|_| quarto_util::verbose_to_filter(log_verbosity).into()),
         )
         // Logs go to stderr like every other q2 diagnostic — stdout
         // stays reserved for command output (`get-config` JSON, etc.).
@@ -1884,6 +1952,7 @@ fn run() -> Result<()> {
             profile,
             metadata,
             no_execute,
+            dry_run,
             ..
         } => commands::render::execute(commands::render::RenderArgs {
             metadata,
@@ -1903,6 +1972,8 @@ fn run() -> Result<()> {
             profile,
             execution_policy: render_execution_policy(no_execute),
             audience: quarto_core::project::drafts::RenderAudience::Reading,
+            dry_run,
+            verbose: cli.verbose,
         }),
         Commands::Preview {
             path,
@@ -1924,6 +1995,8 @@ fn run() -> Result<()> {
             to,
             metadata,
             profile,
+            hub_url,
+            project,
         } => {
             if print_asset_manifest_hashes {
                 // Binary diagnostic (release CI drift check); answers
@@ -1978,6 +2051,7 @@ fn run() -> Result<()> {
                     to,
                     metadata,
                     profile,
+                    upstream: hub_url.zip(project),
                 })
             }
         }
@@ -2089,6 +2163,13 @@ fn run() -> Result<()> {
             CallCommands::InlineCss => commands::inline_css::execute(),
         },
         Commands::Lsp => commands::lsp::execute(),
+        Commands::HubLsp {
+            server,
+            header_file,
+        } => commands::hub_lsp::execute(commands::hub_lsp::HubLspArgs {
+            server,
+            header_files: header_file,
+        }),
         Commands::GetConfig {
             file,
             path,

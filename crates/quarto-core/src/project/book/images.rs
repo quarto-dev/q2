@@ -179,6 +179,7 @@ mod tests {
             text: text.map(String::from),
             file: Some(PathBuf::from(file)),
             number: None,
+            heading_title: None,
         };
         let meta =
             || ConfigValue::new_map(vec![], SourceInfo::generated(By::programmatic_config()));

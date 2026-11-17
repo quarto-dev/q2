@@ -90,6 +90,7 @@ mod footer_render;
 mod footnotes;
 mod footnotes_resolve;
 mod format_css;
+mod graphviz;
 mod heading_id;
 mod lightbox;
 mod link_external;
@@ -196,6 +197,8 @@ pub use footnotes::FootnotesTransform;
 pub use footnotes_resolve::FootnotesResolveTransform;
 pub use format_css::FormatCssTransform;
 pub(crate) use format_css::user_css_urls;
+pub(crate) use graphviz::LAYOUT_ENGINES as GRAPHVIZ_LAYOUT_ENGINES;
+pub use graphviz::{GRAPHVIZ_VERSION, GraphvizRenderTransform, VIZ_VERSION};
 pub use heading_id::{HeadingIdTransform, rederive_stale_heading_ids};
 #[cfg(not(target_arch = "wasm32"))]
 pub use hephaestus::HephaestusRenderTransform;

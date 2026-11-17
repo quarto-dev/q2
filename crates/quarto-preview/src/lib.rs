@@ -312,6 +312,9 @@ pub struct PreviewConfig {
     pub ui: PreviewUi,
     /// `--to`, `-M` and `--profile` (F8). Default: none of them.
     pub render: RenderFlags,
+    /// Mirror a project from an existing sync server instead of serving a
+    /// local one (`--hub-url`, bd-yq3awhmw). Requires `project_root: None`.
+    pub upstream: Option<quarto_hub::upstream::UpstreamConfig>,
 }
 
 /// Run the preview server. Returns when the server is shut down (ctrl-c
@@ -751,6 +754,7 @@ fn build_hub_config(config: &PreviewConfig) -> HubConfig {
         socket_path: None,
         socket_group: None,
         socket_allow_uid: Vec::new(),
+        upstream: config.upstream.clone(),
     }
 }
 
@@ -1416,6 +1420,7 @@ mod tests {
     fn test_config(ui: PreviewUi, allow_edit: bool) -> PreviewConfig {
         PreviewConfig {
             render: Default::default(),
+            upstream: None,
             host: "127.0.0.1".to_string(),
             port: 0,
             project_root: None,

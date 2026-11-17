@@ -210,6 +210,7 @@ async fn run_hub(args: HubArgs) -> Result<()> {
         socket_path,
         socket_group: args.socket_group.clone(),
         socket_allow_uid: args.socket_allow_uid.clone(),
+        upstream: None,
     };
 
     server::run_server(storage, config).await?;

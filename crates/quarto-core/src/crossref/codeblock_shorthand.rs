@@ -143,7 +143,7 @@ fn try_desugar_code_block(
     let parsed = parse_cell_options(&language, &cb.text, body_source.clone());
 
     if is_diagram_language(&language) {
-        warn_wrong_marker(&cb.text, &parsed, &body_source, diagnostics);
+        warn_wrong_marker(&language, &cb.text, &parsed, &body_source, diagnostics);
     }
 
     // Keys this cell's options let us act on. Everything else stays in
@@ -209,7 +209,9 @@ fn try_desugar_code_block(
 
     // Accessibility (decision 2), independent of any wrapper: a lone
     // `fig-alt` on a diagram is reason enough to rewrite the cell.
-    let acc_descr = if is_diagram_language(&language) {
+    // How the text reaches assistive technology depends on the diagram
+    // language: see where `fig_alt` is applied below.
+    let fig_alt = if is_diagram_language(&language) {
         consume("fig-alt".to_string()).map(|v| v.value.clone())
     } else {
         None
@@ -226,9 +228,18 @@ fn try_desugar_code_block(
         None
     };
 
+    // Layout engine (bd-ijlapt70), Graphviz only: `graph-layout` becomes
+    // a `graph-layout` attribute on the code block, which the Graphviz
+    // transform and the preview component both read.
+    let graph_layout = if is_graphviz_language(&language) {
+        consume("graph-layout".to_string()).and_then(|v| graphviz_layout(v, diagnostics))
+    } else {
+        None
+    };
+
     // A diagram cell has no engine to hand the leftovers to (decision 4).
     if is_diagram_language(&language) {
-        warn_unconsumed_options(&parsed, &consumed, diagnostics);
+        warn_unconsumed_options(&language, &parsed, &consumed, diagnostics);
     }
 
     if consumed.is_empty() {
@@ -236,12 +247,22 @@ fn try_desugar_code_block(
     }
 
     let mut text = strip_consumed_lines(&cb.text, &consumed, &parsed.syntax);
-    if let Some(description) = acc_descr {
-        text = inject_acc_descr(&text, &description);
-    }
     let mut attr = cb.attr.clone();
+    if let Some(description) = fig_alt {
+        if is_graphviz_language(&language) {
+            // The Graphviz language has no accessibility directive, so
+            // the text travels as an attribute and the renderer sets it
+            // on the drawn SVG.
+            attr.2.insert("fig-alt".to_string(), description);
+        } else {
+            text = inject_acc_descr(&text, &description);
+        }
+    }
     if let Some(align) = fig_align {
         attr.2.insert("fig-align".to_string(), align);
+    }
+    if let Some(engine) = graph_layout {
+        attr.2.insert("graph-layout".to_string(), engine);
     }
     let new_code_block = Block::CodeBlock(Box::new(quarto_pandoc_types::block::CodeBlock {
         attr,
@@ -393,10 +414,26 @@ enum Wrapper<'a> {
     None,
 }
 
-/// Languages whose cells q2 renders as a client-side diagram, and for
-/// which [`inject_acc_descr`] therefore knows how to carry `fig-alt`.
+/// Languages whose cells q2 renders as a client-side diagram: mermaid
+/// and Graphviz (`dot`). Both carry `fig-align` as a code-block
+/// attribute; `fig-alt` reaches the diagram by a language-specific
+/// route (mermaid's `accDescr:` directive, an attribute for Graphviz).
 fn is_diagram_language(language: &str) -> bool {
-    language.eq_ignore_ascii_case("mermaid")
+    language.eq_ignore_ascii_case("mermaid") || is_graphviz_language(language)
+}
+
+/// A Graphviz diagram cell (bd-ijlapt70).
+fn is_graphviz_language(language: &str) -> bool {
+    language.eq_ignore_ascii_case("dot")
+}
+
+/// The option keys a diagram cell in `language` can act on.
+fn diagram_option_keys(language: &str) -> &'static [&'static str] {
+    if is_graphviz_language(language) {
+        GRAPHVIZ_OPTION_KEYS
+    } else {
+        DIAGRAM_OPTION_KEYS
+    }
 }
 
 /// Every option key a diagram cell can act on. A key outside this set is
@@ -409,6 +446,42 @@ fn is_diagram_language(language: &str) -> bool {
 /// (bd-sehm2rha, bd-nj25kgbu) should add `theme` when they land, or
 /// authors who follow Q1 will get a warning for an option that works.
 const DIAGRAM_OPTION_KEYS: &[&str] = &["label", "fig-cap", "fig-scap", "fig-alt", "fig-align"];
+
+/// [`DIAGRAM_OPTION_KEYS`] plus the one option only Graphviz has.
+const GRAPHVIZ_OPTION_KEYS: &[&str] = &[
+    "label",
+    "fig-cap",
+    "fig-scap",
+    "fig-alt",
+    "fig-align",
+    "graph-layout",
+];
+
+/// The layout engine a Graphviz cell's `graph-layout` asks for, or `None`
+/// (with a `Q-2-47` warning) when the value is not an engine in the
+/// vendored Graphviz build.
+fn graphviz_layout(
+    option: &OptionValue,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Option<String> {
+    let engines = crate::transforms::GRAPHVIZ_LAYOUT_ENGINES;
+    if engines.contains(&option.value.as_str()) {
+        return Some(option.value.clone());
+    }
+    diagnostics.push(
+        DiagnosticMessageBuilder::warning("Cell option ignored on a diagram cell")
+            .with_code("Q-2-47")
+            .with_location(option.value_source.clone())
+            .problem(format!(
+                "`{}` is not a Graphviz layout engine, so `graph-layout` is ignored and the \
+                 diagram uses `dot`.",
+                option.value
+            ))
+            .add_hint(format!("Use one of: {}.", engines.join(", ")))
+            .build(),
+    );
+    None
+}
 
 /// The alignment a diagram cell's `fig-align` asks for, or `None` (with a
 /// `Q-2-57` warning) when the value is not one q2 understands.
@@ -450,6 +523,7 @@ fn diagram_fig_align(
 /// document. A diagram cell has no engine at all — every option is q2's
 /// to interpret, and one q2 does not interpret is a mistake.
 fn warn_unconsumed_options(
+    language: &str,
     parsed: &CellOptions,
     consumed: &std::collections::HashMap<String, &OptionValue>,
     diagnostics: &mut Vec<DiagnosticMessage>,
@@ -464,7 +538,7 @@ fn warn_unconsumed_options(
     leftover.sort_by(|a, b| a.0.cmp(b.0));
 
     for (key, option) in leftover {
-        let recognized = DIAGRAM_OPTION_KEYS.contains(&key.as_str());
+        let recognized = diagram_option_keys(language).contains(&key.as_str());
         let problem = if recognized {
             format!("`{key}` is a Quarto cell option, but it has no effect on this diagram.")
         } else {
@@ -472,6 +546,10 @@ fn warn_unconsumed_options(
         };
         let hint = if recognized {
             "Remove it, or move it to a position where it applies."
+        } else if is_graphviz_language(language) {
+            "Graphviz diagram cells accept `label`, `fig-cap`, `fig-scap`, `fig-alt`, \
+             `fig-align`, and `graph-layout`. A diagram has no execution engine, so other \
+             options have nowhere to go."
         } else {
             "Diagram cells accept `label`, `fig-cap`, `fig-scap`, `fig-alt`, and `fig-align`. \
              A diagram has no execution engine, so other options have nowhere to go."
@@ -498,6 +576,7 @@ fn warn_unconsumed_options(
 /// correctly uses `%%|` and happens to contain a `#|` further down is
 /// writing diagram content, not options.
 fn warn_wrong_marker(
+    language: &str,
     text: &str,
     parsed: &CellOptions,
     body_source: &SourceInfo,
@@ -524,8 +603,16 @@ fn warn_wrong_marker(
                 0,
                 first.len().min(body_source.length()),
             ))
-            .problem("`#|` is not a mermaid comment, so these lines are read as diagram source.")
-            .add_hint("Write mermaid cell options as `%%|` — the marker follows the cell language's own comment syntax.")
+            .problem(if is_graphviz_language(language) {
+                "`#|` is not the cell-option marker for a dot cell. Graphviz skips lines that start with `#`, so these options are dropped silently."
+            } else {
+                "`#|` is not a mermaid comment, so these lines are read as diagram source."
+            })
+            .add_hint(if is_graphviz_language(language) {
+                "Write dot cell options as `//|` — the marker follows the cell language's own comment syntax."
+            } else {
+                "Write mermaid cell options as `%%|` — the marker follows the cell language's own comment syntax."
+            })
             .build(),
     );
 }
@@ -1552,6 +1639,151 @@ mod tests {
                 cb.text
             );
         }
+    }
+
+    // ── Graphviz (`dot`) diagram cells (bd-ijlapt70) ────────────────
+
+    /// A `dot` cell is a diagram cell: its options use the `//|` marker,
+    /// and `label` + `fig-cap` build the same float a mermaid cell gets.
+    #[test]
+    fn dot_cell_label_and_caption_build_a_float() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "dot",
+            "//| label: fig-g\n//| fig-cap: A graph.\ndigraph G { a -> b }\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+        assert!(diagnostics.is_empty(), "got {diagnostics:?}");
+
+        let Block::Div(div) = &blocks[0] else {
+            panic!("expected a float Div, got {:?}", blocks[0]);
+        };
+        assert_eq!(div.attr.0, "fig-g");
+        let cb = diagram_code_block(&blocks[0]);
+        assert_eq!(cb.text.trim(), "digraph G { a -> b }");
+    }
+
+    /// `fig-align` travels as a code-block attribute, as it does for
+    /// mermaid.
+    #[test]
+    fn dot_cell_fig_align_becomes_a_code_block_attribute() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "dot",
+            "//| fig-align: right\ndigraph G { a -> b }\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+        assert!(diagnostics.is_empty(), "got {diagnostics:?}");
+        let cb = diagram_code_block(&blocks[0]);
+        assert_eq!(
+            cb.attr.2.get("fig-align").map(String::as_str),
+            Some("right")
+        );
+        assert!(!cb.text.contains("fig-align"), "got:\n{}", cb.text);
+    }
+
+    /// Graphviz has no `accDescr:` equivalent in its source language, so
+    /// `fig-alt` travels as a code-block attribute and the renderer sets
+    /// it on the drawn SVG. Nothing mermaid-specific may be injected.
+    #[test]
+    fn dot_cell_fig_alt_becomes_a_code_block_attribute() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "dot",
+            "//| fig-alt: Two nodes joined by an arrow.\ndigraph G { a -> b }\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+        assert!(diagnostics.is_empty(), "got {diagnostics:?}");
+        let cb = diagram_code_block(&blocks[0]);
+        assert_eq!(
+            cb.attr.2.get("fig-alt").map(String::as_str),
+            Some("Two nodes joined by an arrow.")
+        );
+        assert!(!cb.text.contains("fig-alt"), "got:\n{}", cb.text);
+        assert!(!cb.text.contains("accDescr"), "got:\n{}", cb.text);
+    }
+
+    /// `graph-layout` selects the Graphviz layout engine.
+    #[test]
+    fn dot_cell_graph_layout_becomes_a_code_block_attribute() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "dot",
+            "//| graph-layout: neato\ngraph G { a -- b }\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+        assert!(diagnostics.is_empty(), "got {diagnostics:?}");
+        let cb = diagram_code_block(&blocks[0]);
+        assert_eq!(
+            cb.attr.2.get("graph-layout").map(String::as_str),
+            Some("neato")
+        );
+        assert!(!cb.text.contains("graph-layout"), "got:\n{}", cb.text);
+    }
+
+    /// A `graph-layout` that is not an engine is dropped with a warning
+    /// that names the engines, not left for the browser to trip over.
+    #[test]
+    fn dot_cell_graph_layout_invalid_value_warns() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "dot",
+            "//| graph-layout: sideways\ngraph G { a -- b }\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+        assert_eq!(diagnostics.len(), 1, "got {diagnostics:?}");
+        assert_eq!(diagnostics[0].code.as_deref(), Some("Q-2-47"));
+        let rendered = format!("{:?}", diagnostics[0]);
+        assert!(rendered.contains("sideways"), "got {rendered}");
+        assert!(rendered.contains("neato"), "got {rendered}");
+        let cb = diagram_code_block(&blocks[0]);
+        assert!(cb.attr.2.get("graph-layout").is_none());
+    }
+
+    /// `graph-layout` means nothing to mermaid, so it still warns there.
+    #[test]
+    fn graph_layout_on_a_mermaid_cell_warns() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%%| graph-layout: neato\nflowchart LR\n  A --> B\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+        assert_eq!(diagnostics.len(), 1, "got {diagnostics:?}");
+        assert_eq!(diagnostics[0].code.as_deref(), Some("Q-2-47"));
+    }
+
+    /// An option a dot cell cannot act on warns, and the hint lists
+    /// `graph-layout` among the options it does accept.
+    #[test]
+    fn unknown_option_on_a_dot_cell_warns() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in("dot", "//| echo: true\ndigraph G { a -> b }\n")];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+        assert_eq!(diagnostics.len(), 1, "got {diagnostics:?}");
+        assert_eq!(diagnostics[0].code.as_deref(), Some("Q-2-47"));
+        assert!(
+            format!("{:?}", diagnostics[0]).contains("graph-layout"),
+            "got {:?}",
+            diagnostics[0]
+        );
+    }
+
+    /// `#|` is not the dot marker. Graphviz skips lines that start with
+    /// `#`, so without this warning the options vanish with no trace.
+    #[test]
+    fn hash_marker_on_a_dot_cell_warns() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "dot",
+            "#| fig-cap: A graph.\ndigraph G { a -> b }\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+        assert_eq!(diagnostics.len(), 1, "got {diagnostics:?}");
+        assert_eq!(diagnostics[0].code.as_deref(), Some("Q-2-48"));
+        let rendered = format!("{:?}", diagnostics[0]);
+        assert!(rendered.contains("//|"), "got {rendered}");
+        assert!(!rendered.contains("%%|"), "got {rendered}");
     }
 
     /// `default` is the alignment a figure gets when nothing sets one.

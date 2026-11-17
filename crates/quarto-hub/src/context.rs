@@ -26,6 +26,7 @@ use crate::sync::{
     DiskWritePolicy, SyncAllResult, SyncResult, sync_all_documents, sync_file_by_path,
 };
 use crate::sync_state::SyncState;
+use crate::upstream::{HubSharePolicy, UpstreamConfig};
 use crate::watch::WatchFilter;
 
 /// Configuration for the hub.
@@ -168,6 +169,15 @@ pub struct HubConfig {
     /// check beyond the hub's own uid (the proxy's uid). Requires
     /// `socket_path`.
     pub socket_allow_uid: Vec<u32>,
+
+    /// Mirror an existing project from another sync server
+    /// (bd-yq3awhmw). Requires standalone mode. The hub dials the
+    /// upstream before loading the index, loads the upstream project's
+    /// index instead of creating one, and requests missing documents
+    /// from the upstream. See [`crate::upstream`].
+    ///
+    /// Default: `None`.
+    pub upstream: Option<UpstreamConfig>,
 }
 
 impl Default for HubConfig {
@@ -192,6 +202,7 @@ impl Default for HubConfig {
             socket_path: None,
             socket_group: None,
             socket_allow_uid: Vec::new(),
+            upstream: None,
         }
     }
 }
@@ -336,9 +347,26 @@ impl HubContext {
 
         let samod_storage = TokioFilesystemStorage::new(&automerge_dir);
 
+        if config.upstream.is_some() && project_root.is_some() {
+            return Err(crate::error::Error::Server(
+                "an upstream hub requires standalone mode (no local project)".to_string(),
+            ));
+        }
+
+        // bd-yq3awhmw: `hub_share_policy()` for every peer, except peers
+        // recorded as the upstream (none unless `config.upstream` is set).
+        // A mirror has no disk to protect, so `DiskWritePolicy::ReadOnly`
+        // (no --allow-edit) instead makes its browser clients read-only:
+        // their edits never reach the upstream project.
+        let share_policy =
+            if config.upstream.is_some() && config.disk_write_policy == DiskWritePolicy::ReadOnly {
+                HubSharePolicy::read_only_clients()
+            } else {
+                HubSharePolicy::default()
+            };
         let builder = Repo::build_tokio()
             .with_storage(samod_storage)
-            .with_share_policy(hub_share_policy());
+            .with_share_policy(share_policy.clone());
 
         let repo = builder.load().await;
 
@@ -352,15 +380,28 @@ impl HubContext {
 
         info!("samod repo initialized");
 
-        // Load or create the index document
-        let existing_index_id = storage.index_document_id();
-        let (index, new_index_id) = load_or_create_index(&repo, existing_index_id).await?;
+        let index = if let Some(upstream) = &config.upstream {
+            // bd-yq3awhmw: dial the upstream and record its peer id before
+            // the lookup (samod does not revive a completed `find()`), then
+            // load its index. Never create one: a missing upstream index is
+            // an error, not an empty project.
+            crate::upstream::connect_upstream(&repo, upstream, &share_policy).await?;
+            let index = crate::upstream::load_upstream_index(&repo, &upstream.index_doc_id).await?;
+            info!(index_doc_id = %index.document_id(), "Loaded upstream project index");
+            crate::upstream::prefetch_files(&repo, &index);
+            index
+        } else {
+            // Load or create the index document
+            let existing_index_id = storage.index_document_id();
+            let (index, new_index_id) = load_or_create_index(&repo, existing_index_id).await?;
 
-        // If we created a new index, persist the ID
-        if let Some(new_id) = new_index_id {
-            storage.set_index_document_id(&new_id)?;
-            info!(index_doc_id = %new_id, "Created and persisted new index document");
-        }
+            // If we created a new index, persist the ID
+            if let Some(new_id) = new_index_id {
+                storage.set_index_document_id(&new_id)?;
+                info!(index_doc_id = %new_id, "Created and persisted new index document");
+            }
+            index
+        };
 
         // Reconcile discovered files with the index and perform initial sync
         // (only in project mode)
