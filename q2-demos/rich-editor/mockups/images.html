@@ -57,6 +57,8 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
 /* The document. */
 .page { position:relative; max-width:800px; margin:0 auto; padding:36px 40px 240px; }
 .body { outline:none; font-size:17px; line-height:1.5; }
+.body.no-caret { caret-color:transparent; }
+.body.no-caret figcaption { caret-color:auto; }
 .body > :first-child { margin-top:0; }
 .body p { margin:0 0 17px; min-height:1lh; white-space:pre-wrap; }
 .body h2 { font-size:1.6rem; font-weight:600; line-height:1.2; margin:1.8rem 0 .75rem; border-bottom:1px solid var(--line); padding-bottom:.25rem; white-space:pre-wrap; }
@@ -72,6 +74,7 @@ button.icon[data-tip]:hover::after { visibility:visible; transition:visibility 0
    as in Notion. See-through on purpose: it mustn't hide the image. A
    figure's covers its caption too, which goes with it (.sel-wash, drawn
    over the page, since the figure itself is as wide as the text). */
+.body .frame.in-range::after, .body .inl.in-range::after,
 .body .inl.sel::after, .sel-wash { content:""; position:absolute; inset:-4px; border-radius:4px;
   background:rgba(35,131,226,.16); pointer-events:none; }
 .sel-wash { inset:auto; z-index:1; }
@@ -237,6 +240,10 @@ const GROUPS = [
     ['hover', 'On the image, on hover', 'A small bar in the image\'s corner while the pointer is on it (or it\'s selected): caption, alignment (its own little menu), expand, download, and More, which is also what right-clicking shows. Drag the bars at its sides to resize it. Captions are typed in place. As in Notion.'],
     ['toolbar', 'In the toolbar', 'The toolbar swaps its text buttons for the image\'s while one is selected. As in Word\'s "Picture Format".'],
   ]},
+  { key: 'through', title: '→ through a figure', options: [
+    ['around', 'Before, its caption, after', 'Before the image, through its caption, then after the figure: "after" is after everything in it.'],
+    ['sides', 'Before, after, its caption', 'Before the image, after it, then down through its caption: the two sides of the image\'s line first.'],
+  ]},
   { key: 'resize', title: 'Resizing', options: [
     ['both', 'Handles and sizes', 'Drag a corner (it snaps to a quarter, a third, a half…) or pick Small, Medium, Large or Full. Either writes width="…%". Double-click a handle for the image\'s own size.'],
     ['presets', 'Sizes only', 'Small, Medium, Large or Full: four widths, nothing in between. Fewer choices, tidier documents.'],
@@ -368,9 +375,12 @@ function inlineByKey(k) {
 }
 /** The image the controls are for: a figure or an image in a line. */
 function selectedImage() {
-  if (sel.fig) { const f = figByKey(sel.fig); return f && { fig: f } }
-  if (sel.inl) { const at = inlineByKey(sel.inl); return at && { inl: at.img, at } }
-  return null
+  // A selection that's exactly one image, and nothing else, selects it too.
+  const k = sel.fig ?? sel.inl ?? sel.only
+  const f = k && figByKey(k)
+  if (f) return { fig: f }
+  const at = k && inlineByKey(k)
+  return at ? { inl: at.img, at } : null
 }
 
 // ---------------------------------------------------------------- history
@@ -609,6 +619,15 @@ function renderBlock(blk, b, nums) {
 function normalizeText(el) { el.normalize() }
 
 let focusAlt = false, focusCaption = false
+/**
+ * While the editor shows its own caret (beside a figure) or a selected image,
+ * the browser's is hidden: it may put one back (at the document's start, when
+ * the window's focused again) that isn't where typing goes.
+ */
+function syncCaret() {
+  editor.classList.toggle('no-caret', Boolean((sel.gap || sel.fig || sel.inl) && !sel.caption))
+}
+
 function render() {
   normalize()
   lastState = snapshot()
@@ -618,6 +637,7 @@ function render() {
   if (sel.caret) {
     editor.focus({ preventScroll: true })
     setCaret(sel.caret)
+    if (sel.atX != null) { placeAtX(blockEl(sel.caret.b), sel.atX, sel.atLine); delete sel.atX }
   } else if (sel.caption) {
     const cap = editor.querySelector(`figure[data-k="${sel.fig}"] figcaption`)
     cap.focus({ preventScroll: true })
@@ -626,6 +646,8 @@ function render() {
     r.collapse(sel.capAt === 'start')
     getSelection().removeAllRanges()
     getSelection().addRange(r)
+    // ↑ from the text below: where it was across the line.
+    if (sel.atX != null) { placeAtX(cap, sel.atX, sel.atLine); delete sel.atX }
   } else if (sel.fig || sel.inl || sel.gap) {
     // A key or click that led here (⌘V, the Markdown typed) has done its
     // moving: the caret the browser puts back mustn't unselect the image.
@@ -635,6 +657,7 @@ function render() {
       getSelection().removeAllRanges()
     }
   }
+  syncCaret()
   renderToolbar()
   renderSource()
   renderOverlay()
@@ -1054,14 +1077,28 @@ function drawGap(origin) {
 // selects it, any more than they'd select a word: a click, a drag over it,
 // or Shift with an arrow does.
 const hasCaption = (f) => captionInPlace() && Boolean(f.caption)
-const landing = (f) => ({ gap: f.k, side: 'before' })
+/** The figure's line, at the side of its image nearer x (before, with no x). */
+function landing(f, x = null) {
+  const r = editor.querySelector(`figure[data-k="${f.k}"] .frame`)?.getBoundingClientRect()
+  return { gap: f.k, side: x != null && r && x > r.left + r.width / 2 ? 'after' : 'before' }
+}
+/** The x of the caret beside a figure: its image's left or right edge. */
+function gapX() {
+  const r = editor.querySelector(`figure[data-k="${sel.gap}"] .frame`)?.getBoundingClientRect()
+  return r ? (sel.side === 'after' ? r.right : r.left) : null
+}
 
-/** Arrive at block n by ↓ (dir 1) or ↑ (dir -1). */
-function arriveVertical(n, dir) {
+/**
+ * Arrive at block n by ↓ (dir 1) or ↑ (dir -1), from x across the page:
+ * in a line of text or a caption, as near x as its first (last) line goes;
+ * on a figure's line, the side of its image nearer x.
+ */
+function arriveVertical(n, dir, x = null) {
   const blk = doc[n]
   if (!blk) return false
-  if (blk.kind === 'text') sel = { caret: { b: n, o: dir > 0 ? 0 : blk.items.length } }
-  else sel = dir < 0 && hasCaption(blk) ? { fig: blk.k, caption: true, capAt: 'end' } : landing(blk)
+  const line = dir > 0 ? 'first' : 'last'
+  if (blk.kind === 'text') sel = { caret: { b: n, o: dir > 0 ? 0 : blk.items.length }, atX: x, atLine: line }
+  else sel = dir < 0 && hasCaption(blk) ? { fig: blk.k, caption: true, capAt: 'end', atX: x, atLine: line } : landing(blk, x)
   return true
 }
 /** Arrive at block n by → (dir 1) or ← (dir -1): the nearest place in reading order. */
@@ -1070,7 +1107,7 @@ function arriveHorizontal(n, dir) {
   if (!blk) return false
   if (blk.kind === 'text') sel = { caret: { b: n, o: dir > 0 ? 0 : blk.items.length } }
   else if (dir > 0) sel = { gap: blk.k, side: 'before' }
-  else sel = hasCaption(blk) ? { fig: blk.k, caption: true, capAt: 'end' } : { gap: blk.k, side: 'after' }
+  else sel = hasCaption(blk) && opts.through === 'sides' ? { fig: blk.k, caption: true, capAt: 'end' } : { gap: blk.k, side: 'after' }
   return true
 }
 /** Lines b and b + 1 as one, the caret where they met. */
@@ -1095,6 +1132,262 @@ function normalize() {
   }
 }
 
+/** The caret's x on the page, or null. */
+function caretX() {
+  const s = getSelection()
+  if (!s.rangeCount) return null
+  // By the character after it, if any, as atEdge: at a line's wrap, the
+  // caret's own empty range may give the end of the line above.
+  const r = s.getRangeAt(0).cloneRange()
+  let node = r.startContainer, o = r.startOffset
+  // At an element's edge (an empty range there has no box): into its text.
+  if (node.nodeType === 1) {
+    const after = node.childNodes[o], before = node.childNodes[o - 1]
+    if (after?.nodeType === 3 && after.length) { node = after; o = 0 }
+    else if (before?.nodeType === 3 && before.length) { node = before; o = before.length }
+    r.setStart(node, o); r.collapse(true)
+  }
+  if (node.nodeType === 3 && o < node.length) {
+    r.setEnd(node, o + 1)
+    const box = r.getClientRects()[0]
+    if (box) return box.left
+    r.collapse(true)
+  }
+  const box = r.getClientRects()[0]
+  if (box) return box.left
+  if (node.nodeType === 3 && o > 0) { r.setStart(node, o - 1); r.setEnd(node, o); const b = r.getClientRects()[0]; if (b) return b.right }
+  return null
+}
+/** The caret in `el` at x, on its first or last line. */
+function placeAtX(el, x, line) {
+  if (x == null || !el) return
+  const all = document.createRange()
+  all.selectNodeContents(el)
+  const boxes = [...all.getClientRects()].filter((b) => b.height > 0)
+  if (!boxes.length) return
+  const box = line === 'first' ? boxes[0] : boxes.at(-1)
+  const y = (box.top + box.bottom) / 2
+  // Past its ends: its start or end.
+  x = Math.min(Math.max(x, box.left + 1), box.right - 1)
+  // Through whatever's laid over the page (a bar, a menu) to the text under it.
+  overlay.style.display = 'none'
+  const p = document.caretPositionFromPoint ? document.caretPositionFromPoint(x, y) : document.caretRangeFromPoint(x, y)
+  overlay.style.display = ''
+  const node = p && (p.offsetNode ?? p.startContainer), offset = p && (p.offset ?? p.startOffset)
+  if (node && el.contains(node)) getSelection().collapse(node, offset)
+}
+
+// ----------------------------------------------------------- selecting
+// Shift with an arrow extends the selection through figures by the same
+// places the caret goes: the end of the line before one, before it, after it
+// (its caption goes with it), then on into the next line, where the browser
+// extends it through text as usual. Positions are { b, o } in a line of text,
+// or { edge: i } between blocks i - 1 and i. A selection that's exactly one
+// image is that image selected (sel.only).
+
+/** A model position from a point in the page. */
+function modelPos(node, offset) {
+  if (node === editor) return { edge: offset }
+  const el = (node.nodeType === 1 ? node : node.parentElement)?.closest('#editor > *')
+  if (!el) return null
+  const b = [...editor.children].indexOf(el)
+  if (el.nodeName === 'FIGURE') return { edge: b }
+  return { b, o: caretOffset(el, node, offset) }
+}
+/** A point in the page for a model position. */
+function domPos(pos) {
+  if (pos.edge != null) return [editor, pos.edge]
+  const el = blockEl(pos.b)
+  let count = 0
+  for (const [i, node] of [...el.childNodes].entries()) {
+    if (node.nodeType === 3) { if (pos.o <= count + node.length) return [node, pos.o - count]; count += node.length }
+    else if (node.classList?.contains('inl')) { if (pos.o === count) return [el, i]; count++ }
+  }
+  return [el, el.lastChild?.nodeName === 'BR' ? el.childNodes.length - 1 : el.childNodes.length]
+}
+/** Positions in reading order: an edge comes before the block it's before. */
+const posKey = (p) => (p.edge != null ? [p.edge, -1] : [p.b, p.o])
+const cmpPos = (p, q) => { const a = posKey(p), b = posKey(q); return a[0] - b[0] || a[1] - b[1] }
+
+/**
+ * The selection, in the editor's own terms. Chrome moves a selection's end
+ * that's next to a block it can't edit (a figure), which would drop the
+ * figure from it: so a selection that crosses one is kept here, the page's
+ * selection only showing its text.
+ */
+let ownFocus = null   // where the page's selection's focus was, as the editor last set it
+function select(anchor, focus) {
+  const [an, ao] = domPos(anchor), [fn, fo] = domPos(focus)
+  const s = getSelection()
+  s.setBaseAndExtent(an, ao, fn, fo)
+  // Its report of this change would say where Chrome moved it to: one that
+  // leaves it there is this one, and is passed over.
+  ownFocus = [s.focusNode, s.focusOffset]
+  rangeChanged([anchor, focus])
+}
+/** The selection's ends, as model positions. */
+function selectionEnds() {
+  if (sel.range && sel.anchorPos && sel.focusPos) return [sel.anchorPos, sel.focusPos]
+  if (sel.gap) { const i = figIndex(sel.gap) + (sel.side === 'after' ? 1 : 0); return [{ edge: i }, { edge: i }] }
+  if (sel.fig) { const i = figIndex(sel.fig); return sel.back ? [{ edge: i + 1 }, { edge: i }] : [{ edge: i }, { edge: i + 1 }] }
+  if (sel.inl) { const at = inlineByKey(sel.inl); return sel.back ? [{ b: at.b, o: at.o + 1 }, { b: at.b, o: at.o }] : [{ b: at.b, o: at.o }, { b: at.b, o: at.o + 1 }] }
+  const s = getSelection()
+  if (!s.rangeCount || !editor.contains(s.anchorNode)) return null
+  if ((s.focusNode.nodeType === 1 ? s.focusNode : s.focusNode.parentElement)?.closest('figcaption')) return null
+  const a = modelPos(s.anchorNode, s.anchorOffset), f = modelPos(s.focusNode, s.focusOffset)
+  return a && f ? [a, f] : null
+}
+
+/** Shift and an arrow, where it meets a figure; false to leave it to the browser. */
+function extendSelection(e) {
+  const ends = selectionEnds()
+  if (!ends) return false
+  const [anchor, focus] = ends
+  const fwd = e.key === 'ArrowRight' || e.key === 'ArrowDown', vertical = e.key === 'ArrowUp' || e.key === 'ArrowDown'
+  let to = null
+  if (focus.edge != null) {
+    // Between blocks: over the next one if it's a figure (its line, for ↑/↓,
+    // the same), else into the line of text.
+    const i = focus.edge, next = fwd ? doc[i] : doc[i - 1]
+    if (!next) return true
+    if (next.kind === 'fig') to = { edge: fwd ? i + 1 : i - 1 }
+    else to = fwd ? { b: i, o: 0 } : { b: i - 1, o: next.items.length }
+  } else {
+    // In a line: at its end (or start), or for ↑/↓ on its last (first) line,
+    // with a figure next, the edge before (after) the figure; or straight
+    // over it, for ↑/↓.
+    const blk = doc[focus.b], el = blockEl(focus.b)
+    const atEnd = vertical ? atEdgeOf(focus, el, fwd ? 1 : -1) : fwd ? focus.o === blk.items.length : focus.o === 0
+    const n = fwd ? focus.b + 1 : focus.b - 1
+    if (!atEnd || doc[n]?.kind !== 'fig') {
+      // The browser extends it from here; from a selected image or the caret
+      // beside a figure, it needs a selection in the page to extend.
+      if (sel.fig || sel.inl || sel.gap) {
+        const [an, ao] = domPos(anchor), [fn, fo] = domPos(focus)
+        getSelection().setBaseAndExtent(an, ao, fn, fo)
+        sel = { range: true, caret: null, anchorPos: anchor, focusPos: focus }
+        moved = true
+      }
+      return false
+    }
+    to = vertical ? { edge: fwd ? n + 1 : n } : { edge: fwd ? n : n + 1 }
+  }
+  e.preventDefault()
+  moved = true
+  select(anchor, to)
+  return true
+}
+/** Whether a position is on the last (dir 1) or first line of its block. */
+function atEdgeOf(pos, el, dir) {
+  const s = getSelection()
+  const keep = s.rangeCount ? s.getRangeAt(0).cloneRange() : null
+  setCaret(pos)
+  const edge = atEdge(el, dir)
+  if (keep) { s.removeAllRanges(); s.addRange(keep) }
+  return edge
+}
+
+/** After the selection changed to a range (given, or the page's): what it holds. */
+function rangeChanged(given = null) {
+  const s = getSelection()
+  let anchor, focus
+  if (given) [anchor, focus] = given
+  else {
+    // The page's selection; its anchor kept from before, where Chrome may have
+    // moved it (see select).
+    focus = s.focusNode && modelPos(s.focusNode, s.focusOffset)
+    anchor = (sel.range && sel.anchorPos) || (s.anchorNode && modelPos(s.anchorNode, s.anchorOffset))
+  }
+  if (!anchor || !focus) return
+  const [start, end] = cmpPos(anchor, focus) <= 0 ? [anchor, focus] : [focus, anchor]
+  const held = imagesIn(start, end)
+  const was = sel
+  // Exactly one image, nothing else: that image, selected.
+  sel = { range: true, caret: null, anchorPos: anchor, focusPos: focus, held, only: held.length === 1 && !textIn(start, end) ? held[0] : null }
+  syncCaret()
+  if (was.fig || was.inl || was.gap) editor.querySelectorAll('.sel').forEach((n) => n.classList.remove('sel'))
+  markRange()
+  renderOverlay()
+  renderToolbar()
+  renderSource()
+}
+/** The keys of the images between two positions. */
+function imagesIn(start, end) {
+  const out = []
+  doc.forEach((blk, b) => {
+    if (blk.kind === 'fig') { if (cmpPos(start, { edge: b }) <= 0 && cmpPos(end, { edge: b + 1 }) >= 0) out.push(blk.k) }
+    else blk.items.forEach((x, o) => { if (typeof x === 'object' && cmpPos(start, { b, o }) <= 0 && cmpPos(end, { b, o: o + 1 }) >= 0) out.push(x.k) })
+  })
+  return out
+}
+/** Whether there's text (not just space) between two positions. */
+function textIn(start, end) {
+  return doc.some((blk, b) => blk.kind === 'text' && blk.items.some((x, o) => typeof x === 'string' && /\S/.test(x) && cmpPos(start, { b, o }) <= 0 && cmpPos(end, { b, o: o + 1 }) >= 0))
+}
+/** Images in the selection get the selected wash. */
+function markRange() {
+  const held = new Set(sel.range ? sel.held ?? [] : [])
+  for (const el of editor.querySelectorAll('figure .frame, .inl')) el.classList.toggle('in-range', held.has(Number(el.closest('[data-k]').dataset.k)))
+}
+
+/** The blocks between two positions, cut at them. */
+function sliceBlocks(start, end) {
+  const out = []
+  const sb = start.edge ?? start.b, eb = end.edge != null ? end.edge - 1 : end.b
+  for (let b = sb; b <= eb; b++) {
+    const blk = doc[b]
+    if (blk.kind === 'fig') { out.push(blk); continue }
+    const from = start.edge == null && b === start.b ? start.o : 0
+    const to = end.edge == null && b === end.b ? end.o : blk.items.length
+    out.push({ ...blk, items: blk.items.slice(from, to) })
+  }
+  return out
+}
+/** Delete between two positions; the caret where they were. */
+function deleteBetween(start, end) {
+  record()
+  const head = doc.slice(0, start.edge ?? start.b)
+  const tail = doc.slice(end.edge != null ? end.edge : end.b + 1)
+  const headItems = start.edge == null ? doc[start.b].items.slice(0, start.o) : null
+  const tailItems = end.edge == null ? doc[end.b].items.slice(end.o) : null
+  const tag = start.edge == null ? doc[start.b].tag : end.edge == null ? doc[end.b].tag : 'p'
+  const items = [...(headItems ?? []), ...(tailItems ?? [])]
+  // What's left of the lines at the two ends, as one line (an empty one if
+  // the selection was whole blocks).
+  doc = [...head, { kind: 'text', tag, items }, ...tail]
+  sel = { caret: { b: head.length, o: headItems?.length ?? 0 } }
+}
+/** Keys with a selection that holds an image and more: Backspace, typing, copying. */
+function rangeKey(e) {
+  const mod = e.metaKey || e.ctrlKey, key = e.key
+  const [start, end] = cmpPos(sel.anchorPos, sel.focusPos) <= 0 ? [sel.anchorPos, sel.focusPos] : [sel.focusPos, sel.anchorPos]
+  if (mod && (key === 'c' || key === 'x')) {
+    // As Markdown: the editor's own copy of a stretch with images in it.
+    const md = sliceBlocks(start, end).map(toQmd).join('\n\n')
+    navigator.clipboard.writeText(md).then(() => toast(key === 'x' ? 'Cut, as Markdown' : 'Copied, as Markdown'), () => toast("The browser didn't let the editor copy"))
+    if (key === 'c') return true
+  } else if (mod || e.altKey) return false
+  else if (e.shiftKey && key.startsWith('Arrow')) return false
+  else if (!(key === 'Backspace' || key === 'Delete' || key === 'Enter' || key.length === 1 || key === 'ArrowLeft' || key === 'ArrowRight')) return false
+  e.preventDefault()
+  if (key === 'ArrowLeft' || key === 'ArrowRight') {
+    // The selection goes; the caret's at its start or end.
+    const at = key === 'ArrowLeft' ? start : end
+    if (at.edge == null) sel = { caret: at }
+    else if (doc[at.edge]?.kind === 'fig') sel = { gap: doc[at.edge].k, side: 'before' }
+    else if (doc[at.edge]) sel = { caret: { b: at.edge, o: 0 } }
+    else sel = { gap: doc[at.edge - 1].k, side: 'after' }
+    render()
+    return true
+  }
+  deleteBetween(start, end)
+  const { b, o } = sel.caret
+  if (key.length === 1) { doc[b].items.splice(o, 0, key); sel = { caret: { b, o: o + 1 } } }
+  else if (key === 'Enter') { const rest = doc[b].items.splice(o); doc.splice(b + 1, 0, { kind: 'text', tag: 'p', items: rest }); sel = { caret: { b: b + 1, o: 0 } } }
+  render()
+  return true
+}
+
 /** Keys at the caret beside a figure's image. */
 function gapKey(e) {
   const k = sel.gap, before = sel.side === 'before', key = e.key
@@ -1109,11 +1402,18 @@ function gapKey(e) {
     record()
     if (before) doc.splice(b, 0, para('p'))
     else { doc.splice(b + 1, 0, para('p')); sel = { caret: { b: b + 1, o: 0 } } }
-  } else if (e.shiftKey && ((key === 'ArrowRight' && before) || (key === 'ArrowLeft' && !before) || key === 'ArrowUp' || key === 'ArrowDown')) sel = { fig: k }
-  else if (key === 'ArrowRight') { if (before) sel = { gap: k, side: 'after' }; else if (hasCaption(f)) sel = { fig: k, caption: true, capAt: 'start' }; else arriveHorizontal(b + 1, 1) }
-  else if (key === 'ArrowLeft') { if (!before) sel = { gap: k, side: 'before' }; else arriveHorizontal(b - 1, -1) }
-  else if (key === 'ArrowDown') { if (hasCaption(f)) sel = { fig: k, caption: true, capAt: 'start' }; else arriveVertical(b + 1, 1) }
-  else if (key === 'ArrowUp') arriveVertical(b - 1, -1)
+  } else if (key === 'ArrowRight' || key === 'ArrowLeft') {
+    // The order through it (opts.through): before, caption, after; or
+    // before, after, caption.
+    const cap = hasCaption(f) ? { fig: k, caption: true } : null
+    const order = [{ gap: k, side: 'before' }, ...(opts.through === 'sides' ? [{ gap: k, side: 'after' }, cap] : [cap, { gap: k, side: 'after' }])].filter(Boolean)
+    const i = order.findIndex((x) => x.gap && x.side === sel.side)
+    const next = order[i + (key === 'ArrowRight' ? 1 : -1)]
+    if (next) sel = next.caption ? { ...next, capAt: key === 'ArrowRight' ? 'start' : 'end' } : next
+    else arriveHorizontal(key === 'ArrowRight' ? b + 1 : b - 1, key === 'ArrowRight' ? 1 : -1)
+  }
+  else if (key === 'ArrowDown') { const x = gapX(); if (hasCaption(f)) sel = { fig: k, caption: true, capAt: 'start', atX: x, atLine: 'first' }; else arriveVertical(b + 1, 1, x) }
+  else if (key === 'ArrowUp') arriveVertical(b - 1, -1, gapX())
   // Towards the image, Backspace and Delete select it first, as in a line.
   else if ((key === 'Delete' && before) || (key === 'Backspace' && !before)) sel = { fig: k }
   else if (key === 'Backspace') { if (b > 0) joinLines(b - 1) }
@@ -1141,7 +1441,10 @@ function washFigure(origin = page.getBoundingClientRect()) {
   overlay.prepend(wash)
 }
 
-const selectedEl = () => (sel.fig ? editor.querySelector(`figure[data-k="${sel.fig}"]`) : sel.inl ? editor.querySelector(`.inl[data-k="${sel.inl}"]`) : null)
+const selectedEl = () => {
+  const k = sel.fig ?? sel.inl ?? sel.only
+  return k ? editor.querySelector(`figure[data-k="${k}"], .inl[data-k="${k}"]`) : null
+}
 
 // Drag a corner: the width as a share of the page's text, snapping to the
 // common ones, from the side the image grows from.
@@ -1680,6 +1983,9 @@ editor.addEventListener('keydown', (e) => {
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return }
   if (e.key === 'Escape' && panel) { e.preventDefault(); panel = null; render(); return }
 
+  if (e.shiftKey && !mod && !e.altKey && e.key.startsWith('Arrow') && extendSelection(e)) return
+  if (sel.range && sel.held?.length && !sel.only && rangeKey(e)) return
+
   // In a caption.
   const cap = e.target.closest?.('figcaption')
   if (cap) {
@@ -1696,17 +2002,18 @@ editor.addEventListener('keydown', (e) => {
       render()
     } else if (e.key === 'ArrowUp' && atEdge(cap, -1)) {
       e.preventDefault()
-      sel = landing(doc[b])
+      sel = landing(doc[b], caretX())
       render()
     } else if (e.key === 'ArrowDown' && atEdge(cap, 1)) {
       e.preventDefault()
-      if (arriveVertical(b + 1, 1)) render()
+      if (arriveVertical(b + 1, 1, caretX())) render()
     } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.shiftKey) {
       // Out of its ends: back beside the image, or on to what's next.
       const s = getSelection()
       const at = s.rangeCount && s.isCollapsed ? caretOffset(cap, s.focusNode, s.focusOffset) : -1
-      if (e.key === 'ArrowLeft' && at === 0) { e.preventDefault(); sel = { gap: k, side: 'after' }; render() }
-      else if (e.key === 'ArrowRight' && at === cap.textContent.length) { e.preventDefault(); if (arriveHorizontal(b + 1, 1)) render() }
+      const around = opts.through !== 'sides'
+      if (e.key === 'ArrowLeft' && at === 0) { e.preventDefault(); sel = { gap: k, side: around ? 'before' : 'after' }; render() }
+      else if (e.key === 'ArrowRight' && at === cap.textContent.length) { e.preventDefault(); if (around) sel = { gap: k, side: 'after' }; else if (!arriveHorizontal(b + 1, 1)) return; render() }
     }
     return
   }
@@ -1717,6 +2024,8 @@ editor.addEventListener('keydown', (e) => {
   // An image selected.
   const img = selectedImage()
   if (img) {
+    // Shift with an arrow extends the selection (extendSelection).
+    if (e.shiftKey && e.key.startsWith('Arrow')) return
     if (mod && !e.shiftKey && (e.key.toLowerCase() === 'c' || e.key.toLowerCase() === 'x')) {
       e.preventDefault()
       const cut = e.key.toLowerCase() === 'x'
@@ -1807,10 +2116,6 @@ editor.addEventListener('keydown', (e) => {
   // Backspace or Delete next to an image in a line: select it first.
   const near = e.key === 'Backspace' ? blk.items[o - 1] : e.key === 'Delete' ? blk.items[o] : null
   if (near && typeof near === 'object') { e.preventDefault(); sel = { inl: near.k }; render(); return }
-  // Shift and an arrow onto an image in a line selects it, as it would a
-  // character; plain arrows go past it like one.
-  const over = e.shiftKey && !mod && !e.altKey ? (e.key === 'ArrowRight' ? blk.items[o] : e.key === 'ArrowLeft' ? blk.items[o - 1] : null) : null
-  if (over && typeof over === 'object') { e.preventDefault(); moved = true; sel = { inl: over.k }; render(); return }
   // Arrows onto a figure from the line next to it: see arriveVertical and
   // arriveHorizontal. With Shift, over it: it's selected.
   if (mod || e.altKey) return
@@ -1821,9 +2126,8 @@ editor.addEventListener('keydown', (e) => {
   if (f?.kind !== 'fig') return
   e.preventDefault()
   moved = true
-  if (e.shiftKey) sel = { fig: f.k }
-  else if (e.key === 'ArrowDown') arriveVertical(b + 1, 1)
-  else if (e.key === 'ArrowUp') arriveVertical(b - 1, -1)
+  if (e.key === 'ArrowDown') arriveVertical(b + 1, 1, caretX())
+  else if (e.key === 'ArrowUp') arriveVertical(b - 1, -1, caretX())
   else if (e.key === 'ArrowRight') arriveHorizontal(b + 1, 1)
   else arriveHorizontal(b - 1, -1)
   render()
@@ -1865,7 +2169,11 @@ function atEdge(el, dir) {
 // or a key moves it off an image: focusing the editor puts the caret at its
 // start, after the image was selected.
 let moved = false
-editor.addEventListener('mousedown', (e) => { if (!e.target.closest('figure .frame, .inl') && e.target.nodeName !== 'FIGURE') moved = true })
+editor.addEventListener('mousedown', (e) => {
+  if (!e.target.closest('figure .frame, .inl') && e.target.nodeName !== 'FIGURE') moved = true
+  // A new selection, from wherever this press is.
+  if (sel.range) sel = { caret: null }
+})
 editor.addEventListener('keydown', () => { moved = true }, true)
 document.addEventListener('selectionchange', () => {
   if (dragging) return
@@ -1884,13 +2192,20 @@ document.addEventListener('selectionchange', () => {
   const inCaption = (s.anchorNode.nodeType === 1 ? s.anchorNode : s.anchorNode.parentElement)?.closest('figcaption')
   if (inCaption) {
     const k = Number(inCaption.closest('figure').dataset.k)
-    if (sel.fig !== k || !sel.caption) { sel = { fig: k, caption: true }; renderToolbar(); renderSource(); refreshCaptions(); renderOverlay() }
+    if (sel.fig !== k || !sel.caption) { sel = { fig: k, caption: true }; syncCaret(); renderToolbar(); renderSource(); refreshCaptions(); renderOverlay() }
     return
+  }
+  if (!s.isCollapsed) {
+    if (ownFocus && s.focusNode === ownFocus[0] && s.focusOffset === ownFocus[1]) return
+    ownFocus = null
+    return rangeChanged()
   }
   const caret = readCaret()
   if (!caret) return
   const was = sel
-  sel = caret.collapsed ? { caret: { b: caret.b, o: caret.o } } : { range: true, caret: null }
+  sel = { caret: { b: caret.b, o: caret.o } }
+  syncCaret()
+  markRange()
   if (was.fig || was.inl || panel?.anchor === 'image') {
     panel = null
     // Unselect without rebuilding the text the caret is in.
