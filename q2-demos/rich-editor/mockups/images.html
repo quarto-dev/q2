@@ -553,6 +553,9 @@ function render() {
     getSelection().removeAllRanges()
     getSelection().addRange(r)
   } else if (sel.fig || sel.inl) {
+    // A key or click that led here (⌘V, the Markdown typed) has done its
+    // moving: the caret the browser puts back mustn't unselect the image.
+    moved = false
     if (document.activeElement === document.body || editor.contains(document.activeElement) || document.activeElement === editor) {
       editor.focus({ preventScroll: true })
       getSelection().removeAllRanges()
