@@ -180,8 +180,14 @@ path = "./crates/quarto-config"
 [workspace.dependencies.quarto-system-runtime]
 path = "./crates/quarto-system-runtime"
 
+[workspace.dependencies.quarto-project-files]
+path = "./crates/quarto-project-files"
+
 [workspace.dependencies.quarto-project-create]
 path = "./crates/quarto-project-create"
+
+[workspace.dependencies.quarto-lsp-project]
+path = "./crates/quarto-lsp-project"
 
 [workspace.dependencies.quarto-lsp-core]
 path = "./crates/quarto-lsp-core"

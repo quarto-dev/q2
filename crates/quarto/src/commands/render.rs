@@ -480,30 +480,18 @@ fn classify_no_inputs(
 /// contains the first match, or `None` if the filesystem root is
 /// reached without one.
 ///
-/// This is the cheap half of `ProjectContext::find_project_config`
-/// (parsing-free, `path_exists`-only). `classify_no_inputs` uses it
-/// to gate the expensive directory walk that `ProjectContext::discover`
-/// would otherwise perform on a project-less cwd.
+/// A thin wrapper over the shared walk,
+/// `quarto_core::project::discovery::find_project_root` (parsing-free,
+/// `path_exists`-only). `classify_no_inputs` uses it to gate the
+/// expensive directory walk that `ProjectContext::discover` would
+/// otherwise perform on a project-less cwd.
 pub(crate) fn find_project_root_upward(
     start: &Path,
     runtime: &dyn SystemRuntime,
 ) -> std::result::Result<Option<PathBuf>, DispatchError> {
-    let mut current = start.to_path_buf();
-    loop {
-        for name in ["_quarto.yml", "_quarto.yaml"] {
-            let candidate = current.join(name);
-            let exists = runtime
-                .path_exists(&candidate, None)
-                .map_err(|e| DispatchError::Discover(e.to_string()))?;
-            if exists {
-                return Ok(Some(current));
-            }
-        }
-        match current.parent() {
-            Some(parent) => current = parent.to_path_buf(),
-            None => return Ok(None),
-        }
-    }
+    quarto_core::project::discovery::find_project_root(start, runtime)
+        .map(|found| found.map(|(dir, _config)| dir))
+        .map_err(|e| DispatchError::Discover(e.to_string()))
 }
 
 /// True when a real `_quarto.yml` (or `_quarto.yaml`) sits at the

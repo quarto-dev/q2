@@ -9,7 +9,11 @@
 pub mod admin;
 pub mod auth;
 pub mod context;
-pub mod discovery;
+/// File discovery moved to `quarto-project-files` (bd-n0uth2zt) so the
+/// language server classifies project files exactly as the hub does.
+pub mod discovery {
+    pub use quarto_project_files::discovery::*;
+}
 pub mod error;
 pub mod index;
 pub mod login_state;

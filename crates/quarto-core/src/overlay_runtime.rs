@@ -16,7 +16,8 @@
 //!
 //! Every trait method is written out and forwards to the inner runtime, so a
 //! method the inner runtime overrides is never replaced by the trait default.
-//! Five methods see the file overlay: `file_read`, `file_read_string`,
+//! Six methods see the file overlay: `path_exists` (bd-ojsx06at: the shared
+//! project-root walk checks configs with it), `file_read`, `file_read_string`,
 //! `is_file`, `is_dir` and `path_metadata`; `runtime_metadata` merges. The trait defaults of `file_read_string`,
 //! `is_file` and `is_dir` route through `self`, and `NativeRuntime` may
 //! override them, so forwarding them plainly would bypass the overlay.
@@ -155,7 +156,15 @@ impl OverlayRuntime {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 impl SystemRuntime for OverlayRuntime {
-    // The five methods that see the overlay.
+    // The six methods that see the overlay.
+
+    fn path_exists(&self, path: &Path, kind: Option<PathKind>) -> RuntimeResult<bool> {
+        match (self.overlaid(path), kind) {
+            (Some(_), None | Some(PathKind::File)) => Ok(true),
+            (Some(_), Some(_)) => Ok(false),
+            (None, _) => self.inner.path_exists(path, kind),
+        }
+    }
 
     fn file_read(&self, path: &Path) -> RuntimeResult<Vec<u8>> {
         match self.overlaid(path) {
@@ -211,10 +220,6 @@ impl SystemRuntime for OverlayRuntime {
 
     fn file_write(&self, path: &Path, contents: &[u8]) -> RuntimeResult<()> {
         self.inner.file_write(path, contents)
-    }
-
-    fn path_exists(&self, path: &Path, kind: Option<PathKind>) -> RuntimeResult<bool> {
-        self.inner.path_exists(path, kind)
     }
 
     fn canonicalize(&self, path: &Path) -> RuntimeResult<PathBuf> {
@@ -400,13 +405,13 @@ impl SystemRuntime for OverlayRuntime {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use quarto_system_runtime::NativeRuntime;
     use std::collections::BTreeSet;
 
     /// Method names declared inside `pub trait SystemRuntime { .. }`.
-    fn trait_methods(src: &str) -> BTreeSet<String> {
+    pub(crate) fn trait_methods(src: &str) -> BTreeSet<String> {
         let start = src.find("pub trait SystemRuntime").expect("trait");
         let body = &src[start..];
         let end = body.find("\n}\n").expect("end of trait");
@@ -414,7 +419,7 @@ mod tests {
     }
 
     /// Method names declared at four-space indent (`fn` or `async fn`).
-    fn method_names(body: &str) -> BTreeSet<String> {
+    pub(crate) fn method_names(body: &str) -> BTreeSet<String> {
         body.lines()
             .filter_map(|line| {
                 let rest = line.strip_prefix("    ")?;

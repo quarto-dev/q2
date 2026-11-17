@@ -72,12 +72,13 @@ use crate::stage::stages::{
     UnexecutedCellCountStage,
 };
 use crate::stage::{
-    ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
-    DocumentProfileStage, EngineExecutionStage, EquationNumberStage, IncludeExpansionStage,
-    IncludeResolveStage, LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage,
-    LoadedSource, MathJsStage, MathMlStage, MetadataMergeStage, ParseDocumentStage, Pipeline,
-    PipelineData, PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage,
-    SourceConversionStage, StageContext, UnwrapProfileStage, UserFiltersStage,
+    ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, AuthoredMetadataStage,
+    CompileThemeCssStage, DocumentProfileStage, EngineExecutionStage, EquationNumberStage,
+    IncludeExpansionStage, IncludeResolveStage, LanguageResolveStage, LinkResolutionStage,
+    ListingItemInfoStage, LoadedSource, MathJsStage, MathMlStage, MetadataMergeStage,
+    ParseDocumentStage, Pipeline, PipelineData, PipelineStage, PreEngineSugaringStage,
+    RenderHtmlBodyStage, ResourceReportStage, SourceConversionStage, StageContext,
+    UnwrapProfileStage, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
@@ -319,32 +320,19 @@ pub fn build_html_pipeline_stages_with_apply_config(
     build_html_pipeline_stages_with_options(apply_config)
 }
 
-/// Like [`build_html_pipeline_stages_with_apply_config`], but also
-/// accepts an optional `ApplyTemplateConfig`.  The engine registry is
-/// now carried on [`crate::stage::StageContext`] (Task 8 of the
-/// ts-engine-extensions plan) — callers that need a non-default
-/// registry set `ctx.engine_registry_override` (or equivalently
-/// `HtmlRenderConfig.engine_registry`) before calling `run_pipeline`,
-/// which applies it after constructing the `StageContext`.
-/// The head pipeline: every stage from the raw source through the
-/// [`DocumentProfileStage`] checkpoint and the Pass-1 analyses that
-/// write to the profile ([`LinkResolutionStage`]). Its output is
-/// [`PipelineData::AtProfile`](crate::stage::PipelineData).
+/// The ingest phase: turn the source into an AST with fully merged
+/// metadata. Source conversion (non-QMD inputs), parse, then the
+/// metadata merge (project `_quarto.yml`, directory `_metadata.yml`
+/// layers, front matter, `format.<id>.*` flattening).
 ///
-/// **Single source of truth for what a profile sees.** The full HTML
-/// pipeline ([`build_html_pipeline_stages_with_options`]) starts with
-/// exactly these stages, and Pass-1 profiling
-/// (`orchestrator::pass1_profile_single_file_live`) runs exactly
-/// these, so a document's Pass-1 profile — the one listings, sidebars
-/// and the dependency graph read — equals the profile its full render
-/// computes. The two lists used to be maintained by hand and drifted:
-/// `IncludeResolveStage`, `ListingItemInfoStage` and
-/// `LanguageResolveStage` were added to the full pipeline only, so
-/// listing autofill never reached listings
-/// (bd-listing-default-no-derived-desc-m0wrr8ty,
-/// bd-listing-description-precedence-x4bh6w3m). Add pre-checkpoint
-/// stages here, never to one caller.
-pub fn build_head_stages() -> Vec<Box<dyn PipelineStage>> {
+/// At the end of this phase `ast.meta` is the document's **authored**
+/// merged metadata: nothing in it was derived by quarto. `q2 get-config`
+/// runs exactly these stages ([`crate::get_config::merge_document_metadata`]),
+/// and [`build_head_stages`] starts with them followed by the
+/// [`AuthoredMetadataStage`] checkpoint, so the two agree by
+/// construction (bd-xzsnuoqq; `get-config` used to keep its own copy of
+/// this list and skipped source conversion, so it failed on `.ipynb`).
+pub fn build_ingest_stages() -> Vec<Box<dyn PipelineStage>> {
     vec![
         // Convert non-QMD files (e.g. .echo, .jl, .ipynb) to QMD before parse.
         // First engine in deterministic order that claims the file wins.
@@ -352,6 +340,17 @@ pub fn build_head_stages() -> Vec<Box<dyn PipelineStage>> {
         Box::new(SourceConversionStage::new()),
         Box::new(ParseDocumentStage::new()),
         Box::new(MetadataMergeStage::new()),
+    ]
+}
+
+/// The enrich phase: stages that add derived information before the
+/// profile checkpoint. Several of them write derived keys into
+/// `ast.meta` (`quarto.language`, `rendered.includes`, `listing-item`)
+/// because templates, Lua filters and listing templates read them from
+/// there — which is why the authored metadata is recorded *before* this
+/// phase (see [`AuthoredMetadataStage`]).
+fn build_enrich_stages() -> Vec<Box<dyn PipelineStage>> {
+    vec![
         // Resolve localized terms (`lang` + `language:` → `quarto.language`
         // metadata) right after the merge so every downstream consumer —
         // profile extraction, transforms, templates — sees the table
@@ -381,18 +380,64 @@ pub fn build_head_stages() -> Vec<Box<dyn PipelineStage>> {
         // (epic `bd-61cd`, L1 = `bd-izqh`). Author values always win.
         // See `claude-notes/plans/2026-05-05-listings-L1-autofill-stage.md`.
         Box::new(ListingItemInfoStage::new()),
-        // Profile checkpoint: post-merge, pre-mutation. See
-        // `claude-notes/designs/document-profile-contract.md`.
-        Box::new(DocumentProfileStage::new()),
-        // Pass-1 cross-doc body-link resolution. Walks the AST
-        // (read-only) and writes each link target into
-        // `profile.body_link_targets` so the Phase-8 dependency
-        // graph can use them. See
-        // `claude-notes/designs/body-link-resolution-contract.md`.
-        Box::new(LinkResolutionStage::new()),
     ]
 }
 
+/// The head pipeline: every stage from the raw source through the
+/// [`DocumentProfileStage`] checkpoint and the Pass-1 analyses that
+/// write to the profile ([`LinkResolutionStage`]). Its output is
+/// [`PipelineData::AtProfile`](crate::stage::PipelineData).
+///
+/// It runs in named phases:
+///
+/// 1. **Ingest** ([`build_ingest_stages`]): source conversion, parse,
+///    metadata merge.
+/// 2. **Authored-metadata checkpoint** ([`AuthoredMetadataStage`]):
+///    records the merged metadata before anything derived is added.
+/// 3. **Enrich** (`build_enrich_stages`): language terms, include
+///    expansion and resolution, listing autofill.
+/// 4. **Profile checkpoint** ([`DocumentProfileStage`]).
+/// 5. **Pass-1 analyses** that write to the profile
+///    ([`LinkResolutionStage`]).
+///
+/// **Single source of truth for what a profile sees.** The full HTML
+/// pipeline ([`build_html_pipeline_stages_with_options`]) starts with
+/// exactly these stages, and Pass-1 profiling
+/// ([`crate::pass1::profile_document`]) runs exactly
+/// these, so a document's Pass-1 profile — the one listings, sidebars
+/// and the dependency graph read — equals the profile its full render
+/// computes. The two lists used to be maintained by hand and drifted:
+/// `IncludeResolveStage`, `ListingItemInfoStage` and
+/// `LanguageResolveStage` were added to the full pipeline only, so
+/// listing autofill never reached listings
+/// (bd-listing-default-no-derived-desc-m0wrr8ty,
+/// bd-listing-description-precedence-x4bh6w3m). Add pre-checkpoint
+/// stages to the phase they belong to, never to one caller. A stage
+/// that writes derived keys into `ast.meta` belongs in enrich, after the
+/// authored-metadata checkpoint.
+pub fn build_head_stages() -> Vec<Box<dyn PipelineStage>> {
+    let mut stages = build_ingest_stages();
+    stages.push(Box::new(AuthoredMetadataStage::new()));
+    stages.extend(build_enrich_stages());
+    // Profile checkpoint: post-merge, pre-mutation. See
+    // `claude-notes/designs/document-profile-contract.md`.
+    stages.push(Box::new(DocumentProfileStage::new()));
+    // Pass-1 cross-doc body-link resolution. Walks the AST
+    // (read-only) and writes each link target into
+    // `profile.body_link_targets` so the Phase-8 dependency
+    // graph can use them. See
+    // `claude-notes/designs/body-link-resolution-contract.md`.
+    stages.push(Box::new(LinkResolutionStage::new()));
+    stages
+}
+
+/// Like [`build_html_pipeline_stages_with_apply_config`], but also
+/// accepts an optional `ApplyTemplateConfig`.  The engine registry is
+/// now carried on [`crate::stage::StageContext`] (Task 8 of the
+/// ts-engine-extensions plan) — callers that need a non-default
+/// registry set `ctx.engine_registry_override` (or equivalently
+/// `HtmlRenderConfig.engine_registry`) before calling `run_pipeline`,
+/// which applies it after constructing the `StageContext`.
 pub fn build_html_pipeline_stages_with_options(
     apply_config: Option<ApplyTemplateConfig>,
 ) -> Vec<Box<dyn PipelineStage>> {
@@ -1132,14 +1177,23 @@ pub fn build_analysis_transform_pipeline() -> TransformPipeline {
 ///
 /// ## Stages
 ///
-/// 1. [`ParseDocumentStage`] — QMD → Pandoc AST
-/// 2. [`MetadataMergeStage`] — merge project / directory / document /
-///    runtime metadata into `pandoc.meta`
+/// 1. The head ([`build_head_stages`]): ingest (source conversion, parse,
+///    metadata merge), the authored-metadata checkpoint, enrich (language
+///    terms, include expansion and resolution, listing autofill), the
+///    [`DocumentProfileStage`] checkpoint and the Pass-1 analyses. Exactly
+///    what a render and Pass 1 run, so an analysis sees the same document
+///    (bd-ojsx06at, decision R3; this used to be its own hand-copied list).
+/// 2. [`UnwrapProfileStage`] — leaves the profile in
+///    `StageContext::document_profile` and continues with the AST
+///    (`DocumentAst::authored_meta` rides along).
 /// 3. [`PreEngineSugaringStage`] — seed the [`RefTypeRegistry`] from
 ///    `crossref.custom` metadata, seed a [`CrossrefIndex`], desugar
 ///    code-block shorthand
 /// 4. [`AstTransformsStage`] with the [`build_analysis_transform_pipeline`]
 ///    subset — apply sugaring + crossref indexing
+///
+/// One run therefore yields the profile, the authored metadata, the
+/// outline-ready AST and every diagnostic.
 ///
 /// After this pipeline runs, the AST is in its outline-ready state:
 /// cross-referenceable blocks are `CustomNode`s with
@@ -1151,19 +1205,12 @@ pub fn build_analysis_transform_pipeline() -> TransformPipeline {
 /// [`RefTypeRegistry`]: crate::crossref::RefTypeRegistry
 /// [`CrossrefIndex`]: crate::crossref::CrossrefIndex
 pub fn build_analysis_pipeline() -> Pipeline {
-    let stages: Vec<Box<dyn PipelineStage>> = vec![
-        Box::new(ParseDocumentStage::new()),
-        Box::new(MetadataMergeStage::new()),
-        // Localized-term resolution — keeps analysis-path transforms in
-        // sync with the render pipelines once they consume terms
-        // (bd-llhlzd7p).
-        Box::new(LanguageResolveStage::new()),
-        Box::new(IncludeExpansionStage::new()),
-        Box::new(PreEngineSugaringStage::new()),
-        Box::new(AstTransformsStage::with_pipeline(
-            build_analysis_transform_pipeline(),
-        )),
-    ];
+    let mut stages = build_head_stages();
+    stages.push(Box::new(UnwrapProfileStage::new()));
+    stages.push(Box::new(PreEngineSugaringStage::new()));
+    stages.push(Box::new(AstTransformsStage::with_pipeline(
+        build_analysis_transform_pipeline(),
+    )));
 
     Pipeline::new(stages).expect("analysis pipeline stages should be compatible")
 }
@@ -4032,6 +4079,7 @@ mod tests {
                 "source-conversion",
                 "parse-document",
                 "metadata-merge",
+                "authored-metadata",
                 "language-resolve",
                 "include-expansion",
                 "include-resolve",
@@ -4054,87 +4102,91 @@ mod tests {
         // plus LmdDesugarStage before the engine and LmdExecuteStage before
         // the user pre-filters (bd-lmd-exploration-jqv2nbl4), plus
         // ListingResolveStage before lmd-execute (bd-2oqen84t), plus SearchCaptureStage (bd-eip0naf4), plus DashboardJsStage
-        // (bd-dashboard-format-k21hd4vy): 32.
-        assert_eq!(stages.len(), 32);
+        // (bd-dashboard-format-k21hd4vy), plus AuthoredMetadataStage after
+        // the merge (bd-xzsnuoqq): 33.
+        assert_eq!(stages.len(), 33);
         // Pre-parse file-claim/convert (Task 10).
         assert_eq!(stages[0].name(), "source-conversion");
         assert_eq!(stages[1].name(), "parse-document");
         assert_eq!(stages[2].name(), "metadata-merge");
-        // Localized-term resolution (bd-llhlzd7p) directly follows the
-        // metadata merge so `quarto.language` is present for every
+        // Authored-metadata checkpoint (bd-xzsnuoqq): ends the ingest
+        // phase, before any enrich stage writes derived keys into `meta`.
+        assert_eq!(stages[3].name(), "authored-metadata");
+        // Localized-term resolution (bd-llhlzd7p) opens the enrich phase,
+        // right after the merge and its checkpoint, so `quarto.language` is present for every
         // downstream consumer, including the profile checkpoint.
-        assert_eq!(stages[3].name(), "language-resolve");
+        assert_eq!(stages[4].name(), "language-resolve");
         // Include expansion runs before the profile checkpoint (bd-xfwx)
         // so profiles reflect content spliced in via `{{< include ... >}}`.
-        assert_eq!(stages[4].name(), "include-expansion");
+        assert_eq!(stages[5].name(), "include-expansion");
         // include-resolve (bd-8kp3) sits between include-expansion and
         // the profile checkpoint so file-slot include dependencies are
         // recorded into `profile.includes` for cache invalidation.
-        assert_eq!(stages[5].name(), "include-resolve");
+        assert_eq!(stages[6].name(), "include-resolve");
         // Listings auto-fill (bd-izqh, L1) sits between include-resolve
         // and the profile checkpoint so `meta.listing-item.*` enrichment
         // is visible to `DocumentProfile.listing_item`.
-        assert_eq!(stages[6].name(), "listing-item-info");
+        assert_eq!(stages[7].name(), "listing-item-info");
         // Profile checkpoint (Phase 0 website epic, bd-f3jc).
-        assert_eq!(stages[7].name(), "document-profile");
+        assert_eq!(stages[8].name(), "document-profile");
         // Cross-doc body-link resolution (Phase 8 sub-phase 8.0d).
-        assert_eq!(stages[8].name(), "link-resolution");
-        assert_eq!(stages[9].name(), "unwrap-profile");
-        assert_eq!(stages[10].name(), "pre-engine-sugaring");
+        assert_eq!(stages[9].name(), "link-resolution");
+        assert_eq!(stages[10].name(), "unwrap-profile");
+        assert_eq!(stages[11].name(), "pre-engine-sugaring");
         // lmd exploration spike (bd-lmd-exploration-jqv2nbl4): rewrites
         // `{lmd}` cells before any engine can see them.
-        assert_eq!(stages[11].name(), "lmd-desugar");
-        assert_eq!(stages[12].name(), "engine-execution");
-        assert_eq!(stages[13].name(), "compile-theme-css");
+        assert_eq!(stages[12].name(), "lmd-desugar");
+        assert_eq!(stages[13].name(), "engine-execution");
+        assert_eq!(stages[14].name(), "compile-theme-css");
         // Bootstrap JS (bd-4eyf) sits immediately after CompileThemeCssStage
         // so the same theme predicate gates JS and CSS together.
-        assert_eq!(stages[14].name(), "bootstrap-js");
+        assert_eq!(stages[15].name(), "bootstrap-js");
         // ClipboardJsStage (Phase 2 of bd-1tl09) sits next to
         // bootstrap-js because both ship a Project-scoped JS payload
         // gated on minimal-HTML. clipboard-js additionally gates on
         // `code-copy != false`.
-        assert_eq!(stages[15].name(), "clipboard-js");
+        assert_eq!(stages[16].name(), "clipboard-js");
         // TabsetsJsStage (bd-toc-tabset-titles-zq93gjvf) ships the
         // grouped-tabset sync module whenever Bootstrap does — same
         // gate as bootstrap-js, so it sits in the same JS block.
-        assert_eq!(stages[16].name(), "tabsets-js");
+        assert_eq!(stages[17].name(), "tabsets-js");
         // DashboardJsStage ships the dashboard runtime scripts; a no-op for
         // every other format (bd-dashboard-format-k21hd4vy).
-        assert_eq!(stages[17].name(), "dashboard-js");
+        assert_eq!(stages[18].name(), "dashboard-js");
         // Attribution-generate runs before user filters so the
         // `quarto.attribution.*` Lua host binding sees a populated
         // sidecar (bd-0fd0). No-op when no provider is installed.
-        assert_eq!(stages[18].name(), "attribution-generate");
+        assert_eq!(stages[19].name(), "attribution-generate");
         // Listings resolve before the lmd cells and the user pre-filters
         // so both see `meta.listings.<id>` (bd-2oqen84t).
-        assert_eq!(stages[19].name(), "listing-resolve");
+        assert_eq!(stages[20].name(), "listing-resolve");
         // lmd exploration spike 2: cells run after the engine, before user
         // pre-filters.
-        assert_eq!(stages[20].name(), "lmd-execute");
-        assert_eq!(stages[21].name(), "user-filters-pre");
-        assert_eq!(stages[22].name(), "ast-transforms");
-        assert_eq!(stages[23].name(), "user-filters-post");
+        assert_eq!(stages[21].name(), "lmd-execute");
+        assert_eq!(stages[22].name(), "user-filters-pre");
+        assert_eq!(stages[23].name(), "ast-transforms");
+        assert_eq!(stages[24].name(), "user-filters-post");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[24].name(), "resource-report");
+        assert_eq!(stages[25].name(), "resource-report");
         // Equation-number encoding (bd-vlhi2zkj) must follow
         // user-filters-post: a Lua post filter may rewrite or delete the
         // reserved `quarto-eq-number` attribute the stage consumes.
-        assert_eq!(stages[25].name(), "equation-number");
+        assert_eq!(stages[26].name(), "equation-number");
         // Native MathML (bd-3evfzwal) follows equation-number (the TeX it
         // converts carries no `\tag`) and precedes math-js (which loads
         // MathJax only for what this stage left as TeX).
-        assert_eq!(stages[26].name(), "math-ml");
-        assert_eq!(stages[27].name(), "code-highlight");
+        assert_eq!(stages[27].name(), "math-ml");
+        assert_eq!(stages[28].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, the `\tag{N}` equation-number encoding) is visible.
-        assert_eq!(stages[28].name(), "math-js");
-        assert_eq!(stages[29].name(), "render-html-body");
+        assert_eq!(stages[29].name(), "math-js");
+        assert_eq!(stages[30].name(), "render-html-body");
         // Website search capture (bd-eip0naf4): records the rendered
         // body before the template wraps it.
-        assert_eq!(stages[30].name(), "search-capture");
-        assert_eq!(stages[31].name(), "apply-template");
+        assert_eq!(stages[31].name(), "search-capture");
+        assert_eq!(stages[32].name(), "apply-template");
     }
 
     #[test]
@@ -4145,8 +4197,9 @@ mod tests {
         // EquationNumberStage and MathMlStage, plus LmdDesugarStage and
         // LmdExecuteStage, plus ListingResolveStage (bd-2oqen84t), plus
         // SearchCaptureStage (bd-eip0naf4), plus DashboardJsStage
-        // (bd-dashboard-format-k21hd4vy) → 32 stages.
-        assert_eq!(pipeline.len(), 32);
+        // (bd-dashboard-format-k21hd4vy), plus AuthoredMetadataStage
+        // (bd-xzsnuoqq) → 33 stages.
+        assert_eq!(pipeline.len(), 33);
     }
 
     #[test]
@@ -4154,9 +4207,9 @@ mod tests {
         use crate::stage::PipelineDataKind;
 
         let pipeline = build_analysis_pipeline();
-        // Parse + MetadataMerge + LanguageResolve + IncludeExpansion +
-        // PreEngineSugaring + AstTransforms(analysis subset)
-        assert_eq!(pipeline.len(), 6);
+        // The head + UnwrapProfile + PreEngineSugaring + AstTransforms
+        // (analysis subset), bd-ojsx06at.
+        assert_eq!(pipeline.len(), build_head_stages().len() + 3);
         assert_eq!(pipeline.expected_input(), PipelineDataKind::LoadedSource);
         assert_eq!(pipeline.expected_output(), PipelineDataKind::DocumentAst);
     }
@@ -7744,6 +7797,7 @@ mod tests {
                 "source-conversion",
                 "parse-document",
                 "metadata-merge",
+                "authored-metadata",
                 "language-resolve",
                 "include-expansion",
                 "include-resolve",

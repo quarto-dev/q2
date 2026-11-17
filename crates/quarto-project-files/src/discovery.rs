@@ -1,4 +1,4 @@
-//! Project file discovery
+//! Project file discovery (moved from `quarto-hub`; see the crate docs).
 //!
 //! Walks the project directory to find source files (`.qmd`, `.md`), config
 //! files, and binary resources.
@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use tracing::debug;
 use walkdir::WalkDir;
 
-use crate::resource::is_binary_extension;
+use crate::is_binary_extension;
 
 /// Discovered files in a Quarto project.
 #[derive(Debug, Default)]
@@ -85,77 +85,23 @@ impl ProjectFiles {
         for entry in walker.filter_map(|e| e.ok()) {
             let path = entry.path();
 
-            if path.is_file() {
-                // Files inside _extensions/ are included wholesale (Lua filters,
-                // JSON manifests, YAML metadata, etc. are all needed at render time).
-                // Binary files within _extensions/ go into binary_files; everything
-                // else is treated as text and goes into extension_files.
-                let in_extensions = path.components().any(|c| c.as_os_str() == "_extensions");
-
-                if in_extensions {
-                    if let Ok(relative) = path.strip_prefix(project_root) {
-                        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-                        if is_binary_extension(ext) {
-                            debug!(?relative, "Discovered extension binary file");
-                            files.binary_files.push(relative.to_path_buf());
-                        } else {
-                            debug!(?relative, "Discovered extension text file");
-                            files.extension_files.push(relative.to_path_buf());
-                        }
-                    }
-                    continue;
-                }
-
-                // Check for config files first (by name).
-                // `_brand.yml`/`_brand.yaml` are project-level config like
-                // `_quarto.yml` (they feed theme/brand resolution); syncing them
-                // into the preview VFS lets `q2 preview` read a deck's brand
-                // (bd-y259zb57) instead of failing with "Path not found:
-                // /project/_brand.yml".
-                if let Some(file_name) = path.file_name()
-                    && (file_name == "_quarto.yml"
-                        || file_name == "_quarto.yaml"
-                        || file_name == "_metadata.yml"
-                        || file_name == "_metadata.yaml"
-                        || file_name == "_brand.yml"
-                        || file_name == "_brand.yaml")
-                {
-                    if let Ok(relative) = path.strip_prefix(project_root) {
-                        debug!(?relative, "Discovered config file");
-                        files.config_files.push(relative.to_path_buf());
-                    }
-                    continue;
-                }
-
-                // Get file extension for further checks
-                let ext = path.extension().and_then(|e| e.to_str());
-
-                // Check for source files (.qmd, .md — see module docs re D10)
-                if ext == Some("qmd") || ext == Some("md") {
-                    if let Ok(relative) = path.strip_prefix(project_root) {
-                        debug!(?relative, "Discovered source file");
-                        files.qmd_files.push(relative.to_path_buf());
-                    }
-                    continue;
-                }
-
-                // Check for .tsx and .scss source files
-                if ext == Some("tsx") || ext == Some("scss") {
-                    if let Ok(relative) = path.strip_prefix(project_root) {
-                        debug!(?relative, "Discovered text source file");
-                        files.source_files.push(relative.to_path_buf());
-                    }
-                    continue;
-                }
-
-                // Check for binary resource files (images, PDFs, etc.)
-                if let Some(ext_str) = ext
-                    && is_binary_extension(ext_str)
-                    && let Ok(relative) = path.strip_prefix(project_root)
-                {
-                    debug!(?relative, "Discovered binary file");
-                    files.binary_files.push(relative.to_path_buf());
-                }
+            if !path.is_file() {
+                continue;
+            }
+            let Ok(relative) = path.strip_prefix(project_root) else {
+                continue;
+            };
+            let Some(class) = classify(relative) else {
+                continue;
+            };
+            debug!(?relative, ?class, "Discovered project file");
+            let relative = relative.to_path_buf();
+            match class {
+                FileClass::Source => files.qmd_files.push(relative),
+                FileClass::Config => files.config_files.push(relative),
+                FileClass::ExtensionText => files.extension_files.push(relative),
+                FileClass::TextSource => files.source_files.push(relative),
+                FileClass::ExtensionBinary | FileClass::Binary => files.binary_files.push(relative),
             }
         }
 
@@ -298,6 +244,106 @@ impl ProjectFiles {
 }
 
 /// Check if a directory entry should be ignored during traversal.
+/// How [`ProjectFiles::discover`] files a project file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileClass {
+    /// `.qmd` / `.md` ([`ProjectFiles::qmd_files`]).
+    Source,
+    /// `_quarto.yml`, `_metadata.yml`, `_brand.yml` and their `.yaml`
+    /// spellings ([`ProjectFiles::config_files`]).
+    Config,
+    /// A non-binary file under `_extensions/` ([`ProjectFiles::extension_files`]).
+    ExtensionText,
+    /// A binary file under `_extensions/` (goes to [`ProjectFiles::binary_files`]).
+    ExtensionBinary,
+    /// `.tsx` / `.scss` ([`ProjectFiles::source_files`]).
+    TextSource,
+    /// A binary resource by extension ([`ProjectFiles::binary_files`]).
+    Binary,
+}
+
+impl FileClass {
+    /// Whether the file is synced (and held) as text.
+    pub fn is_text(self) -> bool {
+        !matches!(self, FileClass::ExtensionBinary | FileClass::Binary)
+    }
+}
+
+/// Directory and file names the walk never enters or reports.
+const IGNORED_NAMES: [&str; 8] = [
+    "node_modules",
+    "_site",
+    "_book",
+    "_freeze",
+    "renv",
+    "venv",
+    "__pycache__",
+    "target",
+];
+
+/// Classify one project-relative file path exactly as
+/// [`ProjectFiles::discover`] would, including its exclusions (hidden
+/// directories and [`IGNORED_NAMES`] anywhere on the path). `None` means the
+/// walk skips the file.
+///
+/// The walk itself classifies through this function, so a watcher that
+/// applies single-file change events (the language server's disk feeder)
+/// keeps exactly the file set a full walk would produce (bd-ojsx06at).
+pub fn classify(rel: &Path) -> Option<FileClass> {
+    let mut components: Vec<&str> = rel
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(s) => s.to_str(),
+            _ => None,
+        })
+        .collect();
+    let file_name = components.pop()?;
+    if IGNORED_NAMES.contains(&file_name) {
+        return None;
+    }
+    for dir in &components {
+        if dir.starts_with('.') || IGNORED_NAMES.contains(dir) {
+            return None;
+        }
+    }
+
+    let ext = Path::new(file_name).extension().and_then(|e| e.to_str());
+
+    // Files inside _extensions/ are included wholesale (Lua filters, JSON
+    // manifests, YAML metadata, etc. are all needed at render time).
+    if components.contains(&"_extensions") {
+        return Some(if ext.is_some_and(is_binary_extension) {
+            FileClass::ExtensionBinary
+        } else {
+            FileClass::ExtensionText
+        });
+    }
+
+    // Config files by name. `_brand.yml`/`_brand.yaml` are project-level
+    // config like `_quarto.yml` (they feed theme/brand resolution); syncing
+    // them into the preview VFS lets `q2 preview` read a deck's brand
+    // (bd-y259zb57).
+    if matches!(
+        file_name,
+        "_quarto.yml"
+            | "_quarto.yaml"
+            | "_metadata.yml"
+            | "_metadata.yaml"
+            | "_brand.yml"
+            | "_brand.yaml"
+    ) {
+        return Some(FileClass::Config);
+    }
+
+    match ext {
+        // Source files (.qmd, .md — see module docs re D10)
+        Some("qmd" | "md") => Some(FileClass::Source),
+        Some("tsx" | "scss") => Some(FileClass::TextSource),
+        Some(e) if is_binary_extension(e) => Some(FileClass::Binary),
+        _ => None,
+    }
+}
+
 fn is_ignored(entry: &walkdir::DirEntry) -> bool {
     // Never filter the root directory (depth 0)
     if entry.depth() == 0 {
@@ -312,10 +358,7 @@ fn is_ignored(entry: &walkdir::DirEntry) -> bool {
     }
 
     // Skip common non-source directories
-    matches!(
-        name.as_ref(),
-        "node_modules" | "_site" | "_book" | "_freeze" | "renv" | "venv" | "__pycache__" | "target"
-    )
+    IGNORED_NAMES.contains(&name.as_ref())
 }
 
 #[cfg(test)]
@@ -323,6 +366,67 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::TempDir;
+
+    #[test]
+    fn classify_matches_the_walk_rules() {
+        let c = |p: &str| classify(Path::new(p));
+        assert_eq!(c("index.qmd"), Some(FileClass::Source));
+        assert_eq!(c("posts/a.md"), Some(FileClass::Source));
+        assert_eq!(c("_quarto.yml"), Some(FileClass::Config));
+        assert_eq!(c("sub/_metadata.yaml"), Some(FileClass::Config));
+        assert_eq!(c("_brand.yml"), Some(FileClass::Config));
+        assert_eq!(c("theme.scss"), Some(FileClass::TextSource));
+        assert_eq!(c("img/logo.png"), Some(FileClass::Binary));
+        assert_eq!(
+            c("_extensions/x/filter.lua"),
+            Some(FileClass::ExtensionText)
+        );
+        assert_eq!(
+            c("_extensions/x/logo.png"),
+            Some(FileClass::ExtensionBinary)
+        );
+        assert_eq!(c("refs.bib"), None, "not synced");
+        assert_eq!(c(".git/config.qmd"), None, "hidden directory");
+        assert_eq!(c("_site/index.qmd"), None, "output directory");
+        assert_eq!(c("a/node_modules/b.md"), None);
+        assert_eq!(
+            c(".hidden.qmd"),
+            Some(FileClass::Source),
+            "hidden files are walked"
+        );
+    }
+
+    #[test]
+    fn classify_agrees_with_a_full_walk() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        for rel in [
+            "index.qmd",
+            "_quarto.yml",
+            "sub/_metadata.yml",
+            "img/a.png",
+            "styles.scss",
+            "_extensions/e/_extension.yml",
+            "_extensions/e/font.woff2",
+            "refs.bib",
+            "_site/out.qmd",
+            ".quarto/cache.qmd",
+        ] {
+            let path = root.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, "x").unwrap();
+        }
+        let walked: std::collections::BTreeSet<PathBuf> =
+            ProjectFiles::discover(root).all_files().cloned().collect();
+        let classified: std::collections::BTreeSet<PathBuf> = walkdir::WalkDir::new(root)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_file())
+            .map(|e| e.path().strip_prefix(root).unwrap().to_path_buf())
+            .filter(|rel| classify(rel).is_some())
+            .collect();
+        assert_eq!(walked, classified);
+    }
 
     #[test]
     fn test_discover_qmd_files() {

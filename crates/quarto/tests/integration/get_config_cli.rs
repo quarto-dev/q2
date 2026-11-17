@@ -186,6 +186,24 @@ fn standalone_document_without_project() {
 }
 
 #[test]
+fn notebook_input_is_converted_before_the_merge() {
+    // bd-xzsnuoqq: get-config used to run its own `[Parse, MetadataMerge]`
+    // list, skipping source conversion, so a notebook's raw JSON was parsed
+    // as qmd and failed with Q-2-2. It now runs the head pipeline's ingest
+    // phase, like a render.
+    let dir = TempDir::new().expect("temp dir");
+    let nb = dir.path().join("nb.ipynb");
+    std::fs::write(
+        &nb,
+        r##"{"cells":[{"cell_type":"raw","metadata":{},"source":["---\n","title: Notebook title\n","---"]},{"cell_type":"markdown","metadata":{},"source":["# Hello"]}],"metadata":{"kernelspec":{"name":"python3","display_name":"Python 3","language":"python"}},"nbformat":4,"nbformat_minor":5}"##,
+    )
+    .unwrap();
+    let (stdout, stderr, code) = run(&[&nb.to_string_lossy(), "title"]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(stdout.trim(), "\"Notebook title\"");
+}
+
+#[test]
 fn missing_file_is_an_error() {
     let fx = make_fixture();
     let path = fx.path().join("nope.qmd").to_string_lossy().into_owned();

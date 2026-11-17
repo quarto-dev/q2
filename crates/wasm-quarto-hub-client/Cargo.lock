@@ -4359,6 +4359,7 @@ dependencies = [
  "quarto-navigation",
  "quarto-node-discovery",
  "quarto-pandoc-types",
+ "quarto-project-files",
  "quarto-sass",
  "quarto-source-map",
  "quarto-system-runtime",
@@ -4577,6 +4578,14 @@ dependencies = [
  "serde",
  "thiserror 2.0.21",
  "time",
+]
+
+[[package]]
+name = "quarto-project-files"
+version = "0.45.0"
+dependencies = [
+ "tracing",
+ "walkdir",
 ]
 
 [[package]]

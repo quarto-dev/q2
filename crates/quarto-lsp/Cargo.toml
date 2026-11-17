@@ -12,29 +12,40 @@ name = "quarto_lsp"
 path = "src/lib.rs"
 
 [dependencies]
-# LSP dependencies
-# Note: We use the lsp-types re-exported by tower-lsp to avoid version conflicts
-tower-lsp.workspace = true
-tokio.workspace = true
+# LSP transport (bd-ojsx06at, decision D1): rust-analyzer's synchronous
+# server scaffold; its in-order message channel is the analysis loop.
+lsp-server = "0.10"
+# lsp-server pairs with lsp-types 0.97 (fluent-uri). q2 hub-lsp's tower-lsp
+# stays on 0.94 until F3 folds it in (decision R4).
+lsp-types = "0.97"
+crossbeam-channel = "0.5"
+# Background analysis jobs (the project sweep).
+rayon = "1"
+# File watching when the client cannot watch for us.
+notify = "8"
+notify-debouncer-mini = "0.7"
 
 # Serialization
 serde.workspace = true
 serde_json.workspace = true
 
 # Error handling
-thiserror.workspace = true
 anyhow.workspace = true
 
 # Logging
 tracing.workspace = true
-tracing-subscriber.workspace = true
 
 # Local crates
+pampa = { workspace = true }
+quarto-core = { workspace = true }
 quarto-lsp-core = { workspace = true }
+quarto-lsp-project = { workspace = true }
+quarto-system-runtime = { workspace = true }
 quarto-util.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
+tempfile = "3"
 
 [lints]
 workspace = true
