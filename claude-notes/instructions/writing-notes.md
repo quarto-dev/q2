@@ -10,43 +10,39 @@ Quarto 2" (`docs/guides/authoring/migrating-markdown.qmd`;
 `q2 agents-info guides/authoring/migrating-markdown.md` prints it). Read it once.
 The habits that most often break a note here, in order of frequency:
 
-1. An apostrophe right after a code span: `` `a.rs`'s `` is an unclosed quote.
-   Write `` `a.rs`\'s ``, or reword ("the `a.rs` function").
-2. A plural possessive: `the engines' state` is a close quote without an open.
-   Write `engines\'`.
-3. A `$` that is not math: `$5 and $10`, `$ cargo run`. Write `\$`, or put the
+1. A `$` that is not math: `$5 and $10`, `$ cargo run`. Write `\$`, or put the
    command in a code span or fence.
-4. Underscore filenames in prose: `_quarto.yml and _brand.yml` pairs into
+2. Underscore filenames in prose: `_quarto.yml and _brand.yml` pairs into
    emphasis. Write `\_quarto.yml`, or use code spans (better: they are filenames).
-5. Braces in prose: `{ a, b }`, `{python}`. Code span or `\{ \}`.
-6. A code block indented four spaces. Use a fence; q2 does not support indented
+3. Braces in prose: `{ a, b }`, `{python}`. Code span or `\{ \}`.
+4. A code block indented four spaces. Use a fence; q2 does not support indented
    code (Q-2-59).
-7. A stray backtick, or a code span that contains a backtick with single-backtick
+5. A stray backtick, or a code span that contains a backtick with single-backtick
    delimiters. Use double backticks around a span that contains one.
-8. Bare brackets as editorial marks: `[REVISED]`, `[sic]`, `**[Q-1]**`,
+6. Bare brackets as editorial marks: `[REVISED]`, `[sic]`, `**[Q-1]**`,
    `[[a-ref]]`. They become spans with a warning (Q-2-49); write `\[REVISED\]`.
    A code expression (`argv[1]`, `[2, 4]`, `["mermaid"]`) goes in a code span
    instead. A checkbox state q2 does not know, `- [~]` or `- [-]`, is the same
    warning; write `- \[\~\]`. And `- [x]**bold**` with no space after `]` is not
    a task item at all.
-9. Reference-style links `[text][1]`. Only inline links work.
-10. A heading underlined with `===` or `---`. It silently becomes a paragraph;
-    use `#`.
-11. A multi-paragraph footnote written Pandoc-style (`[^1]: First.` and an
-    indented second paragraph). Write it as a block footnote: `::: ^1` on its
-    own line, the paragraphs, `:::`.
-12. Continuation lines of a `- [x]` item indented six spaces to sit under the
+7. Reference-style links `[text][1]`. Only inline links work.
+8. A heading underlined with `===` or `---`. It silently becomes a paragraph;
+   use `#`.
+9. A multi-paragraph footnote written Pandoc-style (`[^1]: First.` and an
+   indented second paragraph). Write it as a block footnote: `::: ^1` on its
+   own line, the paragraphs, `:::`.
+10. Continuation lines of a `- [x]` item indented six spaces to sit under the
     text. The item's content column is 2 (`[x]` is content), so a paragraph after
     a blank line, a fenced block or a sub-list at column 6 is an *indented code
     block*. Indent continuations two spaces. `scripts/q2-dedent-task-items.py`
     re-indents an existing file.
-13. A fenced block that contains another fence (a Rust raw string holding a
+11. A fenced block that contains another fence (a Rust raw string holding a
     ```` ```{r} ```` cell, a Markdown example with its own fences). Use four
     backticks for the outer fence. One diagnostic looks through it on purpose:
     an inner ```` ```{{r}} ```` opener (the Quarto 1 doubled-brace form) still
     reports Q-2-50, so a note that documents that idiom opts out in its front
     matter, `diagnostics: {Q-2-50: {level: off, reason: "..."}}`.
-14. A shortcode quoted in a code span or a fenced code block. Shortcodes
+12. A shortcode quoted in a code span or a fenced code block. Shortcodes
     expand there on purpose (textual inclusion of snippets), so a quoted
     `{{< include "x.qmd" >}}` reports Q-17-2 and `{{{< meta title >}}}` reports
     Q-16-5 and renders as `?meta:title`. In a span or in prose write it with
@@ -54,7 +50,7 @@ The habits that most often break a note here, in order of frequency:
     open the fence as `` ```{.yaml shortcodes="false"} `` and leave its content
     alone. A span that must show the triple-brace form takes the same
     attribute: `` `{{{< x >}}}`{shortcodes="false"} ``{shortcodes="false"}.
-15. Angle brackets in prose (Q-2-9): q2 reads `<x>` as an HTML tag and passes it
+13. Angle brackets in prose (Q-2-9): q2 reads `<x>` as an HTML tag and passes it
     through, so the reader sees nothing. A generic type goes in a code span
     (`` `Vec<String>` ``, the whole expression). A placeholder escapes the `<`:
     `"Authenticated as \<email>"`. HTML you actually want rendered is a raw

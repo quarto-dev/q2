@@ -2870,6 +2870,76 @@
           "name": "pandoc_str"
         },
         {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_html_comment"
+          },
+          "named": true,
+          "value": "comment"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "shortcode_escaped"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "entity_reference"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "numeric_character_reference"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_pandoc_line_break"
+          },
+          "named": true,
+          "value": "pandoc_line_break"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_pandoc_attr_specifier"
+          },
+          "named": true,
+          "value": "attribute_specifier"
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_closable_inline"
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_span_apostrophe"
+                  },
+                  "named": true,
+                  "value": "pandoc_str"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "_closable_inline": {
+      "type": "CHOICE",
+      "members": [
+        {
           "type": "SYMBOL",
           "name": "pandoc_span"
         },
@@ -2898,15 +2968,6 @@
           "name": "pandoc_double_quote"
         },
         {
-          "type": "ALIAS",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_html_comment"
-          },
-          "named": true,
-          "value": "comment"
-        },
-        {
           "type": "SYMBOL",
           "name": "highlight"
         },
@@ -2925,10 +2986,6 @@
         {
           "type": "SYMBOL",
           "name": "shortcode"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "shortcode_escaped"
         },
         {
           "type": "SYMBOL",
@@ -2960,14 +3017,6 @@
         },
         {
           "type": "SYMBOL",
-          "name": "entity_reference"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "numeric_character_reference"
-        },
-        {
-          "type": "SYMBOL",
           "name": "inline_note_reference"
         },
         {
@@ -2982,24 +3031,6 @@
         {
           "type": "SYMBOL",
           "name": "html_element"
-        },
-        {
-          "type": "ALIAS",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_pandoc_line_break"
-          },
-          "named": true,
-          "value": "pandoc_line_break"
-        },
-        {
-          "type": "ALIAS",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_pandoc_attr_specifier"
-          },
-          "named": true,
-          "value": "attribute_specifier"
         }
       ]
     },
@@ -5567,6 +5598,10 @@
     {
       "type": "SYMBOL",
       "name": "_paragraph_start"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_span_apostrophe"
     }
   ],
   "inline": [],

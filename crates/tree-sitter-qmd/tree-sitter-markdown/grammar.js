@@ -653,8 +653,49 @@ module.exports = grammar({
         _line: $ => prec.right(seq($._inline_element, repeat(seq(optional(alias($._whitespace, $.pandoc_space)), $._inline_element)))),
         _line_with_maybe_spaces: $ => prec.right(repeat1(choice(alias($._whitespace, $.pandoc_space), $._inline_element))),
 
+        // An inline is either one that can be directly followed by an
+        // apostrophe (see `_closable_inline`) or one that cannot.
         _inline_element: $ => choice(
-            $.pandoc_str, 
+            $.pandoc_str,
+
+            alias($._html_comment, $.comment),
+
+            $.shortcode_escaped,
+
+            $.entity_reference,
+            $.numeric_character_reference,
+
+            alias($._pandoc_line_break, $.pandoc_line_break),
+            alias($._pandoc_attr_specifier, $.attribute_specifier),
+
+            // bd-apostrophe-after-span-6l9c8c26: a `'` directly after the
+            // end of an inline construct is an apostrophe, not a quote
+            // opener: `_book_'s`, `[book](url)'s`, `` `a.rs`'s ``,
+            // `_books_' premises`. Pandoc reads all of these that way.
+            //
+            // The scanner cannot look behind, and several closers are not
+            // external tokens at all (the `)` of a link target, the `}` of
+            // an attribute, the closing `$` of math), so the context comes
+            // from the parse state instead: `_span_apostrophe` is a valid
+            // symbol only in the states right after a `_closable_inline`
+            // has ended. The scanner emits it there, for the `'` alone,
+            // unless a single-quoted span is open (then the `'` is that
+            // span's closer) or whitespace precedes it; see
+            // parse_single_quote in scanner.c. The choice is the scanner's
+            // and is deterministic, so this adds no grammar conflict.
+            //
+            // The apostrophe is a sibling `pandoc_str` after the construct,
+            // which is the shape Pandoc produces (Emph [Str "book"],
+            // Str "’s"); pampa merges it with the Str that follows.
+            seq($._closable_inline, optional(alias($._span_apostrophe, $.pandoc_str))),
+        ),
+
+        // Every inline that ends in a closing delimiter. Left out on
+        // purpose: `pandoc_str` (GH #943 handles a `'` after a word from the
+        // word's start), the HTML comment (so `_a_<!---->'b'` remains a way
+        // to write a quote that abuts a closer), the escaped shortcode,
+        // entities, the line break and a bare attribute.
+        _closable_inline: $ => choice(
             $.pandoc_span,
             $.pandoc_math,
             $.pandoc_display_math,
@@ -663,15 +704,12 @@ module.exports = grammar({
             $.pandoc_single_quote,
             $.pandoc_double_quote,
 
-            alias($._html_comment, $.comment),
-
             $.highlight,
             $.insert,
             $.delete,
             $.edit_comment,
 
             $.shortcode,
-            $.shortcode_escaped,
 
             $.citation,
             $.inline_note,
@@ -683,15 +721,11 @@ module.exports = grammar({
             $.pandoc_emph,
             $.pandoc_strong,
 
-            $.entity_reference,
-            $.numeric_character_reference,
             $.inline_note_reference,
 
             alias($._autolink, $.autolink),
 
             $.html_element,
-            alias($._pandoc_line_break, $.pandoc_line_break),
-            alias($._pandoc_attr_specifier, $.attribute_specifier),
         ),
 
         _shortcode_sep: $ => choice($._whitespace, $._soft_line_break, seq($._soft_line_break, $._whitespace), seq($._whitespace, $._soft_line_break)),
@@ -1367,6 +1401,12 @@ module.exports = grammar({
         // `_pandoc_literal_str`. Emission site: scanner.c,
         // parse_pipe_table_or_word_apostrophe.
         $._paragraph_start,
+
+        // bd-apostrophe-after-span-6l9c8c26: a `'` directly after the end of
+        // an inline construct, read as an apostrophe. Valid only right
+        // after a `_closable_inline` (see `_inline_element`); aliased to
+        // `pandoc_str`. Emission site: scanner.c, parse_single_quote.
+        $._span_apostrophe,
     ],
     precedences: $ => [],
     extras: $ => [],

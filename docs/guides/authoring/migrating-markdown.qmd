@@ -51,7 +51,6 @@ them point at the exact character to escape.
 
 | You wrote | Pandoc | q2 | Fix |
 |---|---|---|---|
-| `` `a.rs`'s `` (an apostrophe right after a code span, `_x_` or `**x**`) | apostrophe | Q-2-7, unclosed quote | `` `a.rs`\'s `` |
 | `_quarto.yml and _brand.yml` (a `_` at a word boundary) | literal | Q-2-5, unclosed emphasis | `\_quarto.yml` |
 | `Q-2-*` or `epub_*` (a `*` at the end of a word) | literal | Q-2-12, unclosed emphasis | `Q-2-\*` |
 | `$5 and $10`, `$ q2 render` (a `$` that is not inline math) | literal | parse error | `\$5`, or a code span |
@@ -88,9 +87,20 @@ written. So does a `*`, `_`, `~` or `^` with whitespace on both sides
 (`a * b * c`), a `~` before a number (`~16 files`), a bare `@` that
 is not a citation (`` `main` @ `6bee9ebe` ``), and an apostrophe
 directly after a word, including a plural possessive (`the engines'
-state`, `the cats'.`). Earlier versions of q2 rejected some of these;
-if an old document carries escapes for them, the escapes are
-harmless.
+state`, `the cats'.`). An apostrophe directly after the end of an
+inline construct is fine too: `` `a.rs`'s ``, `_book_'s`,
+`[book](url)'s`, `**books**' covers`. Earlier versions of q2 rejected
+some of these; if an old document carries escapes for them, the
+escapes are harmless.
+
+Two corners of that last rule are worth knowing. Inside a
+single-quoted span the mark after a closing delimiter ends the quote,
+so a possessive there still needs its escape: `'the _book_\'s
+premise'`. And because the mark is an apostrophe, a quotation cannot
+start directly after a closing delimiter: `_a_'b'` is `a`, an
+apostrophe, `b`, an apostrophe, as in Pandoc. In the rare case where
+you do want the quotation, put an empty HTML comment between the two:
+`_a_<!---->'b'`.
 
 ## Warnings: the render continues, but check the output
 

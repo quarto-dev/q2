@@ -71,6 +71,7 @@ pub mod table_caption_provenance;
 pub mod test;
 pub mod test_angle_bracket_link_destination;
 pub mod test_ansi_writer;
+pub mod test_apostrophe_after_closer;
 pub mod test_apostrophe_after_word;
 pub mod test_attr_key_colon;
 pub mod test_attr_source_parsing;
