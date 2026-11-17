@@ -27,17 +27,17 @@ CMake (only if the build fails inside `aws-lc-sys`), Node at the major in `.nvmr
 
 ## 2. Get the branch
 
-The macOS agent pushes `rfu/6-windows-run` to `origin` as `feature/rfu-6-windows-run` after you say go. Clone with
+The macOS agent pushes `rfu/6-windows-tooling` to `origin` as `feature/rfu-6-windows-tooling` after you say go. Clone with
 `core.autocrlf=true` (the Git for Windows default, and the setting the CRLF check needs):
 
 ```powershell
 git clone -c core.autocrlf=true https://github.com/quarto-dev/q2.git
 cd q2
-git switch -c rfu/6-windows-run origin/feature/rfu-6-windows-run
+git switch -c rfu/6-windows-tooling origin/feature/rfu-6-windows-tooling
 ```
 
-If you already have a clone, run `git fetch origin feature/rfu-6-windows-run` and then the `git switch` line above.
-A later fix from the macOS side arrives with `git pull origin feature/rfu-6-windows-run`.
+If you already have a clone, run `git fetch origin feature/rfu-6-windows-tooling` and then the `git switch` line above.
+A later fix from the macOS side arrives with `git pull origin feature/rfu-6-windows-tooling`.
 
 ## 3. Run it
 
@@ -74,7 +74,7 @@ Either rerun with `-Publish`, or do it by hand (the script prints the exact comm
 ```powershell
 git add scripts/rfu6-windows/results/*.json scripts/rfu6-windows/results/*.md
 git commit -m "RFU-6: Windows results"
-git push origin HEAD:feature/rfu-6-windows-run
+git push origin HEAD:feature/rfu-6-windows-tooling
 ```
 
 Then tell the macOS session "results are pushed". It fetches the branch and runs the parser. If pushing is awkward, paste
@@ -115,7 +115,7 @@ If the run reports failures, run this once from the repository root. It reads th
 uv run scripts/rfu6-windows/extract_failures.py
 git add scripts/rfu6-windows/results
 git commit -m "RFU-6: failure details"
-git push origin HEAD:feature/rfu-6-windows-run
+git push origin HEAD:feature/rfu-6-windows-tooling
 ```
 
 It writes `results/failure-details-<run>.md`: which tools are on `PATH` (pandoc, typst, and so on), every failing test grouped by its first panic message, a failure count per test module, and the full output of the failing tests for items 1, 4, and 6. Add `--show NAME` to include the full output of any failing test whose name contains `NAME`.
