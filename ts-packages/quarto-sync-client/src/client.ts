@@ -74,6 +74,27 @@ import {
   getDocSyncActivityWithPersisted,
 } from './sync-activity.js';
 
+/**
+ * The sync server could not be reached within the peer-wait budget
+ * and the caller demanded a live connection (`requireOnline: true`).
+ * See bd-xnmd5ni1.
+ */
+export class PeerUnavailableError extends Error {
+  override readonly name = 'PeerUnavailableError';
+  constructor(serverUrl: string, timeoutMs: number, cause?: unknown) {
+    super(
+      `no peer connection to ${serverUrl} within ${timeoutMs} ms; ` +
+        'refusing to continue offline (requireOnline is set)',
+    );
+    if (cause !== undefined) (this as { cause?: unknown }).cause = cause;
+  }
+}
+
+/**
+ * Peer-wait budget used when a caller sets `requireOnline` without a
+ * `peerTimeoutMs` of its own.
+ */
+const DEFAULT_REQUIRE_ONLINE_TIMEOUT_MS = 15_000;
 
 /**
  * Normalize a document id from the index into the `automerge:<id>`
@@ -621,6 +642,71 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     }
   }
 
+  // Helper: wait for a peer connection. Resolves at once when a peer is
+  // already connected (a caller-supplied repo may be). `Infinity` means
+  // wait with no deadline at all — no timer is scheduled (setTimeout
+  // would coerce a non-finite delay to 0 and fire immediately, the exact
+  // opposite of the intent).
+  function waitForPeer(repo: Repo, timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // (`peers` is absent on the repo doubles some tests install.)
+      if (state.connectedPeers.size > 0 || (repo.peers?.length ?? 0) > 0) {
+        resolve();
+        return;
+      }
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      if (Number.isFinite(timeoutMs)) {
+        timeoutId = setTimeout(() => {
+          cleanup();
+          reject(new Error('Timeout waiting for peer connection'));
+        }, timeoutMs);
+      }
+
+      const onPeer = () => {
+        cleanup();
+        resolve();
+      };
+
+      const cleanup = () => {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+        repo.networkSubsystem.off('peer', onPeer);
+      };
+
+      repo.networkSubsystem.on('peer', onPeer);
+    });
+  }
+
+  // Helper: the opt-in peer wait. By default nothing waits for a peer
+  // (the hub-client app never asks to). A caller that passes
+  // `peerTimeoutMs` and/or `requireOnline` gets a wait: on timeout,
+  // `requireOnline` tears the connection down and rejects with
+  // PeerUnavailableError; without it the caller carries on, exactly as
+  // if it had not waited. Must run after trackPeers so the first peer
+  // event is counted.
+  async function awaitPeerIfRequested(
+    repo: Repo,
+    serverUrl: string,
+    peerTimeoutMs: number | undefined,
+    requireOnline: boolean | undefined,
+  ): Promise<void> {
+    if (peerTimeoutMs === undefined && requireOnline !== true) return;
+    const timeoutMs = peerTimeoutMs ?? DEFAULT_REQUIRE_ONLINE_TIMEOUT_MS;
+    try {
+      syncLog('Waiting for peer connection...');
+      await waitForPeer(repo, timeoutMs);
+      syncLog('Peer connected');
+    } catch (peerError) {
+      if (requireOnline === true) {
+        // Tear down the adapter's reconnect loop before failing — the
+        // caller asked for online-or-error, not a background retry it
+        // can't observe.
+        await disconnect();
+        throw new PeerUnavailableError(serverUrl, timeoutMs, peerError);
+      }
+      syncLog('No peer within the wait budget; continuing without one');
+    }
+  }
+
   // Helper: start tracking connected peers on a freshly-created repo.
   // Returns a cleanup registered into state.cleanupFns by the caller.
   function trackPeers(repo: Repo): void {
@@ -792,7 +878,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       state.watchHandle?.(handle as unknown as DocHandle<unknown>);
       return handle;
     }
-    // No author ID (offline mode) - use import without author to respect the provided docId
+    // No author ID - use import without author to respect the provided docId
     const doc = automergeFrom(initialValue ?? {});
     const handle = state.repo!.import<T>(automergeSerialize(doc), docId ? { docId } : undefined);
     state.watchHandle?.(handle as unknown as DocHandle<unknown>);
@@ -804,7 +890,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   // a doc can resolve unavailable when `handle.request()` fires before
   // the peer has finished syncing it. Retry only while a peer is
   // connected — with zero peers, unavailable is the truth (offline)
-  // and hub-client's fast-fail path must be preserved.
+  // and the fast-fail path must be preserved: opening a project whose
+  // index isn't in local storage fails at once rather than after the
+  // whole retry budget.
   async function findDoc<T>(docId: DocumentId): Promise<DocHandle<T>> {
     const { attempts, baseDelayMs } = state.findDocRetry;
     const repo = state.repo!;
@@ -841,6 +929,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
           }
           throw err;
         }
+        if (state.connectedPeers.size === 0) throw err;
         await new Promise((r) => setTimeout(r, baseDelayMs * 2 ** attempt));
         // The connection may have been torn down while we slept.
         if (state.repo !== repo) throw err;
@@ -1310,9 +1399,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
   // Bounded "retry unavailable files while a peer is connected" loop. This
   // closes the gap that made the smoke-all preview tests flaky in CI: the app
-  // opens each project offline-first (its per-project connect uses the 1 ms
-  // default peer wait), the websocket connects in the background, most docs
-  // sync — but a doc still in flight when loadFileDocuments' 5 s findDoc cap
+  // opens each project without waiting for a peer (connect never does), the
+  // websocket connects in the background, most docs sync — but a doc still in flight when loadFileDocuments' 5 s findDoc cap
   // fires is marked `unavailable`, and was then NEVER retried, so the render
   // failed permanently with "Path not found". The key insight from the CI
   // diagnostics: the peer is *connected* by then (vfs shows ~all files) — the
@@ -1425,20 +1513,24 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   /**
    * Connect to a sync server and load a project.
    *
-   * Supports offline mode: if the peer connection fails or times out,
-   * the function will continue and load documents from local IndexedDB.
+   * By default there is no peer wait and no separate online/offline
+   * mode (the hub-client app relies on this and must never wait): the
+   * repo is built (or supplied) and documents are found through it —
+   * from local storage (IndexedDB by default), or from a peer once one
+   * is connected. An index that stays unavailable is fatal and throws;
+   * a file that stays unavailable is marked as such and retried while
+   * a peer is connected. Whether a peer is currently connected is
+   * reported separately, through `onConnectionChange`.
    *
-   * The sixth parameter accepts either the legacy numeric
-   * `peerTimeoutMs` or a {@link ConnectOptions} bag (bd-jit6pdwq).
-   * Defaults preserve hub-client's behavior exactly: a 1 ms peer
-   * probe, then offline-from-IndexedDB. Callers without an IndexedDB
-   * cache (the q2-preview SPA, which runs against ephemeral hubs)
-   * should pass `{ peerTimeoutMs: Infinity, storage: 'memory' }`:
-   * an indefinite wait never enters offline mode (the SPA arbitrates
-   * server liveness over HTTP `/health` instead — a finite WS budget
-   * can't be made correct under Firefox's per-IP handshake
-   * serialization), and memory storage keeps the IndexedDB open off
-   * the critical path of the WebSocket `join`.
+   * Server-backed callers and tests can opt in to a wait with
+   * `peerTimeoutMs` and/or `requireOnline` (see {@link ConnectOptions}):
+   * `requireOnline` rejects with `PeerUnavailableError` when no peer
+   * arrives in time.
+   *
+   * The sixth parameter is a {@link ConnectOptions} bag. Callers
+   * without an IndexedDB cache (the q2-preview SPA, which runs against
+   * ephemeral hubs) should pass `{ storage: 'memory' }`, which keeps
+   * the IndexedDB open off the critical path of the WebSocket `join`.
    */
   async function connect(syncServerUrl: string, indexDocId: string, authorId?: string, screenName?: string, color?: string, options: ConnectOptions = {}, auth?: SyncClientAuthOptions): Promise<AnnotatedFileEntry[]> {
     if (options.auth && auth) {
@@ -1480,6 +1572,12 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         installDuplicateSeqRecovery(state.repo, indexDocId as DocumentId),
       );
 
+      await awaitPeerIfRequested(
+        state.repo,
+        syncServerUrl,
+        options.peerTimeoutMs,
+        options.requireOnline,
+      );
 
       // The index staying unavailable IS fatal — nothing sensible can
       // be done without it — but say so precisely: "index" vs "file"
@@ -1529,16 +1627,17 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       attachIndexSubscription(indexHandle, true);
 
       // Subscribe to network events for ongoing connection status.
-      // Initialize from the live peer set, not the waitForPeer outcome:
-      // a peer whose handshake completed after waitForPeer's timeout but
-      // before this subscription would otherwise be missed, leaving the
-      // flag stuck at "offline" while a peer is connected (trackPeers is
-      // subscribed before waitForPeer, so its set has no such gap).
+      // Initialize from the live peer set: connect() doesn't wait for a
+      // peer, so one may or may not have completed its handshake by now.
+      // A peer that connected before this subscription would otherwise be
+      // missed, leaving the flag stuck at "disconnected" while a peer is
+      // connected (trackPeers is subscribed at repo setup, so its set has
+      // no such gap).
       let currentlyOnline = state.connectedPeers.size > 0;
       const onPeerConnect = () => {
         if (!currentlyOnline) {
           currentlyOnline = true;
-          syncLog('Peer connected - switching to online mode');
+          syncLog('Peer connected');
           callbacks.onConnectionChange?.(true);
           // A peer just (re)connected; (re)start the bounded retry of any
           // stranded files. Guarded to after the initial load so it can't
@@ -1551,7 +1650,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       const onPeerDisconnect = () => {
         if (currentlyOnline) {
           currentlyOnline = false;
-          syncLog('Peer disconnected - switching to offline mode');
+          syncLog('Peer disconnected');
           callbacks.onConnectionChange?.(false);
         }
       };
@@ -2431,6 +2530,12 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       state.recoveryBackoff = resolveRecoveryBackoff(options.recoveryBackoff);
       trackPeers(state.repo);
 
+      await awaitPeerIfRequested(
+        state.repo,
+        options.syncServer,
+        options.peerTimeoutMs,
+        options.requireOnline,
+      );
 
       // Phase 1: Generate a document ID and resolve the author ID before
       // creating any documents. This avoids the chicken-and-egg problem
@@ -2526,14 +2631,14 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       const onPeerConnect = () => {
         if (!currentlyOnline) {
           currentlyOnline = true;
-          syncLog('Peer connected - switching to online mode');
+          syncLog('Peer connected');
           callbacks.onConnectionChange?.(true);
         }
       };
       const onPeerDisconnect = () => {
         if (currentlyOnline) {
           currentlyOnline = false;
-          syncLog('Peer disconnected - switching to offline mode');
+          syncLog('Peer disconnected');
           callbacks.onConnectionChange?.(false);
         }
       };

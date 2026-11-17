@@ -4,7 +4,6 @@ import ProjectSelector from './components/ProjectSelector';
 import ProjectsHome from './components/ProjectsHome';
 import InviteLanding from './components/InviteLanding';
 import EditorWelcomeBanner from './components/EditorWelcomeBanner';
-import ProjectSetError from './components/ProjectSetError';
 
 // Lazy-loaded dev harness — only fetched when navigating to #/dev/... routes.
 // Dev routes are parsed only in development builds and VITE_E2E=1 test
@@ -28,7 +27,7 @@ function DevHarnessLazy({ page }: { page: string }) {
 }
 import Editor from './components/Editor';
 import DemoGallery from './components/demo/DemoGallery';
-import { notifications } from './strings';
+import { notifications, signInStatus as signInStatusStrings } from './strings';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import LoadingIndicator from './components/Loading';
 import SkipLink from './components/SkipLink';
@@ -36,6 +35,7 @@ import Toast from './components/Toast';
 import { ViewModeProvider } from './components/ViewModeContext';
 import { readAuthErrorReason, authErrorMessage } from './auth/authError';
 import { useAuthProvider } from './auth/AuthProvider';
+import { SignInStatusProvider, type SignInStatusValue } from './components/auth/SignInStatus';
 import {
   connect,
   disconnect,
@@ -1101,17 +1101,16 @@ function App() {
     // sign-in button (local-only until the user signs in).
   }
 
-  // Sign-in affordance + status note for the projects home (optional auth).
-  const signInCta = AUTH_ENABLED && !auth ? (
-    <authProvider.SignInButton
-      loginUri={window.location.origin + hubPath('/auth/callback')}
-    />
-  ) : undefined;
+  // Sign-in status for the shared SignInStatus component (projects-home
+  // top bar, editor connection-status dialog). null = auth not configured.
   const authNote = authErrorReason !== undefined
     ? authErrorMessage(authErrorReason)
     : sessionExpired
-      ? 'Your session expired — sign in again to resume syncing.'
+      ? signInStatusStrings.sessionExpired
       : undefined;
+  const signInStatus: SignInStatusValue | null = AUTH_ENABLED
+    ? { email: auth?.email ?? null, note: authNote, onSignOut: logout }
+    : null;
 
   // Gate on screen name being loaded (fast IndexedDB read).
   // Prevents connects from firing before the identity can be written.
@@ -1176,38 +1175,37 @@ function App() {
     );
   }
 
-  // The root could not be established or reconnected: offer another
-  // attempt (bd-4h1hv60p). `needs-setup` / `needs-migration` fall through
-  // to the home: useAutoEstablishRoot flips them to 'connecting' in the
-  // same commit, and the home's skeleton covers both. Ephemeral preview
-  // boots skip the error card: the preview works without a project set,
-  // so a set failure must not block it.
-  if (!ephemeralHub && projectSetState.status === 'error') {
-    return (
-      <ProjectSetError
-        error={projectSetState.error}
-        onRetry={() => void projectSetActions.retry()}
-      />
-    );
-  }
+  // The root could not be established or reconnected: the home still
+  // renders, with the failure in its error banner and Retry re-running
+  // the collections initialization. A project-open failure
+  // (`connectionError`) takes precedence, since it is the more recent,
+  // user-triggered one. Ephemeral preview boots show nothing: the
+  // preview works without a project set.
+  const projectSetError =
+    !ephemeralHub && projectSetState.status === 'error'
+      ? (projectSetState.error ?? 'Could not load your project list.')
+      : null;
+  const homeError = connectionError ?? projectSetError;
+  const homeRetry =
+    connectionError !== null
+      ? lastOpenAttempt !== null
+        ? () => void handleSelectProject(lastOpenAttempt.project, lastOpenAttempt.filePathOverride)
+        : undefined
+      : projectSetError !== null
+        ? () => void projectSetActions.retry()
+        : undefined;
 
   return (
-    <>
+    <SignInStatusProvider value={signInStatus}>
       <SkipLink />
       {!project ? (
         uiVariant === 'collections' ? (
           <ProjectsHome
             onSelectProject={handleSelectProject}
             onProjectCreated={handleProjectCreated}
-            error={connectionError}
-            onRetry={
-              lastOpenAttempt
-                ? () => void handleSelectProject(lastOpenAttempt.project, lastOpenAttempt.filePathOverride)
-                : undefined
-            }
+            error={homeError}
+            onRetry={homeRetry}
             onSignOut={signedIn ? logout : undefined}
-            signInCta={signInCta}
-            authNote={authNote}
             authEmail={auth?.email}
             authPicture={auth?.picture}
             onScreenNameChange={setScreenName}
@@ -1238,7 +1236,7 @@ function App() {
             <ProjectSelector
               onSelectProject={handleSelectProject}
               onProjectCreated={handleProjectCreated}
-              error={connectionError}
+              error={homeError}
               onSignOut={signedIn ? logout : undefined}
               authEmail={auth?.email}
               authPicture={auth?.picture}
@@ -1308,7 +1306,7 @@ function App() {
         visible={showSaveToast}
         onHide={() => setShowSaveToast(false)}
       />
-    </>
+    </SignInStatusProvider>
   );
 }
 

@@ -9,7 +9,9 @@
 .connection-status-row {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  /* center, not baseline: the account row holds a button (or the
+     provider's sign-in iframe), which has no useful text baseline. */
+  align-items: center;
   gap: 16px;
 }
 
@@ -168,4 +170,18 @@
 .connection-status-badge.offline .connection-dot {
   background-color: var(--editor-warning);
   box-shadow: 0 0 4px color-mix(in srgb, var(--editor-warning) 60%, transparent);
+}
+
+/* Account row while signed out: light yellow panel across the whole
+   row. Negative inline margin keeps its content aligned with the rows
+   below. */
+.connection-status-row.warning {
+  margin: 0 -8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--warning-bg);
+}
+
+.connection-status-row.warning dt {
+  color: var(--warning-text);
 }

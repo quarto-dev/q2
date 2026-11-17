@@ -43,15 +43,14 @@
 }
 
 .sync-status-dot.green {
-  background: radial-gradient(
-    circle,
-    var(--editor-success) var(--sync-pulse-stop),
-    yellowgreen 100%
-  );
+  background: radial-gradient(circle,
+      var(--editor-success) var(--sync-pulse-stop),
+      yellowgreen 100%);
   animation: sync-pulse 1.4s ease-in-out infinite;
 }
 
 @keyframes sync-pulse {
+
   0%,
   100% {
     --sync-pulse-stop: 5%;
@@ -85,4 +84,14 @@
 
 .sync-status-text em {
   font-style: italic;
+}
+
+/* Verbose (document bottom bar) disconnected state: "Offline" as a
+   warning chip, same look as the sign-in status warning. */
+.sync-status-offline {
+  padding: 8px;
+  border-radius: 4px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  font-weight: 600;
 }

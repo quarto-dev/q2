@@ -299,17 +299,37 @@ export interface RecoveryBackoffOptions {
 }
 
 /**
- * Options bag for `connect()`. All fields optional. The client never waits
- * for a peer: it builds (or is given) a repo and finds documents through
- * it, from storage or from a peer once one is there.
+ * Options bag for `connect()`. All fields optional. By default the client
+ * never waits for a peer: it builds (or is given) a repo and finds
+ * documents through it, from storage or from a peer once one is there.
+ * `peerTimeoutMs` / `requireOnline` opt in to a wait; the hub-client app
+ * must not pass either.
  */
 export interface ConnectOptions {
+  /**
+   * Opt in to waiting for a peer connection before documents are loaded,
+   * for up to this many ms. Unset (the default) means no wait at all.
+   * `Infinity` waits with no deadline. When the wait times out the
+   * connection carries on without a peer, unless `requireOnline` is set.
+   * For server-backed callers and tests that need documents to be on the
+   * hub before continuing — never the hub-client app.
+   */
+  peerTimeoutMs?: number;
+  /**
+   * Fail instead of carrying on without a peer (bd-xnmd5ni1): `connect`
+   * waits for a peer (`peerTimeoutMs`, default 15000 ms when unset) and
+   * rejects with `PeerUnavailableError` if none arrives. For server-backed
+   * callers with memory storage (the hub MCP server), running offline
+   * persists nothing — silent fallback is a data black hole. Default
+   * false: the browser's offline-first behavior never waits.
+   */
+  requireOnline?: boolean;
   /** Storage backing for this connection. Default `'indexeddb'`. */
   storage?: StorageKind;
   /**
    * Network backing for this connection. Default `'websocket'`. `'none'`
-   * builds the Repo with storage only — no WebSocket adapter is created,
-   * no peer wait runs, and the connection reports offline. Used by the
+   * builds the Repo with storage only — no WebSocket adapter is created
+   * and the connection reports disconnected. Used by the
    * optional-auth prototype while the user is signed out (the hub would
    * reject the upgrade); a later sign-in reloads the page and reconnects.
    */
@@ -451,12 +471,25 @@ export interface CreateProjectOptions {
    * When unset, the browser adapter is used unchanged.
    */
   auth?: SyncClientAuthOptions;
+  /**
+   * Opt in to waiting up to this many ms for a peer connection before
+   * the project's documents are created, so they flush to the hub
+   * immediately. Unset (the default) means no wait. See
+   * {@link ConnectOptions.peerTimeoutMs}.
+   */
+  peerTimeoutMs?: number;
+  /**
+   * Fail instead of creating the project without a peer — rejects with
+   * `PeerUnavailableError`. See {@link ConnectOptions.requireOnline}
+   * (bd-xnmd5ni1).
+   */
+  requireOnline?: boolean;
   /** Storage backing for this connection. Default `'indexeddb'`. */
   storage?: StorageKind;
   /**
    * Network backing for this connection. Default `'websocket'`. `'none'`
-   * builds the Repo with storage only — no WebSocket adapter is created,
-   * no peer wait runs, and the connection reports offline. Used by the
+   * builds the Repo with storage only — no WebSocket adapter is created
+   * and the connection reports disconnected. Used by the
    * optional-auth prototype while the user is signed out (the hub would
    * reject the upgrade); a later sign-in reloads the page and reconnects.
    */

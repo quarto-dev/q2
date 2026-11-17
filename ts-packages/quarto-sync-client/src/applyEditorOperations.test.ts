@@ -63,7 +63,9 @@ import type { IndexDocument, TextDocumentContent } from '@quarto/quarto-automerg
 
 function createMockHandle<T>(initialDoc: T) {
   let current = structuredClone(initialDoc);
-  const changeListeners: Array<(args: { doc: T; patches: never[] }) => void> = [];
+  const changeListeners: Array<
+    (args: { handle: unknown; doc: T; patches: never[] }) => void
+  > = [];
   const handle = {
     documentId: 'mock-doc-id' as DocumentId,
     doc: () => current,
@@ -73,19 +75,22 @@ function createMockHandle<T>(initialDoc: T) {
       current = draft;
       // Fire change listeners so subscriptions propagate
       for (const cb of changeListeners) {
-        cb({ doc: current, patches: [] });
+        // The client's change listener reads `handle` off the payload,
+        // as automerge-repo's real change event provides it.
+        cb({ handle, doc: current, patches: [] });
       }
     },
     update: (fn: (d: T) => T) => {
       current = fn(structuredClone(current));
     },
-    on: vi.fn((event: string, cb: (args: { doc: T; patches: never[] }) => void) => {
+    on: vi.fn((event: string, cb: (args: { handle: unknown; doc: T; patches: never[] }) => void) => {
       if (event === 'change') {
         changeListeners.push(cb);
       }
     }),
     off: vi.fn(),
     whenReady: () => Promise.resolve(),
+    isReady: () => true,
   };
   return { handle, getDoc: () => current };
 }

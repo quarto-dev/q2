@@ -403,6 +403,7 @@ function toHttpUrl(wsUrl: URL): URL {
  * /auth/author fetch, possibly a token refresh) before the websocket
  * joins.
  */
+const PEER_TIMEOUT_MS = 15_000;
 
 export class ConnectionManager {
   private readonly serverUrl: string;
@@ -615,6 +616,12 @@ export class ConnectionManager {
     // uses the browser adapter (no header).
     await client.connect(serverUrl, indexDocId, authorId, undefined, undefined, {
       auth,
+      // Server-backed client with memory storage: running offline would
+      // be a silent data black hole — demand a live peer or fail
+      // loudly (bd-xnmd5ni1). The budget covers the auth round-trips
+      // (health probe, author fetch, token refresh).
+      requireOnline: true,
+      peerTimeoutMs: PEER_TIMEOUT_MS,
     });
 
     const presence = new PresenceTracker(client);
@@ -825,6 +832,10 @@ export class ConnectionManager {
           contentType: 'text' as const,
         })),
         auth,
+        // See connect(): online-or-error, never a silent offline project
+        // that dies with the process (bd-xnmd5ni1).
+        requireOnline: true,
+        peerTimeoutMs: PEER_TIMEOUT_MS,
       },
       undefined,
       undefined,

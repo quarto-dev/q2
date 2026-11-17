@@ -607,22 +607,22 @@ export async function connectCollections(
 /**
  * Create a new collection document on a sync server.
  *
+ * Local-first: the document is created in the repo's storage without
+ * waiting for the server, and syncs whenever a network adapter connects
+ * (immediately when online; after sign-in when the sync gate is closed;
+ * on reconnect when offline).
+ *
  * @returns The document ID of the new ProjectSetDocument.
- * @throws If the sync server is unreachable.
  */
 export async function createCollection(
   syncServerUrl: string,
   name?: string,
 ): Promise<string> {
   const server = acquireServer(syncServerUrl);
-  // Creation requires the server so the document actually syncs.
-  if (!(await server.whenConnected(10000))) {
-    releaseServer(syncServerUrl);
-    throw new Error(
-      'Could not reach sync server. Please check your connection and try again.',
-    );
-  }
-  onConnectionChange?.(true);
+  // Report connection state in the background, as connectCollection does.
+  void server
+    .whenConnected(DEFAULT_CONNECT_TUNING.connectWaitMs)
+    .then((online) => onConnectionChange?.(online));
 
   const initial = {
     projects: {},

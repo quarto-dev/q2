@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { Handle, NodeResizer, Position } from '@xyflow/react';
-import { parseQmdToAst } from '@quarto/preview-runtime';
+import { parseQmdToAstWithAttribution } from '@quarto/preview-runtime';
 import type { TextDocumentContent } from '@quarto/quarto-automerge-schema';
 import { Q2DebugIframe } from '../../render/q2-debug/Q2DebugIframe';
 import { useInput, type DocPort, type WasmPort } from './ports';
@@ -23,7 +23,7 @@ function Parsed({ text, path }: { text: string; path: string }) {
   useEffect(() => {
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void parseQmdToAst(text).then((result) => {
+      void parseQmdToAstWithAttribution(text, null).then((result) => {
         if (cancelled) return;
         if (result.success && result.ast !== undefined) setParsed({ astJson: result.ast, error: null });
         else setParsed((prev) => ({ astJson: prev?.astJson ?? '', error: String(result.error ?? 'parse failed') }));

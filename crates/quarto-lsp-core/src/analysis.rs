@@ -166,7 +166,9 @@ pub async fn analyze_document_async(doc: &Document) -> DocumentAnalysis {
                         &pe.source_context,
                     ));
                 }
-                PipelineError::StageError { diagnostics: errs, .. } if !errs.is_empty() => {
+                PipelineError::StageError {
+                    diagnostics: errs, ..
+                } if !errs.is_empty() => {
                     diagnostics.extend(diagnostics_from_messages(errs, &source_context));
                 }
                 _ => {}

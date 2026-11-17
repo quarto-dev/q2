@@ -78,6 +78,7 @@ function renderChoiceTree(
 import Tooltip from './Tooltip';
 import ModalDialog from './ModalDialog';
 import { common } from '../strings';
+import SignInStatus from './auth/SignInStatus';
 import { sortProjectItems, sortOrderLabel, type SortOrder } from '../utils/projectSort';
 import { buildProjectListExport, parseProjectListImport } from '../services/projectListExport';
 import type { Face } from '../utils/facepile';
@@ -92,14 +93,6 @@ interface Props {
   onRetry?: () => void;
   onProjectCreated?: (files: ProjectFile[], title: string, projectType: string, syncServer: string) => void;
   onSignOut?: () => void;
-  /**
-   * Sign-in affordance (the AuthProvider's button) shown in the header
-   * while auth is configured but the user is signed out. Absent when auth
-   * is disabled or the user is already signed in.
-   */
-  signInCta?: ReactNode;
-  /** One-line auth status note (session expired, sign-in error). */
-  authNote?: string;
   authEmail?: string;
   authPicture?: string | null;
   onScreenNameChange?: (name: string) => void;
@@ -267,8 +260,6 @@ export default function ProjectsHome({
   onRetry,
   onProjectCreated,
   onSignOut,
-  signInCta,
-  authNote,
   authEmail,
   authPicture,
   onScreenNameChange,
@@ -1791,21 +1782,9 @@ export default function ProjectsHome({
               </Menu>
             )}
           </div>
-          {/* Optional auth (prototype): sign-in status beside the control.
-              Signed out → local-only note + the provider's sign-in button;
-              signed in → who, plus Sign out. Nothing when auth is off. */}
-          {(signInCta || onSignOut) && (
-            <div className="qh-auth" data-testid="auth-status">
-              <span className="qh-auth-status" title={authNote}>
-                {signInCta
-                  ? (authNote ?? 'Not signed in · changes stay on this device')
-                  : `Signed in as ${authEmail ?? 'unknown'}`}
-              </span>
-              {signInCta ?? (
-                <button className="qh-btn outline" onClick={onSignOut}>Sign out</button>
-              )}
-            </div>
-          )}
+          {/* Optional auth (prototype): sign-in status + button. Renders
+              nothing when auth is off. */}
+          <SignInStatus className="qh-auth" />
           <div className="qh-menu-anchor qh-avatar-anchor">
             <button
               className="qh-avatar"

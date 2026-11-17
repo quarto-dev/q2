@@ -18,8 +18,8 @@
  *   isn't deleted for others); "Delete" destroys a file.
  *
  * Scope: the app chrome (header, sidebar, outline, dialogs,
- * notifications, tabs) is migrated. ProjectsHome, the classic
- * ProjectSelector, and ProjectSetError keep local strings for now —
+ * notifications, tabs) is migrated. ProjectsHome and the classic
+ * ProjectSelector keep local strings for now —
  * they share the common vocabulary below where trivially substitutable.
  *
  * Phase 2 deliverable of the UI/UX modernization plan.
@@ -145,6 +145,8 @@ export const download = {
 export const syncStatus = {
   /** Prefix when disconnected (browser offline / socket down / no peer). */
   savingLocally: 'Offline',
+  /** Reason shown beside "Offline" when the user is signed out. */
+  notSignedIn: 'not signed in',
   syncedAgo: (ago: string) => `synced ${ago}`,
   neverSynced: 'not synced yet',
   synced: 'Synced',
@@ -385,6 +387,7 @@ export const dialogs = {
   },
   connectionStatus: {
     title: 'Connection status',
+    account: 'Account',
     browserNetwork: 'Browser network',
     browserOnline: 'Online',
     browserOffline: 'Offline',
@@ -535,3 +538,12 @@ export const replay = {
    */
   anonymous: 'anonymous',
 } as const;
+
+// Sign-in status line + button (projects-home top bar, connection status dialog).
+export const signInStatus = {
+  signedOut: 'Not signed in',
+  localOnly: 'changes stay on this device',
+  signedInAs: (email: string) => `Signed in as ${email}`,
+  signOut: 'Sign out',
+  sessionExpired: 'Your session expired — sign in again to resume syncing.',
+};

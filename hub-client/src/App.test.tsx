@@ -173,6 +173,12 @@ vi.mock('./components/ProjectSelector', () => ({
   default: () => <div data-testid="project-selector-stub" />,
 }));
 
+// The demo gallery statically imports the real Monaco editor, which
+// jsdom cannot load; App only renders it on the demo route.
+vi.mock('./components/demo/DemoGallery', () => ({
+  default: () => <div data-testid="demo-gallery-stub" />,
+}));
+
 vi.mock('./components/auth/LoginScreen', () => ({
   LoginScreen: () => <div data-testid="login-screen-stub" />,
 }));
