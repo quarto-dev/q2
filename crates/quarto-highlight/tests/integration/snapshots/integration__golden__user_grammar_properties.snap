@@ -1,0 +1,42 @@
+---
+source: crates/quarto-highlight/tests/integration/golden.rs
+assertion_line: 80
+description: "# server\nhost = localhost\nport: 8080\n"
+---
+[
+  [
+    0,
+    8,
+    "comment"
+  ],
+  [
+    9,
+    13,
+    "property"
+  ],
+  [
+    14,
+    15,
+    "operator"
+  ],
+  [
+    16,
+    25,
+    "string"
+  ],
+  [
+    26,
+    30,
+    "property"
+  ],
+  [
+    30,
+    31,
+    "operator"
+  ],
+  [
+    32,
+    36,
+    "string"
+  ]
+]

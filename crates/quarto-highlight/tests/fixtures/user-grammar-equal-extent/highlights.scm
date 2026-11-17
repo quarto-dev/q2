@@ -6,9 +6,9 @@
 ; the one residual ambiguity `flatten_spans` must tie-break, because
 ; "innermost (narrowest) wins" cannot order two spans of equal length.
 ;
-; This is precisely the case `user-grammar-toml` does NOT exercise: there
-; `(bare_key) @type` is *nested inside* `(pair (bare_key)) @property`
-; (different ends — type ⊂ property), so node-exact extraction resolves it
+; This is precisely the case the upstream tree-sitter-toml query does NOT
+; exercise: there `(bare_key) @type` is *nested inside*
+; `(pair (bare_key)) @property` (different ends — type ⊂ property), so node-exact extraction resolves it
 ; by innermost-wins with no tie. Those captures only LOOK equal-extent in
 ; the legacy `collect_spans` output, where the bd-98k6 over-wrap bug
 ; stretched `type` to the pair's end.

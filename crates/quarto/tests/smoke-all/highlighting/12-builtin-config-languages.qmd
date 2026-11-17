@@ -1,0 +1,69 @@
+---
+title: Built-in config-file languages
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        # Each block resolves to a built-in grammar: the container carries
+        # `sourceCode <class>` and the tokens wrap in `hl-*` spans. `conf`
+        # is an alias of `toml` (Pandoc resolves `conf` through TOML's
+        # `*.conf` glob), and `Dockerfile` matches `dockerfile` because
+        # class names match case-insensitively. PowerShell is included too.
+        # The ini and Dockerfile comments must come out as `hl-comment`:
+        # their upstream queries also capture comments as `@spell`, which
+        # must not win. (Comment nodes may include the line break, so only
+        # the opening is matched.)
+        - [!str "<pre class=\"sourceCode ini\"",
+           !str "hl-comment\">; Widget settings",
+           !str "hl-property\">host</span>",
+           !str "<pre class=\"sourceCode toml\"",
+           !str "hl-string\">&quot;localhost&quot;</span>",
+           !str "<pre class=\"sourceCode conf\"",
+           !str "hl-string\">&quot;0.0.0.0:3939&quot;</span>",
+           !str "<pre class=\"sourceCode xml\"",
+           !str "hl-tag\">server</span>",
+           !str "<pre class=\"sourceCode Dockerfile\"",
+           !str "hl-comment\"># Build stage",
+           !str "hl-keyword\">FROM</span>",
+           !str "<pre class=\"sourceCode powershell\"",
+           !str "hl-string\">&quot;widget&quot;</span>"]
+---
+
+Configuration files are common in technical documentation. These
+languages are highlighted without any setup.
+
+```ini
+; Widget settings
+[server]
+host = localhost
+port = 8080
+```
+
+```toml
+[server]
+host = "localhost"
+port = 8080
+debug = false
+```
+
+```conf
+listen = "0.0.0.0:3939"
+```
+
+```xml
+<?xml version="1.0"?>
+<server host="localhost" port="8080">ok</server>
+```
+
+```Dockerfile
+# Build stage
+FROM rust:1.80 AS build
+RUN cargo build --release
+```
+
+```powershell
+$name = "widget"
+Restart-Service -Name $name -Force
+```

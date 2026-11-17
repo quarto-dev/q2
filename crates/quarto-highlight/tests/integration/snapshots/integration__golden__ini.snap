@@ -1,0 +1,47 @@
+---
+source: crates/quarto-highlight/tests/integration/golden.rs
+assertion_line: 49
+description: "; Widget settings\n[server]\nhost = localhost\nport = 8080\n"
+---
+[
+  [
+    0,
+    18,
+    "comment"
+  ],
+  [
+    18,
+    19,
+    "punctuation.bracket"
+  ],
+  [
+    19,
+    25,
+    "type"
+  ],
+  [
+    25,
+    26,
+    "punctuation.bracket"
+  ],
+  [
+    27,
+    31,
+    "property"
+  ],
+  [
+    32,
+    33,
+    "operator"
+  ],
+  [
+    44,
+    48,
+    "property"
+  ],
+  [
+    49,
+    50,
+    "operator"
+  ]
+]

@@ -3734,9 +3734,9 @@ mod tests {
         // there), even without colors. Blocks in other languages, output
         // blocks and language-less blocks stay a bare `<pre>`.
         let content = b"---\ntitle: Test\n---\n\n\
-            ```ini\n[Widget]\nEnabled = true\n```\n\n\
+            ```apache\n<Directory /srv>\nRequire all granted\n</Directory>\n```\n\n\
             ```default\n/opt/widget/bin/widget\n```\n\n\
-            ```conf\nkey = value\n```\n\n\
+            ```cfg\nkey = value\n```\n\n\
             ```text\nplain\n```\n\n\
             ```{.cell-output .cell-output-stdout}\n[1] 2\n```\n\n\
             ```\nno language\n```\n";
@@ -3755,7 +3755,9 @@ mod tests {
         .unwrap();
         let html = &output.html;
 
-        for lang in ["ini", "default", "conf"] {
+        // q2 has no grammar for these; Pandoc knows `cfg` only through
+        // INI's `*.cfg` glob.
+        for lang in ["apache", "default", "cfg"] {
             assert!(
                 html.contains(&format!("<pre class=\"sourceCode {lang}\"")),
                 "`{lang}` block should be pre.sourceCode inside div.sourceCode; got:\n{html}",
@@ -3764,7 +3766,7 @@ mod tests {
         assert_eq!(
             html.matches("<div class=\"sourceCode").count(),
             3,
-            "only the ini/default/conf blocks get the wrapper; got:\n{html}",
+            "only the apache/default/cfg blocks get the wrapper; got:\n{html}",
         );
         for bare in [
             "<pre class=\"text",

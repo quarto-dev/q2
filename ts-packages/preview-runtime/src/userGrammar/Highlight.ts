@@ -162,13 +162,21 @@ type SpanTriple = [number, number, string];
  */
 function collectSpans(query: Query, root: TsNode): SpanTriple[] {
   const captures = query.captures(root);
-  const raw: SpanTriple[] = new Array(captures.length);
-  for (let i = 0; i < captures.length; i++) {
-    const cap = captures[i];
-    raw[i] = [cap.node.startIndex, cap.node.endIndex, cap.name];
+  const raw: SpanTriple[] = [];
+  for (const cap of captures) {
+    if (DIRECTIVE_CAPTURES.has(cap.name)) continue;
+    raw.push([cap.node.startIndex, cap.node.endIndex, cap.name]);
   }
   return flattenSpans(raw);
 }
+
+/**
+ * Captures that are editor directives rather than highlight classes — the
+ * TS mirror of `is_directive_capture` in `quarto_highlight::captures`.
+ * Neovim-style queries write `(comment) @comment @spell`; kept, `spell`
+ * would be an equal-extent twin of `comment` and win the tie-break below.
+ */
+const DIRECTIVE_CAPTURES: ReadonlySet<string> = new Set(['spell', 'nospell']);
 
 /**
  * Innermost (narrowest) span wins each byte — the TS mirror of

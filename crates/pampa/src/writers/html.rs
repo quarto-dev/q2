@@ -3155,14 +3155,14 @@ mod tests {
     fn empty_hl_spans_codeblock_gets_div_wrapper() {
         let html = render_block_to_html(codeblock_with_id_classes_and_spans(
             "cb1",
-            vec!["ini", "code-with-copy"],
+            vec!["apache", "code-with-copy"],
             "a = <b>",
             "[]",
         ));
         assert!(
             html.contains(
-                "<div class=\"sourceCode code-with-copy\" id=\"cb1\"><pre class=\"sourceCode ini\">\
-                 <code class=\"sourceCode ini\">a = &lt;b&gt;</code></pre></div>"
+                "<div class=\"sourceCode code-with-copy\" id=\"cb1\"><pre class=\"sourceCode apache\">\
+                 <code class=\"sourceCode apache\">a = &lt;b&gt;</code></pre></div>"
             ),
             "expected the div.sourceCode nesting with escaped text, got:\n{html}",
         );

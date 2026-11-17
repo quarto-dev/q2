@@ -23,6 +23,12 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-11-17
+
+- [`74930907d`](https://github.com/quarto-dev/q2/commits/74930907d): Comments in user-supplied tree-sitter grammars whose query also tags them for spell checking (`@spell`) are now colored as comments in the preview
+- [`0093f3443`](https://github.com/quarto-dev/q2/commits/0093f3443): PowerShell code blocks (`powershell`, `ps1`) are now syntax-highlighted
+- [`2773a34b3`](https://github.com/quarto-dev/q2/commits/2773a34b3): INI, TOML (also `conf`), XML and Dockerfile code blocks are now syntax-highlighted
+
 ### 2026-11-16
 
 - [`17792be75`](https://github.com/quarto-dev/q2/commits/17792be75): In preview comments, Shift+Enter now starts a new line in a comment (Enter still adds it), and pasting text with blank lines into a comment no longer breaks the document
