@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use quarto_hub::index::IndexDocument;
-use samod::{BackoffConfig, DialerFailed, Repo};
+use samod::{BackoffConfig, Dialer, DialerFailed, Repo};
 
 use crate::ProviderError;
 use crate::dialer::BearerDialer;
@@ -31,12 +31,43 @@ pub async fn join(
     config: JoinConfig,
     token_source: Arc<dyn TokenSource>,
 ) -> Result<(Repo, IndexDocument), ProviderError> {
-    let repo = Repo::build_tokio().load().await;
-
     let dialer = Arc::new(BearerDialer::new(
         config.server_ws_url.clone(),
         token_source,
     ));
+    join_with_dialer(config, dialer).await
+}
+
+/// [`join`] with any samod [`Dialer`], such as a
+/// [`HeaderDialer`](crate::HeaderDialer) for a hub behind a token-gated
+/// gateway. `config.server_ws_url` is unused here: the dialer carries its
+/// own URL.
+pub async fn join_with_dialer<D>(
+    config: JoinConfig,
+    dialer: Arc<D>,
+) -> Result<(Repo, IndexDocument), ProviderError>
+where
+    D: Dialer,
+{
+    let repo = dial_hub(dialer, config.connect_timeout).await?;
+
+    let index = IndexDocument::load(&repo, &config.index_doc_id)
+        .await
+        .map_err(|e| ProviderError::Index(e.to_string()))?
+        .ok_or_else(|| ProviderError::Index("index document not found".into()))?;
+
+    Ok((repo, index))
+}
+
+/// Build an ephemeral (memory-storage) client [`Repo`] and dial the hub with
+/// `dialer`, returning once the first connection is established. samod
+/// keeps redialing with backoff after that if the connection drops.
+pub async fn dial_hub<D>(dialer: Arc<D>, connect_timeout: Duration) -> Result<Repo, ProviderError>
+where
+    D: Dialer,
+{
+    let repo = Repo::build_tokio().load().await;
+
     let handle = repo
         .dial(BackoffConfig::default(), dialer)
         .map_err(|_| ProviderError::Repo("repo is stopped".into()))?;
@@ -44,7 +75,7 @@ pub async fn join(
     // Wait for the first connection (or a failure) within the timeout. A
     // permanent dial failure (e.g. a non-ws(s) --server URL) surfaces its
     // own cause; anything else keeps the generic wording (bd-q96fhj3q).
-    tokio::time::timeout(config.connect_timeout, handle.established())
+    tokio::time::timeout(connect_timeout, handle.established())
         .await
         .map_err(|_| ProviderError::Repo("timed out connecting to hub".into()))?
         .map_err(|e| match e {
@@ -54,12 +85,7 @@ pub async fn join(
             e => ProviderError::Repo(format!("hub connection failed: {e}")),
         })?;
 
-    let index = IndexDocument::load(&repo, &config.index_doc_id)
-        .await
-        .map_err(|e| ProviderError::Index(e.to_string()))?
-        .ok_or_else(|| ProviderError::Index("index document not found".into()))?;
-
-    Ok((repo, index))
+    Ok(repo)
 }
 
 /// Join the hub and return the sorted list of project file paths.

@@ -32,7 +32,7 @@
  * is absent), tagged `COMMENT_EDIT`. `PreviewContext.editingDisabled`
  * does not affect them; `commentingDisabled` makes bubbles display-only
  * (GH #973). Blocks without an inline slot (code blocks, incl.
- * mermaid) get wrapped in a `CONTAINER_CLASS` Div holding the comment
+ * mermaid) get wrapped in a `COMMENT_CONTAINER_CLASS` Div holding the comment
  * paragraphs; the Div owns the thread's single bubble and its children
  * render chrome-free.
  *
@@ -52,7 +52,6 @@ import { AttributionLookupContext, authorInitials, Node as AstNode, RegistryCont
 import type {
     BlockNode,
     DivBlock,
-    HeaderBlock,
     InlineNode,
     NodeArgs,
     ParaBlock,
@@ -66,6 +65,15 @@ import { usePreviewEdit } from '../usePreviewEdit';
 import { routeLinkClick } from '../../utils/iframeLinkHandlers';
 import { CommentAnchorContext, PlainHostContext } from '../commentAnchor';
 import type { CommentAnchorTarget } from '../commentAnchor';
+import {
+    appendCommentToBlock,
+    commentLineBreaksAllowed,
+    commentTextToInlines,
+    inlineSlot,
+    isComment,
+    isCommentContainer,
+    makeCommentSpan,
+} from '../../utils/commentEdits';
 
 // Shared palette bits.
 const CHROME_BLUE = '#4a7ba7';
@@ -76,42 +84,12 @@ const GLOW = '0 0 8px 2px rgba(140, 190, 240, 0.6)';
 // still accept it (GH #973).
 export const COMMENT_EDIT = { scope: 'comment' } as const;
 
-export function isComment(inline: InlineNode): boolean {
-    if (inline.t === 'Span' && 'c' in inline) {
-        const classes = (inline as SpanInline).c[0][1];
-        return classes.includes('quarto-edit-comment');
-    }
-    return false;
-}
-
-// A block that can't hold an inline comment span (a code block) gets
-// wrapped in a Div with this class; the comment lives as a `[>> ...]`
-// paragraph inside the Div. The Div owns the one bubble for the whole
-// thread; its children render chrome-free (InsideCommentContainer).
-const CONTAINER_CLASS = 'quarto-edit-comment-container';
-
-function isCommentContainer(block: BlockNode): boolean {
-    return (
-        block.t === 'Div' &&
-        ((block as DivBlock).c[0][1] ?? []).includes(CONTAINER_CLASS)
-    );
-}
+// `isComment` stays exported from here for existing importers
+// (`CommentSpan.tsx`); the helpers live in `utils/commentEdits.ts` so the
+// hub-client WASM round-trip test commits exactly what the UI commits.
+export { isComment };
 
 const InsideCommentContainer = React.createContext(false);
-
-/**
- * The mutable inline array where a block's comment spans live, or null
- * when the block type has no inline slot. (Casts because the BlockNode
- * union includes `UnknownBlock { t: string }`, which defeats
- * discriminant narrowing.)
- */
-function inlineSlot(block: BlockNode): InlineNode[] | null {
-    if (block.t === 'Para' || block.t === 'Plain') {
-        return (block as ParaBlock | PlainBlock).c;
-    }
-    if (block.t === 'Header') return (block as HeaderBlock).c[2];
-    return null;
-}
 
 // Light blue placeholder tint for the comment input — ::placeholder
 // isn't reachable from inline styles, so inject one tiny rule per
@@ -207,16 +185,24 @@ const UnsupportedChip = ({ kind }: { kind: string }) => (
 
 const NOOP_SET_LOCAL_AST = () => {};
 
+// The compact bubble is one line (nowrap + ellipsis): a comment's line
+// breaks show there as spaces (bd-ov4jydyf).
+const CompactLineBreak = () => <>{' '}</>;
+
 /**
  * Renders one comment span's content inlines for display in the
  * bubble, under the bubble-scoped registry override described above.
+ * `compact` (the one-line bubble preview) renders `LineBreak` as a
+ * space; the expanded rows keep it as a `<br>`.
  */
 const CommentSpanContent = ({
     span,
     onNavigateToDocument,
+    compact = false,
 }: {
     span: InlineNode;
     onNavigateToDocument?: (path: string, anchor: string | null) => void;
+    compact?: boolean;
 }) => {
     const outer = React.useContext(RegistryContext);
     const bubbleValue = React.useMemo(() => {
@@ -237,9 +223,10 @@ const CommentSpanContent = ({
             // Spans inside a bubble never grow chrome of their own
             // (`CommentSpan.tsx` is the registry's `Inline`): dispatch raw.
             Inline: RawInline,
+            ...(compact ? { LineBreak: CompactLineBreak } : {}),
         };
         return { registry, sourceInfoPool: outer.sourceInfoPool };
-    }, [outer.registry, outer.sourceInfoPool]);
+    }, [outer.registry, outer.sourceInfoPool, compact]);
 
     return (
         <RegistryContext.Provider value={bubbleValue}>
@@ -426,44 +413,19 @@ const CommentBlockInner = (args: NodeArgs<BlockNode>) => {
         edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), modified, COMMENT_EDIT);
     };
 
-    // Append a comment span (text) to the source node and commit.
+    // Append a comment span (text) to the source node and commit. New
+    // lines in the text become `LineBreak`s, except in a heading, which
+    // is one source line (bd-ov4jydyf). A code block gets wrapped in a
+    // comment container; see `appendCommentToBlock`.
     const addComment = (text: string) => {
         const resolved = resolveCommittable();
         if (!resolved) return;
-        const modified = structuredClone(resolved.sourceNode);
-        const newComment: SpanInline = {
-            t: 'Span',
-            c: [['', ['quarto-edit-comment'], []], [{ t: 'Str', c: text }]],
-        };
-        const slot = inlineSlot(modified);
-        if (slot) {
-            slot.push(newComment);
-        } else if (modified.t === 'CodeBlock') {
-            // A code block can't hold an inline span: wrap it in a
-            // comment container Div with the comment as a `[>> ...]`
-            // paragraph inside. Further comments append to that Div.
-            const wrapper: DivBlock = {
-                t: 'Div',
-                c: [
-                    ['', [CONTAINER_CLASS], []],
-                    [modified, { t: 'Para', c: [newComment] } as ParaBlock],
-                ],
-            };
-            edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), wrapper as BlockNode, COMMENT_EDIT);
-            return;
-        } else if (isCommentContainer(modified)) {
-            // Append to the container's last comment paragraph, or add
-            // a fresh one at the end.
-            const children = (modified as DivBlock).c[1];
-            const lastCommentPara = [...children].reverse().find((ch) =>
-                (inlineSlot(ch) ?? []).some(isComment),
-            );
-            if (lastCommentPara) {
-                inlineSlot(lastCommentPara)!.push(newComment);
-            } else {
-                children.push({ t: 'Para', c: [newComment] } as ParaBlock);
-            }
-        }
+        const inlines = commentTextToInlines(text, {
+            allowLineBreaks: commentLineBreaksAllowed(resolved.sourceNode),
+        });
+        if (inlines.length === 0) return;
+        const modified = appendCommentToBlock(resolved.sourceNode, makeCommentSpan(inlines));
+        if (!modified) return;
         edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), modified, COMMENT_EDIT);
     };
 
@@ -487,6 +449,7 @@ const CommentBlockInner = (args: NodeArgs<BlockNode>) => {
             fallbackAnchor={block.t === 'Plain' ? plainHost : null}
             addComment={addComment}
             resolveCommentAtIndex={resolveCommentAtIndex}
+            allowLineBreaks={commentLineBreaksAllowed(block)}
             mode={mode}
             onNavigateToDocument={onNavigateToDocument}
         >
@@ -1013,6 +976,7 @@ export const CommentWrapper = ({
     claimInitialOpen,
     addComment,
     resolveCommentAtIndex,
+    allowLineBreaks = true,
     mode,
     onNavigateToDocument,
 }: {
@@ -1038,6 +1002,11 @@ export const CommentWrapper = ({
     addComment: (text: string) => void;
     /** Remove the index-th comment (comment spans only, in order) from the source node and commit. */
     resolveCommentAtIndex: (index: number) => void;
+    /**
+     * Whether Shift+Enter may start a new line in the input (bd-ov4jydyf).
+     * False for comments stored in a heading, which is one source line.
+     */
+    allowLineBreaks?: boolean;
     mode: CommentsMode;
     onNavigateToDocument?: (path: string, anchor: string | null) => void;
 }) => {
@@ -1607,8 +1576,20 @@ export const CommentWrapper = ({
                                             onChange={(e) => setCommentText(e.target.value)}
                                             onKeyDown={(e) => {
                                                 if (e.key === 'Enter') {
+                                                    // The Enter that confirms an
+                                                    // IME composition (CJK input)
+                                                    // is not a submit; Safari
+                                                    // reports it as keyCode 229.
+                                                    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                                                    // Shift+Enter starts a new
+                                                    // line: let the browser insert
+                                                    // it. `addComment` stores it as
+                                                    // a LineBreak. A heading is one
+                                                    // line, so there it does nothing.
+                                                    if (e.shiftKey && allowLineBreaks) return;
                                                     e.preventDefault();
-                                                    if (commentText) {
+                                                    if (e.shiftKey) return;
+                                                    if (commentText.trim()) {
                                                         addComment(commentText);
                                                         setCommentText('');
                                                         // Close once the comment
@@ -1651,7 +1632,9 @@ export const CommentWrapper = ({
                                             color: '#6699cc',
                                             textAlign: 'right',
                                         }}>
-                                            Enter to add · Esc to close
+                                            {allowLineBreaks
+                                                ? '↵ add · ⇧↵ new line · Esc close'
+                                                : '↵ add · Esc close'}
                                         </div>
                                     </div>
                                 )}
@@ -1664,7 +1647,7 @@ export const CommentWrapper = ({
                                     whiteSpace: 'nowrap',
                                     textOverflow: 'ellipsis',
                                 }}>
-                                    <CommentSpanContent span={comments[0]} onNavigateToDocument={onNavigateToDocument} />
+                                    <CommentSpanContent span={comments[0]} onNavigateToDocument={onNavigateToDocument} compact />
                                 </div>
                                 {comments.length > 1 && (
                                     <div style={{ color: '#6699cc', textAlign: 'right' }}>
