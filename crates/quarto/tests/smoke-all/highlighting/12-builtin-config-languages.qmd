@@ -10,10 +10,11 @@ _quarto:
         # `sourceCode <class>` and the tokens wrap in `hl-*` spans. `conf`
         # is an alias of `toml` (Pandoc resolves `conf` through TOML's
         # `*.conf` glob), and `Dockerfile` matches `dockerfile` because
-        # class names match case-insensitively. The ini and Dockerfile
-        # comments must come out as `hl-comment`: their upstream queries
-        # also capture comments as `@spell`, which must not win. (Comment
-        # nodes may include the line break, so only the opening is matched.)
+        # class names match case-insensitively. PowerShell is included too.
+        # The ini and Dockerfile comments must come out as `hl-comment`:
+        # their upstream queries also capture comments as `@spell`, which
+        # must not win. (Comment nodes may include the line break, so only
+        # the opening is matched.)
         - [!str "<pre class=\"sourceCode ini\"",
            !str "hl-comment\">; Widget settings",
            !str "hl-property\">host</span>",
@@ -25,7 +26,9 @@ _quarto:
            !str "hl-tag\">server</span>",
            !str "<pre class=\"sourceCode Dockerfile\"",
            !str "hl-comment\"># Build stage",
-           !str "hl-keyword\">FROM</span>"]
+           !str "hl-keyword\">FROM</span>",
+           !str "<pre class=\"sourceCode powershell\"",
+           !str "hl-string\">&quot;widget&quot;</span>"]
 ---
 
 Configuration files are common in technical documentation. These
@@ -58,4 +61,9 @@ listen = "0.0.0.0:3939"
 # Build stage
 FROM rust:1.80 AS build
 RUN cargo build --release
+```
+
+```powershell
+$name = "widget"
+Restart-Service -Name $name -Force
 ```

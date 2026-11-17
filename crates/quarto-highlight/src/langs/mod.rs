@@ -17,6 +17,7 @@ pub(crate) mod json;
 pub(crate) mod julia;
 pub(crate) mod lmd;
 pub(crate) mod lua;
+pub(crate) mod powershell;
 pub(crate) mod python;
 pub(crate) mod r;
 pub(crate) mod rust;

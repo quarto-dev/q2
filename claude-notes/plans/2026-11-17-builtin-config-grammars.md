@@ -87,7 +87,7 @@ is judged too high.
 
 ### Phase 3: powershell (separate commit)
 
-- [ ] Test cases, snippet, crate, module, registry, `ps1` alias.
+- [x] Test cases, snippet, crate, module, registry, `ps1` alias.
 
 ### Phase 4: bookkeeping and verification
 

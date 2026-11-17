@@ -19,7 +19,7 @@ intended source of truth — lift them as-is.
 | `09-builtin-rust.qmd` | Built-in Rust grammar via the canonical `rust` class and the `rs` alias. |
 | `10-syntax-highlighting-key.qmd` | `syntax-highlighting:` (Quarto 1's current name; `highlight-style:` is the alias) selects the HTML palette. |
 | `11-builtin-qmd.qmd` | Built-in qmd composite (GH #1081) via `qmd` and the `markdown` / `md` aliases: structure, front matter as YAML, and an embedded code cell with its `#|` options. |
-| `12-builtin-config-languages.qmd` | Built-in config-file grammars: `ini`, `toml` and its `conf` alias, `xml`, and `dockerfile` (matched case-insensitively as `Dockerfile`). |
+| `12-builtin-config-languages.qmd` | Built-in config-file grammars: `ini`, `toml` and its `conf` alias, `xml`, `dockerfile` (matched case-insensitively as `Dockerfile`), and `powershell`. |
 
 See the Phase 3.5 plan at
 `claude-notes/plans/2026-04-20-syntax-highlighting-phase-3.5.md`

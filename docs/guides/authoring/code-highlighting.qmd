@@ -47,6 +47,7 @@ code block class, and so does each alias.
 | julia      | `jl`        |
 | lmd        |             |
 | lua        |             |
+| powershell | `ps1`       |
 | python     | `py`        |
 | r          |             |
 | rust       | `rs`        |

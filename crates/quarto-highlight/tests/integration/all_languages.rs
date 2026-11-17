@@ -29,6 +29,8 @@ fn cases() -> &'static [(&'static str, &'static str, &'static str)] {
         ("lua", "local x = 1\n", "keyword"),
         ("python", "def foo(): pass\n", "keyword"),
         ("py", "def foo(): pass\n", "keyword"),
+        ("powershell", "Write-Host \"hi\"\n", "string"),
+        ("ps1", "Write-Host \"hi\"\n", "string"),
         ("r", "x <- 1\n", "operator"),
         ("rust", "fn main() {}\n", "keyword"),
         ("rs", "fn main() {}\n", "keyword"),

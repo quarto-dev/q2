@@ -7259,6 +7259,7 @@ dependencies = [
  "tree-sitter-julia",
  "tree-sitter-lmd",
  "tree-sitter-lua",
+ "tree-sitter-powershell",
  "tree-sitter-python",
  "tree-sitter-qmd",
  "tree-sitter-r",
@@ -10385,6 +10386,16 @@ name = "tree-sitter-lua"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8daaf5f4235188a58603c39760d5fa5d4b920d36a299c934adddae757f32a10c"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-powershell"
+version = "0.26.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa49d15e5b291030a548447445e0547992eff1438e7cd9133bfec99a9ba962a9"
 dependencies = [
  "cc",
  "tree-sitter-language",

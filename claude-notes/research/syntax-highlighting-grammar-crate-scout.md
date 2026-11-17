@@ -21,6 +21,7 @@ Scouted 2026-04-19 for wiring into `quarto-highlight`. Versions/commits verified
 | TOML | `tree-sitter-toml-ng` | `0.7.0` | `tree_sitter_toml_ng::LANGUAGE` | tree-sitter-grammars/tree-sitter-toml | (crates.io release) | `queries/highlights.scm` (crate constant `HIGHLIGHTS_QUERY`) | MIT |
 | XML | `tree-sitter-xml` | `0.7.0` | `tree_sitter_xml::LANGUAGE_XML` | tree-sitter-grammars/tree-sitter-xml | (crates.io release) | `queries/xml/highlights.scm` (crate constant `XML_HIGHLIGHT_QUERY`) | MIT |
 | Dockerfile | `tree-sitter-containerfile` | `0.9.2` | `tree_sitter_containerfile::LANGUAGE` | wharflab/tree-sitter-containerfile | (crates.io release) | `queries/highlights.scm` (crate constant `HIGHLIGHTS_QUERY`) | MIT |
+| PowerShell | `tree-sitter-powershell` | `0.26.6` | `tree_sitter_powershell::LANGUAGE` | airbus-cert/tree-sitter-powershell | (crates.io release) | `queries/highlights.scm` (crate constant `HIGHLIGHTS_QUERY`) | MIT |
 
 ## Caveats to verify at build time
 
@@ -30,4 +31,4 @@ Scouted 2026-04-19 for wiring into `quarto-highlight`. Versions/commits verified
 
 _Rust row added 2026-09-08 (bd-202u5bld); its external scanner uses the same `isw*` libc calls as bash, served on wasm32 by `crates/wasm-c-shim`. Grammar ABI 15, same as python 0.25._
 
-_INI, TOML, XML and Dockerfile rows added 2026-11-17 (bd-z6xw3psd); the survey behind them is `claude-notes/research/2026-11-17-highlight-grammar-coverage-survey.md`. containerfile needs `memchr` and `iswxdigit` from the wasm32 headers in `crates/tree-sitter-language-wasm-shim`._
+_INI, TOML, XML, Dockerfile and PowerShell rows added 2026-11-17 (bd-z6xw3psd); the survey behind them is `claude-notes/research/2026-11-17-highlight-grammar-coverage-survey.md`. containerfile needs `memchr` and `iswxdigit` from the wasm32 headers in `crates/tree-sitter-language-wasm-shim`._

@@ -49,6 +49,8 @@ tree-sitter-xml = "0.7"
 # Dockerfile: the maintained fork of camdencheek/tree-sitter-dockerfile,
 # whose crate is stuck on tree-sitter 0.20.
 tree-sitter-containerfile = "0.9"
+# The largest of the config-file grammars (about 1.1 MB of wasm32 objects).
+tree-sitter-powershell = "0.26"
 
 # Native-only: wasmtime-backed user-grammar loader. The `wasm` feature on
 # tree-sitter pulls in wasmtime-c-api, which itself has transitive deps

@@ -184,6 +184,8 @@ static BUILTIN_ALIASES: &[(&str, &[&str])] = &[
     ("julia", &["jl"]),
     ("lmd", &[]),
     ("lua", &[]),
+    // `ps1` follows Pandoc, which resolves it through PowerShell's `*.ps1` glob.
+    ("powershell", &["ps1"]),
     ("python", &["py"]),
     // Quarto markdown (GH #1081). tree-sitter-qmd parses a superset of
     // Pandoc markdown, so plain `markdown` / `md` blocks use it too.
@@ -222,6 +224,7 @@ static BUILTIN_BUILDERS: &[(
     ("julia", crate::langs::julia::build),
     ("lmd", crate::langs::lmd::build),
     ("lua", crate::langs::lua::build),
+    ("powershell", crate::langs::powershell::build),
     ("python", crate::langs::python::build),
     ("r", crate::langs::r::build),
     ("rust", crate::langs::rust::build),

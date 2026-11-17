@@ -108,5 +108,10 @@
     "name": "dockerfile",
     "class": "dockerfile",
     "source": "# Build stage\nFROM rust:1.80 AS build\nRUN cargo build --release\nCOPY --from=build /app /app\n"
+  },
+  {
+    "name": "powershell",
+    "class": "powershell",
+    "source": "# Restart the service\n$name = \"widget\"\nif ($name) {\n    Restart-Service -Name $name -Force\n}\n"
   }
 ]
