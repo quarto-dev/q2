@@ -1924,6 +1924,42 @@ td code:not(.sourceCode) {
   }
 }
 
+// Figure wrapper and alignment. Ported from Q1's `_quarto-rules.scss`
+// (`.quarto-figure` block). The `> figure > p` alignment rules apply to the
+// figure that `crossref-render` puts around an uncaptioned image with
+// `fig-align` (`<div class="quarto-figure-<align>"><figure><p><img>`).
+// Q1's `> figure > div` variants are left out on purpose: a crossref
+// float's content sits in exactly that `<div>`, so porting them would also
+// centre every captioned figure. That broader change belongs to
+// bd-9fz5fweg.
+.quarto-figure {
+  position: relative;
+  margin-bottom: 1em;
+}
+
+.quarto-figure > figure {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.quarto-figure-left > figure > p {
+  text-align: left;
+}
+.quarto-figure-center > figure > p {
+  text-align: center;
+}
+.quarto-figure-right > figure > p {
+  text-align: right;
+}
+
+figure > p:empty {
+  display: none;
+}
+figure > p:first-child {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
 // AnchorJS hover links (bd-5kf2dnw4). Ported from Q1's `_quarto-rules.scss`
 // (anchorjs block). AnchorJS appends `a.anchorjs-link` to each `.anchored`
 // element; headings keep AnchorJS's own inline placement, while figure and

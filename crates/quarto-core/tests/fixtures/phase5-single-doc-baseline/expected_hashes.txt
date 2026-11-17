@@ -524,4 +524,4 @@
 # link, external link) compile to `rgb(...)` instead of the literal
 # `colorToRGB(#...)` call text. doc.html hash unchanged.
 doc.html cb911871a3a0f9328ae6a32df4e2d72da647ff8696169aec56c01d66984cd8ef
-doc_files/styles.css 637076ca660b66ed41f7407f96bc7e49e40fc0e6027a1abf709ea34e109e6c23
+doc_files/styles.css 04e0440be24ccea46b7bdfbddc2849391c02cec55c992dc0600987bc24613218
