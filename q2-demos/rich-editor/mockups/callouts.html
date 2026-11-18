@@ -740,15 +740,17 @@ function renderLayer() {
       layer.append(bar)
       const r = el.getBoundingClientRect()
       if (asImage) {
-        // Inside its top-right corner, 3px in, as on an image; clear of
-        // Quarto's chevron, which it would otherwise cover.
-        const chev = el.querySelector(':scope > .callout-header .chev')?.getBoundingClientRect()
-        bar.style.left = (chev ? chev.left - 4 : r.right - 3) - bar.offsetWidth + 'px'
-        // In one too short to hold it (a collapsed one, only its header): the
-        // same bar, centred on it, so it stays put rather than jumping out
-        // above or shrinking.
-        bar.style.top = (r.height < bar.offsetHeight + 6 ? r.top + (r.height - bar.offsetHeight) / 2 : r.top + 3) + 'px'
-        bar.style.left = (chev ? chev.left - 4 : r.right - 3) - bar.offsetWidth + 'px'
+        // Inside its top-right corner, as on an image, but always clear of
+        // where Quarto's chevron goes, chevron or not: making it collapsible
+        // mustn't move the bar out from under the pointer.
+        const header = el.querySelector(':scope > .callout-header')
+        const cs = getComputedStyle(el), hs = header && getComputedStyle(header)
+        const slot = parseFloat(cs.borderRightWidth) + parseFloat(cs.paddingRight) + (hs ? parseFloat(hs.paddingRight) : 8) + 22
+        bar.style.left = r.right - slot - 4 - bar.offsetWidth + 'px'
+        // Centred on its header, open or collapsed, so collapsing it doesn't
+        // move the bar either (nor shrink it); 3px in, with no header.
+        const hr = header?.getBoundingClientRect()
+        bar.style.top = (hr ? hr.top + (hr.height - bar.offsetHeight) / 2 : r.top + 3) + 'px'
       } else {
         // On its top-right corner, across its top edge, so the pointer can
         // reach it without leaving the callout.
