@@ -85,11 +85,11 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 /* Or as rendered, with a hint after it that says what it is. */
 .callout .title.hinted:empty::before { color:inherit; }
 .callout .title.hinted:empty::after { content:attr(data-hint); color:var(--faint); font-weight:400; margin-left:.6em; visibility:hidden; }
-/* The hint only while you're at the header (as its settings bar is), or
-   typing in the title. */
-.callout-header:hover .title.hinted:empty::after, .callout .title.hinted:empty:focus::after { visibility:visible; }
-/* And with it, the name fades to a placeholder: the hint says why. */
-.callout-header:hover .title.hinted:empty::before, .callout .title.hinted:empty:focus::before { color:var(--faint); }
+/* The hint, and the name faded to a placeholder beside it, only with the
+   caret in the title: not on hover, which would change it for no reason
+   you can see. */
+.callout .title.hinted:empty:focus::after { visibility:visible; }
+.callout .title.hinted:empty:focus::before { color:var(--faint); }
 .callout .title.ghost:empty::before { color:var(--faint); font-weight:400; }
 /* A callout with nothing in it: its one empty line, as the editor's empty
    document has it. */
@@ -220,7 +220,7 @@ const GROUPS = [
     ['menu', 'A menu', 'The appearances by name, each with what it means.'],
   ]},
   { key: 'untitled', title: 'An untitled callout\'s header', options: [
-    ['hint', 'Its kind\'s name and a hint', '"Note" as it renders, and a faint "default title" after it (what "Note" is, so it isn\'t mistaken for one typed) while the pointer\'s over its header or the caret\'s in its title.'],
+    ['hint', 'Its kind\'s name and a hint', '"Note" as it renders; with the caret in its title, it fades and "Using the default title — add your own" shows after it.'],
     ['faint', 'Its kind\'s name, faint', 'Where it renders "Note", "Note" in placeholder grey: not a title; typing replaces it.'],
     ['placeholder', 'A title placeholder', '"Add a title" in placeholder grey instead: plainly a field, but not the word it renders.'],
   ]},
@@ -584,7 +584,7 @@ function renderBlock(b) {
     const ghost = !c.title && !num && (!rendersName || opts.untitled === 'placeholder')
     const t = textEl('span', 't:' + c.k, c.title, 'title' + (ghost ? ' ghost' : '') + (rendersName && opts.untitled === 'hint' ? ' hinted' : ''))
     t.dataset.ph = num ? '' : ghost ? 'Add a title' : NAME[c.type]
-    t.dataset.hint = 'default title'
+    t.dataset.hint = 'Using the default title — add your own'
     tc.append(t)
     h.append(tc)
     if (opts.controls === 'header') box.append(cbar())
