@@ -14,16 +14,20 @@ import {
 } from 'vscode-languageclient/node';
 
 import { findQ2FromEnvironment } from './binary';
+import { PreviewManager } from './preview';
 
 export const LANGUAGE_ID = 'quarto2';
 const INSTALL_URL = 'https://github.com/quarto-dev/q2#installation';
 
 let client: LanguageClient | undefined;
 let output: vscode.OutputChannel;
+let previews: PreviewManager;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   output = vscode.window.createOutputChannel('Quarto 2');
   context.subscriptions.push(output);
+  previews = new PreviewManager(output);
+  context.subscriptions.push(previews);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('q2.restartServer', async () => {
@@ -31,6 +35,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await startClient(context);
     }),
     vscode.commands.registerCommand('q2.showOutput', () => output.show()),
+    vscode.commands.registerCommand('q2.preview', (uri?: vscode.Uri) =>
+      previews.preview(uri instanceof vscode.Uri ? uri : undefined),
+    ),
     vscode.workspace.onDidChangeConfiguration(async (e) => {
       if (e.affectsConfiguration('q2.path')) {
         await stopClient();
@@ -88,12 +95,14 @@ async function startClient(context: vscode.ExtensionContext): Promise<void> {
   }
   const info = client.initializeResult?.serverInfo;
   output.appendLine(`Connected to ${info?.name ?? 'q2 lsp'} ${info?.version ?? ''}`.trimEnd());
+  previews.attach(client);
   context.subscriptions.push({ dispose: () => void stopClient() });
 }
 
 async function stopClient(): Promise<void> {
   const c = client;
   client = undefined;
+  previews?.detach();
   if (c) {
     try {
       await c.stop();

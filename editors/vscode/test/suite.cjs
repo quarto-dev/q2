@@ -34,14 +34,19 @@ exports.run = async function run() {
     return t && t.data.length > 0 ? t : undefined;
   }, 'semantic tokens');
 
-  // Decode and find the heading on line 5 ("# A heading") and a keyword.
+  // Decode and find the "# A heading" line and a keyword.
+  const headingLine = doc.getText().split('\n').indexOf('# A heading');
+  assert.ok(headingLine >= 0, 'the sample has a "# A heading" line');
   const seen = new Set();
   let line = 0;
   for (let i = 0; i < tokens.data.length; i += 5) {
     line += tokens.data[i];
     seen.add(`${line}:${legend.tokenTypes[tokens.data[i + 3]]}`);
   }
-  assert.ok(seen.has('5:qmdHeading'), `no heading token on line 5: ${[...seen].join(' ')}`);
+  assert.ok(
+    seen.has(`${headingLine}:qmdHeading`),
+    `no heading token on line ${headingLine}: ${[...seen].join(' ')}`,
+  );
   assert.ok([...seen].some((s) => s.endsWith(':keyword')), 'no keyword token');
 
   const symbols = await waitFor(
@@ -50,4 +55,19 @@ exports.run = async function run() {
   );
   assert.ok(symbols.some((s) => s.name === 'A heading'), JSON.stringify(symbols.map((s) => s.name)));
   console.log(`smoke: ${tokens.data.length / 5} tokens, ${symbols.length} symbols`);
+
+  // Preview: the command answers with the server's URL and opens a panel.
+  const previewDoc = path.join(__dirname, '..', 'test-workspace', 'preview.qmd');
+  const started = await vscode.commands.executeCommand('q2.preview', vscode.Uri.file(previewDoc));
+  assert.ok(started && started.url, `no preview started: ${JSON.stringify(started)}`);
+  const page = await fetch(started.url).then((r) => r.text());
+  assert.ok(page.includes('Hello from the preview'), page.slice(0, 500));
+  await waitFor(
+    () =>
+      vscode.window.tabGroups.all
+        .flatMap((g) => g.tabs)
+        .some((t) => t.input instanceof vscode.TabInputWebview && t.input.viewType.includes('q2.preview')),
+    'the preview panel',
+  );
+  console.log(`smoke: preview ${started.previewId} at ${started.url}`);
 };

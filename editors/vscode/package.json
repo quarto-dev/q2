@@ -271,6 +271,13 @@
     },
     "commands": [
       {
+        "command": "q2.preview",
+        "title": "Preview",
+        "category": "Quarto 2",
+        "icon": "$(open-preview)",
+        "enablement": "q2.previewAvailable"
+      },
+      {
         "command": "q2.restartServer",
         "title": "Restart Language Server",
         "category": "Quarto 2"
@@ -300,9 +307,59 @@
           ],
           "default": "off",
           "description": "Trace the communication between VS Code and `q2 lsp`."
+        },
+        "q2.preview.target": {
+          "scope": "window",
+          "type": "string",
+          "enum": [
+            "panel",
+            "browser"
+          ],
+          "enumDescriptions": [
+            "Show the preview in a panel beside the editor.",
+            "Open the preview in your web browser."
+          ],
+          "default": "panel",
+          "description": "Where Quarto 2: Preview shows the rendered document."
         }
       }
-    }
+    },
+    "menus": {
+      "editor/title": [
+        {
+          "command": "q2.preview",
+          "when": "editorLangId == quarto2",
+          "group": "navigation"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "q2.preview",
+          "when": "resourceLangId == quarto2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "q2.preview",
+          "when": "resourceLangId == quarto2",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "q2.preview",
+          "when": "editorLangId == quarto2"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "q2.preview",
+        "key": "ctrl+shift+k",
+        "mac": "cmd+shift+k",
+        "when": "editorLangId == quarto2"
+      }
+    ]
   },
   "scripts": {
     "build": "node esbuild.mjs",
