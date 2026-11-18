@@ -146,13 +146,13 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 .chev.setting { color:var(--muted); }
 
 /* "On the callout itself": its settings at the right of its header, or in
-   its corner without one, while the pointer's over its title (never just
-   for the caret being in it). */
+   its corner without one, while the pointer's over it (never just for the
+   caret being in it). */
 /* Across its top edge, not in its header: there it'd take room from the
    title even while hidden, and wrap it sooner than it renders. */
 .cbar { position:absolute; top:-14px; right:8px; z-index:2; display:flex; gap:1px; visibility:hidden; background:#fff; border-radius:6px; box-shadow:0 0 0 1px var(--line); padding:1px; }
-/* Over its title area (anywhere in one with no header), or the bar itself. */
-.callout:has(> .callout-header:hover) .cbar, .callout:not(.callout-titled):hover .cbar, .cbar:hover,
+/* Over the callout, anywhere in it, or the bar itself. */
+.callout:hover .cbar, .cbar:hover,
 .callout.menu-open .cbar { visibility:visible; }
 .cbar button { width:24px; height:24px; display:grid; place-items:center; padding:0; border:0; background:none; border-radius:5px; cursor:pointer; color:#4a4e52; }
 .cbar button:hover, .cbar button[aria-pressed="true"] { background:color-mix(in srgb, var(--c) 18%, #fff); }
@@ -239,9 +239,9 @@ body.dragging, body.dragging * { cursor:grabbing !important; user-select:none; }
 // ---------------------------------------------------------------- options
 const GROUPS = [
   { key: 'controls', title: 'Where its settings are', options: [
-    ['hover', 'A bar on its corner', 'Its kind (by name), appearance, collapsing and More in a bar across its top-right corner, while the pointer\'s over its title. It slides clear of Quarto\'s chevron when the callout is made collapsible, and back when it isn\'t.'],
-    ['header', 'On the callout itself', 'Click its icon to change its kind. Its other settings are at the right end of its header (in its top-right corner without one), while the pointer\'s over its title.'],
-    ['image', 'Inside its corner, as an image\'s', 'An image\'s hover bar (blocks.html), on a callout: icon buttons inside its top-right corner, over what\'s there, while the pointer\'s over its title. Kind, its current kind\'s icon, opens the kinds.'],
+    ['hover', 'A bar on its corner', 'Its kind (by name), appearance, collapsing and More in a bar across its top-right corner, while the pointer\'s over it. It slides clear of Quarto\'s chevron when the callout is made collapsible, and back when it isn\'t.'],
+    ['header', 'On the callout itself', 'Click its icon to change its kind. Its other settings are at the right end of its header (in its top-right corner without one), while the pointer\'s over it.'],
+    ['image', 'Inside its corner, as an image\'s', 'An image\'s hover bar (blocks.html), on a callout: icon buttons inside its top-right corner, over what\'s there, while the pointer\'s over it. Kind, its current kind\'s icon, opens the kinds.'],
     ['toolbar', 'In the toolbar', 'With the caret in a callout, the toolbar grows a Callout section, as Google Docs\' does for a table.'],
   ]},
   // Each setting picked its own way: a row where its icons can be read (the
@@ -1201,10 +1201,9 @@ document.addEventListener('selectionchange', () => {
 document.addEventListener('mousemove', (e) => {
   if (drag) return
   const t = e.target
-  // Its settings for the callout whose title area is under the pointer (or
-  // its bar); one with no header has no title area, so anywhere in it.
+  // Its settings for the callout under the pointer, anywhere in it (or its bar).
   const box = t.closest?.('.callout'), header = box?.querySelector(':scope > .callout-header')
-  const k = Number(t.closest?.('[data-hk]')?.dataset.hk ?? (box && (!header || header.contains(t)) ? box.dataset.k : 0)) || null
+  const k = Number(t.closest?.('[data-hk]')?.dataset.hk ?? box?.dataset.k ?? 0) || null
   const g = hoveredBlock(e)
   const gripMoved = g?.k !== grip?.k || g?.top !== grip?.top
   grip = g
