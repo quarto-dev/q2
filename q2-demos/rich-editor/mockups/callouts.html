@@ -1253,8 +1253,12 @@ document.addEventListener('mousedown', (e) => {
 })
 document.getElementById('scroller').addEventListener('scroll', () => { menu = null; grip = null; renderLayer() })
 // The layer's over the page, not in what scrolls: the wheel over a handle,
-// a bar or a menu scrolls the document as it would over the page.
-layer.addEventListener('wheel', (e) => {
+// a bar or a menu scrolls the document as it would over the page. Caught on
+// the document, not the layer: a scroll redraws the layer, and the browser
+// keeps sending the rest of the gesture to the bar it began on, which is no
+// longer in the page by then (nor in the layer, to hear it).
+document.addEventListener('wheel', (e) => {
+  if (!layer.contains(e.target) && e.target.isConnected) return
   const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1
   document.getElementById('scroller').scrollBy(e.deltaX * unit, e.deltaY * unit)
 }, { passive: true })
