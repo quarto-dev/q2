@@ -686,7 +686,7 @@ function renderMenu() {
       return place(row, true)
     }
     if (menu.kind === 'create') heading('A callout of this kind')
-    for (const t of KINDS) item(kindIcon(t), NAME[t], () => choose(t), { check: c?.type === t, hint: `.callout-${t}` })
+    for (const t of KINDS) item(kindIcon(t), NAME[t], () => choose(t), { check: c?.type === t })
   } else if (menu.kind === 'appearance') {
     for (const [a, name, sub] of [['default', 'Default', 'A tinted header, always'], ['simple', 'Simple', 'No tint; a header only for a title'], ['minimal', 'Minimal', 'No tint and no icon; a header only for a title']])
       item('', name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub, hint: a === 'default' ? '' : `appearance="${a}"` })
