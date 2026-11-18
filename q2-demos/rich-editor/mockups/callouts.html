@@ -1318,16 +1318,28 @@ function gapKey(e) {
   else if (e.key === 'Delete' && i < doc.length) { e.preventDefault(); into(i, false) }
 }
 // A click in the space between two blocks, where there's a gap: the caret
-// goes there.
-document.querySelector('.page').addEventListener('mousedown', (e) => {
-  if (e.target !== editor && e.target !== e.currentTarget) return
+// goes there. Over that space the pointer is a text caret (I-beam), as over
+// text, so it's plain a click there puts the caret somewhere.
+/** The gap under the pointer, if it's in the space between two blocks, or null. */
+function gapAt(e) {
+  if (e.target !== editor && e.target !== page) return null
   const kids = [...editor.children]
   for (let i = 0; i <= kids.length; i++) {
     const a = kids[i - 1]?.getBoundingClientRect(), b = kids[i]?.getBoundingClientRect()
     const top = a ? a.bottom : -Infinity, bottom = b ? b.top : Infinity
-    if (e.clientY >= top && e.clientY <= bottom && isGap(i)) { e.preventDefault(); goalX = null; return toGapAt(i) }
+    if (e.clientY >= top && e.clientY <= bottom) return isGap(i) ? i : null
   }
+  return null
+}
+const page = document.querySelector('.page')
+page.addEventListener('mousedown', (e) => {
+  const i = gapAt(e)
+  if (i == null) return
+  e.preventDefault()
+  goalX = null
+  toGapAt(i)
 })
+page.addEventListener('mousemove', (e) => { page.style.cursor = gapAt(e) == null ? '' : 'text' })
 
 // ------------------------------------------------------------- moving
 // Any block moves by the handle beside it in the gutter (a callout's beside
