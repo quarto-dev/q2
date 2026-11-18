@@ -98,6 +98,7 @@ pub mod import_support;
 pub mod import_transforms;
 pub mod include_code_fence;
 pub mod include_expansion_diagnostics;
+pub mod include_filter_metadata;
 pub mod include_heading_id_dedup;
 pub mod include_nested_expansion;
 pub mod include_project_absolute;

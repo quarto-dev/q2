@@ -146,7 +146,7 @@ pub use equation_number::{
 pub use include_expansion::{
     IncludeExpansionStage, collect_include_paths, expand_document_includes, extract_include_path,
 };
-pub use include_resolve::IncludeResolveStage;
+pub use include_resolve::{IncludeInlineFoldStage, IncludeResolveStage};
 pub use inline_table_css::{InlineTableCssStage, inline_table_css};
 pub use language_resolve::LanguageResolveStage;
 pub use link_resolution::LinkResolutionStage;
