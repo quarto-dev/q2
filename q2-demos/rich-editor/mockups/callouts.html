@@ -2067,12 +2067,45 @@ const hasCallout = (slice) => slice.pieces.some((x) => x.tag === 'callout')
 /** Within one line: only text, to go into a line, a title too. */
 const inline = (slice) => slice.pieces.length === 1 && slice.openStart && slice.openEnd
 
+/**
+ * The places in a callout's text a paragraph can go, i before its
+ * paragraph i: { i, top, bottom, y }, the space there (from its title, or
+ * its top, to its first paragraph; between two; from its last to its
+ * bottom) and its middle, where a drop's line shows.
+ */
+function calloutSlots(c) {
+  const el = editor.querySelector(`.callout[data-k="${c.k}"]`), body = el?.querySelector('.callout-body-container')
+  if (!body) return []
+  const r = el.getBoundingClientRect(), cs = getComputedStyle(el)
+  const inTop = r.top + parseFloat(cs.borderTopWidth), inBottom = r.bottom - parseFloat(cs.borderBottomWidth)
+  const header = el.querySelector(':scope > .callout-header')?.getBoundingClientRect()
+  // By the text's own lines, not the paragraphs' boxes, which run into the
+  // title bar and the callout's bottom edge.
+  const ps = [...body.children].map((x) => {
+    const lines = lineBoxes(x), r = x.getBoundingClientRect()
+    return { top: lines[0]?.top ?? r.top, bottom: lines.at(-1)?.bottom ?? r.bottom }
+  })
+  return Array.from({ length: ps.length + 1 }, (_, i) => {
+    const top = i === 0 ? (header ? header.bottom : inTop) : ps[i - 1].bottom
+    const bottom = i === ps.length ? inBottom : ps[i].top
+    return { i, top, bottom, y: (top + bottom) / 2 }
+  })
+}
 /** Where a slice would drop, under the pointer: a position outside [s, e] it can go; or null. */
 function dropTarget(ev, [s, e], slice) {
   // What's under the pointer now (the page may have scrolled under it).
   const target = document.elementFromPoint(ev.clientX, ev.clientY)
   if (!target) return null
   let d = null
+  // In the space between a callout's title and its text, or between its
+  // paragraphs: there, as paragraphs of its own (not a callout, which
+  // doesn't go in one). Narrow spaces take a few pixels either side.
+  const box = target.closest?.('.callout'), c = box && editor.contains(box) && calloutByKey(Number(box.dataset.k))
+  if (c && bodyShown(c) && !hasCallout(slice)) {
+    for (const sl of calloutSlots(c)) {
+      if (ev.clientY >= Math.min(sl.top, sl.y - 5) && ev.clientY <= Math.max(sl.bottom, sl.y + 5)) { d = { into: c.k, i: sl.i }; break }
+    }
+  }
   // In the space between two blocks (or past the first or last): there,
   // between them, as a block of its own; over a line, into it.
   const kids = [...editor.children]
@@ -2093,13 +2126,23 @@ function dropTarget(ev, [s, e], slice) {
     }
   }
   // Into what's moving, or at its ends, it'd stay put.
-  if (cmp(s, d) <= 0 && cmp(d, e) <= 0) return null
+  const at = d.into != null ? slotPos(d) : d
+  if (cmp(s, at) <= 0 && cmp(at, e) <= 0) return null
   return d
 }
-/** Mark where it'd drop: a caret in a line, a line between blocks. */
+/** A place in a callout's text, as a position: the start of the paragraph it's before (or the end of the last). */
+function slotPos({ into, i }) {
+  const c = calloutByKey(into), p = c.body[i]
+  return p ? { u: 'p:' + p.k, o: 0 } : { u: 'p:' + c.body.at(-1).k, o: c.body.at(-1).text.length }
+}
+/** Mark where it'd drop: a caret in a line, a line between blocks or a callout's paragraphs. */
 function markDropAt(d) {
   if (!d) return dropLine.remove()
-  if (d.u != null) {
+  if (d.into != null) {
+    const c = calloutByKey(d.into), sl = calloutSlots(c)[d.i]
+    const br = editor.querySelector(`.callout[data-k="${d.into}"] .callout-body-container`).getBoundingClientRect()
+    Object.assign(dropLine.style, { left: br.left + 6 + 'px', top: sl.y - 1 + 'px', width: br.width - 12 + 'px', height: '2px' })
+  } else if (d.u != null) {
     const r = caretRect(unitEl(d.u), d.o)
     Object.assign(dropLine.style, { left: r.x - 1 + 'px', top: r.top + 'px', width: '2px', height: r.bottom - r.top + 'px' })
   } else {
@@ -2119,7 +2162,10 @@ function moveSelection([s, e], d) {
   // character in a line.
   let mark = null
   s = { ...s }; e = { ...e }
-  if (d.edge != null) {
+  if (d.into != null) {
+    mark = { k: key(), tag: 'mark', text: '' }
+    calloutByKey(d.into).body.splice(d.i, 0, mark)
+  } else if (d.edge != null) {
     mark = { k: key(), tag: 'mark', text: '' }
     doc.splice(d.edge, 0, mark)
     for (const p of [s, e]) if (p.edge != null && p.edge >= d.edge) p.edge++
@@ -2132,12 +2178,13 @@ function moveSelection([s, e], d) {
   deleteRange([s, e])
   // A whole line moved to a place of its own: its paragraph goes too, not
   // left empty (a callout keeps one, though, to type in).
-  if (d.edge != null && inline(slice) && s.u?.startsWith('p:') && s.o === 0 && e.o === slice.pieces[0].text.length) {
+  if ((d.edge != null || d.into != null) && inline(slice) && s.u?.startsWith('p:') && s.o === 0 && e.o === slice.pieces[0].text.length) {
     const loc = locate(s.u)
     if (loc && !loc.blk.text && (loc.list === doc || loc.list.length > 1)) loc.list.splice(loc.i, 1)
   }
   let at
-  if (mark) { const i = doc.indexOf(mark); doc.splice(i, 1); at = { edge: i } }
+  if (mark && d.into != null) { const c = calloutByKey(d.into), i = c.body.indexOf(mark); c.body.splice(i, 1); at = { into: d.into, i } }
+  else if (mark) { const i = doc.indexOf(mark); doc.splice(i, 1); at = { edge: i } }
   else {
     for (const u of units()) {
       const o = unitText(u).indexOf(DROP_MARK)
@@ -2157,6 +2204,17 @@ function moveSelection([s, e], d) {
 /** Put a slice in at d; its start and end there. */
 function insertSlice(d, { pieces, openStart, openEnd }) {
   const toBlock = (x) => (x.tag === 'callout' ? x : { k: x.k, tag: x.tag, text: x.text })
+  const notEmptyEnd = (x, n) => !(x.tag !== 'callout' && !x.text && ((n === 0 && openStart) || (n === pieces.length - 1 && openEnd)))
+  if (d.into != null) {
+    // Into a callout's text: its lines as paragraphs there (into one with
+    // nothing in it, in place of its empty line).
+    const c = calloutByKey(d.into)
+    const ps = pieces.filter(notEmptyEnd).map((x) => ({ k: x.k, tag: 'p', text: x.text }))
+    if (!ps.length) ps.push(para(''))
+    if (isEmptyBody(c)) c.body.splice(0, 1, ...ps)
+    else c.body.splice(d.i, 0, ...ps)
+    return [{ u: 'p:' + ps[0].k, o: 0 }, { u: 'p:' + ps.at(-1).k, o: ps.at(-1).text.length }]
+  }
   if (d.edge != null) {
     // Between blocks: its pieces as blocks, but not an empty piece of a line.
     const blocks = pieces.filter((x, n) => !(x.tag !== 'callout' && !x.text && ((n === 0 && openStart) || (n === pieces.length - 1 && openEnd)))).map(toBlock)
@@ -2434,7 +2492,7 @@ function dropAt(ev) {
       const br = body.getBoundingClientRect()
       if (y < br.top - 4 || y > br.bottom + 4 || ev.clientX < el.getBoundingClientRect().left) continue
       const c = calloutByKey(Number(el.dataset.k))
-      gaps = between([...body.children], c.body, br.left + 6, br.right - 6, 2)
+      gaps = calloutSlots(c).map((sl) => ({ list: c.body, i: sl.i, y: sl.y, left: br.left + 6, right: br.right - 6 }))
     }
   }
   gaps ??= between([...editor.children], doc, er.left, er.right, 6)
