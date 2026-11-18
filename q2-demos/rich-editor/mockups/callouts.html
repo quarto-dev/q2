@@ -1975,8 +1975,23 @@ document.addEventListener('mousedown', (e) => {
     return
   }
   dragFrom = p
+  // A double or triple click's drag goes by words or lines, keeping the
+  // word or line clicked: what it selected, from where it starts.
+  dragGrain = p?.u != null && e.detail >= 2 ? (e.detail >= 3 ? 'line' : 'word') : null
+  dragFirst = dragGrain ? grainAround(p, dragGrain) : null
   clickFrom = sel?.anchor ? p : null
 }, true)
+let dragGrain = null, dragFirst = null
+const WORD = /[\p{L}\p{N}_'’]/u
+/** The word or line around p, as [start, end]. */
+function grainAround(p, grain) {
+  const t = unitText(p.u)
+  if (grain === 'line') return [{ u: p.u, o: 0 }, { u: p.u, o: t.length }]
+  let a = p.o, b = p.o
+  while (a > 0 && WORD.test(t[a - 1])) a--
+  while (b < t.length && WORD.test(t[b])) b++
+  return [{ u: p.u, o: a }, { u: p.u, o: b }]
+}
 // A click off any text (a callout's header, its padding, a margin) with a
 // selection showing: the caret at the nearest line, as a click in text does.
 let clickFrom = null
@@ -1986,7 +2001,13 @@ document.addEventListener('mousemove', (e) => {
   const p = pointPos(e)
   if (!p || (!dragging && p.u === dragFrom.u && p.edge === dragFrom.edge)) return
   if (!dragging) { dragging = true; editor.classList.add('xsel') }
-  sel = { anchor: dragFrom, focus: p }
+  if (dragFirst) {
+    // By words or lines: from the far side of the one clicked, to the far
+    // side of the one under the pointer.
+    const back = cmp(p, dragFirst[0]) < 0
+    const at = p.u != null ? grainAround(p, dragGrain)[back ? 0 : 1] : p
+    sel = { anchor: dragFirst[back ? 1 : 0], focus: at }
+  } else sel = { anchor: dragFrom, focus: p }
   getSelection().removeAllRanges()
   editor.focus({ preventScroll: true })
   renderToolbar()
