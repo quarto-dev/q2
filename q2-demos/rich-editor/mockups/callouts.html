@@ -84,11 +84,11 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 .callout .title:empty::before { content:attr(data-ph); color:var(--faint); }
 /* Or as rendered, with a hint after it that says what it is. */
 .callout .title.hinted:empty::before { color:inherit; }
-.callout .title.hinted:empty::after { content:attr(data-hint); color:var(--faint); font-weight:400; margin-left:.6em; visibility:hidden; }
-/* The hint, and the name faded to a placeholder beside it, only with the
-   caret in the title: not on hover, which would change it for no reason
-   you can see. */
-.callout .title.hinted:empty:focus::after { visibility:visible; }
+.callout .title.hinted:empty::after { content:attr(data-hint); color:var(--faint); font-weight:400; margin-left:.6em; opacity:0; transition:opacity .2s; }
+/* The hint shows on hover over the header, saying what "Note" is; with the
+   caret in the title it fades away (it's said its piece), and "Note"
+   fades to a placeholder, which typing replaces. */
+.callout-header:hover .title.hinted:empty:not(:focus)::after { opacity:1; }
 .callout .title.hinted:empty:focus::before { color:var(--faint); }
 .callout .title.ghost:empty::before { color:var(--faint); font-weight:400; }
 /* A callout with nothing in it: its one empty line, as the editor's empty
@@ -220,7 +220,7 @@ const GROUPS = [
     ['menu', 'A menu', 'The appearances by name, each with what it means.'],
   ]},
   { key: 'untitled', title: 'An untitled callout\'s header', options: [
-    ['hint', 'Its kind\'s name and a hint', '"Note" as it renders; with the caret in its title, it fades and "Using the default title — add your own" shows after it.'],
+    ['hint', 'Its kind\'s name and a hint', '"Note" as it renders, and "Using the default title — add your own" after it on hover over its header; with the caret in its title, the hint fades away and "Note" fades to a placeholder.'],
     ['faint', 'Its kind\'s name, faint', 'Where it renders "Note", "Note" in placeholder grey: not a title; typing replaces it.'],
     ['placeholder', 'A title placeholder', '"Add a title" in placeholder grey instead: plainly a field, but not the word it renders.'],
   ]},
