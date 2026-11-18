@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const watch = process.argv.includes('--watch');
+const minify = process.argv.includes('--minify');
 
 const options = {
   entryPoints: [join(here, 'src/extension.ts')],
@@ -24,6 +25,7 @@ const options = {
   sourcemap: true,
   sourcesContent: false,
   keepNames: true,
+  minify,
   logLevel: 'info',
 };
 

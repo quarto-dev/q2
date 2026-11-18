@@ -1,7 +1,7 @@
 # A minimal VS Code extension for q2
 
 **Strand:** bd-xnpyb2vv (epic)
-**Status:** draft, revision 3 (2026-11-17). Not approved for execution.
+**Status:** P1–P6 built on `feature/q2-vscode` (2026-11-17), not yet merged to `main`. Design revision 3.
 
 - Revision 1: the first proposal. `q2 lsp` supervised `q2 preview --static`
   child processes.
@@ -572,3 +572,20 @@ P2 and P4.
     macOS (C build scripts). The `stdio.rs` Windows branch was
     type-checked in a scratch crate with the same dependencies, but it
     needs a native Windows run.
+- **P5 (bd-0p6ualnt).** As designed, except there is one Preview icon in
+  `editor/title`, not one in `editor/title/run` as well: two buttons for
+  one action was clutter. Also:
+  - Keybinding Cmd/Ctrl+Shift+K, plus explorer and tab context menus.
+  - The command is enabled only when the server advertises
+    `experimental.quarto.preview`.
+  - Verified by hand in a VS Code dev host (driven over CDP): the iframe
+    renders, the toolbar works, and the status bar reports render errors.
+  - `test-workspace/sample.qmd` is now `engine: markdown`, because its
+    mixed Python/R cells failed under knitr.
+- **P6 (bd-0j0qycfb).**
+  - `.github/workflows/vscode-extension.yml` runs typecheck, unit tests
+    and `vsce package`, then uploads the `.vsix` artifact. It is
+    path-filtered to the extension and the root npm manifests.
+  - `cargo xtask verify` step 6 runs the same three checks.
+  - `dev-docs/vscode-extension.md` is new.
+  - The `.vsix` build is minified through `vscode:prepublish`.

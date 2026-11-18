@@ -14,7 +14,8 @@
 //! 4. Test tree-sitter grammars
 //! 5. Run all Rust tests (with -D warnings, matching CI)
 //! 6. Build ts-packages workspaces + quarto-hub-mcp smoke check
-//!    (bd-6rczoll3 — see `ts_packages.rs`)
+//!    (bd-6rczoll3 — see `ts_packages.rs`), and typecheck / test / build
+//!    the VS Code extension (`editors/vscode`)
 //! 7. Build hub-client (including WASM)
 //! 8. Run hub-client tests
 //! 9. Build trace-viewer SPA
@@ -516,6 +517,27 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
             println!("  ✓ quarto-hub-mcp module graph loads");
         }
         println!("✓ ts-packages build complete");
+
+        // The VS Code extension (editors/vscode, bd-xnpyb2vv) rides along:
+        // typecheck, unit tests and bundle are a few seconds, and CI's
+        // vscode-extension.yml runs the same three.
+        if project_root.join("editors/vscode/package.json").is_file() {
+            println!("\n  ↳ VS Code extension (quarto2-vscode): typecheck, test, build...");
+            for (script, what) in [
+                ("typecheck", "typecheck"),
+                ("test", "unit tests"),
+                ("build", "build"),
+            ] {
+                run_command(
+                    "npm",
+                    &["run", script, "-w", "quarto2-vscode"],
+                    &project_root,
+                    None,
+                    &format!("quarto2-vscode {what} failed"),
+                )?;
+            }
+            println!("  ✓ quarto2-vscode typecheck, tests and build pass");
+        }
     } else if ts_workspaces.is_empty() {
         println!(
             "\n━━━ Step 6/{}: ts-packages/ not present, skipping ━━━\n",
