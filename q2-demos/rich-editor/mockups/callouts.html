@@ -84,7 +84,10 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 .callout .title:empty::before { content:attr(data-ph); color:var(--faint); }
 /* Or as rendered, with a hint after it that says what it is. */
 .callout .title.hinted:empty::before { color:inherit; }
-.callout .title.hinted:empty::after { content:attr(data-hint); color:var(--faint); font-weight:400; margin-left:.6em; }
+.callout .title.hinted:empty::after { content:attr(data-hint); color:var(--faint); font-weight:400; margin-left:.6em; visibility:hidden; }
+/* The hint only while you're at the header (as its settings bar is), or
+   typing in the title. */
+.callout-header:hover .title.hinted:empty::after, .callout .title.hinted:empty:focus::after { visibility:visible; }
 .callout .title.ghost:empty::before { color:var(--faint); font-weight:400; }
 /* A callout with nothing in it: its one empty line, as the editor's empty
    document has it. */
@@ -215,9 +218,9 @@ const GROUPS = [
     ['menu', 'A menu', 'The appearances by name, each with what it means.'],
   ]},
   { key: 'untitled', title: 'An untitled callout\'s header', options: [
+    ['hint', 'Its kind\'s name and a hint', '"Note" as it renders, and a faint "Type a title" after it while the pointer\'s over its header or the caret\'s in its title.'],
     ['faint', 'Its kind\'s name, faint', 'Where it renders "Note", "Note" in placeholder grey: not a title; typing replaces it.'],
     ['placeholder', 'A title placeholder', '"Add a title" in placeholder grey instead: plainly a field, but not the word it renders.'],
-    ['hint', 'Its kind\'s name and a hint', '"Note" as it renders, then a faint "Type a title" after it.'],
   ]},
   { key: 'create', title: 'Callout in the toolbar', options: [
     ['note', 'A note, then change it', 'Wraps the paragraph in a note at once; change its kind after.'],
