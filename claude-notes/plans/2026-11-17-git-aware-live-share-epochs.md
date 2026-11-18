@@ -2,8 +2,13 @@
 title: 'Git-aware sync: epoch switching on checkout (preview live share and the VS Code extension)'
 date: 2026-11-17
 description: 'Makes disk-synced Automerge sessions resilient to git checkouts, rebases, and commits by switching a file to a fresh doc when git rewrites it, keeping the old doc, and telling collaborators; covers q2 preview live share (Part A) and the VS Code extension (Part B).'
-status: draft  # design settled in conversation 2026-11-17 except the open items (D26, O1, the D12 revision); implementation not started
+status: superseded  # replaced 2026-11-18 by the git epochs epic, which maps D1 to D36 and closes the open items (D26, O1, the D12 revision); kept as history
 ---
+
+**Superseded by [the git epochs epic](2026-11-18-git-epochs-epic.md)** (plans in `git-epochs/`). The epic keeps, revises,
+or replaces each decision below; its section "What became of D1 to D36" is the map. Read this file for the original
+evidence and rejected alternatives only.
+
 
 **Branch:** `feature/git-epochs` (from `origin/main` at `1d0042cb2`), worktree `workspace-6`.
 No braid strand: this is plan work. Follow-ups that fall outside the plan are listed under "Out of scope".
