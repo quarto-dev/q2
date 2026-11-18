@@ -107,13 +107,14 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 .chev.setting { color:var(--muted); }
 
 /* "On the callout itself": its settings at the right of its header, or in
-   its corner without one, while the pointer's over it or the caret's in it. */
+   its corner without one, while the pointer's over its title (never just
+   for the caret being in it). */
 /* Across its top edge, not in its header: there it'd take room from the
    title even while hidden, and wrap it sooner than it renders. */
 .cbar { position:absolute; top:-14px; right:8px; z-index:2; display:flex; gap:1px; visibility:hidden; background:#fff; border-radius:6px; box-shadow:0 0 0 1px var(--line); padding:1px; }
 /* Over its title area (anywhere in one with no header), or the bar itself. */
 .callout:has(> .callout-header:hover) .cbar, .callout:not(.callout-titled):hover .cbar, .cbar:hover,
-.callout.has-caret .cbar, .callout.menu-open .cbar { visibility:visible; }
+.callout.menu-open .cbar { visibility:visible; }
 .cbar button { width:24px; height:24px; display:grid; place-items:center; padding:0; border:0; background:none; border-radius:5px; cursor:pointer; color:#4a4e52; }
 .cbar button:hover, .cbar button[aria-pressed="true"] { background:color-mix(in srgb, var(--c) 18%, #fff); }
 .cbar svg { width:16px; height:16px; }
@@ -191,8 +192,8 @@ body.dragging, body.dragging * { cursor:grabbing !important; user-select:none; }
 // ---------------------------------------------------------------- options
 const GROUPS = [
   { key: 'controls', title: 'Where its settings are', options: [
-    ['hover', 'A bar on its corner', 'Its kind (by name), appearance, collapsing and More in a bar across its top-right corner, for the callout under the pointer or with the caret. On Quarto\'s chevron (which it would partly cover) it goes, so the chevron can be clicked.'],
-    ['header', 'On the callout itself', 'Click its icon to change its kind. Its other settings are at the right end of its header (in its top-right corner without one), while the pointer\'s over it or the caret\'s in it.'],
+    ['hover', 'A bar on its corner', 'Its kind (by name), appearance, collapsing and More in a bar across its top-right corner, while the pointer\'s over its title. On Quarto\'s chevron (which it would partly cover) it goes, so the chevron can be clicked.'],
+    ['header', 'On the callout itself', 'Click its icon to change its kind. Its other settings are at the right end of its header (in its top-right corner without one), while the pointer\'s over its title.'],
     ['image', 'Inside its corner, as an image\'s', 'An image\'s hover bar (blocks.html), on a callout: icon buttons inside its top-right corner, over what\'s there, while the pointer\'s over its title. Kind, its current kind\'s icon, opens the kinds.'],
     ['toolbar', 'In the toolbar', 'With the caret in a callout, the toolbar grows a Callout section, as Google Docs\' does for a table.'],
   ]},
@@ -612,7 +613,6 @@ function placeCaret() {
   let el = editor.querySelector(`[data-u="${sel.u}"]`)
   if (!el) return
   setCaret(el, sel.o)
-  markCaret()
 }
 function setCaret(el, o) {
   el.focus({ preventScroll: true })
@@ -633,10 +633,6 @@ function caretIn(el) {
   r.selectNodeContents(el)
   r.setEnd(s.focusNode, s.focusOffset)
   return { o: r.toString().length, collapsed: s.isCollapsed }
-}
-function markCaret() {
-  const c = caretCallout()
-  for (const el of editor.querySelectorAll('.callout')) el.classList.toggle('has-caret', Number(el.dataset.k) === c?.k)
 }
 
 // ---------------------------------------------------------------- toolbar
@@ -715,8 +711,9 @@ function renderLayer() {
   renderGrip()
   const asImage = opts.controls === 'image'
   if (opts.controls === 'hover' || asImage) {
-    // As an image's, only for the one under the pointer (or whose menu is open).
-    const c = calloutByKey(menu?.k ?? hoverK ?? (asImage ? null : caretCallout()?.k))
+    // Only for the one under the pointer (or whose menu is open), as an
+    // image's: never just for the caret being in it.
+    const c = calloutByKey(menu?.k ?? hoverK)
     // Across its top edge, it covers the top of Quarto's chevron: on the
     // chevron, it goes, so the chevron's all there to click.
     const offChev = opts.controls !== 'hover' || chevK !== c?.k || menu?.k === c?.k
@@ -941,7 +938,7 @@ editor.addEventListener('keydown', (e) => {
     if (prev?.tag === 'callout') {
       // After a callout: an empty line goes; a line of text doesn't join it.
       if (!loc.blk.text) { record(); loc.list.splice(loc.i, 1); sel = null; render() }
-      if (ui > 0) { const v = list[ui - 1]; const t = editor.querySelector(`[data-u="${v}"]`); if (t) { sel = { u: v, o: t.textContent.length }; setCaret(t, sel.o); markCaret(); renderToolbar(); renderSource(); renderLayer() } }
+      if (ui > 0) { const v = list[ui - 1]; const t = editor.querySelector(`[data-u="${v}"]`); if (t) { sel = { u: v, o: t.textContent.length }; setCaret(t, sel.o); renderToolbar(); renderSource(); renderLayer() } }
       return
     }
     // The first line in a callout: back to its title, never out of it.
@@ -995,7 +992,6 @@ document.addEventListener('selectionchange', () => {
     if (sel.u !== 't:' + k && (!c || !c.title)) { forceTitle.delete(k); return render() }
     if (c?.title) forceTitle.delete(k)
   }
-  markCaret()
   renderToolbar()
   renderSource()
   renderLayer()
