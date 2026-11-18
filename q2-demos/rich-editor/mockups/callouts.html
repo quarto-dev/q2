@@ -661,7 +661,7 @@ function renderToolbar() {
     }
   } else bar.append(pick(NAME[c.type], kindGlyph(c.type), 'kind', 'Kind'))
   bar.append(pick({ default: 'Default', simple: 'Simple', minimal: 'Minimal' }[c.appearance], '', 'appearance', 'Appearance'),
-    pick(c.collapse == null ? 'Not collapsible' : c.collapse ? 'Starts collapsed' : 'Starts open', '', 'collapse', 'Collapsing'))
+    pick(`Collapsing: ${c.collapse == null ? 'Off' : c.collapse ? 'Collapsed' : 'Open'}`, '', 'collapse', 'Collapsing'))
   const more = toolButton('More', ICONS.more, (b) => toggleMenu('more', c.k, b))
   more.classList.add('hui')
   bar.append(more)
@@ -795,7 +795,7 @@ function renderMenu() {
     if (rows) return row(choices.map(([a, name, sub]) => ({ icon: APPEARANCE_ICONS[a], tip: `${name}: ${sub.toLowerCase()}`, on: c.appearance === a, act: () => change(c, () => { c.appearance = a }) })))
     for (const [a, name, sub] of choices) item('', name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub })
   } else if (menu.kind === 'collapse') {
-    const choices = [[null, 'Not collapsible', 'Always open'], [false, 'Starts open', 'Readers can collapse it'], [true, 'Starts collapsed', 'Readers open it to read it']]
+    const choices = [[null, 'Off', 'Readers can\'t collapse it'], [false, 'Open', 'Starts open; readers can collapse it'], [true, 'Collapsed', 'Starts collapsed; readers open it to read it']]
     const set = (v) => () => change(c, () => { c.collapse = v; peek.delete(c.k) })
     if (rows) return row(choices.map(([v, name, sub]) => ({ icon: COLLAPSE_ICONS[String(v)], tip: `${name}: ${sub.toLowerCase()}`, on: c.collapse === v, act: set(v) })))
     for (const [v, name, sub] of choices) item('', name, set(v), { check: c.collapse === v, sub })
