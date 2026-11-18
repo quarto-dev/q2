@@ -82,16 +82,17 @@ use crate::stage::{
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
-    AnnouncementGenerateTransform, AnnouncementRenderTransform, AppendixStructureTransform,
-    AttributionRenderTransform, AttributionViewerTransform, AuthorsNormalizeTransform,
-    BookCoverImageTransform, BraceDiagramCellDiagnosticsTransform, BreadcrumbsRenderTransform,
-    CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform,
-    CodeBlockGenerateTransform, CodeBlockRenderTransform, ConditionalContentTransform,
-    CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform, DraftAlertTransform,
-    EditorialMarksOoxmlTransform, EditorialMarksTypstTransform, EquationLabelTransform,
-    ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
-    FooterGenerateTransform, FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform,
-    GraphvizRenderTransform, ImageDimensionsTransform, LinkExternalTransform, LinkRewriteTransform,
+    AboutPageDiagnosticsTransform, AnnouncementGenerateTransform, AnnouncementRenderTransform,
+    AppendixStructureTransform, AttributionRenderTransform, AttributionViewerTransform,
+    AuthorsNormalizeTransform, BookCoverImageTransform, BraceDiagramCellDiagnosticsTransform,
+    BreadcrumbsRenderTransform, CalloutResolveTransform, CalloutTransform,
+    CategoriesSidebarTransform, CodeBlockGenerateTransform, CodeBlockRenderTransform,
+    ConditionalContentTransform, CrossrefIndexTransform, CrossrefRenderTransform,
+    CrossrefResolveTransform, DraftAlertTransform, EditorialMarksOoxmlTransform,
+    EditorialMarksTypstTransform, EquationLabelTransform, ExampleEmbedRenderTransform,
+    ExampleEmbedTransform, FloatRefTargetSugarTransform, FooterGenerateTransform,
+    FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform, GraphvizRenderTransform,
+    ImageDimensionsTransform, LinkExternalTransform, LinkRewriteTransform,
     ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
     MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
     PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
@@ -2523,6 +2524,10 @@ pub fn build_transform_pipeline(
     // both consumed later (by the template and `IncludeResolveStage`
     // respectively). Self-gates to non-reveal HTML.
     pipeline.push(Box::new(DraftAlertTransform::new()));
+    // `about:` pages (bd-7hzkh4m6): warn (Q-5-57) that Quarto 1's about
+    // templates are not implemented. Read-only; self-gates to non-reveal
+    // HTML in website/book projects, Quarto 1's scope for about pages.
+    pipeline.push(Box::new(AboutPageDiagnosticsTransform::new()));
     // Slide construction for `format: revealjs` replaces the generic
     // title-block + sectionize pair: reveal needs an exactly-two-level slide
     // tree built from `slide-level` (Pandoc keeps reveal slide-construction
@@ -3206,6 +3211,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "attribution-viewer",
     "attribution-render",
     "draft-alert",
+    "about-page-diagnostics",
     "format-css",
     "responsive-image",
     "image-dimensions",
@@ -3342,6 +3348,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // Writes `rendered.draft-alert-text` + a `quarto:status` header include
     // for the HTML template; sibling of `title-banner`.
     ("draft-alert", Bucket::B2),
+    // Read-only warning for `about:` pages, a website/book HTML feature;
+    // self-gates to non-reveal HTML, so it has no Pandoc-writer role.
+    ("about-page-diagnostics", Bucket::B2),
     // Synthesizes an HTML title-block container from Meta; Pandoc's own
     // templates build the equivalent from the same Meta.
     ("title-block", Bucket::B2),
@@ -7195,6 +7204,7 @@ mod tests {
                 "website-canonical-url",
                 "format-css",
                 "draft-alert",
+                "about-page-diagnostics",
                 "book-cover-image",
                 "title-block",
                 "sectionize",
@@ -7299,6 +7309,7 @@ mod tests {
                 "website-canonical-url",
                 "format-css",
                 "draft-alert",
+                "about-page-diagnostics",
                 "reveal-columns",
                 "reveal-absolute",
                 "reveal-slides",
@@ -7687,6 +7698,7 @@ mod tests {
                 "website-canonical-url",
                 "format-css",
                 "draft-alert",
+                "about-page-diagnostics",
                 "book-cover-image",
                 "sectionize",
                 "html-columns",

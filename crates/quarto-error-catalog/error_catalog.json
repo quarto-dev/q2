@@ -1896,6 +1896,13 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-56",
     "since_version": "99.9.9"
   },
+  "Q-5-57": {
+    "subsystem": "project",
+    "title": "About Pages Not Yet Supported",
+    "message_template": "A website or book page sets `about:`. Quarto 2 does not implement about page templates yet; the page renders as a plain document.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-57",
+    "since_version": "99.9.9"
+  },
   "Q-13-8": {
     "subsystem": "navigation",
     "title": "Unsupported toc-location value",
