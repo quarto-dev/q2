@@ -85,8 +85,10 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 /* Or as rendered, with a hint after it that says what it is. */
 .callout .title.hinted:empty::before { color:inherit; }
 /* #646b72: at least 4.5:1 (WCAG AA for its size) on every kind's header
-   tint and on white; placeholder grey is under 2:1 there. */
-.callout .title.hinted:empty::after { content:attr(data-hint); color:#646b72; font-weight:400; font-size:calc(1em - 3px); margin-left:.6em; opacity:0; transition:opacity .2s; }
+   tint and on white; placeholder grey is under 2:1 there.
+   Raised 1px: 3px smaller on the title's baseline, its capitals sat about
+   1px below the middle of the title's. */
+.callout .title.hinted:empty::after { content:attr(data-hint); color:#646b72; font-weight:400; font-size:calc(1em - 3px); vertical-align:1px; margin-left:.6em; opacity:0; transition:opacity .2s; }
 /* The hint shows on hover over the header, saying what "Note" is; with the
    caret in the title it fades away (it's said its piece), and "Note"
    fades to a placeholder, which typing replaces. */
