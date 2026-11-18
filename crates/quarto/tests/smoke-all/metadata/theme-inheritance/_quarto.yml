@@ -1,3 +1,4 @@
 project:
   type: default
 theme: darkly
+quarto-required: "^2"

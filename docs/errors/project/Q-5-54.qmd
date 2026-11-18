@@ -1,0 +1,47 @@
+---
+title: "`quarto-required` Admits Both Quarto 1 and Quarto 2"
+description: "The `quarto-required` range in `_quarto.yml` admits versions of both Quarto 1 and Quarto 2."
+code: Q-5-54
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-54` — `quarto-required` Admits Both Quarto 1 and Quarto 2
+
+> The `quarto-required` range in `_quarto.yml` admits versions of both
+> Quarto 1 and Quarto 2.
+
+## What this means
+
+`quarto-required` holds a version range. This one admits versions of
+both Quarto 1 and Quarto 2, so it does not say which major version the
+project is written for, and both will render it:
+
+```yaml
+quarto-required: ">=1.4"   # Q-5-54: 1.4, 1.9, 2.0 and 2.5 all qualify
+```
+
+Open ranges like this are common in Quarto 1 projects, which used them
+to require a minimum Quarto 1 release.
+
+## How to fix it
+
+For a Quarto 2 project, write a range that admits Quarto 2 only:
+
+```yaml
+quarto-required: "^2"
+```
+
+For a Quarto 1 project, close the range below 2, for example
+`"^1.7"` or `">=1.4 <2"`. Quarto 2 then reports [`Q-5-55`](Q-5-55.qmd)
+instead, which says the project is a Quarto 1 project.
+
+See [Declaring the Quarto version of a project](../../guides/projects/quarto-version.qmd).
+
+## Related errors
+
+- [`Q-5-53`](Q-5-53.qmd) — no `quarto-required` at all.
+- [`Q-5-55`](Q-5-55.qmd) — the range admits no Quarto 2 version.

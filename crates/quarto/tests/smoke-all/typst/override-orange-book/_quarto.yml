@@ -11,3 +11,4 @@ book:
 format:
   orange-book-typst:
     keep-typ: true
+quarto-required: "^2"

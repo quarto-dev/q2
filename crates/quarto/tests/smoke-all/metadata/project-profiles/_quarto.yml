@@ -3,3 +3,4 @@ project:
 
 profile:
   default: prod
+quarto-required: "^2"

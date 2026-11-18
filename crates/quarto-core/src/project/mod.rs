@@ -40,6 +40,7 @@ pub mod project_profile;
 pub mod render_scripts;
 pub mod search;
 pub mod sidebar_membership;
+pub mod version_marker;
 pub mod website_config;
 // Every hook in this module is native-only (`#[cfg(not(wasm32))]`
 // per function) — each writes into the on-disk output dir. The one
@@ -1253,6 +1254,17 @@ pub struct ProjectConfig {
     /// merged values keep the filename-hash FileId of the overlay
     /// they were written in. Also a cache-key input (Phase 2).
     pub profile_config_paths: Vec<PathBuf>,
+
+    /// The `quarto-required` value written in the project's own
+    /// `_quarto.yml` / `_quarto.yaml` (bd-gw8fmaz3), captured **before**
+    /// profile overlays, `_quarto.yml.local` and extension contributions
+    /// merge into [`metadata`](Self::metadata).
+    ///
+    /// Only the base file counts: whether a project targets Quarto 2 is
+    /// a property of that one file, not of whichever profile is active.
+    /// `None` when the key is absent, and for default-constructed
+    /// configs. Read by [`version_marker::version_marker_diagnostics`].
+    pub declared_quarto_required: Option<ConfigValue>,
 }
 
 impl ProjectConfig {
@@ -2343,6 +2355,10 @@ impl ProjectContext {
         let mut metadata =
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
 
+        // The base file's `quarto-required`, before any overlay can
+        // supply or override it (bd-gw8fmaz3; see the field docs).
+        let declared_quarto_required = metadata.get("quarto-required").cloned();
+
         // ── Project profiles (bd-fu16z22k) ──────────────────────────
         // Resolve the activation set and merge `_quarto-<name>.yml`
         // overlays plus `_quarto.yml.local` into `metadata` *before*
@@ -2462,6 +2478,7 @@ impl ProjectContext {
             brand,
             active_config_profiles,
             profile_config_paths,
+            declared_quarto_required,
         })
     }
 

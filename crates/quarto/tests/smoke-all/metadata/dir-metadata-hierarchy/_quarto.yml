@@ -1,3 +1,4 @@
 project:
   type: default
 title: "Hierarchy Test Project"
+quarto-required: "^2"

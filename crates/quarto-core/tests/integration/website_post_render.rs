@@ -124,7 +124,7 @@ fn pipeline_title_prefix_combines_titles() {
     let (_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  title: Site\n",
         );
         write(
@@ -162,7 +162,7 @@ fn pipeline_favicon_link_emitted_per_page() {
     let (_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  favicon: favicon.ico\n",
         );
         // 1×1 transparent placeholder bytes; content is irrelevant.
@@ -206,7 +206,7 @@ fn pipeline_favicon_file_copied_to_output_dir() {
     let (project_dir, _summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  favicon: favicon.ico\n",
         );
         write_bytes(&project_dir.join("favicon.ico"), b"\x00\x00\x01\x00");
@@ -230,7 +230,7 @@ fn pipeline_canonical_url_per_page() {
     let (_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  site-url: \"https://example.com\"\n",
         );
         write(
@@ -272,7 +272,7 @@ fn pipeline_sitemap_emitted_with_site_url() {
     let (project_dir, _summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  site-url: \"https://example.com\"\n",
         );
         write(
@@ -309,7 +309,7 @@ fn pipeline_sitemap_omitted_without_site_url() {
     let (project_dir, _summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  title: Site\n",
         );
         write(
@@ -332,7 +332,7 @@ fn pipeline_robots_txt_emitted_when_site_url_set() {
     let (project_dir, _summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  site-url: \"https://example.com\"\n",
         );
         write(
@@ -354,7 +354,7 @@ fn pipeline_robots_txt_user_file_takes_precedence() {
     let (project_dir, _summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  site-url: \"https://example.com\"\n",
         );
         write(&project_dir.join("robots.txt"), user_body);
@@ -379,7 +379,7 @@ fn pipeline_favicon_missing_diagnoses_continues() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  favicon: missing.ico\n",
         );
         write(
@@ -430,7 +430,7 @@ fn pipeline_navbar_logo_missing_diagnoses_continues() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  navbar:\n    title: Site\n    logo: images/missing-logo.svg\n    left:\n      - index.qmd\n",
         );
         write(
@@ -467,7 +467,7 @@ fn pipeline_footer_image_missing_diagnoses_continues() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  page-footer:\n    center: \"![](/images/gone.svg)\"\n",
         );
         write(
@@ -521,7 +521,7 @@ fn pipeline_footer_item_image_missing_raises_q_5_6() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  page-footer:\n    right:\n      - text: \"![](/images/gone.svg)\"\n",
         );
         write(
@@ -544,7 +544,7 @@ fn pipeline_footer_item_image_present_is_copied() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  page-footer:\n    right:\n      - text: \"![](/images/logo.svg)\"\n",
         );
         std::fs::create_dir_all(project_dir.join("images")).unwrap();
@@ -580,7 +580,7 @@ fn pipeline_footer_md_blocks_image_missing_raises_q_5_6() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  page-footer:\n    center: !md |\n      ![](/images/gone.svg)\n\n      second paragraph\n",
         );
         write(
@@ -613,7 +613,7 @@ fn pipeline_default_project_no_phase_7_outputs() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: default\n  output-dir: _out\n",
+            "quarto-required: \"^2\"\nproject:\n  type: default\n  output-dir: _out\n",
         );
         write(
             &project_dir.join("index.qmd"),
@@ -666,7 +666,7 @@ fn pipeline_website_post_render_substitutes_listing_placeholders() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n",
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n",
         );
         write(
             &project_dir.join("index.qmd"),
@@ -740,7 +740,7 @@ fn pipeline_website_post_render_substitutes_image_from_sibling_preview() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n",
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n",
         );
         write(
             &project_dir.join("index.qmd"),
@@ -810,7 +810,7 @@ fn pipeline_default_project_does_not_substitute_listing_placeholders() {
     let (project_dir, _summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: default\n  output-dir: _out\n",
+            "quarto-required: \"^2\"\nproject:\n  type: default\n  output-dir: _out\n",
         );
         // A bare html comment that resembles a desc-begin marker
         // (the static content in this fixture has no real listing
@@ -884,7 +884,7 @@ fn pipeline_brand_favicon_fallback_link_emitted_per_page() {
     let (_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              brand: _brand.yml\n",
         );
         write(
@@ -925,7 +925,7 @@ fn pipeline_brand_favicon_fallback_file_copied_to_output_dir() {
     let (project_dir, _summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              brand: _brand.yml\n",
         );
         write(
@@ -956,7 +956,7 @@ fn pipeline_brand_favicon_fallback_rebases_subdirectory_brand() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              brand: _brand/_brand.yml\n",
         );
         write(
@@ -1002,7 +1002,7 @@ fn pipeline_explicit_website_favicon_wins_over_brand_logo() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              website:\n  favicon: favicon.ico\n\
              brand: _brand.yml\n",
         );
@@ -1050,7 +1050,7 @@ fn pipeline_brand_favicon_light_dark_pair_declines_quietly() {
     let (_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              brand: _brand.yml\n",
         );
         write(
@@ -1093,7 +1093,7 @@ fn pipeline_brand_favicon_external_url_emits_link_without_copy() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              brand: _brand.yml\n",
         );
         write(
@@ -1153,7 +1153,7 @@ fn pipeline_no_brand_key_emits_no_favicon() {
     let (_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n",
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n",
         );
         // Present on disk but never referenced.
         write(
@@ -1183,7 +1183,7 @@ fn pipeline_missing_brand_logo_diagnoses_against_the_brand() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              brand: _brand.yml\n",
         );
         // Names a logo that was never created.
@@ -1245,7 +1245,7 @@ fn pipeline_default_project_with_brand_emits_no_favicon() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: default\n  output-dir: _out\n\
+            "quarto-required: \"^2\"\nproject:\n  type: default\n  output-dir: _out\n\
              brand: _brand.yml\n",
         );
         write(

@@ -1,3 +1,4 @@
 project:
   type: default
 title: "Dir Metadata Override Project"
+quarto-required: "^2"

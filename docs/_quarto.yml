@@ -1,3 +1,5 @@
+quarto-required: "^2"
+
 project:
   type: website
   # Staged example output for `.embed-example-iframe` embeds (bd-z1smhvuo).
@@ -53,6 +55,7 @@ website:
           contents:
             - guides/authoring/index.qmd
             - guides/projects/create.qmd
+            - guides/projects/quarto-version.qmd
             - guides/projects/book.qmd
             - guides/projects/preview.qmd
             - guides/projects/render-options.qmd
@@ -398,6 +401,10 @@ website:
             - errors/project/Q-5-50.qmd
             - errors/project/Q-5-51.qmd
             - errors/project/Q-5-52.qmd
+            - errors/project/Q-5-53.qmd
+            - errors/project/Q-5-54.qmd
+            - errors/project/Q-5-55.qmd
+            - errors/project/Q-5-56.qmd
         - section: "include"
           contents:
             - errors/include/Q-17-1.qmd

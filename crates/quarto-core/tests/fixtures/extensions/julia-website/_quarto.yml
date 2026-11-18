@@ -9,3 +9,4 @@ website:
         text: Home
       - href: plot.qmd
         text: Plot
+quarto-required: "^2"

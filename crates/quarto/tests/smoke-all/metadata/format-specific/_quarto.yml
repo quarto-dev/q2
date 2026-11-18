@@ -6,3 +6,4 @@ format:
     toc-depth: 2
   pdf:
     documentclass: article
+quarto-required: "^2"
