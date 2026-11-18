@@ -700,7 +700,7 @@ function renderMenu() {
     item(ICONS.numbered, 'Numbered', () => change(c, () => { c.id = c.id ? null : `${PREFIX[c.type]}-${slug(c.title || NAME[c.type])}` }), { check: Boolean(c.id), hint: c.id ? '#' + c.id : '' })
     list.append(document.createElement('hr'))
     item(ICONS.unwrap, 'Remove the callout', () => unwrap(c), { sub: 'Keeps what\'s in it' })
-    item(ICONS.delete, 'Delete', () => remove(c), { danger: true, sub: 'With what\'s in it' })
+    item(ICONS.delete, 'Delete', () => remove(c), { danger: true })
   }
   place(list)
 }
