@@ -132,12 +132,15 @@ clock where timing matters.
   "Stay detached"; "N files joined live edits from collaborators that are not committed to git." with the action "Use
   my checkout instead"; the adopt confirm: "This file has uncommitted changes. Replace it with the shared version?"
   Notices aggregate per batch, one message each.
-- [ ] **Share mine** (the third action for a dirty file). The epic\'s arrival rule offers it, but registering a second
-  doc under a blob would make it a loser of the canonical rule. Implement it as: fork the canonical doc, overwrite
-  its text with the local text as one change, attach to the fork, and do not register it; it joins the registry at
-  the next commit through move forward. This is a gap in the epic: "share mine" is offered, but a second doc under the
-  same blob would lose to the canonical doc under G7, so the plan chooses a private fork (detail chosen by the plan
-  author; confirm before this plan starts).
+- [ ] **No "share mine".** A dirty file offers two actions, adopt and stay detached (decided 2026-11-18: a second doc
+  under the current blob would lose to the canonical doc under G7, so it could never be joined). A detached file that
+  is later committed goes through arrival again for its new blob; no doc is registered there, so one is created from
+  the disk text and the file is shareable from then on. Add that as a test case: detach a dirty file, commit it, and
+  assert a doc exists under the new blob and the file is attached.
+- [ ] **"Use my checkout instead"** (the action on the joined-live-edits notice, G9 step 4). It writes the blob's
+  content (read with `git cat-file`, no filters) back to the file and detaches the file (inert); it never creates a
+  second doc (detail chosen by the plan author; confirm). Test it: the file text equals the blob and the Binding is
+  inert.
 - [ ] Status bar: the mode plus the detached count; clicking opens a quick pick listing the detached files with
   "Adopt" and "Stay detached" per file (detail chosen by the plan author; confirm). Automatic re-attach: on a watcher
   event or a doc change, compare normalized text and re-attach when equal.
