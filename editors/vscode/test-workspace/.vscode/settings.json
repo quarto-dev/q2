@@ -1,0 +1,5 @@
+{
+  // The F5 dev host opens this folder; use the repo's debug build of q2
+  // (`cargo build -p quarto`). Relative to this workspace folder.
+  "q2.path": "../../../target/debug/q2"
+}
