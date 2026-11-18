@@ -10,6 +10,7 @@ import PreviewDemo from './PreviewDemo';
 import ProjectDemo from './ProjectDemo';
 import RadioTower from './RadioTower';
 import CanvasDemo from './CanvasDemo';
+import EmbedDemo from './EmbedDemo';
 import { QuartoFolderIcon } from '../icons';
 import './DemoGallery.css';
 
@@ -50,6 +51,12 @@ const DEMOS: Record<string, Demo> = {
     description: 'Every part of the hub-client editor as a node on an infinite canvas — server, websocket adapter, repo, project sync, file explorer, WASM and its VFS, document, editor, raw preview, language, presence, identity, LSP, preview, and the stores — with the dependencies as edges.',
     icon: <span className="dg-glyph">⧉</span>,
     Component: CanvasDemo,
+  },
+  embed: {
+    title: 'Embedded editor',
+    description: 'An editor a host builds from hub-client parts: its own header and layout around the file tree, document, preview and outline, which find each other through one ProjectProvider.',
+    icon: <span className="dg-glyph">▣</span>,
+    Component: EmbedDemo,
   },
 };
 

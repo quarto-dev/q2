@@ -31,7 +31,6 @@
   position: sticky;
   top: var(--sidebar-section-header-height, 0px);
   z-index: var(--z-sticky);
-  background: var(--sidebar-bg);
   height: var(--sidebar-files-toolbar-height);
   box-sizing: border-box;
   display: flex;
@@ -84,7 +83,7 @@
 
 /* Illustrated empty state (Phase 5): small muted glyph above the copy
    (inherits currentColor from .empty-state). */
-.empty-state > svg {
+.empty-state>svg {
   display: block;
   margin: 0 auto 8px;
 }
@@ -155,7 +154,7 @@
    unpositioned, so they scroll beneath a pinned one instead of painting
    over it. The z-index is set inline, decreasing with depth (see
    FOLDER_HEADER_Z_TOP in FileSidebar.tsx). */
-.file-list .tree-folder.expanded > .folder-header {
+.file-list .tree-folder.expanded>.folder-header {
   position: sticky;
   background: var(--sidebar-bg);
 }
@@ -182,8 +181,8 @@
 
 /* Specificity matches the sticky-header rule above (which sets an opaque
    background) and comes later, so the tint wins while dragging. */
-.file-list .tree-folder.drop-target > .folder-header,
-.file-list .tree-folder.drop-target > .folder-header:hover {
+.file-list .tree-folder.drop-target>.folder-header,
+.file-list .tree-folder.drop-target>.folder-header:hover {
   background: var(--sidebar-drag-bg);
   color: var(--editor-text);
   border-radius: var(--radius-md) var(--radius-md) 0 0;
@@ -273,4 +272,3 @@
 .file-item .file-kebab[aria-expanded="true"] {
   opacity: 1;
 }
-
