@@ -7,7 +7,7 @@ export default function DemoFrame({ info, children }: { info?: ReactNode; childr
   return (
     <div className="df-page">
       <header className="df-bar">
-        <a href="#/demo">← Demos</a>
+        <a href="#/component-playground">← Demos</a>
         {info !== undefined && <span className="df-info">{info}</span>}
       </header>
       <div className="df-card">{children}</div>

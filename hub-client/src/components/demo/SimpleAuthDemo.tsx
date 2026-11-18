@@ -1,5 +1,5 @@
 /**
- * #/demo/simple-auth — a standalone example page. A counter document lives
+ * #/component-playground/simple-auth — a standalone example page. A counter document lives
  * in IndexedDB and only reaches the sync server while signed in. Each time
  * the counter changes, the document's waves light up; each time the server
  * reports that it holds our latest heads, the tower's waves light up. Auth is

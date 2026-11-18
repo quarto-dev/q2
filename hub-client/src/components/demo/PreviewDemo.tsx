@@ -1,5 +1,5 @@
 /**
- * #/demo/preview — preview of a file in a hub project, rendered by the same
+ * #/component-playground/preview — preview of a file in a hub project, rendered by the same
  * PreviewRouter the editor uses. The preview runtime's `connect` loads the
  * project into the WASM VFS and keeps it synced; in-preview block edits are
  * written back to the document as splices.

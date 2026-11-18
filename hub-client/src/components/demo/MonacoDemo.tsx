@@ -1,5 +1,5 @@
 /**
- * #/demo/monaco — the hub-client document editor (`DocumentEditor`, the
+ * #/component-playground/monaco — the hub-client document editor (`DocumentEditor`, the
  * Monaco editor `Editor.tsx` uses) on a file of a hub project, by itself:
  * Automerge sync, remote cursors, the qmd grammar and theme, outline /
  * folding / semantic tokens, Cmd+B, link and image paste. The preview

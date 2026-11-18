@@ -1065,7 +1065,7 @@ function App() {
     );
   }
 
-  // Gallery of standalone example pages (#/demo, #/demo/<id>).
+  // Gallery of standalone example pages (#/component-playground, #/component-playground/<id>).
   if (route.type === 'demo') {
     return <DemoGallery page={route.page} />;
   }

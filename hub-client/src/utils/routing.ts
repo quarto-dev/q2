@@ -191,7 +191,7 @@ export interface DevRoute {
 /**
  * Route for the gallery of example pages shipped in every build.
  *
- * URL format: #/demo (gallery) or #/demo/<page> (one demo, e.g. 'simple-auth')
+ * URL format: #/component-playground (gallery) or #/component-playground/<page> (one demo, e.g. 'simple-auth')
  */
 export interface DemoRoute {
   type: 'demo';
@@ -346,9 +346,9 @@ export function parseHashRoute(hash: string): Route {
     return { type: 'project', projectId };
   }
 
-  // Parse demo routes: /demo and /demo/<page>. Unlike dev routes these
+  // Parse demo routes: /component-playground and /component-playground/<page>. Unlike dev routes these
   // ship everywhere.
-  if (segments[0] === 'demo') {
+  if (segments[0] === 'component-playground') {
     return segments[1]
       ? { type: 'demo', page: decodeURIComponent(segments[1]) }
       : { type: 'demo' };
@@ -442,7 +442,7 @@ export function buildHashRoute(route: Route): string {
       return `#/dev/${encodeURIComponent(route.page)}`;
 
     case 'demo':
-      return route.page !== undefined ? `#/demo/${encodeURIComponent(route.page)}` : '#/demo';
+      return route.page !== undefined ? `#/component-playground/${encodeURIComponent(route.page)}` : '#/component-playground';
   }
 }
 

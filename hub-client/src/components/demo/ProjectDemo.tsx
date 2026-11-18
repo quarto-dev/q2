@@ -1,5 +1,5 @@
 /**
- * #/demo/project — the hub-client file tree (no toolbar) for a hub project,
+ * #/component-playground/project — the hub-client file tree (no toolbar) for a hub project,
  * fed from the project's index doc (file paths and folders). Selection is
  * local; the file actions are stubs.
  */

@@ -1,5 +1,5 @@
 /**
- * #/demo/embed — an editor built by a host out of hub-client's parts, with
+ * #/component-playground/embed — an editor built by a host out of hub-client's parts, with
  * this page playing the host (think: the Connect satellite).
  *
  * `ProjectProvider` opens the project; everything inside is this page's
@@ -51,7 +51,7 @@ function Header({ split, onSplit, commentsMode, onCommentsMode, authors, onAutho
   const [previewEditing, setPreviewEditing] = usePreference('previewEditing');
   return (
     <header className="ed-header">
-      <a href="#/demo">← Demos</a>
+      <a href="#/component-playground">← Demos</a>
       <strong>{project?.description ?? 'Opening…'}</strong>
       <span className="ed-path">{error ?? currentFile?.path ?? ''}</span>
       {remoteUsers.length > 0 && (

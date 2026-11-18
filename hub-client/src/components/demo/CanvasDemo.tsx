@@ -1,5 +1,5 @@
 /**
- * #/demo/canvas — standalone nodes on an infinite canvas, wired together
+ * #/component-playground/canvas — standalone nodes on an infinite canvas, wired together
  * with edges. Each node is its own small demo; dependencies live only in
  * the edges (see canvas/ports.ts). Drag an edge end off a handle to
  * disconnect it, or select an edge and press Backspace; drag between

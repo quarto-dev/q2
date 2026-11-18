@@ -1,5 +1,5 @@
 /**
- * #/demo — index of standalone example pages; #/demo/<id> renders one.
+ * #/component-playground — index of standalone example pages; #/component-playground/<id> renders one.
  * Add a demo by registering it in DEMOS.
  */
 
@@ -73,7 +73,7 @@ export default function DemoGallery({ page }: { page?: string }) {
           <li key={id}>
             <span className="dg-icon">{icon}</span>
             <div>
-              <a href={`#/demo/${id}`}>{title}</a>
+              <a href={`#/component-playground/${id}`}>{title}</a>
               <p>{description}</p>
             </div>
           </li>
