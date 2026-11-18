@@ -78,11 +78,10 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 .callout-style-simple > .callout-header { color:#595c60; }
 .callout-title-container { flex:1; min-width:0; display:flex; }
 .callout .title { flex:1; min-width:4ch; }
-/* With no title, the kind's name, as it renders ("Note"). It isn't text:
-   with the pointer over the header or the caret in it, it's a placeholder,
-   faint, so it doesn't read as "## Note" with places for the caret in it. */
-.callout .title:empty::before { content:attr(data-ph); color:inherit; }
-.callout-header:hover .title:empty::before, .callout .title:empty:focus::before { color:var(--faint); }
+/* With no title, the kind's name, where it renders ("Note"), but faint, as
+   placeholders are: it isn't text (not "## Note", no places for the caret in
+   it), and typing replaces it. A drift from the render in colour only. */
+.callout .title:empty::before { content:attr(data-ph); color:var(--faint); }
 .callout .title.ghost:empty::before { color:var(--faint); font-weight:400; }
 /* A callout with nothing in it: its one empty line, as the editor's empty
    document has it. */
