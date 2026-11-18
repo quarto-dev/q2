@@ -304,6 +304,7 @@ npm run test:unit   # editing logic, in Node
 npm run test:wasm   # needs the WASM build from step 1
 npm run test:e2e    # the app in Chromium, Firefox and WebKit, on a test hub; needs the WASM build
 npm run test:e2e:chromium   # the same in Chromium only, for iterating
+npm run test:desktop   # the desktop app's Rust side (src-tauri/)
 ```
 
 While iterating, run Chromium only, on the specs you're changing
@@ -348,7 +349,9 @@ and drop),
 block is shown), `read-only.spec.ts` (when nothing can be edited),
 `source.spec.ts` (what an edit does to the source text),
 `collaboration.spec.ts` (more than one person in a document),
-`render-parity.spec.ts` (the editor shows a document as `q2 render` would)
+`render-parity.spec.ts` (the editor shows a document as `q2 render` would),
+`desktop.spec.ts` (the desktop app: the file it opens, saving, changes on
+disk; the test stands in for the app's Rust side, `e2e/desktop.ts`)
 and `app.spec.ts` (the page around the editor: which document it opens,
 the source pane, the connection to the hub, the status line, the layout
 in a narrow window).
