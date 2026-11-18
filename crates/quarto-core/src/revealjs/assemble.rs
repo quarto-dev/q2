@@ -434,6 +434,17 @@ pub fn render_revealjs_document(
     // reveal.js owns everything inside `.reveal` — and is deferred
     // until a concrete consumer appears.)
     let header_includes_block = includes_block(meta, "header");
+    // Math engine (MathJax / KaTeX) config + loader markup, written to
+    // `meta.math` by `MathJsStage` when the deck contains math. The HTML
+    // templates print it through `$math$`; the scaffold bypasses them, so it
+    // prints the slot itself. Placed after the stylesheets and before the
+    // header includes, as in Quarto 1's reveal template.
+    let math_block = meta
+        .get("math")
+        .and_then(|v| v.as_plain_text())
+        .filter(|m| !m.is_empty())
+        .map(|m| format!("\n{m}"))
+        .unwrap_or_default();
     let after_body_block = includes_block(meta, "after-body");
 
     format!(
@@ -443,7 +454,7 @@ pub fn render_revealjs_document(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>{title}</title>
-{links}{header_includes_block}
+{links}{math_block}{header_includes_block}
 </head>
 <body>
 <div class="{reveal_class}">
@@ -461,6 +472,7 @@ Reveal.initialize({config});
         title = escape_html(&title),
         reveal_class = reveal_class,
         links = links,
+        math_block = math_block,
         header_includes_block = header_includes_block,
         body = body,
         footer_logo_block = footer_logo_block,
@@ -985,6 +997,65 @@ mod tests {
         let m = meta(vec![("title", s("Deck")), ("pagetitle", s("Site – Deck"))]);
         let html = render_revealjs_document("", &m, &[], &[]);
         assert!(html.contains("<title>Site – Deck</title>"), "{html}");
+    }
+
+    /// `meta.math` (filled by `MathJsStage` with the engine's config and
+    /// loader markup) lands in `<head>` exactly once, after the deck
+    /// stylesheets and before the reveal.js script, which is where Quarto 1's
+    /// reveal template prints `$math$`. The HTML templates print the same
+    /// slot; the reveal scaffold bypasses them, so without this a deck loaded
+    /// no math engine and `\(…\)` stayed raw.
+    #[test]
+    fn math_slot_lands_in_head_after_stylesheets() {
+        let probe = "<script>window.MathJax = {};</script>\n<script defer src=\"mj.js\"></script>";
+        let m = meta(vec![("title", s("T")), ("math", s(probe))]);
+        let html = render_revealjs_document("<section></section>", &m, &sample_css(), &sample_js());
+        assert_eq!(
+            html.matches(probe).count(),
+            1,
+            "math slot printed once; got:\n{html}"
+        );
+        let at = |needle: &str| html.find(needle).expect(needle);
+        assert!(
+            at(r#"href="site_libs/revealjs/quarto-reveal.css""#) < at(probe),
+            "math slot must follow the stylesheets"
+        );
+        assert!(at(probe) < at("</head>"), "math slot must be inside <head>");
+        assert!(
+            at(probe) < at(r#"src="site_libs/revealjs/reveal.js""#),
+            "math slot must precede the reveal.js script"
+        );
+    }
+
+    /// The math slot precedes `rendered.includes.header`, matching Quarto 1's
+    /// template (`$math$` then `$header-includes$`), so an include can adjust
+    /// the engine configuration it sets.
+    #[test]
+    fn math_slot_precedes_header_includes() {
+        let mut m = meta_with_includes(vec![r#"<meta name="probe" content="x">"#], vec![]);
+        m.insert_path(&["math"], s("<script>/*math*/</script>"));
+        let html = render_revealjs_document("<section></section>", &m, &sample_css(), &sample_js());
+        let math = html
+            .find("<script>/*math*/</script>")
+            .expect("math slot emitted");
+        let include = html
+            .find(r#"<meta name="probe" content="x">"#)
+            .expect("header include emitted");
+        assert!(math < include, "math slot must come before header includes");
+    }
+
+    /// No `meta.math` (a deck without math): the scaffold is unchanged.
+    #[test]
+    fn math_slot_absent_adds_nothing() {
+        let m = meta(vec![("title", s("T"))]);
+        let html = render_revealjs_document("<section></section>", &m, &sample_css(), &sample_js());
+        let head = &html[..html.find("</head>").unwrap()];
+        assert!(
+            head.trim_end().ends_with(
+                r#"<link rel="stylesheet" href="site_libs/revealjs/quarto-reveal.css">"#
+            ),
+            "without math the last thing in <head> is the last stylesheet; head:\n{head}"
+        );
     }
 
     /// bd-jij5gge2: the assembler must **link** vendored assets, not

@@ -1,0 +1,31 @@
+---
+title: "Revealjs math"
+format: revealjs
+# The reveal scaffold writes its own <head>, so it prints `meta.math`
+# (MathJsStage's loader markup) itself. Before this, a deck loaded no math
+# engine and `\(…\)` stayed raw.
+_quarto:
+  tests:
+    revealjs:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "head script[src*='mathjax@3/es5/tex-chtml-full.js']",
+            "section span.math.inline",
+            "section span.math.display",
+          ]
+        - []
+      ensureFileRegexMatches:
+        - ["window\\.MathJax = \\{", "\\\\tag\\{1\\}"]
+        - []
+---
+
+## Inline and display
+
+Inline $e^{i\pi}+1=0$ here.
+
+$$\int_0^1 x^2\,dx = \frac13$$ {#eq-one}
+
+## Later
+
+See @eq-one.
