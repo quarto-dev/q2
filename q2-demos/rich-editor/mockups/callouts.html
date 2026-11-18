@@ -88,6 +88,8 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 /* The hint only while you're at the header (as its settings bar is), or
    typing in the title. */
 .callout-header:hover .title.hinted:empty::after, .callout .title.hinted:empty:focus::after { visibility:visible; }
+/* And with it, the name fades to a placeholder: the hint says why. */
+.callout-header:hover .title.hinted:empty::before, .callout .title.hinted:empty:focus::before { color:var(--faint); }
 .callout .title.ghost:empty::before { color:var(--faint); font-weight:400; }
 /* A callout with nothing in it: its one empty line, as the editor's empty
    document has it. */
