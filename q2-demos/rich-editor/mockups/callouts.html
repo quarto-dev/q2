@@ -1960,8 +1960,9 @@ function extend(anchor, focus, dir, vertical) {
 let dragFrom = null, dragging = false
 document.addEventListener('mousedown', (e) => {
   if (e.button !== 0 || layer.contains(e.target) || e.target.closest?.('.hui, .chev, .kslot')) return
-  // On what's selected: it moves, dragged (pressMove).
-  const range = !e.shiftKey && selectionUnder(e)
+  // On what's selected: it moves, dragged (pressMove). Not the second or
+  // third press of a double or triple click, which selects a word or a line.
+  const range = !e.shiftKey && e.detail < 2 && selectionUnder(e)
   if (range) return pressMove(e, range)
   selGoalX = null
   const p = pointPos(e)
