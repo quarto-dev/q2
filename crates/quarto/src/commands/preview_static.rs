@@ -260,10 +260,6 @@ pub(crate) enum SessionEvent {
     /// The boot render finished and the server is listening.
     Ready(SessionReady),
     /// What the render loop also sends the browser over SSE.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "read by q2 lsp's preview launcher (bd-foum4ql3)")
-    )]
     Render(ReloadEvent),
 }
 
@@ -276,15 +272,13 @@ pub(crate) struct SessionReady {
     pub output_dir: PathBuf,
     pub project_dir: PathBuf,
     /// The project (or document) root the session serves.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "read by q2 lsp's preview launcher (bd-foum4ql3)")
-    )]
     pub input: PathBuf,
     pub watching: bool,
     /// Whether the flags and `_quarto.yml` ask for a browser tab. The
     /// session never opens one itself.
     pub open_browser: bool,
+    /// Every page of the latest successful render.
+    pub pages: PageIndex,
 }
 
 /// Where a session's events go. Called from the session's tasks, never
@@ -312,10 +306,6 @@ impl From<anyhow::Error> for SessionError {
 
 impl SessionError {
     /// A plain-text description for hosts without a terminal.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "read by q2 lsp's preview launcher (bd-foum4ql3)")
-    )]
     pub(crate) fn plain_message(&self) -> String {
         match self {
             SessionError::BootAbort { abort, .. } => strip_ansi_escapes(
@@ -531,6 +521,57 @@ impl ShutdownSignal {
     }
 }
 
+/// What a session for the canonical `path` renders and serves.
+///
+/// A file inside a project previews the *project*, opened on that page
+/// (Q1 `cmd.ts:362-390`): the whole site renders, so sidebars, listings
+/// and cross-page links are all live. A directory, or a file with no
+/// `_quarto.yml` above it, is rendered as given. `q2 lsp` keys its
+/// sessions by this, so documents of one project share a session.
+pub(crate) fn session_root(path: &Path, profile: &[String]) -> PathBuf {
+    match path.parent() {
+        Some(parent) if path.is_file() => {
+            match find_project_root_upward(parent, &native_runtime_for(profile)) {
+                Ok(Some(root)) => root,
+                _ => path.to_path_buf(),
+            }
+        }
+        _ => path.to_path_buf(),
+    }
+}
+
+/// Each input's page in the last successful render (`/posts/a.html`),
+/// shared with the host so it can hand out the URL of any page.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct PageIndex(Arc<std::sync::RwLock<Vec<(PathBuf, String)>>>);
+
+impl PageIndex {
+    /// Merge `report`'s pages in. A subset re-render reports only the
+    /// pages it wrote, so pages are replaced, never dropped.
+    fn update(&self, report: &RenderReport) {
+        let mut pages = self.0.write().unwrap_or_else(|e| e.into_inner());
+        for (input, output) in report.outputs() {
+            let Some(url) = output_url(&report.output_dir, &output) else {
+                continue;
+            };
+            match pages.iter_mut().find(|(i, _)| *i == input) {
+                Some(entry) => entry.1 = url,
+                None => pages.push((input, url)),
+            }
+        }
+    }
+
+    /// The URL path of `input`'s page (`input` canonical).
+    pub(crate) fn page_of(&self, input: &Path) -> Option<String> {
+        self.0
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .find(|(i, _)| i == input)
+            .map(|(_, url)| url.clone())
+    }
+}
+
 /// Run one static-preview session until `stop` resolves: boot render,
 /// serve, watch and re-render. Host-agnostic: it writes nothing to
 /// stdout, never exits the process and installs no signal handlers;
@@ -549,20 +590,7 @@ pub(crate) async fn run_session(
         .with_context(|| format!("resolving {}", raw.display()))?;
 
     let base_args = args.base_render_args();
-
-    // A file inside a project previews the *project*, opened on that
-    // page (Q1 `cmd.ts:362-390`): the whole site renders, so sidebars,
-    // listings and cross-page links are all live. A directory, or a
-    // file with no `_quarto.yml` above it, is rendered as given.
-    let full_input = match path.parent() {
-        Some(parent) if path.is_file() => {
-            match find_project_root_upward(parent, &native_runtime_for(&args.profile)) {
-                Ok(Some(root)) => root,
-                _ => path.clone(),
-            }
-        }
-        _ => path.clone(),
-    };
+    let full_input = session_root(&path, &args.profile);
 
     // The resolved format decides whether this can be served, before any
     // render happens, so an epub project is refused without first
@@ -713,6 +741,8 @@ pub(crate) async fn run_session(
     let default_file = requested_page.clone().or(first_output);
     let hub = ReloadHub::new();
     record_failure(&hub, &report);
+    let pages = PageIndex::default();
+    pages.update(&report);
     let (page_tx, mut page_rx) = tokio::sync::mpsc::channel::<PathBuf>(64);
     let router = build_router(
         StaticServerConfig {
@@ -755,6 +785,7 @@ pub(crate) async fn run_session(
         input: full_input.clone(),
         watching,
         open_browser,
+        pages: pages.clone(),
     }));
 
     let (stop_server_tx, stop_server_rx) = tokio::sync::oneshot::channel::<()>();
@@ -865,7 +896,7 @@ pub(crate) async fn run_session(
             }
             Some((ran, outcome)) = done_rx.recv() => {
                 in_flight = None;
-                finish_render(&ran, outcome, navigate, &hub, &mut last);
+                finish_render(&ran, outcome, navigate, &hub, &pages, &mut last);
                 if pending != Action::Ignore {
                     start_render(
                         &mut pending,
@@ -1004,6 +1035,7 @@ fn finish_render(
     outcome: RenderOutcome,
     navigate: bool,
     hub: &ReloadHub,
+    pages: &PageIndex,
     last: &mut LastRender,
 ) {
     match outcome {
@@ -1027,6 +1059,7 @@ fn finish_render(
                 hub.send(ReloadEvent::Reload { target });
             }
             record_failure(hub, &report);
+            pages.update(&report);
             *last = LastRender::from_report(&report);
         }
         RenderOutcome::Abort(abort) => {
