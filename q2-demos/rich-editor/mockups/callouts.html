@@ -167,6 +167,9 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 .hbar button.wide { width:auto; padding:0 6px; gap:4px; display:flex; font:13px system-ui, sans-serif; }
 .hbar svg { width:18px; height:18px; display:block; }
 .hbar .kicon { width:16px; height:16px; }
+/* A choice in a row with its name under its picture. */
+.hbar button.lab { width:auto; height:auto; display:flex; flex-direction:column; align-items:center; gap:2px; padding:5px 8px 3px; font:11.5px system-ui, sans-serif; color:#37352f; }
+.hbar button.lab svg { width:22px; height:22px; }
 .hbar .vsep { width:1px; height:18px; background:var(--line); margin:0 3px; }
 .hmenu { position:absolute; pointer-events:auto; display:flex; flex-direction:column; background:#fff; border-radius:8px; padding:4px; min-width:150px;
   box-shadow:0 0 0 1px rgba(15,15,15,.06), 0 3px 10px rgba(15,15,15,.14); font-size:14px; }
@@ -249,8 +252,8 @@ const GROUPS = [
     ['menu', 'A menu', 'The kinds by name, with their icons, the current one marked.'],
   ]},
   { key: 'appearancePick', title: 'Choosing its appearance', options: [
-    ['row', 'A row of icons', 'A little callout for each appearance, under its button; names and what they mean in tooltips.'],
-    ['menu', 'A menu', 'The appearances by name, each with what it means.'],
+    ['row', 'A row of pictures', 'A little callout for each appearance, its name under it, in a row under its button.'],
+    ['menu', 'A menu', 'The appearances by name, each with its picture and what it means.'],
   ]},
   { key: 'untitled', title: 'An untitled callout\'s header', options: [
     ['hint', 'Its kind\'s name and a hint', '"Note" as it renders, and "Using the default title. Add your own." after it on hover over its header or with the caret in its title, where "Note" fades to a placeholder.'],
@@ -461,13 +464,13 @@ const KIND_PATHS = {
   caution: '<path d="M9.97 4.88l.953 3.811C10.158 8.878 9.14 9 8 9c-1.14 0-2.159-.122-2.923-.309L6.03 4.88C6.635 4.957 7.3 5 8 5s1.365-.043 1.97-.12zm-.245-.978L8.97.88C8.718-.13 7.282-.13 7.03.88L6.274 3.9C6.8 3.965 7.382 4 8 4c.618 0 1.2-.036 1.725-.098zm4.396 8.613a.5.5 0 0 1 .037.96l-6 2a.5.5 0 0 1-.316 0l-6-2a.5.5 0 0 1 .037-.96l2.391-.598.565-2.257c.862.212 1.964.339 3.165.339s2.303-.127 3.165-.339l.565 2.257 2.391.598z"/>',
   important: '<path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995z"/>',
 }
-// Each appearance as a little callout: a box with its thick left edge.
-// Default's header is ruled off (where its tint is); simple's isn't;
-// minimal has no icon.
+// Each appearance as a little callout, with its thick left edge: default's
+// header a solid band (where its tint is); simple, an icon and a title on
+// white, its text in past the icon; minimal, only lines of text.
 const MINI = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`
 const APPEARANCE_ICONS = {
-  default: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 4v16" stroke-width="2.8"/><path d="M3.5 10h17"/><circle cx="8" cy="7" r="1.1"/><path d="M11 7h6M7.5 14h9M7.5 17h6"/>'),
-  simple: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 4v16" stroke-width="2.8"/><circle cx="8" cy="8" r="1.1"/><path d="M11 8h6M7.5 13h9M7.5 16h6"/>'),
+  default: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 4h15.5a1.5 1.5 0 0 1 1.5 1.5V10h-17z" fill="currentColor"/><path d="M3.5 4v16" stroke-width="2.8"/><path d="M7.5 14h9M7.5 17h6"/>'),
+  simple: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 4v16" stroke-width="2.8"/><circle cx="8.2" cy="8.5" r="1.4"/><path d="M11 8.5h6.5M11 13h6.5M11 16.5h4"/>'),
   minimal: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 4v16" stroke-width="2.8"/><path d="M7.5 8.5h9M7.5 12h9M7.5 15.5h6"/>'),
 }
 const kindIcon = (t) => `<svg viewBox="0 0 16 16" class="kicon k-${t}">${KIND_PATHS[t]}</svg>`
@@ -927,7 +930,8 @@ function renderMenu() {
     for (const ch of choices) {
       const btn = document.createElement('button')
       btn.innerHTML = ch.icon
-      btn.dataset.tip = ch.tip
+      if (ch.label) { btn.classList.add('lab'); btn.append(Object.assign(document.createElement('span'), { textContent: ch.label })) }
+      else btn.dataset.tip = ch.tip
       btn.setAttribute('aria-label', ch.tip)
       btn.setAttribute('aria-pressed', String(ch.on))
       btn.onclick = ch.act
@@ -941,9 +945,11 @@ function renderMenu() {
     if (menu.kind === 'create') heading('A callout of this kind')
     for (const t of KINDS) item(kindGlyph(t), NAME[t], () => choose(t), { check: c?.type === t })
   } else if (menu.kind === 'appearance') {
-    const choices = [['default', 'Default', 'A tinted header, always'], ['simple', 'Simple', 'No tint; a header only for a title'], ['minimal', 'Minimal', 'No tint and no icon; a header only for a title']]
-    if (opts.appearancePick === 'row') return row(choices.map(([a, name, sub]) => ({ icon: APPEARANCE_ICONS[a], tip: `${name}: ${sub.toLowerCase()}`, on: c.appearance === a, act: () => change(c, () => { c.appearance = a }) })))
-    for (const [a, name, sub] of choices) item('', name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub })
+    const choices = [['default', 'Default', 'Tinted header'], ['simple', 'Simple', 'No tint; a header only with a title'], ['minimal', 'Minimal', 'No tint, no icon']]
+    // Pictures of each, named (under them in a row, beside them in a menu):
+    // the pictures alone are too alike to tell apart at a glance.
+    if (opts.appearancePick === 'row') return row(choices.map(([a, name]) => ({ icon: APPEARANCE_ICONS[a], label: name, on: c.appearance === a, act: () => change(c, () => { c.appearance = a }) })))
+    for (const [a, name, sub] of choices) item(APPEARANCE_ICONS[a], name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub })
   } else if (menu.kind === 'more') {
     if (c.title) item(ICONS.title, 'Remove the title', () => change(c, () => { c.title = ''; if (sel?.u === 't:' + c.k) sel = { u: 'p:' + c.body[0].k, o: 0 } }))
     item(ICONS.icon, 'Icon', () => change(c, () => { c.icon = !c.icon }), { check: hasIcon(c), disabled: c.appearance === 'minimal', hint: c.appearance === 'minimal' ? 'minimal has none' : '' })
