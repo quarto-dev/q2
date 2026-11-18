@@ -213,6 +213,66 @@ mod tests {
         }
     }
 
+    /// The VS Code extension declares every custom (non-standard) type
+    /// this legend uses and maps it to TextMate scopes; otherwise VS Code
+    /// drops those tokens. Reads `editors/vscode/package.json`
+    /// (cross-language reference: moving that file breaks this test).
+    #[test]
+    fn the_vscode_extension_declares_every_custom_token_type() {
+        const STANDARD: &[&str] = &[
+            "namespace",
+            "class",
+            "enum",
+            "interface",
+            "struct",
+            "typeParameter",
+            "type",
+            "parameter",
+            "variable",
+            "property",
+            "enumMember",
+            "decorator",
+            "event",
+            "function",
+            "method",
+            "macro",
+            "label",
+            "comment",
+            "string",
+            "keyword",
+            "number",
+            "regexp",
+            "operator",
+        ];
+        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../editors/vscode/package.json");
+        let pkg: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&manifest).unwrap()).unwrap();
+        let declared: Vec<&str> = pkg["contributes"]["semanticTokenTypes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["id"].as_str().unwrap())
+            .collect();
+        let scopes = &pkg["contributes"]["semanticTokenScopes"][0]["scopes"];
+        for t in legend_token_types() {
+            if STANDARD.contains(t) {
+                continue;
+            }
+            assert!(declared.contains(t), "{t} is not in semanticTokenTypes");
+            assert!(
+                scopes.get(*t).is_some(),
+                "{t} has no semanticTokenScopes entry"
+            );
+        }
+        for t in &declared {
+            assert!(
+                legend_token_types().contains(t),
+                "{t} is declared but never sent"
+            );
+        }
+    }
+
     #[test]
     fn encode_delta_encodes_lines_and_starts() {
         let heading = qmd_index("qmd.markup.heading");

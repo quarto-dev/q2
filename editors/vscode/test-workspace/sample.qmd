@@ -1,0 +1,38 @@
+---
+title: "Quarto 2 highlighting sample"
+format: html
+---
+
+# A heading
+
+Some *emphasis*, **strong**, ~~struck~~, `inline code`, and $e^{i\pi} + 1 = 0$.
+
+A [link](https://quarto.org "title") and an image ![alt](figure.png).
+
+> A quote with a shortcode: {{< meta title >}}
+
+- a list item
+- another, with a citation [@knuth84]
+
+::: {.callout-note}
+A callout.
+:::
+
+```{python}
+#| echo: false
+#| label: fig-plot
+import math
+
+def area(r: float) -> float:
+    """Circle area."""
+    return math.pi * r ** 2  # comment
+
+print(area(2), True, None)
+```
+
+```{r}
+x <- c(1, 2, 3)
+mean(x)
+```
+
+<!-- a comment -->
