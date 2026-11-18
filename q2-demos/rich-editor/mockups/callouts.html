@@ -1416,10 +1416,18 @@ function effective(a = sel.anchor, f = sel.focus) {
   if (ps?.c !== pe?.c) {
     if (ps && wholeFromOutside(ps.c)) s = { edge: doc.indexOf(ps.c) }
     if (pe && wholeFromOutside(pe.c)) e = { edge: doc.indexOf(pe.c) + 1 }
-  } else if (ps && ps.part !== pe.part) {
-    const c = ps.c, i = doc.indexOf(c)
-    if (opts.crossTitle === 'callout') { s = { edge: i }; e = { edge: i + 1 } }
-    else if (opts.crossTitle === 'all') { const last = c.body.at(-1); s = { u: 't:' + c.k, o: 0 }; e = { u: 'p:' + last.k, o: last.text.length } }
+  }
+  if (opts.crossTitle === 'text') return [s, e]
+  // Across a callout's title and its text, wherever the other end is (in
+  // its text, or past it): as opts.crossTitle says, from that end.
+  const titleEnd = (c) => ({ u: 't:' + c.k, o: c.title.length }), bodyStart = (c) => ({ u: 'p:' + c.body[0].k, o: 0 })
+  const S = partOf(s), E = partOf(e)
+  if (S?.part === 't' && bodyShown(S.c) && cmp(e, titleEnd(S.c)) > 0) {
+    s = opts.crossTitle === 'callout' ? { edge: doc.indexOf(S.c) } : { u: 't:' + S.c.k, o: 0 }
+  }
+  if (E?.part === 'b' && showHeader(E.c) && cmp(s, bodyStart(E.c)) < 0) {
+    const last = E.c.body.at(-1)
+    e = opts.crossTitle === 'callout' ? { edge: doc.indexOf(E.c) + 1 } : { u: 'p:' + last.k, o: last.text.length }
   }
   return [s, e]
 }
@@ -1523,18 +1531,17 @@ function arrive(v, dir, vertical) {
 }
 /**
  * Into the block on the far side of edge i, going dir. A callout the
- * anchor's not in, selected whole from outside: over it, to the next stop
- * (a gap, or the near end of the text past it). One it's in: into the part
- * of it the anchor's in, so coming back retraces the way out.
+ * anchor's not in, selected whole from outside: over it, to its far edge.
+ * One it's in: into the part of it the anchor's in, so coming back
+ * retraces the way out.
  */
 function beyond(i, dir, anchor, vertical) {
   const n = dir > 0 ? i : i - 1, blk = doc[n]
   if (!blk) return null
   if (blk.tag === 'callout' && !inCallout(anchor, blk) && wholeFromOutside(blk)) {
-    const j = dir > 0 ? n + 1 : n
-    const next = doc[dir > 0 ? j : j - 1]
-    if (!next || isGap(j)) return { edge: j }
-    return { u: 'p:' + next.k, o: dir > 0 ? 0 : next.text.length }
+    // Its edge, not into the text past it: the break before that text
+    // isn't selected, so it isn't shown selected.
+    return { edge: dir > 0 ? n + 1 : n }
   }
   let us = unitsOf(n)
   if (blk.tag === 'callout' && inCallout(anchor, blk) && opts.crossTitle !== 'text') {
@@ -1589,9 +1596,23 @@ function setRange(anchor, focus) {
     getSelection().removeAllRanges()
     editor.focus({ preventScroll: true })
   }
+  reveal(focus)
   renderToolbar()
   renderSource()
   renderLayer()
+}
+/** Scroll the page just enough to show position p (as the browser does a caret). */
+function reveal(p) {
+  let top, bottom
+  if (p.u != null) ({ top, bottom } = caretRect(unitEl(p.u), p.o))
+  else {
+    const a = editor.children[p.edge - 1]?.getBoundingClientRect(), b = editor.children[p.edge]?.getBoundingClientRect()
+    top = a ? a.bottom : b.top
+    bottom = b ? b.top : a.bottom
+  }
+  const sc = document.getElementById('scroller'), r = sc.getBoundingClientRect(), pad = 40
+  if (top < r.top + pad) sc.scrollBy(0, top - r.top - pad)
+  else if (bottom > r.bottom - pad) sc.scrollBy(0, bottom - r.bottom + pad)
 }
 /** The caret at a position: an edge's, its gap, or the text beside it. */
 function caretAt(p) {
@@ -1696,25 +1717,39 @@ function renderSelection() {
     Object.assign(d.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' })
     selLayer.append(d)
   }
-  doc.forEach((b, i) => {
+  for (const c of coverage(s, e)) {
     // A callout selected as a block: all of it, as a block.
-    if (b.tag === 'callout' && blockIn(i, s, e)) return paint(editor.children[i].getBoundingClientRect(), 'sel-box sel-block')
+    if (c.block != null) { paint(editor.children[c.block].getBoundingClientRect(), 'sel-box sel-block'); continue }
+    const el = unitEl(c.u), t = el.firstChild
+    if (c.from < c.to && t?.nodeType === 3) {
+      const rg = document.createRange()
+      rg.setStart(t, c.from); rg.setEnd(t, c.to)
+      for (const box of rg.getClientRects()) paint(box)
+    }
+    // On past its end: a sliver for the line's end, as Google Docs shows it.
+    if (c.tail) {
+      const r = caretRect(el, unitText(c.u).length)
+      paint({ left: r.x, top: r.top, width: 6, height: r.bottom - r.top })
+    }
+  }
+}
+/** What's drawn selected for [s, e]: callouts as blocks, and lines' covered text. */
+function coverage(s, e) {
+  const out = []
+  doc.forEach((b, i) => {
+    if (b.tag === 'callout' && blockIn(i, s, e)) return out.push({ block: i })
     for (const u of unitsOf(i)) {
       const r = cover(u, s, e)
-      if (!r) continue
-      const el = unitEl(u), t = el.firstChild
-      if (r[0] < r[1] && t?.nodeType === 3) {
-        const rg = document.createRange()
-        rg.setStart(t, r[0]); rg.setEnd(t, r[1])
-        for (const box of rg.getClientRects()) paint(box)
-      }
-      // On past its end: a sliver for the line's end, as Google Docs shows it.
-      if (cmp(e, { u, o: unitText(u).length }) > 0) {
-        const c = caretRect(el, unitText(u).length)
-        paint({ left: c.x, top: c.top, width: 6, height: c.bottom - c.top })
-      }
+      // Its line break, shown selected (a sliver past its end) only where
+      // it goes on deleting: the line joins the next one, or goes whole. A
+      // title's never does, nor a line beside a callout.
+      const title = u.startsWith('t:')
+      const joins = e.u != null && !e.u.startsWith('t:') && partOf(e)?.c === partOf({ u })?.c
+      const tail = Boolean(r) && !title && cmp(e, { u, o: unitText(u).length }) > 0 && (joins || cmp(s, { u, o: 0 }) <= 0)
+      if (r && (r[0] < r[1] || tail)) out.push({ u, from: r[0], to: r[1], tail })
     }
   })
+  return out
 }
 
 // ---- keys and the pointer
@@ -1781,7 +1816,15 @@ function extend(anchor, focus, dir, vertical) {
     steps.pop()
     return setRange(anchor, last.from)
   }
-  const to = stepFocus(focus, dir, vertical, anchor)
+  // Every press changes what's selected: a step that doesn't (into a
+  // callout's text that's all selected anyway, out to its edge) goes on.
+  const shown = (f) => JSON.stringify(coverage(...effective(anchor, f)))
+  const was = shown(focus)
+  let to = stepFocus(focus, dir, vertical, anchor)
+  for (let next = to; next; next = stepFocus(next, dir, vertical, anchor)) {
+    to = next
+    if (shown(to) !== was) break
+  }
   if (!to) return
   steps.push({ anchor, from: focus, to, dir, vertical })
   setRange(anchor, to)
