@@ -253,7 +253,7 @@ const GROUPS = [
   ]},
   { key: 'appearancePick', title: 'Choosing its appearance', options: [
     ['row', 'A row of pictures', 'A little callout for each appearance, its name under it, in a row under its button.'],
-    ['menu', 'A menu', 'The appearances by name, each with its picture and what it means.'],
+    ['menu', 'A menu', 'The appearances by name, each with its picture.'],
   ]},
   { key: 'untitled', title: 'An untitled callout\'s header', options: [
     ['hint', 'Its kind\'s name and a hint', '"Note" as it renders, and "Using the default title. Add your own." after it on hover over its header or with the caret in its title, where "Note" fades to a placeholder.'],
@@ -945,11 +945,11 @@ function renderMenu() {
     if (menu.kind === 'create') heading('A callout of this kind')
     for (const t of KINDS) item(kindGlyph(t), NAME[t], () => choose(t), { check: c?.type === t })
   } else if (menu.kind === 'appearance') {
-    const choices = [['default', 'Default', 'Tinted header'], ['simple', 'Simple', 'No tint; a header only with a title'], ['minimal', 'Minimal', 'No tint, no icon']]
+    const choices = [['default', 'Default'], ['simple', 'Simple'], ['minimal', 'Minimal']]
     // Pictures of each, named (under them in a row, beside them in a menu):
     // the pictures alone are too alike to tell apart at a glance.
     if (opts.appearancePick === 'row') return row(choices.map(([a, name]) => ({ icon: APPEARANCE_ICONS[a], label: name, on: c.appearance === a, act: () => change(c, () => { c.appearance = a }) })))
-    for (const [a, name, sub] of choices) item(APPEARANCE_ICONS[a], name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub })
+    for (const [a, name] of choices) item(APPEARANCE_ICONS[a], name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a })
   } else if (menu.kind === 'more') {
     if (c.title) item(ICONS.title, 'Remove the title', () => change(c, () => { c.title = ''; if (sel?.u === 't:' + c.k) sel = { u: 'p:' + c.body[0].k, o: 0 } }))
     item(ICONS.icon, 'Icon', () => change(c, () => { c.icon = !c.icon }), { check: hasIcon(c), disabled: c.appearance === 'minimal', hint: c.appearance === 'minimal' ? 'minimal has none' : '' })
