@@ -700,7 +700,7 @@ function renderMenu() {
   } else if (menu.kind === 'more') {
     if (!showHeader(c)) item(ICONS.title, 'Add a title', () => addTitle(c))
     else if (c.title) item(ICONS.title, 'Remove the title', () => change(c, () => { c.title = ''; if (sel?.u === 't:' + c.k) sel = { u: 'p:' + c.body[0].k, o: 0 } }))
-    item(ICONS.icon, 'Icon', () => change(c, () => { c.icon = !c.icon }), { check: hasIcon(c), disabled: c.appearance === 'minimal', hint: c.appearance === 'minimal' ? 'minimal has none' : c.icon ? '' : 'icon=false' })
+    item(ICONS.icon, 'Icon', () => change(c, () => { c.icon = !c.icon }), { check: hasIcon(c), disabled: c.appearance === 'minimal', hint: c.appearance === 'minimal' ? 'minimal has none' : '' })
     item(ICONS.numbered, 'Numbered', () => change(c, () => { c.id = c.id ? null : `${PREFIX[c.type]}-${slug(c.title || NAME[c.type])}` }), { check: Boolean(c.id), hint: c.id ? '#' + c.id : '' })
     list.append(document.createElement('hr'))
     item(ICONS.unwrap, 'Remove the callout', () => unwrap(c), { sub: 'Keeps what\'s in it' })
