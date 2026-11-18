@@ -122,6 +122,10 @@ button.icon svg { width:20px; height:20px; display:block; }
 .hbar button.wide { width:auto; padding:0 6px; gap:4px; display:flex; font:13px system-ui, sans-serif; }
 .hbar svg { width:18px; height:18px; display:block; }
 .hbar .kicon { width:16px; height:16px; }
+.hbar.compact { padding:2px; gap:1px; }
+.hbar.compact button { width:24px; height:24px; border-radius:5px; }
+.hbar.compact svg { width:16px; height:16px; }
+.hbar.compact .kicon { width:14px; height:14px; }
 .hbar .vsep { width:1px; height:18px; background:var(--line); margin:0 3px; }
 .hmenu { position:absolute; pointer-events:auto; display:flex; flex-direction:column; background:#fff; border-radius:8px; padding:4px; min-width:150px;
   box-shadow:0 0 0 1px rgba(15,15,15,.06), 0 3px 10px rgba(15,15,15,.14); font-size:14px; }
@@ -694,9 +698,12 @@ function renderLayer() {
         // Quarto's chevron, which it would otherwise cover.
         const chev = el.querySelector(':scope > .callout-header .chev')?.getBoundingClientRect()
         bar.style.left = (chev ? chev.left - 4 : r.right - 3) - bar.offsetWidth + 'px'
-        // Above one too short to hold it (a collapsed one), as above a short
-        // image, overlapping its edge so the pointer crosses no gap to it.
-        bar.style.top = (r.height < bar.offsetHeight + 6 ? r.top - bar.offsetHeight + 2 : r.top + 3) + 'px'
+        // In one too short to hold it (a collapsed one, only its header): a
+        // compact bar, centred in it, so it stays inside rather than jumping
+        // out above.
+        if (r.height < bar.offsetHeight + 6) bar.classList.add('compact')
+        bar.style.top = (bar.classList.contains('compact') ? r.top + (r.height - bar.offsetHeight) / 2 : r.top + 3) + 'px'
+        bar.style.left = (chev ? chev.left - 4 : r.right - 3) - bar.offsetWidth + 'px'
       } else {
         // On its top-right corner, across its top edge, so the pointer can
         // reach it without leaving the callout.
