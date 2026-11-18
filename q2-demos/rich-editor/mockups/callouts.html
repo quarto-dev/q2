@@ -128,7 +128,7 @@ button.icon svg { width:20px; height:20px; display:block; }
 .hmenu .label { flex:1; }
 .hmenu .label small { display:block; color:var(--muted); font-size:12px; }
 .hmenu .hint { color:var(--faint); font:12px ui-monospace, Menlo, monospace; }
-.hmenu .mark { flex:none; color:var(--accent); width:12px; }
+.hmenu .mark { flex:none; color:var(--accent); margin-left:8px; }
 .hmenu .danger { color:#c4342d; }
 .hmenu hr { border:0; border-top:1px solid var(--line); margin:4px 0; }
 .hmenu h3 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:6px 8px 4px; font-weight:600; }
@@ -659,7 +659,9 @@ function renderMenu() {
   list.addEventListener('mousedown', (e) => e.preventDefault())
   const item = (icon, label, action, { check = null, hint = '', sub = '', disabled = false, danger = false } = {}) => {
     const b = document.createElement('button')
-    b.innerHTML = `<span class="mark">${check ? '✓' : ''}</span><span class="icon">${icon}</span><span class="label"></span><span class="hint"></span>`
+    // What's chosen: a tick at the row's end, as in Notion, so no column is
+    // kept for it in the rows without one.
+    b.innerHTML = `${icon ? `<span class="icon">${icon}</span>` : ''}<span class="label"></span><span class="hint"></span>${check ? '<span class="mark">✓</span>' : ''}`
     b.querySelector('.label').textContent = label
     if (sub) b.querySelector('.label').append(Object.assign(document.createElement('small'), { textContent: sub }))
     b.querySelector('.hint').textContent = hint
