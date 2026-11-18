@@ -375,3 +375,87 @@ fn queries_say_why_they_cannot_answer() {
     assert_eq!(untitled.data.unwrap()["kind"], "unknownDocument");
     client.shutdown();
 }
+
+/// Decode `semanticTokens/full` data into absolute `(line, start, length,
+/// type name)` tuples using the advertised legend.
+fn decode_tokens(init: &Value, result: &Value) -> Vec<(u32, u32, u32, String)> {
+    let legend: Vec<String> =
+        init["capabilities"]["semanticTokensProvider"]["legend"]["tokenTypes"]
+            .as_array()
+            .expect("a legend")
+            .iter()
+            .map(|t| t.as_str().unwrap().to_string())
+            .collect();
+    let data: Vec<u32> = result["data"]
+        .as_array()
+        .expect("token data")
+        .iter()
+        .map(|v| v.as_u64().unwrap() as u32)
+        .collect();
+    let (mut line, mut start) = (0, 0);
+    data.chunks(5)
+        .map(|c| {
+            if c[0] > 0 {
+                line += c[0];
+                start = c[1];
+            } else {
+                start += c[1];
+            }
+            (line, start, c[2], legend[c[3] as usize].clone())
+        })
+        .collect()
+}
+
+#[test]
+fn semantic_tokens_colour_the_open_buffer_including_unsaved_edits() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    write(&root, "doc.qmd", "plain\n");
+    let doc = uri(&root.join("doc.qmd"));
+
+    let (mut client, init) = Client::start_with(json!({ "sweep": false }));
+    client.open(&doc, "# Title\n\n```{python}\nimport os\n```\n");
+    let params = json!({ "textDocument": { "uri": doc } });
+    let tokens = decode_tokens(
+        &init,
+        &client.request("textDocument/semanticTokens/full", params.clone()),
+    );
+    assert!(
+        tokens.iter().any(|t| t.0 == 0 && t.3 == "qmdHeading"),
+        "{tokens:?}"
+    );
+    assert!(tokens.contains(&(3, 0, 6, "keyword".into())), "{tokens:?}");
+
+    // The unsaved buffer, not the disk, is what gets coloured.
+    client.notify(
+        "textDocument/didChange",
+        json!({
+            "textDocument": { "uri": doc, "version": 2 },
+            "contentChanges": [{ "text": "plain *emph*\n" }],
+        }),
+    );
+    let tokens = decode_tokens(
+        &init,
+        &client.request("textDocument/semanticTokens/full", params),
+    );
+    assert!(tokens.iter().all(|t| t.3 != "qmdHeading"), "{tokens:?}");
+    assert!(
+        tokens.iter().any(|t| t.0 == 0 && t.3 == "qmdEmphasis"),
+        "{tokens:?}"
+    );
+    client.shutdown();
+}
+
+#[test]
+fn semantic_tokens_for_a_document_that_is_not_open_are_null() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    write(&root, "doc.qmd", "# Title\n");
+    let mut client = Client::start(json!({ "sweep": false }));
+    let result = client.request(
+        "textDocument/semanticTokens/full",
+        json!({ "textDocument": { "uri": uri(&root.join("doc.qmd")) } }),
+    );
+    assert!(result.is_null(), "{result}");
+    client.shutdown();
+}

@@ -219,6 +219,12 @@ impl Host {
                     None => invalid_params(req.id, "missing textDocument.uri"),
                 }
             }
+            lsp_types::request::SemanticTokensFullRequest::METHOD => {
+                match text_document_uri(&req.params) {
+                    Some(uri) => self.semantic_tokens(req.id, &uri),
+                    None => invalid_params(req.id, "missing textDocument.uri"),
+                }
+            }
             DOCUMENT_PROFILE => self.document_profile(req.id, &req.params),
             DOCUMENT_METADATA => self.document_metadata(req.id, &req.params),
             _ => Response::new_err(
@@ -228,6 +234,23 @@ impl Host {
             ),
         };
         self.send(response.into());
+    }
+
+    /// `textDocument/semanticTokens/full` (bd-xnpyb2vv P1): highlight
+    /// tokens for an open buffer. Only the text is needed, so this never
+    /// waits for an analysis. A document that is not open (or is not a
+    /// document, like `_quarto.yml`) gets `null`.
+    fn semantic_tokens(&mut self, id: RequestId, uri: &DocUri) -> Response {
+        match self.workspace.open_document_text(CLIENT, uri) {
+            Some((text, _version)) => {
+                let text = String::from_utf8_lossy(&text);
+                Response::new_ok(
+                    id,
+                    crate::semantic_tokens::tokens_for_text(uri.as_str(), &text),
+                )
+            }
+            None => Response::new_ok(id, Value::Null),
+        }
     }
 
     /// `quarto/documentProfile` (C4): the wire profile of a document.

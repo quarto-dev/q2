@@ -452,6 +452,17 @@ impl Workspace {
         Ok(self.result_for(client, session, &rel, format))
     }
 
+    /// The text and version of the buffer `client` has open for `uri`, if
+    /// it is open and is a document (`textDocument/semanticTokens`, which
+    /// needs only the text, never an analysis).
+    pub fn open_document_text(&self, client: ClientId, uri: &DocUri) -> Option<(Arc<[u8]>, i32)> {
+        let doc = self.clients.get(&client)?.docs.get(uri)?;
+        if !is_document(uri, &doc.rel) {
+            return None;
+        }
+        Some((doc.text.clone(), doc.version))
+    }
+
     /// The buffer version `client` has open for `uri`, if any.
     fn open_version(&self, client: ClientId, uri: &DocUri) -> Option<i32> {
         self.clients
