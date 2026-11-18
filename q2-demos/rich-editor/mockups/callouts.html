@@ -692,7 +692,7 @@ function renderMenu() {
       item('', name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub })
   } else if (menu.kind === 'collapse') {
     for (const [v, name, sub] of [[null, 'Not collapsible', 'Always open'], [false, 'Starts open', 'Readers can collapse it'], [true, 'Starts collapsed', 'Readers open it to read it']])
-      item('', name, () => change(c, () => { c.collapse = v; peek.delete(c.k) }), { check: c.collapse === v, sub, hint: v == null ? '' : `collapse="${v}"` })
+      item('', name, () => change(c, () => { c.collapse = v; peek.delete(c.k) }), { check: c.collapse === v, sub })
   } else if (menu.kind === 'more') {
     if (!showHeader(c)) item(ICONS.title, 'Add a title', () => addTitle(c))
     else if (c.title) item(ICONS.title, 'Remove the title', () => change(c, () => { c.title = ''; if (sel?.u === 't:' + c.k) sel = { u: 'p:' + c.body[0].k, o: 0 } }))
