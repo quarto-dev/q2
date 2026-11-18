@@ -25,6 +25,10 @@ aside h2:first-child { margin-top:0; }
 .toolbar button { font:13px system-ui, sans-serif; border:1px solid transparent; background:none; padding:4px 9px; border-radius:5px; cursor:pointer; color:#343a40; display:inline-flex; align-items:center; gap:6px; }
 .toolbar button:hover:not(:disabled) { background:#f1f3f5; }
 .toolbar button:disabled { color:var(--faint); cursor:default; }
+.split { display:inline-flex; align-items:center; }
+.split > button.icon { border-top-right-radius:0; border-bottom-right-radius:0; }
+.split > button.arrow { padding:4px 2px !important; border-top-left-radius:0; border-bottom-left-radius:0; color:#444746; align-self:stretch; }
+.split > button.arrow svg { width:9px; height:9px; }
 .toolbar button[aria-pressed="true"] { background:var(--sel-bg); border-color:#c5dcf5; color:var(--sel-ink); }
 .toolbar .style { width:150px; justify-content:space-between; border-color:var(--line); }
 .toolbar .style svg, .toolbar .caret { width:8px; height:8px; }
@@ -259,6 +263,13 @@ const GROUPS = [
   // Each setting picked its own way: a row where its icons can be read (the
   // kinds' are Quarto's own; appearances are pictures of the result), a menu
   // where the words carry it (how it collapses).
+  // After a pick from one of its menus, its bar stays (where it was) while
+  // the pointer's still over the callout, the bar or where the menu was,
+  // to pick again: picking is often comparing.
+  { key: 'afterPick', title: 'Its bar after a pick from its menus', options: [
+    ['stay', 'Stays until the pointer leaves', 'Where it was, even if the pick moves where it goes, while the pointer\'s over the callout, the bar or where the menu was; then as ever. Esc, a click in the text or a scroll put it away.'],
+    ['go', 'Goes with the menu', 'Closing the menu leaves the bar only if the pointer\'s over the callout.'],
+  ]},
   { key: 'kind', title: 'Choosing its kind', options: [
     ['row', 'A row of icons', 'The five icons under its button, names in tooltips, the current one pressed.'],
     ['menu', 'A menu', 'The kinds by name, with their icons, the current one marked.'],
@@ -273,6 +284,8 @@ const GROUPS = [
     ['placeholder', 'A title placeholder', '"Add a title" in placeholder grey instead: plainly a field, but not the word it renders.'],
   ]},
   { key: 'create', title: 'Callout in the toolbar', options: [
+    ['split', 'A note, with an arrow for the others', 'A split button: the button wraps the paragraph in a note at once; the arrow beside it opens the kinds. In a callout, the button takes it away and the arrow changes its kind.'],
+    ['splitLast', 'The kind last picked, with an arrow', 'The split button, but the button makes the kind last picked from its arrow (a note at first), its icon edged in that kind\'s colour, as Google Docs\' text colour button keeps the last colour.'],
     ['note', 'A note, then change it', 'Wraps the paragraph in a note at once; change its kind after.'],
     ['pick', 'Pick the kind first', 'Opens the kinds; the one picked wraps the paragraph.'],
   ]},
@@ -464,6 +477,8 @@ function unwrap(c) {
   out.push(...c.body)
   doc.splice(i, 1, ...out)
   if (sel?.u === 't:' + c.k) sel = h ? { u: 'p:' + h.k, o: sel.o } : { u: 'p:' + c.body[0]?.k, o: 0 }
+  // Selected whole (or across it): the caret at the start of what was in it.
+  if (sel?.anchor) sel = { u: 'p:' + (h ?? c.body[0]).k, o: 0 }
   if (c.id && texts().some((t) => t.text.includes('@' + c.id))) toast(`Nothing has the label #${c.id} now: its references show as ?${c.id}?`)
   menu = null
   render()
@@ -662,7 +677,12 @@ function collapseButton(c, inToolbar = false) {
   b.setAttribute('aria-label', 'Collapsible')
   b.setAttribute('aria-pressed', String(c.collapse != null))
   b.onmousedown = (e) => e.preventDefault()
-  b.onclick = (e) => { e.stopPropagation(); record(); setCollapse(c, c.collapse == null ? true : null); menu = null; render() }
+  b.onclick = (e) => {
+    e.stopPropagation()
+    // A bar kept after a pick: it slides from where it was kept, as ever.
+    if (pinned?.k === c.k) { lastBar = { k: c.k, left: parseFloat(pinned.left), chev: c.collapse != null }; pinned = null; hoverK = c.k }
+    record(); setCollapse(c, c.collapse == null ? true : null); menu = null; render()
+  }
   return b
 }
 
@@ -797,10 +817,30 @@ function toolButton(name, icon, action, pressed = null) {
   return b
 }
 const sep = () => Object.assign(document.createElement('span'), { className: 'sep' })
+/**
+ * The callout the selection's in or on: the caret's, or one selected whole
+ * (and nothing else), or the one both ends of a selection are in.
+ */
+function selectedCallout() {
+  const loc = locate(sel?.u)
+  if (loc) return loc.c ?? null
+  if (!sel?.anchor) return null
+  const [s, e] = effective()
+  const cov = coverage(s, e)
+  if (cov.length === 1 && cov[0].block != null) return doc[cov[0].block]
+  const a = partOf(s)?.c
+  return a && a === partOf(e)?.c ? a : null
+}
+// The kind the toolbar's split button last made (opts.create splitLast).
+let lastKind = 'note'
+const KIND_COLOR = { note: '#0d6efd', tip: '#198754', warning: '#ffc107', caution: '#fd7e14', important: '#dc3545' }
+const calloutIconIn = (t) => STROKE(`<rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M4 5v14" stroke-width="3.2" stroke="${KIND_COLOR[t]}"/><path d="M8.5 10h7.5M8.5 14h5"/>`)
+let toolbarU = null   // the line the toolbar was last drawn for
 function renderToolbar() {
+  toolbarU = sel?.u ?? null
   const bar = document.getElementById('toolbar')
   const loc = locate(sel?.u)
-  const c = loc?.c ?? (loc?.title ? loc.c : null)
+  const c = selectedCallout()
   const style = document.createElement('button')
   style.className = 'style'
   style.disabled = true
@@ -812,8 +852,26 @@ function renderToolbar() {
     else wrap('note')
   }, Boolean(c))
   calloutButton.classList.add('hui')
+  let calloutControl = calloutButton
+  if (opts.create === 'split' || opts.create === 'splitLast') {
+    // A split button: the button does it, the arrow beside it picks.
+    const kind = opts.create === 'splitLast' ? lastKind : 'note'
+    if (opts.create === 'splitLast' && !c) calloutButton.innerHTML = calloutIconIn(kind)
+    if (!c && kind !== 'note') { calloutButton.dataset.tip = `Callout: ${NAME[kind]}`; calloutButton.setAttribute('aria-label', `Callout: ${NAME[kind]}`) }
+    calloutButton.onclick = (e) => { e.stopPropagation(); c ? unwrap(c) : wrap(kind) }
+    const split = Object.assign(document.createElement('span'), { className: 'split' })
+    const arrow = document.createElement('button')
+    arrow.className = 'arrow hui'
+    arrow.innerHTML = '<svg viewBox="0 0 8 8"><path d="M1 2.5 4 5.5 7 2.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>'
+    arrow.dataset.tip = c ? 'Its kind' : 'Callout kinds'
+    arrow.setAttribute('aria-label', arrow.dataset.tip)
+    arrow.onmousedown = (e) => e.preventDefault()
+    arrow.onclick = (e) => { e.stopPropagation(); c ? toggleMenu('kind', c.k, split) : toggleMenu('create', 0, split) }
+    split.append(calloutButton, arrow)
+    calloutControl = split
+  }
   bar.replaceChildren(style, sep(), toolButton('Bold', ICONS.bold, null), toolButton('Italic', ICONS.italic, null), sep(),
-    toolButton('Bulleted list', ICONS.bullets, null), toolButton('Quote', ICONS.quote, null), calloutButton)
+    toolButton('Bulleted list', ICONS.bullets, null), toolButton('Quote', ICONS.quote, null), calloutControl)
   if (opts.controls !== 'toolbar' || !c) return
   // The callout's own section: what it is, then how it looks.
   const pick = (label, icon, kind, tip) => {
@@ -846,6 +904,22 @@ let menu = null    // { kind: 'kind' | 'create' | 'appearance' | 'more', k, x, y
 let hoverK = null
 let lastBar = null  // where the bar on its corner was: { k, left, chev }
 let hintK = null    // the callout whose untitled hint the pointer's over
+let pinned = null   // a bar kept after a pick (opts.afterPick): { k, left, top, area }
+/** After a pick from c's menu: its bar stays where it is, over everything it and the menu cover. */
+function pinBar(c) {
+  if (opts.afterPick !== 'stay' || !c) return
+  const bar = layer.querySelector(`.hbar[data-hk="${c.k}"]`)
+  if (!bar) return
+  const rects = [...layer.querySelectorAll('.hui'), editor.querySelector(`.callout[data-k="${c.k}"]`)].filter(Boolean).map((el) => el.getBoundingClientRect())
+  const area = { left: Math.min(...rects.map((r) => r.left)), top: Math.min(...rects.map((r) => r.top)), right: Math.max(...rects.map((r) => r.right)), bottom: Math.max(...rects.map((r) => r.bottom)) }
+  pinned = { k: c.k, left: bar?.style.left, top: bar?.style.top, area }
+}
+/** Whether the pointer's still where a kept bar stays: what it covered then, and the callout now. */
+function inPinned(e) {
+  const el = editor.querySelector(`.callout[data-k="${pinned.k}"]`)
+  const inside = (r, pad = 6) => r && e.clientX >= r.left - pad && e.clientX <= r.right + pad && e.clientY >= r.top - pad && e.clientY <= r.bottom + pad
+  return inside(pinned.area) || inside(el?.getBoundingClientRect())
+}
 function toggleMenu(kind, k, el) {
   if (menu && menu.kind === kind && menu.k === k) { menu = null; return render() }
   const r = el.getBoundingClientRect()
@@ -864,7 +938,7 @@ function renderLayer() {
   if (opts.controls === 'hover' || asImage) {
     // Only for the one under the pointer (or whose menu is open), as an
     // image's: never just for the caret being in it.
-    const c = calloutByKey(menu?.k ?? hoverK)
+    const c = calloutByKey(menu?.k ?? pinned?.k ?? hoverK)
     const el = c && editor.querySelector(`.callout[data-k="${c.k}"]`)
     if (el) {
       const bar = document.createElement('div')
@@ -910,6 +984,7 @@ function renderLayer() {
         // move the bar either (nor shrink it); 3px in, with no header.
         const hr = header?.getBoundingClientRect()
         bar.style.top = (hr ? hr.top + (hr.height - bar.offsetHeight) / 2 : r.top + 3) + 'px'
+        if (pinned?.k === c.k) { bar.style.left = pinned.left; bar.style.top = pinned.top }
       } else {
         // On its top-right corner, across its top edge, so the pointer can
         // reach it without leaving the callout; clear of Quarto's chevron
@@ -925,6 +1000,8 @@ function renderLayer() {
         }
         bar.style.left = left + 'px'
         lastBar = { k: c.k, left, chev: Boolean(chev) }
+        // Kept after a pick, where it was: it moves on only once it's put away.
+        if (pinned?.k === c.k) { bar.style.transition = ''; bar.style.left = pinned.left; bar.style.top = pinned.top; lastBar = null }
       }
     }
   }
@@ -965,7 +1042,7 @@ function renderMenu() {
   const list = document.createElement('div')
   list.className = 'hmenu hui'
   list.addEventListener('mousedown', (e) => e.preventDefault())
-  const item = (icon, label, action, { check = null, hint = '', sub = '', disabled = false, danger = false, preview = null } = {}) => {
+  const item = (icon, label, action, { check = null, hint = '', sub = '', disabled = false, danger = false, preview = null, pin = true } = {}) => {
     const b = document.createElement('button')
     // What's chosen: its row tinted, so no column is kept for a tick.
     b.innerHTML = `${icon ? `<span class="icon">${icon}</span>` : ''}<span class="label"></span><span class="hint"></span>`
@@ -975,7 +1052,7 @@ function renderMenu() {
     b.querySelector('.hint').textContent = hint
     if (danger) b.classList.add('danger')
     b.disabled = disabled
-    b.onclick = action
+    b.onclick = () => { if (pin) pinBar(c); action() }
     if (preview) previewOn(b, c, preview)
     list.append(b)
   }
@@ -993,14 +1070,14 @@ function renderMenu() {
       if (ch.tip) btn.dataset.tip = ch.tip
       btn.setAttribute('aria-label', ch.tip)
       btn.setAttribute('aria-pressed', String(ch.on))
-      btn.onclick = ch.act
+      btn.onclick = () => { pinBar(c); ch.act() }
       if (ch.preview) previewOn(btn, c, ch.preview)
       bar.append(btn)
     }
     place(bar, true)
   }
   if (menu.kind === 'kind' || menu.kind === 'create') {
-    const choose = (t) => (menu.kind === 'create' ? wrap(t) : setKind(c, t))
+    const choose = (t) => (menu.kind === 'create' ? (lastKind = t, wrap(t)) : setKind(c, t))
     const look = (t) => (menu.kind === 'create' ? null : { type: t })
     if (opts.kind === 'row') return row(KINDS.map((t) => ({ icon: kindGlyph(t), tip: NAME[t], on: c?.type === t, act: () => choose(t), preview: look(t) })))
     if (menu.kind === 'create') heading('A callout of this kind')
@@ -1023,11 +1100,11 @@ function renderMenu() {
     item(ICONS.numbered, 'Numbered', () => change(c, () => { c.id = c.id ? null : `${PREFIX[c.type]}-${slug(c.title || NAME[c.type])}` }), { check: Boolean(c.id), hint: c.id ? '#' + c.id : '' })
     list.append(document.createElement('hr'))
     const i = doc.indexOf(c)
-    item(ICONS.up, 'Move up', () => { menu = null; moveCallout(c, -1) }, { hint: '⌥⇧↑', disabled: i === 0 })
-    item(ICONS.down, 'Move down', () => { menu = null; moveCallout(c, 1) }, { hint: '⌥⇧↓', disabled: i === doc.length - 1 })
+    item(ICONS.up, 'Move up', () => { menu = null; moveCallout(c, -1) }, { hint: '⌥⇧↑', disabled: i === 0, pin: false })
+    item(ICONS.down, 'Move down', () => { menu = null; moveCallout(c, 1) }, { hint: '⌥⇧↓', disabled: i === doc.length - 1, pin: false })
     list.append(document.createElement('hr'))
-    item(ICONS.unwrap, 'Remove the callout', () => unwrap(c), { sub: 'Keeps what\'s in it' })
-    item(ICONS.delete, 'Delete', () => remove(c), { danger: true })
+    item(ICONS.unwrap, 'Remove the callout', () => unwrap(c), { sub: 'Keeps what\'s in it', pin: false })
+    item(ICONS.delete, 'Delete', () => remove(c), { danger: true, pin: false })
   }
   place(list)
 }
@@ -1235,6 +1312,7 @@ document.addEventListener('keydown', (e) => {
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
   else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo() }
   else if (e.key === 'Escape' && menu) { menu = null; render() }
+  else if (e.key === 'Escape' && pinned) { pinned = null; renderLayer() }
   // (Not a key the text already handled: moving into the gap is one.)
   else if (sel?.gap != null && !mod && !e.altKey && !e.defaultPrevented) gapKey(e)
 })
@@ -1247,7 +1325,9 @@ document.addEventListener('selectionchange', () => {
   if (!el || !editor.contains(el)) return
   const at = caretIn(el)
   if (!at) return
-  const was = sel?.u
+  // Against where the toolbar last showed the caret: the arrows set sel
+  // before the selection moves.
+  const was = toolbarU
   sel = { u: el.dataset.u, o: at.o }
   if (was === sel.u) return
   // A title emptied by typing, left: if it renders no header without one
@@ -1284,6 +1364,8 @@ document.addEventListener('mousemove', (e) => {
     hintK = hint
     for (const el of editor.querySelectorAll('.title.hinted')) el.classList.toggle('hint-on', Number(el.dataset.u.slice(2)) === hintK)
   }
+  // A bar kept after a pick: until the pointer's away from it.
+  if (pinned && !inPinned(e)) { pinned = null; hoverK = k; renderSource(); return renderLayer() }
   if (k === hoverK && !gripMoved) return
   if (k !== hoverK) { hoverK = k; renderSource() }
   renderLayer()
@@ -1496,12 +1578,25 @@ function offsetAt(el, x, line) {
   else { const p = document.caretRangeFromPoint(cx, y); node = p?.startContainer; off = p?.startOffset ?? 0 }
   return node && el.contains(node) ? offsetIn(el, node, off) : null
 }
-/** A position under the pointer: in a line, or a gap; null elsewhere. */
+/**
+ * A position under the pointer: a gap, or in the line nearest it (over a
+ * callout's icon, border or padding, between paragraphs, in the margins),
+ * as the browser finds the text nearest the pointer in one long text.
+ */
 function pointPos(e) {
   const g = gapAt(e)
   if (g != null) return { edge: g }
-  const el = e.target.closest?.('[data-u]')
-  if (!el || !editor.contains(el)) return null
+  let el = e.target.closest?.('[data-u]')
+  if (!el || !editor.contains(el)) {
+    // Only over the page: not the toolbar, the choices or the source.
+    if (!page.contains(e.target)) return null
+    // In a callout: one of its lines; anywhere else, any.
+    const inBox = e.target.closest?.('.callout')
+    const els = [...(inBox && editor.contains(inBox) ? inBox : editor).querySelectorAll('[data-u]')]
+    const dist = (x) => { const r = x.getBoundingClientRect(); return e.clientY < r.top ? r.top - e.clientY : e.clientY > r.bottom ? e.clientY - r.bottom : 0 }
+    el = els.reduce((best, x) => (!best || dist(x) < dist(best) ? x : best), null)
+    if (!el) return null
+  }
   const lines = lineBoxes(el)
   const line = lines.find((l) => e.clientY >= l.top && e.clientY <= l.bottom) ?? (e.clientY < (lines[0]?.top ?? 0) ? lines[0] : lines.at(-1))
   const o = line ? offsetAt(el, e.clientX, line) : null
@@ -1782,7 +1877,7 @@ document.addEventListener('keydown', (e) => {
   const done = () => { e.preventDefault(); e.stopPropagation() }
   if (sel?.anchor) {
     // Undo, copy and cut go on as ever; a modifier alone does nothing.
-    if (mod || e.altKey || ['Shift', 'Meta', 'Control', 'Alt', 'CapsLock', 'Tab'].includes(e.key) || (e.key === 'Escape' && menu)) return
+    if (mod || e.altKey || ['Shift', 'Meta', 'Control', 'Alt', 'CapsLock', 'Tab'].includes(e.key) || (e.key === 'Escape' && (menu || pinned))) return
     if (arrow && e.shiftKey) {
       if (!vertical) selGoalX = null
       else selGoalX ??= posX(sel.focus)
@@ -1866,12 +1961,12 @@ document.addEventListener('mousedown', (e) => {
     dragFrom = anchor
     return
   }
-  dragFrom = p?.u != null ? p : null
+  dragFrom = p
 }, true)
 document.addEventListener('mousemove', (e) => {
   if (!dragFrom || !(e.buttons & 1)) return
   const p = pointPos(e)
-  if (!p || (!dragging && p.u === dragFrom.u)) return
+  if (!p || (!dragging && p.u === dragFrom.u && p.edge === dragFrom.edge)) return
   if (!dragging) { dragging = true; editor.classList.add('xsel') }
   sel = { anchor: dragFrom, focus: p }
   getSelection().removeAllRanges()
@@ -2099,9 +2194,10 @@ function moveCallout(c, dir) {
   render()
 }
 document.addEventListener('mousedown', (e) => {
+  if (pinned && !e.target.closest('.hui')) { pinned = null; renderLayer() }
   if (menu && !e.target.closest('.hui')) { menu = null; renderLayer(); for (const el of editor.querySelectorAll('.menu-open')) el.classList.remove('menu-open') }
 })
-document.getElementById('scroller').addEventListener('scroll', () => { menu = null; grip = null; renderLayer() })
+document.getElementById('scroller').addEventListener('scroll', () => { menu = null; grip = null; pinned = null; renderLayer() })
 // The layer's over the page, not in what scrolls: the wheel over a handle,
 // a bar or a menu scrolls the document as it would over the page. Caught on
 // the document, not the layer: a scroll redraws the layer, and the browser
