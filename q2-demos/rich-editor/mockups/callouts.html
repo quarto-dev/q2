@@ -84,7 +84,7 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 .callout .title:empty::before { content:attr(data-ph); color:var(--faint); }
 /* Or as rendered, with a hint after it that says what it is. */
 .callout .title.hinted:empty::before { color:inherit; }
-.callout .title.hinted:empty::after { content:attr(data-hint); color:var(--faint); font-weight:400; font-size:calc(1em - 2px); margin-left:.6em; opacity:0; transition:opacity .2s; }
+.callout .title.hinted:empty::after { content:attr(data-hint); color:var(--faint); font-weight:400; font-size:calc(1em - 1px); margin-left:.6em; opacity:0; transition:opacity .2s; }
 /* The hint shows on hover over the header, saying what "Note" is; with the
    caret in the title it fades away (it's said its piece), and "Note"
    fades to a placeholder, which typing replaces. */
