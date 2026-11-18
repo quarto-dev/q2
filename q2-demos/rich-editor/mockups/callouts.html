@@ -582,8 +582,11 @@ function renderBlock(b) {
     // its kind's name (none with a number, which says the kind already), as
     // opts.untitled says: that name faint, "Add a title" instead, or that
     // name as rendered with a hint after it.
-    const rendersName = !c.title && !num && !(c.appearance !== 'default' && c.collapse == null)
-    const ghost = !c.title && !num && (!rendersName || opts.untitled === 'placeholder')
+    // Decided from its settings, not whether it has a title now: emptied by
+    // typing (no re-render), it shows the same as one that never had one.
+    // The styles only take hold while the title's empty.
+    const rendersName = !num && !(c.appearance !== 'default' && c.collapse == null)
+    const ghost = !num && (!rendersName || opts.untitled === 'placeholder')
     const t = textEl('span', 't:' + c.k, c.title, 'title' + (ghost ? ' ghost' : '') + (rendersName && opts.untitled === 'hint' ? ' hinted' : ''))
     t.dataset.ph = num ? '' : ghost ? 'Add a title' : NAME[c.type]
     t.dataset.hint = 'Using the default title. Click to add your own.'
@@ -1011,6 +1014,10 @@ document.addEventListener('selectionchange', () => {
   const was = sel?.u
   sel = { u: el.dataset.u, o: at.o }
   if (was === sel.u) return
+  // A title emptied by typing, left: if it renders no header without one
+  // (simple, minimal), its header goes now, as rendered.
+  const left = was?.startsWith('t:') && calloutByKey(Number(was.slice(2)))
+  if (left && !showHeader(left) && editor.querySelector(`.callout[data-k="${left.k}"] > .callout-header`)) return render()
   // A title being added, left empty: it goes.
   for (const k of [...forceTitle]) {
     const c = calloutByKey(k)
