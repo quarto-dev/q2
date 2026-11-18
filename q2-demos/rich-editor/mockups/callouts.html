@@ -521,7 +521,10 @@ function renderBlock(b) {
       const chev = document.createElement('button')
       chev.className = 'chev' + ((opts.collapse === 'open' ? c.collapse === true : !shown) ? ' shut' : '') + (opts.collapse === 'open' ? ' setting' : '')
       chev.innerHTML = ICONS.chevron
-      chev.dataset.tip = opts.collapse === 'open' ? (c.collapse ? 'Starts collapsed: start it open' : 'Starts open: start it collapsed') : (shown ? 'Shut it here' : 'Open it here')
+      // As rendered (q2 and Quarto 1): no tooltip, labelled "Toggle callout".
+      // Always open here, it changes the document instead, so it says how.
+      chev.setAttribute('aria-label', 'Toggle callout')
+      if (opts.collapse === 'open') chev.dataset.tip = c.collapse ? 'Starts collapsed: start it open' : 'Starts open: start it collapsed'
       chev.onmousedown = (e) => e.preventDefault()
       chev.onclick = () => {
         if (opts.collapse === 'open') return change(c, () => { c.collapse = !c.collapse })
