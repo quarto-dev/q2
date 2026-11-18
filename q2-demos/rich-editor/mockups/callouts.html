@@ -689,7 +689,8 @@ function collapseButton(c, inToolbar = false) {
   b.onclick = (e) => {
     e.stopPropagation()
     // A bar kept after a pick: it slides from where it was kept, as ever.
-    if (pinned?.k === c.k) { lastBar = { k: c.k, left: parseFloat(pinned.left), chev: c.collapse != null }; pinned = null; hoverK = c.k }
+    const kept = pinned?.k === c.k && layer.querySelector(`.hbar[data-hk="${c.k}"]`)
+    if (kept) { lastBar = { k: c.k, left: kept.getBoundingClientRect().left, chev: c.collapse != null }; pinned = null; hoverK = c.k }
     record(); setCollapse(c, c.collapse == null ? true : null); menu = null; render()
   }
   return b
@@ -921,7 +922,10 @@ function pinBar(c) {
   if (!bar) return
   const rects = [...layer.querySelectorAll('.hui'), editor.querySelector(`.callout[data-k="${c.k}"]`)].filter(Boolean).map((el) => el.getBoundingClientRect())
   const area = { left: Math.min(...rects.map((r) => r.left)), top: Math.min(...rects.map((r) => r.top)), right: Math.max(...rects.map((r) => r.right)), bottom: Math.max(...rects.map((r) => r.bottom)) }
-  pinned = { k: c.k, left: bar?.style.left, top: bar?.style.top, area }
+  // By its right end, where it sits on the corner: wider (a longer kind's
+  // name), it grows to the left.
+  const br = bar.getBoundingClientRect()
+  pinned = { k: c.k, right: br.right, top: bar.style.top, area }
 }
 /** Whether the pointer's still where a kept bar stays: what it covered then, and the callout now. */
 function inPinned(e) {
@@ -993,7 +997,7 @@ function renderLayer() {
         // move the bar either (nor shrink it); 3px in, with no header.
         const hr = header?.getBoundingClientRect()
         bar.style.top = (hr ? hr.top + (hr.height - bar.offsetHeight) / 2 : r.top + 3) + 'px'
-        if (pinned?.k === c.k) { bar.style.left = pinned.left; bar.style.top = pinned.top }
+        if (pinned?.k === c.k) { bar.style.left = pinned.right - bar.offsetWidth + 'px'; bar.style.top = pinned.top }
       } else {
         // On its top-right corner, across its top edge, so the pointer can
         // reach it without leaving the callout; clear of Quarto's chevron
@@ -1010,7 +1014,7 @@ function renderLayer() {
         bar.style.left = left + 'px'
         lastBar = { k: c.k, left, chev: Boolean(chev) }
         // Kept after a pick, where it was: it moves on only once it's put away.
-        if (pinned?.k === c.k) { bar.style.transition = ''; bar.style.left = pinned.left; bar.style.top = pinned.top; lastBar = null }
+        if (pinned?.k === c.k) { bar.style.transition = ''; bar.style.left = pinned.right - bar.offsetWidth + 'px'; bar.style.top = pinned.top; lastBar = null }
       }
     }
   }
