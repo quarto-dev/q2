@@ -141,6 +141,10 @@ clock where timing matters.
   content (read with `git cat-file`, no filters) back to the file and detaches the file (inert); it never creates a
   second doc (detail chosen by the plan author; confirm). Test it: the file text equals the blob and the Binding is
   inert.
+- [ ] Event log: add `switched` (arrival attached a different doc), `detached`, `reattached`, and `held` to the
+  events GE-9 widened (`logEvent`, `project.ts:247`), each with the path, the doc ids, and the reason; the first
+  plan listed these for the extension. Test that each decision writes its event (detail chosen by the epic
+  reviewer; confirm).
 - [ ] Status bar: the mode plus the detached count; clicking opens a quick pick listing the detached files with
   "Adopt" and "Stay detached" per file (detail chosen by the plan author; confirm). Automatic re-attach: on a watcher
   event or a doc change, compare normalized text and re-attach when equal.

@@ -93,11 +93,19 @@ on the state asserted, and before a second client reads what the first wrote, wa
    hides when not, hides when the route answers 404 or `tracking` is false.
 7. **MCP:** after a swap, the `edit` tool with the pre-swap `expected_hash` is refused and returns the current content
    and hash.
+8. **Offline, tabs, and late joiners** (detail chosen by the epic reviewer; confirm): a client offline during two
+   flips reconnects and lands on the final doc only, with its retired handle loaded from local storage and an edit it
+   made offline against the old doc routed to that retired doc, never to the new one. Two hub-client tabs on the same
+   project each swap independently, and each clears only its own remote cursors. A client that joins during a pause
+   or after a swap loads the current doc and shows no replacement notice (it never saw the old one); this is accepted
+   and stated in the docs.
 
 ## Checklist
 
 ### Sync client
 
+- [ ] Write test spec 8 (offline reconnect, two tabs, late joiner) first; where today\'s behavior already satisfies a
+  clause, say so in the notes; make the rest pass with the swap module.
 - [ ] Confirm GE-6 is complete; add `@quarto/quarto-git-epochs` as a dependency of `quarto-sync-client` and check the
   build order of the workspaces (detail chosen by the plan author; confirm).
 - [ ] Write tests 1 and 2; see them fail.

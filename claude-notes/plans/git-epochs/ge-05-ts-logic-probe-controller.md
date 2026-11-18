@@ -54,7 +54,7 @@ What GE-1 leaves (this plan reads it, never edits it):
 What exists today: nothing in this package beyond the skeleton. The extension\'s git-unaware path is `syncIndex`
 (`vscode-sync-experiment/src/project.ts:322-330`); GE-9 and GE-10 replace it, not this plan.
 
-Module map. The names are the Rust crate\'s (GE-2), one file each under `src/`:
+Module map. The names are the contract\'s module map (GE-1), the same as the Rust crate\'s, one file each under `src/`:
 
 | Module | Contents |
 |---|---|
@@ -85,8 +85,8 @@ Written first, seen failing for the right reason (a missing module, then a wrong
 4. **Registry rows and golden docs:** canonical by lowest `(generation, docId)`; a creation race (set union); a later
    creator gets generation max-seen plus one; move forward is one change and carries the generation; two tips;
    case-insensitive collision; unborn repo refused. The package reads each golden doc and checks its logical entries;
-   it applies the operation and checks that the result decodes to the golden \"after\" entries, and it writes a doc that
-   GE-2 can read.
+   it applies the operation and checks that the result decodes to the golden \"after\" entries. Reading this package\'s
+   docs with the Rust crate is not checked here; GE-14, the first plan that waits for both, does that.
 5. **Startup rows:** HEAD unchanged (reconcile as today); HEAD changed with some blobs differing; no record (arrival for
    every file, never a merge); detached paths survive a restart.
 6. **Controller with a fake probe and a fake clock, no sleeps:** gate closes on each marker; pending on a HEAD or
@@ -110,11 +110,16 @@ Written first, seen failing for the right reason (a missing module, then a wrong
 - [ ] `classify`: implement G2; the classifier rows pass.
 - [ ] `registry`: implement canonical ordering, `nextGeneration`, `register`, `moveForward` (one `A.change`), the
   collision check, and the live-elsewhere check; the registry rows and the golden-doc test pass; commit the doc this
-  package writes as a fixture GE-2 can read (under `fixtures/golden/`, named for this plan).
+  package writes as a fixture for the cross-implementation check in GE-14 (under `fixtures/golden/`, named for this
+  plan); nothing in GE-2 reads it.
 - [ ] `arrival`: implement the five steps for text, then binary (byte hash), then the `ReadOnly` variant, including
   the unavailable canonical doc and the live-elsewhere fork; the arrival rows pass.
 - [ ] `startup`: implement the three cases; the startup rows pass.
-- [ ] `probe` interface and a fake probe used by the controller tests.
+- [ ] `probe` interface and a fake probe used by the controller tests. The interface also has the repo identity
+  queries (G4): `rootCommits()` (`rev-list --max-parents=0 HEAD`), `isShallow()` (`rev-parse
+  --is-shallow-repository`), and `showPrefix()`; GE-10 uses them for the attach check and GE-12 for the `repo` entry.
+  Real-repo tests: a repo with two root commits, and a `--depth 1` clone made through a `file://` URL (a plain local
+  path ignores `--depth`).
 - [ ] `controller`: write the fake-probe and fake-clock tests, see them fail, then implement the state machine with the
   numbers from G32; they pass with no real timers and no sleeps.
 - [ ] `probe` subprocess implementation: spawn `git` without a shell, with `GIT_OPTIONAL_LOCKS=0`, a per-call timeout,
@@ -153,8 +158,7 @@ output was inspected. Nothing here runs under VS Code; that is GE-9.
 
 - Every shared fixture row, the golden-doc test, the controller tests, and the scenario runs pass.
 - The package has no `vscode` import and no real timer outside the injected clock.
-- A doc written by this package decodes in GE-2 (checked once GE-2 lands, by whichever plan finishes second; the
-  committed golden doc is the evidence).
+- The doc this package writes is committed as a golden fixture; the check that the Rust crate decodes it is GE-14\'s.
 - The gates above are green.
 
 ## Out of scope

@@ -121,6 +121,10 @@ process and removes every temporary directory, and no async work outlives a test
 ## Checklist
 
 - [ ] Extend GE-13\'s fixture builder with `c.qmd`, `b.qmd`, and the PNG; unit-test blob determinism.
+- [ ] **Cross-implementation registry check** (the first plan that waits for both the Rust and TypeScript logic): the
+  TypeScript package decodes a sidecar written by the hub (a golden doc dumped from a real hub run), and the Rust
+  crate decodes the doc GE-5 committed under `fixtures/golden/`; both yield the same logical entries. A mismatch is
+  a contract bug: stop and bring it to Gordon.
 - [ ] Build the orchestrator: start the hub, a browser page, a headless peer or a VS Code window, and a standalone
   local hub; tear everything down; log the exact invocations.
 - [ ] Write H1, H2, and H3 and watch them fail; make them pass.

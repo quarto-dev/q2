@@ -14,7 +14,7 @@ epic: ../2026-11-18-git-epochs-epic.md
 ## Goal
 
 Build the Rust half of the shared logic as a small crate with no samod and no hub dependency, so its tests are light
-and the hub (GE-3) can adopt it. The crate has the same module shape as the TypeScript package that GE-5 writes:
+and the hub (GE-3) can adopt it. The crate has the module map of the GE-1 contract, the same shape as the TypeScript package that GE-5 writes:
 `classify`, `arrival`, `startup`, `registry`, `probe`, `controller`. The pure modules take and return plain data. The
 controller is a state machine driven by explicit ticks over a `GitProbe` trait; it returns actions and never touches
 Automerge or the hub.
@@ -99,7 +99,10 @@ All written first and seen failing for the right reason.
   `rebase-merge`, `rebase-apply`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `sequencer`, `BISECT_LOG`, and jj\'s
   `.jj/working_copy/working_copy.lock`) resolved once with `rev-parse --git-path`, `ls-tree -r -z HEAD` limited to the
   prefix from `rev-parse --show-prefix` with modes 100644 and 100755 only, `cat-file --batch` for content, no
-  `hash-object`, no filters.
+  `hash-object`, no filters. The probe also answers the repo identity queries (G4): `root_commits()` through
+  `rev-list --max-parents=0 HEAD`, `is_shallow()` through `rev-parse --is-shallow-repository`, and `show_prefix()`;
+  GE-3 uses them to write the `repo` entry. Real-repo tests: a repo with two root commits, and a `--depth 1` clone made
+  through a `file://` URL (a plain local path ignores `--depth`).
 - [ ] A timeout per call (use a helper the workspace already depends on; check `Cargo.lock` before adding one)
   (detail chosen by the plan author; confirm). A missing git or a refused repository turns the probe off with one log
   line and the controller reports "off".

@@ -123,6 +123,9 @@ Written first and seen failing.
 - [ ] Write test spec 7. Add the moved message: in the follower\'s `rebind`, call `oldHandle.broadcast(moved)` before
   the old Binding is disposed; extend `Presence.receive` to accept the `moved` type and surface it through
   `Notifier.status` for about 3 s ("NAME switched versions"; text chosen by the plan author; confirm).
+- [ ] Event log: `logEvent` (`project.ts:247`) writes the append-only `.quarto-hub/events.jsonl` with a closed set of
+  event names (`created`, `deleted`, `edited-offline`). Widen the type and add `flipped` for a follower swap (path, old
+  and new docId), with a test (detail chosen by the epic reviewer; confirm).
 - [ ] Status bar: a persistent item showing the mode ("Quarto Hub: mirror" or "Quarto Hub: editor only") through
   `Notifier.status`; GE-10 adds the clone mode and the detached count.
 - [ ] Write test spec 8 and check a pre-change folder (copy a fixture created by GE-8\'s smoke test B) opens as a

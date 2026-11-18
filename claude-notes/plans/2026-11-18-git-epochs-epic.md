@@ -17,6 +17,9 @@ Gordon on 2026-11-18 that settled every question listed here. Nothing in this fi
 need a measurement are Gate 0 checks in GE-1, and the details the plan authors chose are listed under
 [Details chosen while writing the plans](#details-chosen-while-writing-the-plans).
 
+**From the old plan:** its Part A (the hub) became GE-2 to GE-4 and GE-13, its Part B (the extension) GE-8 to GE-12, its
+demos GE-13 and GE-14, and its two Gate 0 sections GE-1.
+
 ## Goal
 
 When someone runs `git switch`, `git pull`, `git rebase`, or `git reset` in a directory that is synced through
@@ -134,7 +137,7 @@ changes.
 | G23 | Mirrors are created where they are today: inside the current workspace folder, or home if none. Ignore any path segment named `.git` or `.quarto-hub`, and skip a subfolder that has its own `.quarto-hub/project.json` | D35 |
 | G24 | "Share this folder" originates a project. A git clone makes a git-enabled project; a plain folder makes a plain project. It publishes tracked files minus the extension\'s ignore set, text and binary, skipping files over 10 MB with a notice. Uncommitted edits are published as on disk. The server is any ws URL, defaulting to the public one. A modal confirm shows the file count, size, skipped files, dirty files, and, for the public server, that the share cannot be unpublished. Docs are created offline first; the index, the sidecar, `repo`, `owner`, and the registry entries are written before the link is shown; the link appears only after the server confirms the heads; an interrupted publish resumes from local storage. The panel offers three copyable forms: a share URL (its `name` is the `_quarto.yml` title or the folder name, and its `file` is `index.qmd` when present), the `q2 preview --hub-url … --project <id> --ui editor --allow-edit` command, and the server and id. It writes `setIdentity` with the extension\'s id, name, and color. It refuses a bound folder and an unborn repo, and prompts when several workspace folders are open | new |
 | G25 | A peer that leaves a doc because of a switch sends a short ephemeral "moved" message on the old doc, and the others show "this person switched versions" briefly. The message type is defined once in the shared package | new |
-| G26 | A shared swap module in TypeScript serves every follower (browsers through `quarto-sync-client`, mirrors and editor-only through the extension): phases `pending`, `done`, `unavailable`; per-path serialization with the latest index state winning; a 5 s timeout; retired handles kept, at most 8 per path, never deleted; docId-bound writes with a stranded-edit counter; and one aggregate notice per batch ("The project owner\'s checked-out version changed.") | D15 |
+| G26 | A shared swap module in TypeScript serves every follower (browsers through `quarto-sync-client`, mirrors and editor-only through the extension): phases `pending`, `done`, `unavailable`; per-path serialization with the latest index state winning; a 5 s timeout; retired handles kept, at most 8 per path, never deleted; docId-bound writes with a stranded-edit counter; and one aggregate notice per batch ("The project owner\'s checked-out version changed.") announced through an `aria-live` region on editing surfaces | D15 |
 | G27 | A detached file has an inert Binding: it neither pushes edits nor applies remote changes; only the handle stays, for the re-attach comparison. The Binding keeps a mirror of the doc text and accepts an edit only when the pre-edit buffer equals it, so a late reload event cannot corrupt a doc | D25, D30 |
 | G28 | At startup `q2 preview` checks its project root for `.quarto-hub/project.json` and warns that running a hub on a directory an extension has bound syncs the same files twice. Warn only; do not refuse | new |
 
@@ -148,7 +151,7 @@ changes.
 | G32 | The numbers: preview periodic sync 5 s, quiet window 1 s, decision cap 30 s, stale lock 60 s, client freeze and unavailable timeout 5 s, unavailable canonical doc 5 s, editor-only wait for a flip 10 s, proxy readiness 15 s, publish cap 10 MB per file, retired handles 8 per path. The hub\'s own default sync interval of 30 s is unchanged | D20 |
 | G33 | `q2 preview --git <track\|ignore>`: experimental, default `ignore`, a value is required (a bare `--git` is a parse error), conflicts with `--join`, `--static`, and `--hub-url`. `track` means this preview owns the project\'s pointer. A route `/api/preview/git-status` reports tracking, paused, and pending; web clients show a "paused for git" indicator only (no read-only mode). Version skew with older web clients is accepted and documented | D18, D32 |
 | G34 | Branch service (hub-client, experimental, default off): additive; reset the active branch to main on a swap; branch edits are docId-bound; no orphan UI. Attribution: a switched or seeded doc is lump-attributed and unlabeled, and the reactji "remove my contribution" feature does not recognize contributions older than a switch | D16, D17 |
-| G35 | Accepted gaps, stated in the docs: the hub restart gap (the registry survives in the sidecar, the hub\'s in-memory state does not); a stale pointer while the owner is offline; extension builds older than this epic follow a flip unconditionally and can overwrite a working tree; two tips after `git add -p`; `git stash`, `git restore`, `git checkout -- file`, and `jj restore` still look like author edits; a git operation inside a nested repo or submodule never moves the superproject HEAD; two full sync agents on one directory are unsupported (G28 warns); how long the public server keeps docs is unknown | D32 |
+| G35 | Accepted gaps, stated in the docs: the hub restart gap (the registry survives in the sidecar, the hub\'s in-memory state does not); a stale pointer while the owner is offline; extension builds older than this epic follow a flip unconditionally and can overwrite a working tree; two tips after `git add -p`; `git stash`, `git restore`, `git checkout -- file`, and `jj restore` still look like author edits; a git operation inside a nested repo or submodule never moves the superproject HEAD; two full sync agents on one directory are unsupported (G28 warns); how long the public server keeps docs is unknown; a client that joins during a pause or after a swap sees no notice; every doc version a peer has been on is retained, binaries included | D32 |
 
 ## What became of D1 to D36
 
@@ -268,6 +271,17 @@ GE-17 -> GE-18
   did not, and surprises. Render-check any plan or note you change: `q2 render --strict <file.md>`.
 - **Gate 0 failures.** If a Gate 0 check in GE-1 fails, stop and bring it to Gordon. Do not degrade silently.
 - **Spelling and prose.** American spelling. Notes are qmd: follow `claude-notes/instructions/writing-notes.md`.
+- **Same-wave plans share files.** Plans in one wave touch the same files (GE-5 and GE-6 both add to the TypeScript
+  package; GE-7 and GE-8 both touch `quarto-sync-client` and `quarto-hub-mcp`). They resolve conflicts when they rebase;
+  shared files are not dependencies. Rebuild every embedded artifact (the MCP bundle, the preview SPA and WASM, the
+  agents docs) at GE-18, because a plan that finished early may have left one stale.
+- **Base.** `feature/git-epochs` was cut from `origin/main` at `1d0042cb2`, and `main` has moved since (17 commits on
+  2026-11-18). Rebase onto `main` before GE-1 starts (linear history), and re-find the file and line numbers cited in
+  these plans: they are as of the base commit.
+- **Auditing the plans.** After editing plans, check that no plan relies on another that is not in its dependency
+  closure: compute each plan\'s transitive `depends-on` and read every mention of a plan outside it (forward references
+  in "Unblocks" and "Out of scope" are fine). The review that produced these plans found one hidden coupling this way,
+  a cross-implementation check that said "whichever plan finishes second"; it now lives in GE-14.
 
 ## Gate 0
 
@@ -358,12 +372,112 @@ These were read in the code during the review, with the locations as of 2026-11-
   (`crates/quarto-p2p/src/ticket.rs`).
 - The extension has three commands (`quartoHub.connect`, `quartoHub.disconnect`, `quartoHub.createFolder`) and one
   setting (`quartoHub.userName`); its README says "pick a new folder" while the code does not prompt.
+- `q2 preview --hub-url <ws> --project <id or share URL>` mirrors a project from an existing sync server. It was merged
+  as a spike (strand bd-yq3awhmw, `claude-notes/plans/2026-11-13-preview-against-remote-hub.md`); it implies standalone
+  mode, conflicts with a path, `--no-project`, `--join`, `--static`, `--share`, `--to`, `-M`, and `--profile`, and gives
+  its browser clients read-only access unless `--allow-edit` is set. It was tested only against `q2 hub --project <dir>`.
+- `q2 preview --join` runs a local proxy that serves matching UI assets from its own binary and tunnels `/ws`,
+  `/api/*`, `/auth/*`, and `/health` (`crates/quarto-preview/src/join_frontend.rs`); `--port`, `--host`, and
+  `--no-browser` apply (`crates/quarto/src/main.rs`).
+- When the Rust hub creates an index it writes only `files` (`crates/quarto-hub/src/index.rs:467`); TypeScript clients
+  migrate it later. GE-1 reads how the version gets set and makes creation write the full shape.
+- "Standalone mode" in the hub means no project directory at all, a pure sync server
+  (`crates/quarto-hub/src/context.rs:228`). The 2026-11-17 plan called it "a long-lived sync server on a project
+  directory", which is wrong; do not repeat it.
+- Preview storage is ephemeral by default ("per-session data dir by default",
+  `crates/quarto-preview/src/lib.rs:661`), which is why a bound folder goes stale between runs (G19).
 
 **Not checked** (each is a Gate 0 item above): hub and extension doc exchange under announce-off; preview `/ws` with
 the extension\'s adapter; `--hub-url` against the public server and a flip through the relay; Rust unknown-key
 preservation on every path; registry put and delete semantics; cherry-pick and revert reflog subjects; the
-`sequencer/` and `BISECT_LOG` markers; the lock and ref ordering of `reset`, `pull`, and `rebase`; JS forking; and
-the retention of docs on the public server.
+`sequencer/` and `BISECT_LOG` markers; the lock and ref ordering of `reset`, `pull`, and `rebase`; JS forking; the
+retention of docs on the public server, and whether a new `q2 preview` run gets a new index doc id (inferred from the
+ephemeral data directory).
+
+## Why these decisions
+
+The decision record says what was decided; this says why, and what was rejected, so a reader does not reopen it by
+accident.
+
+- **Blob id, not commit hash, is the version key.** Commit hashes change under amend, rebase, and jj (`jj new` makes a
+  commit with an identical tree), and a commit does not rewrite the working tree, so rotating on commit would disrupt
+  every guest for nothing.
+- **The content rule leads the classifier.** The reflog misses `commit (merge)` (reproduced), cherry-pick commits, and
+  every colocated jj operation, and says nothing about `git reset --hard HEAD`, which moves neither HEAD nor blob.
+  "Does disk equal what was last synced" is true in every case; the reflog only tells a plain commit from a rewrite
+  when disk differs.
+- **A commit moves the doc forward and removes the old entry,** instead of adding an alias. With an alias,
+  `git checkout <old commit>` would join the doc whose text has moved on and overwrite the working tree.
+- **Canonical is the lowest `(generation, docId)`,** not the smallest docId. With docId alone, a fresh doc could
+  displace a doc people had edited for an hour, decided by random bytes.
+- **The registry is a sidecar, not part of the index.** The index docId is the share identity and cannot be replaced,
+  and every commit adds and deletes entries in a doc whose history never shrinks.
+- **Peers attach by blob.** People on different branches must work at once, and people on one version must collaborate
+  live. Keeping a detached peer bound to the owner\'s doc would push its edits and overwrite its own buffer.
+- **Binary files participate.** Otherwise one peer\'s checkout replaces an image doc and every clone on another branch
+  gets that image written over a tracked file.
+- **Followers follow the pointer; clone peers ignore it for tracked files.** Browsers see the owner\'s version, and a
+  clone\'s working tree is never written from another branch.
+- **Unlist and relist (reversing D9).** Otherwise followers\' previews and file trees keep files the owner\'s checkout
+  lacks.
+- **The gate lives inside `sync_all` and `sync_file`.** The shutdown flush and the initial sync call `sync_all` outside
+  the server loops and would merge a half-written tree.
+- **Editor-only needs the gate.** A checkout makes VS Code reload buffers, and the Binding would send the reload to the
+  old doc as an edit. The mirror check cannot catch it, because the buffer equals the doc until the reload.
+- **The mode is explicit in `project.json`.** A mirror nested in a git repo that someone `git add`s would otherwise turn
+  into a clone of the wrong repo and silently split off. Mirrors are always folders the extension created, so mirror
+  mode can never overwrite a user\'s own clone.
+- **Attach needs the repo identity.** Without root commits, any repo containing an `index.qmd` would pass and silently
+  split off.
+- **Ownership is static.** No election and no heartbeats, and a hub-created project cannot gain a second writer.
+- **The hub joins the shared registry.** Extension peers and the hub collaborate on a version, and there is one arrival
+  rule instead of two.
+- **Two implementations, not WASM.** The extension loads no q2 WASM today (the render module is about 36 MB) and the
+  logic is small; fixtures and golden docs hold the two together.
+- **The hub is not special as a sync server.** The sync endpoint is samod; only the docs are q2 content. A VS Code
+  originator can publish to any Automerge sync server, and `q2 preview --hub-url` can show it with no hub-client change.
+- **No `quartoHub.git` setting.** A kill switch would reintroduce the original bug in one click.
+- **No "share mine".** A second doc under the current blob can never be canonical, so nobody could join it.
+- **Rejected:** pausing guests read-only during a checkout (an indicator only, G33); a hub-written marker file for
+  co-location discovery (deferred); the extension electing a pointer owner; a synced `epochs` map inside the index;
+  hub-client `server=` for the hub-less demo (it uses `--hub-url`); a read-only mirror in a git repo.
+
+## Background a new agent will not have
+
+Learned in the review session; none of it is in `AGENTS.md` or the earlier plan.
+
+- **The extension is a prototype.** Elliot wrote it (three one-line commits in October 2026, moved to the repo root in
+  `251de0df0`, dropped from the workspaces in `8ae461f1b`). It has no tests, no CI, a stale README, and `tsc` fails
+  without the vscode types. It syncs every file on disk except an ignore list, while the hub publishes a curated set
+  (`.qmd`, `.md`, config, binary resources, `_extensions/**`, `.tsx`, `.scss`); a project originated from VS Code
+  can therefore differ from a hub-created one. Elliot also wrote the experimental branch service; shikokuchuo maintains
+  it and the attribution code. Gordon loops them in out of band.
+- **Mirrors already exist.** "Create Folder from Project" makes a new folder inside the open workspace folder (home if
+  none), from an index doc id. It is not a clone and there is no git in it. This epic keeps it as mirror mode.
+- **The hub cannot pull.** With announce off it never requests a doc from a peer, so a doc a peer creates reaches the
+  hub only if the peer pushes it while connected. Attach to an unreachable doc is the 5 s timeout rule, not an error.
+- **`/health` reveals the host\'s `project_root`,** a path on the host\'s machine, even through a `--join` proxy. The
+  Join command compares it with the open folder for every kind of join and always confirms, because the same path can
+  exist on two machines.
+- **The `q2 preview --join` ticket is a capability** (the host\'s endpoint address and a 32-byte session token); the
+  extension passes it in argv, which other local users can see. Accepted at demo quality.
+- **Gordon\'s scope moved several times** (mirrors are fine for git shares, origination is in scope, the hub and the
+  extension work together). Plans must not block what he might add next; the three decisions above are why origination
+  is a plan and not a deferral.
+- **How he wants to work:** he decides pushes and the timing of strands; he wants a recommendation with each decision
+  and patient explanations of anything unfamiliar; he reviews the roughly 80 "confirm" marks later; the Windows machine
+  is his, and he runs it from a branch with the `windows/` prefix; held items are reviewed at the end.
+- **Review lessons.** Two independent reviewers found real defects (the inert Binding contradiction, the late reload
+  race, `off` peers overwritten, the shutdown flush) and some overstated claims (a "blocking" handle-caching finding
+  was important at most, and several timings were not reproduced). Verify a sub-agent claim against the code before
+  acting on it. Forks inherit the conversation but not the reasoning, so a record like this file is what keeps them
+  consistent; tell a fork explicitly not to spawn sub-agents.
+- **Tool quirks in this environment:** a single-file `q2 render --strict` prints about 56 `Q-12-13` listing errors
+  about other plans and exits 1 (filter them with `grep -v Q-12-13` and read the rest); the shell is zsh, so quote a
+  glob passed to `grep --include`; `git show REV:path` mangled a path in the tool\'s output once, so use
+  `git grep PATTERN REV -- path`; a local `git clone --depth` is ignored unless the source is a `file://` URL.
+- **Plans are not listed on the notes site.** `claude-notes/plans/index.md` lists top-level files only, so this
+  epic\'s plans are reached through the plan table above.
 
 ## Details chosen while writing the plans
 
@@ -386,6 +500,7 @@ what a user sees or what the system does:
   tests run without `--share`.
 - **The sidecar** pointer key is proposed as `epochs`, and its schema is path to blob to docId to generation (an
   integer) as a set union (GE-1).
+- **The extension\'s event log** (`.quarto-hub/events.jsonl`) gains `flipped` (GE-9) and `switched`, `detached`, `reattached`, and `held` (GE-10); the earlier plan listed the last four.
 - **The Windows tooling branch** is refreshed by merging `feature/git-epochs` into it, never by rebasing a pushed
   branch (GE-15).
 
@@ -424,6 +539,9 @@ local-disk routes, the editor banner wording, the `/health` file count).
   gate; until then `cargo xtask verify` and the plans\' own runs are the check.
 - **The permanent hub tests cannot use `--share`,** which needs the network. The ticket path is covered by the manual
   transcript and the Windows runs.
+- **Retention grows.** Every doc version a peer has been on is kept, including each binary version, and a fork for the
+  rename invariant copies full history. There is no cap at demo scale; the sidecar rolling strand is held.
+- **Plans in a wave conflict on shared files** (the TypeScript package index, `package.json`); they resolve it at rebase.
 
 ## Closeout
 

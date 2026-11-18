@@ -83,6 +83,10 @@ Written first and seen failing for the right reason.
   outputs for the five steps and the ReadOnly variant. **Surfaces:** the response of
   `GET /api/preview/git-status`, `{ tracking, paused, pending }`; the swap events (`pending`, `done`, `unavailable`)
   and the notice strings; the moved message type; the numbers table from the epic (G32).
+  **Module map:** the six modules the Rust crate (GE-2) and the TypeScript package (GE-5) both build, with one line
+  each and the entry-point function names of the pure core and its plain-data inputs and outputs: `classify`,
+  `arrival`, `startup`, `registry`, `probe` (including the repo identity queries: root commits, shallow check, path
+  prefix), and `controller`. The two plans run in parallel and take their names from this map, not from each other.
 - [ ] Verify the epic\'s "What became of D1 to D36" table against the contract and fix any row that is wrong; record
   each change in Notes from the run.
 
