@@ -143,6 +143,13 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 .hmenu button.on:hover { background:#d8e8fa; }
 .hmenu button.on .label small { color:#4f7fb3; }
 .hmenu .danger { color:#c4342d; }
+/* A switch, for a yes-or-no setting in a menu. */
+.hmenu .toggle { gap:14px; }
+.hmenu .switch { flex:none; width:28px; height:16px; border-radius:8px; background:#cfd4da; position:relative; transition:background .12s; }
+.hmenu .switch i { position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:#fff; transition:left .12s; }
+.hmenu .toggle[aria-checked="true"] .switch { background:var(--accent); }
+.hmenu .toggle[aria-checked="true"] .switch i { left:14px; }
+.hmenu .toggle:disabled .switch { background:#e9ecef; }
 .hmenu hr { border:0; border-top:1px solid var(--line); margin:4px 0; }
 .hmenu h3 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:6px 8px 4px; font-weight:600; }
 .kicon.k-note { --i:#0c63e4; } .kicon.k-tip { --i:#177a4c; } .kicon.k-warning { --i:#e6ae06; } .kicon.k-caution { --i:#e47112; } .kicon.k-important { --i:#c6303e; }
@@ -203,10 +210,6 @@ const GROUPS = [
   { key: 'appearancePick', title: 'Choosing its appearance', options: [
     ['row', 'A row of icons', 'A little callout for each appearance, under its button; names and what they mean in tooltips.'],
     ['menu', 'A menu', 'The appearances by name, each with what it means.'],
-  ]},
-  { key: 'collapsePick', title: 'Choosing how it collapses', options: [
-    ['menu', 'A menu', 'Off, Open and Collapsed by name.'],
-    ['row', 'A row of icons', 'A little callout for each, under its button; names in tooltips.'],
   ]},
   { key: 'create', title: 'Callout in the toolbar', options: [
     ['note', 'A note, then change it', 'Wraps the paragraph in a note at once; change its kind after.'],
@@ -412,21 +415,14 @@ const KIND_PATHS = {
   caution: '<path d="M9.97 4.88l.953 3.811C10.158 8.878 9.14 9 8 9c-1.14 0-2.159-.122-2.923-.309L6.03 4.88C6.635 4.957 7.3 5 8 5s1.365-.043 1.97-.12zm-.245-.978L8.97.88C8.718-.13 7.282-.13 7.03.88L6.274 3.9C6.8 3.965 7.382 4 8 4c.618 0 1.2-.036 1.725-.098zm4.396 8.613a.5.5 0 0 1 .037.96l-6 2a.5.5 0 0 1-.316 0l-6-2a.5.5 0 0 1 .037-.96l2.391-.598.565-2.257c.862.212 1.964.339 3.165.339s2.303-.127 3.165-.339l.565 2.257 2.391.598z"/>',
   important: '<path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995z"/>',
 }
-// Each appearance and each way of collapsing as a little callout: a box
-// with its thick left edge. Default's header is ruled off (where its tint
-// is); simple's isn't; minimal has no icon. Collapsing: no marker; a
-// chevron down (it starts open); only its header, chevron right (it starts
-// collapsed). In a picker of states the chevrons show a state, not a button.
+// Each appearance as a little callout: a box with its thick left edge.
+// Default's header is ruled off (where its tint is); simple's isn't;
+// minimal has no icon.
 const MINI = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`
 const APPEARANCE_ICONS = {
   default: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 4v16" stroke-width="2.8"/><path d="M3.5 10h17"/><circle cx="8" cy="7" r="1.1"/><path d="M11 7h6M7.5 14h9M7.5 17h6"/>'),
   simple: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 4v16" stroke-width="2.8"/><circle cx="8" cy="8" r="1.1"/><path d="M11 8h6M7.5 13h9M7.5 16h6"/>'),
   minimal: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 4v16" stroke-width="2.8"/><path d="M7.5 8.5h9M7.5 12h9M7.5 15.5h6"/>'),
-}
-const COLLAPSE_ICONS = {
-  null: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 10h17M7 7h7M7 14h10M7 17h6"/>'),
-  false: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 10h17M7 7h6M7 14h10M7 17h6M15.5 6.2l1.6 1.6 1.6-1.6"/>'),
-  true: MINI('<rect x="3.5" y="8.5" width="17" height="7" rx="1.5"/><path d="M7 12h6M16.3 10.4l1.6 1.6-1.6 1.6"/>'),
 }
 const kindIcon = (t) => `<svg viewBox="0 0 16 16" class="kicon k-${t}">${KIND_PATHS[t]}</svg>`
 // The same icon in a control: uncoloured, in the control's ink. Only the
@@ -670,7 +666,7 @@ function renderToolbar() {
     }
   } else bar.append(pick(NAME[c.type], kindGlyph(c.type), 'kind', 'Kind'))
   bar.append(pick({ default: 'Default', simple: 'Simple', minimal: 'Minimal' }[c.appearance], '', 'appearance', 'Appearance'),
-    pick(`Collapsing: ${c.collapse == null ? 'Off' : c.collapse ? 'Collapsed' : 'Open'}`, '', 'collapse', 'Collapsing'))
+    pick(c.collapse == null ? 'Not collapsible' : c.collapse ? 'Collapsible, starts collapsed' : 'Collapsible', '', 'collapse', 'Collapsing'))
   const more = toolButton('More', ICONS.more, (b) => toggleMenu('more', c.k, b))
   more.classList.add('hui')
   bar.append(more)
@@ -775,6 +771,17 @@ function renderMenu() {
     b.onclick = action
     list.append(b)
   }
+  const toggle = (label, on, action, disabled = false) => {
+    const b = document.createElement('button')
+    b.className = 'toggle'
+    b.setAttribute('role', 'switch')
+    b.setAttribute('aria-checked', String(on))
+    b.innerHTML = '<span class="label"></span><span class="switch"><i></i></span>'
+    b.querySelector('.label').textContent = label
+    b.disabled = disabled
+    b.onclick = action
+    list.append(b)
+  }
   const heading = (t) => list.append(Object.assign(document.createElement('h3'), { textContent: t }))
   // A setting's choices as a row of icons under its button, names (and what
   // they mean) in tooltips, the current one pressed.
@@ -803,10 +810,12 @@ function renderMenu() {
     if (opts.appearancePick === 'row') return row(choices.map(([a, name, sub]) => ({ icon: APPEARANCE_ICONS[a], tip: `${name}: ${sub.toLowerCase()}`, on: c.appearance === a, act: () => change(c, () => { c.appearance = a }) })))
     for (const [a, name, sub] of choices) item('', name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub })
   } else if (menu.kind === 'collapse') {
-    const choices = [[null, 'Off'], [false, 'Open'], [true, 'Collapsed']]
-    const set = (v) => () => change(c, () => { c.collapse = v; peek.delete(c.k) })
-    if (opts.collapsePick === 'row') return row(choices.map(([v, name]) => ({ icon: COLLAPSE_ICONS[String(v)], tip: `Collapsing: ${name}`, on: c.collapse === v, act: set(v) })))
-    for (const [v, name] of choices) item('', name, set(v), { check: c.collapse === v })
+    // Two yes-or-no questions, not three named states: can readers collapse
+    // it (collapse= at all), and does it start collapsed ("true" or
+    // "false"). The menu stays open, to flip both.
+    const flip = (fn) => () => { record(); fn(); peek.delete(c.k); render() }
+    toggle('Collapsible', c.collapse != null, flip(() => { c.collapse = c.collapse == null ? false : null }))
+    toggle('Starts collapsed', c.collapse === true, flip(() => { c.collapse = !c.collapse }), c.collapse == null)
   } else if (menu.kind === 'more') {
     if (!showHeader(c)) item(ICONS.title, 'Add a title', () => addTitle(c))
     else if (c.title) item(ICONS.title, 'Remove the title', () => change(c, () => { c.title = ''; if (sel?.u === 't:' + c.k) sel = { u: 'p:' + c.body[0].k, o: 0 } }))
