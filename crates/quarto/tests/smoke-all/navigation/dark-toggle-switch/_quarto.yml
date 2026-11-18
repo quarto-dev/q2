@@ -11,3 +11,4 @@ format:
     theme:
       light: cosmo
       dark: darkly
+quarto-required: "^2"

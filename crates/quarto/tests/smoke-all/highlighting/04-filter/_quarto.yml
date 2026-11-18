@@ -1,2 +1,3 @@
 project:
   title: Filter-authored highlighting
+quarto-required: "^2"

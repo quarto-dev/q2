@@ -116,7 +116,8 @@ fn render_project(fixture: impl FnOnce(&Path)) -> (PathBuf, ProjectRenderSummary
 }
 
 /// A minimal website project config.
-const WEBSITE_YML: &str = "project:\n  type: website\n  output-dir: _site\n";
+const WEBSITE_YML: &str =
+    "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n";
 
 /// Strip ANSI escapes from a rendered diagnostic.
 ///
@@ -539,7 +540,7 @@ fn aliases_in_default_project_warns() {
     let (project_dir, summary) = render_project(|dir| {
         write(
             &dir.join("_quarto.yml"),
-            "project:\n  type: default\n  output-dir: _out\n",
+            "quarto-required: \"^2\"\nproject:\n  type: default\n  output-dir: _out\n",
         );
         write(
             &dir.join("index.qmd"),
@@ -644,8 +645,7 @@ fn aliases_case_only_collision_is_error() {
 // ═══════════════════════════════════════════════════════════════════
 
 /// A website config that declares the deployment target case-sensitive.
-const CASE_SENSITIVE_WEBSITE_YML: &str =
-    "project:\n  type: website\n  output-dir: _site\nwebsite:\n  case-sensitive-paths: true\n";
+const CASE_SENSITIVE_WEBSITE_YML: &str = "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\nwebsite:\n  case-sensitive-paths: true\n";
 
 /// The Posit Connect docs shape: `viewer/R/` was renamed `viewer/r/`
 /// and the old URL must keep working on S3, where the two are distinct
@@ -796,7 +796,7 @@ fn case_sensitive_paths_in_default_project_warns() {
     let (_dir, summary) = render_project(|dir| {
         write(
             &dir.join("_quarto.yml"),
-            "project:\n  type: default\n  output-dir: _out\nwebsite:\n  case-sensitive-paths: true\n",
+            "quarto-required: \"^2\"\nproject:\n  type: default\n  output-dir: _out\nwebsite:\n  case-sensitive-paths: true\n",
         );
         write(&dir.join("index.qmd"), "---\ntitle: Home\n---\n\nH.\n");
     });

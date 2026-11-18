@@ -124,7 +124,7 @@ const EXTENSION_CSS: &str = "body { --test-extension-css: 1; }\n";
 fn website_with_root_css(project_dir: &Path) {
     write(
         &project_dir.join("_quarto.yml"),
-        "project:\n  type: website\n  output-dir: _site\n\
+        "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
          format:\n  html:\n    css:\n      - styles.css\n",
     );
     write(&project_dir.join("styles.css"), PROJECT_CSS);
@@ -203,7 +203,7 @@ fn website_extension_css_relocated_to_quarto_contrib() {
     let (project_dir, _summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              format:\n  html:\n    css:\n      - _extensions/acme/widget/widget.css\n",
         );
         write(
@@ -258,7 +258,7 @@ fn extension_css_outside_project_links_page_relative() {
     write(&root.join("shared.css"), PROJECT_CSS);
     write(
         &project_dir.join("_quarto.yml"),
-        "project:\n  type: default\n",
+        "quarto-required: \"^2\"\nproject:\n  type: default\n",
     );
     write(
         &project_dir.join("_extensions/acme/_extension.yml"),
@@ -302,7 +302,7 @@ fn document_front_matter_css_resolves_against_document_dir() {
     let (project_dir, _summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n",
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n",
         );
         write(
             &project_dir.join("index.qmd"),
@@ -338,7 +338,7 @@ fn missing_format_css_emits_q_5_29_and_continues() {
     let (project_dir, summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: website\n  output-dir: _site\n\
+            "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
              format:\n  html:\n    css:\n      - nope.css\n",
         );
         write(
@@ -380,7 +380,7 @@ fn external_url_css_passes_through_verbatim() {
         write(
             &project_dir.join("_quarto.yml"),
             &format!(
-                "project:\n  type: website\n  output-dir: _site\n\
+                "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n\
                  format:\n  html:\n    css:\n      - \"{url}\"\n"
             ),
         );
@@ -422,7 +422,7 @@ fn default_project_format_css_copied_and_rebased() {
     let (project_dir, _summary) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
-            "project:\n  type: default\n  output-dir: _out\n\
+            "quarto-required: \"^2\"\nproject:\n  type: default\n  output-dir: _out\n\
              format:\n  html:\n    css:\n      - styles.css\n",
         );
         write(&project_dir.join("styles.css"), PROJECT_CSS);

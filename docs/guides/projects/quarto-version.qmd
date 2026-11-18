@@ -1,0 +1,97 @@
+---
+title: Declaring the Quarto version of a project
+---
+
+## Overview
+
+Quarto 2 is not fully backwards compatible with Quarto 1. A project
+written for one and rendered by the other can fail, or render with
+subtly different output. So every project says which major version of
+Quarto it is written for, with one line in `_quarto.yml`:
+
+```yaml
+project:
+  type: website
+
+quarto-required: "^2"
+```
+
+`quarto-required` holds a version range. `"^2"` means "any Quarto 2
+version". It is the same key Quarto 1 uses, with the same syntax, so
+both versions understand it:
+
+- Quarto 2 renders the project without comment.
+- Quarto 1 (version 1.4 and later) refuses to render it, with a message
+  that its version does not satisfy the range.
+
+Projects created with `q2 create` already carry the line.
+
+## When the declaration is missing
+
+A `_quarto.yml` without `quarto-required` might have been written for a
+Quarto 1 release that predates Quarto 2, so Quarto 2 presumes it
+belongs to a Quarto 1 project. It still renders the project, but it
+warns once per render ([`Q-5-53`](../../errors/project/Q-5-53.qmd)):
+
+```default
+Warning [Q-5-53]: `_quarto.yml` does not declare a Quarto version
+Without `quarto-required`, `_quarto.yml` is presumed to belong to a Quarto 1 project, and Quarto 1 will render it without complaint.
+ℹ If this project is meant for Quarto 2, add `quarto-required: "^2"` to `_quarto.yml`?
+```
+
+Under `q2 render --strict` the warning fails the render.
+
+## Ranges that do not target Quarto 2
+
+Quarto 2 also warns about a range that does not single out Quarto 2:
+
+| Range | Example | Warning |
+|---|---|---|
+| admits Quarto 2 only | `"^2"`, `">=2"` | none |
+| admits both Quarto 1 and Quarto 2 | `">=1.4"`, `"*"` | [`Q-5-54`](../../errors/project/Q-5-54.qmd) |
+| admits Quarto 1 only, or neither | `"^1.7"`, `"^3"` | [`Q-5-55`](../../errors/project/Q-5-55.qmd) |
+| not a version range | `2`, `"two"` | [`Q-5-56`](../../errors/project/Q-5-56.qmd) |
+
+An open range such as `">=1.4"` is the common case: many Quarto 1
+projects declare a minimum version that way, and the range says nothing
+about which major version the project is written for.
+
+## Only `_quarto.yml` counts
+
+Quarto 2 reads the declaration from the project's own `_quarto.yml`
+(or `_quarto.yaml`) and nowhere else. A `quarto-required` in a profile
+file (`_quarto-<name>.yml`), in `_quarto.yml.local`, in a
+`_metadata.yml`, in a document's front matter, or passed with `-M` does
+not declare the project's version.
+
+The version a project is written for is a property of the whole
+project, so it lives in the one file that defines the project.
+
+Documents rendered on their own, outside any project, are not checked.
+
+## Silencing the warning
+
+A project that is deliberately left undeclared, for example a Quarto 1
+project you also render with Quarto 2 to compare the output, can turn
+the warning off in `_quarto.yml`:
+
+```yaml
+diagnostics:
+  Q-5-53:
+    level: off
+    reason: "a Quarto 1 project we render with both versions"
+```
+
+The same works for `Q-5-54`, `Q-5-55` and `Q-5-56`. The entry must be
+in the project configuration; a `diagnostics:` entry in a document's
+front matter does not silence a project-level warning.
+
+## Difference from Quarto 1
+
+Quarto 1 checks `quarto-required` against its own version and stops
+the render when the version does not satisfy the range. It reads the
+key from each document's merged metadata, so a document's front matter
+can override the project's value.
+
+Quarto 2 does not compare the range with its own version. It only asks
+whether the range singles out Quarto 2, and only in `_quarto.yml`.

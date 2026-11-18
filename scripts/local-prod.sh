@@ -87,6 +87,16 @@ fi
 log_info "Starting hub server on http://127.0.0.1:$HUB_PORT"
 log_info "Using data directory: $DATA_DIR"
 
+# Optional auth: the hub picks up OIDC_CLIENT_ID (and QUARTO_HUB_ALLOWED_EMAILS)
+# from the environment; --allow-insecure-auth lets it run over plain HTTP.
+# Build the client with the same OIDC_CLIENT_ID set (build-local-prod.sh) so
+# the sign-in button appears.
+if [ -n "${OIDC_CLIENT_ID:-}" ]; then
+    log_info "Auth enabled (OIDC_CLIENT_ID set); sign-in is optional in the client"
+else
+    log_info "Auth disabled (OIDC_CLIENT_ID not set)"
+fi
+
 # Start hub binary in background
 "$HUB_BINARY" \
     --data-dir "$DATA_DIR" \

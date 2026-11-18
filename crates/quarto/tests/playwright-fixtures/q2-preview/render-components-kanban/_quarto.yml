@@ -1,2 +1,3 @@
 project:
   title: Kanban render-component demo
+quarto-required: "^2"

@@ -54,6 +54,7 @@
 /// id and are never deduped) skip this marker entirely.
 pub(crate) const FOOTNOTE_REF_ID_MARKER_FORMAT: &str = "quarto-internal-footnote-ref-id";
 
+mod about_page_diagnostics;
 mod anchor_sections;
 mod announcement_generate;
 mod announcement_render;
@@ -158,6 +159,7 @@ mod website_canonical_url;
 mod website_favicon;
 mod website_title_prefix;
 
+pub use about_page_diagnostics::AboutPageDiagnosticsTransform;
 pub use anchor_sections::AnchorSectionsTransform;
 pub use announcement_generate::AnnouncementGenerateTransform;
 pub use announcement_render::AnnouncementRenderTransform;

@@ -74,24 +74,25 @@ use crate::stage::stages::{
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, AuthoredMetadataStage,
     CompileThemeCssStage, DocumentProfileStage, EngineExecutionStage, EquationNumberStage,
-    IncludeExpansionStage, IncludeResolveStage, LanguageResolveStage, LinkResolutionStage,
-    ListingItemInfoStage, LoadedSource, MathJsStage, MathMlStage, MetadataMergeStage,
-    ParseDocumentStage, Pipeline, PipelineData, PipelineStage, PreEngineSugaringStage,
-    RenderHtmlBodyStage, ResourceReportStage, SourceConversionStage, StageContext,
-    UnwrapProfileStage, UserFiltersStage,
+    IncludeExpansionStage, IncludeInlineFoldStage, IncludeResolveStage, LanguageResolveStage,
+    LinkResolutionStage, ListingItemInfoStage, LoadedSource, MathJsStage, MathMlStage,
+    MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData, PipelineStage,
+    PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage, SourceConversionStage,
+    StageContext, UnwrapProfileStage, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
-    AnnouncementGenerateTransform, AnnouncementRenderTransform, AppendixStructureTransform,
-    AttributionRenderTransform, AttributionViewerTransform, AuthorsNormalizeTransform,
-    BookCoverImageTransform, BraceDiagramCellDiagnosticsTransform, BreadcrumbsRenderTransform,
-    CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform,
-    CodeBlockGenerateTransform, CodeBlockRenderTransform, ConditionalContentTransform,
-    CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform, DraftAlertTransform,
-    EditorialMarksOoxmlTransform, EditorialMarksTypstTransform, EquationLabelTransform,
-    ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
-    FooterGenerateTransform, FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform,
-    GraphvizRenderTransform, ImageDimensionsTransform, LinkExternalTransform, LinkRewriteTransform,
+    AboutPageDiagnosticsTransform, AnnouncementGenerateTransform, AnnouncementRenderTransform,
+    AppendixStructureTransform, AttributionRenderTransform, AttributionViewerTransform,
+    AuthorsNormalizeTransform, BookCoverImageTransform, BraceDiagramCellDiagnosticsTransform,
+    BreadcrumbsRenderTransform, CalloutResolveTransform, CalloutTransform,
+    CategoriesSidebarTransform, CodeBlockGenerateTransform, CodeBlockRenderTransform,
+    ConditionalContentTransform, CrossrefIndexTransform, CrossrefRenderTransform,
+    CrossrefResolveTransform, DraftAlertTransform, EditorialMarksOoxmlTransform,
+    EditorialMarksTypstTransform, EquationLabelTransform, ExampleEmbedRenderTransform,
+    ExampleEmbedTransform, FloatRefTargetSugarTransform, FooterGenerateTransform,
+    FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform, GraphvizRenderTransform,
+    ImageDimensionsTransform, LinkExternalTransform, LinkRewriteTransform,
     ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
     MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
     PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
@@ -363,10 +364,13 @@ fn build_enrich_stages() -> Vec<Box<dyn PipelineStage>> {
         // `claude-notes/plans/2026-04-24-include-expansion-merge.md`.
         Box::new(IncludeExpansionStage::new()),
         // Resolve include-in-header / include-before-body /
-        // include-after-body authored keys (plus the legacy inline
-        // `header-includes` / `include-before` / `include-after`
-        // keys) into the canonical `rendered.includes.{header,
-        // before-body, after-body}` location. Runs *before* the
+        // include-after-body authored keys into the canonical
+        // `rendered.includes.{header, before-body, after-body}`
+        // location. The legacy inline `header-includes` /
+        // `include-before` / `include-after` keys are NOT read here:
+        // a user filter may still change them, so
+        // `IncludeInlineFoldStage` folds them after the post filters
+        // (GH #1257). Runs *before* the
         // profile checkpoint so file-slot dependencies are
         // recorded into `profile.includes` for `bd-r82e` cache
         // invalidation. Engine-contributed PandocIncludes are
@@ -503,6 +507,11 @@ pub fn build_html_pipeline_stages_with_options(
     stages.push(Box::new(UserFiltersStage::pre()));
     stages.push(Box::new(AstTransformsStage::new()));
     stages.push(Box::new(UserFiltersStage::post()));
+    // GH #1257: fold the final values of the inline include keys
+    // (`header-includes` / `include-before` / `include-after`) into
+    // `rendered.includes.*`, so what a filter wrote reaches the template
+    // (Pandoc reads these keys from the post-filter metadata).
+    stages.push(Box::new(IncludeInlineFoldStage::new()));
     // bd-o8pr Phase 3: finalize the per-doc resource report
     // (defends against filters that mutate `meta.resources`).
     stages.push(Box::new(ResourceReportStage::new()));
@@ -2515,6 +2524,10 @@ pub fn build_transform_pipeline(
     // both consumed later (by the template and `IncludeResolveStage`
     // respectively). Self-gates to non-reveal HTML.
     pipeline.push(Box::new(DraftAlertTransform::new()));
+    // `about:` pages (bd-7hzkh4m6): warn (Q-5-57) that Quarto 1's about
+    // templates are not implemented. Read-only; self-gates to non-reveal
+    // HTML in website/book projects, Quarto 1's scope for about pages.
+    pipeline.push(Box::new(AboutPageDiagnosticsTransform::new()));
     // Slide construction for `format: revealjs` replaces the generic
     // title-block + sectionize pair: reveal needs an exactly-two-level slide
     // tree built from `slide-level` (Pandoc keeps reveal slide-construction
@@ -3198,6 +3211,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "attribution-viewer",
     "attribution-render",
     "draft-alert",
+    "about-page-diagnostics",
     "format-css",
     "responsive-image",
     "image-dimensions",
@@ -3334,6 +3348,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // Writes `rendered.draft-alert-text` + a `quarto:status` header include
     // for the HTML template; sibling of `title-banner`.
     ("draft-alert", Bucket::B2),
+    // Read-only warning for `about:` pages, a website/book HTML feature;
+    // self-gates to non-reveal HTML, so it has no Pandoc-writer role.
+    ("about-page-diagnostics", Bucket::B2),
     // Synthesizes an HTML title-block container from Meta; Pandoc's own
     // templates build the equivalent from the same Meta.
     ("title-block", Bucket::B2),
@@ -4104,7 +4121,7 @@ mod tests {
         // ListingResolveStage before lmd-execute (bd-2oqen84t), plus SearchCaptureStage (bd-eip0naf4), plus DashboardJsStage
         // (bd-dashboard-format-k21hd4vy), plus AuthoredMetadataStage after
         // the merge (bd-xzsnuoqq): 33.
-        assert_eq!(stages.len(), 33);
+        assert_eq!(stages.len(), 34);
         // Pre-parse file-claim/convert (Task 10).
         assert_eq!(stages[0].name(), "source-conversion");
         assert_eq!(stages[1].name(), "parse-document");
@@ -4166,27 +4183,29 @@ mod tests {
         assert_eq!(stages[22].name(), "user-filters-pre");
         assert_eq!(stages[23].name(), "ast-transforms");
         assert_eq!(stages[24].name(), "user-filters-post");
+        // GH #1257: folds the inline include keys a filter may have written.
+        assert_eq!(stages[25].name(), "include-inline-fold");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[25].name(), "resource-report");
+        assert_eq!(stages[26].name(), "resource-report");
         // Equation-number encoding (bd-vlhi2zkj) must follow
         // user-filters-post: a Lua post filter may rewrite or delete the
         // reserved `quarto-eq-number` attribute the stage consumes.
-        assert_eq!(stages[26].name(), "equation-number");
+        assert_eq!(stages[27].name(), "equation-number");
         // Native MathML (bd-3evfzwal) follows equation-number (the TeX it
         // converts carries no `\tag`) and precedes math-js (which loads
         // MathJax only for what this stage left as TeX).
-        assert_eq!(stages[27].name(), "math-ml");
-        assert_eq!(stages[28].name(), "code-highlight");
+        assert_eq!(stages[28].name(), "math-ml");
+        assert_eq!(stages[29].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, the `\tag{N}` equation-number encoding) is visible.
-        assert_eq!(stages[29].name(), "math-js");
-        assert_eq!(stages[30].name(), "render-html-body");
+        assert_eq!(stages[30].name(), "math-js");
+        assert_eq!(stages[31].name(), "render-html-body");
         // Website search capture (bd-eip0naf4): records the rendered
         // body before the template wraps it.
-        assert_eq!(stages[31].name(), "search-capture");
-        assert_eq!(stages[32].name(), "apply-template");
+        assert_eq!(stages[32].name(), "search-capture");
+        assert_eq!(stages[33].name(), "apply-template");
     }
 
     #[test]
@@ -4199,7 +4218,7 @@ mod tests {
         // SearchCaptureStage (bd-eip0naf4), plus DashboardJsStage
         // (bd-dashboard-format-k21hd4vy), plus AuthoredMetadataStage
         // (bd-xzsnuoqq) → 33 stages.
-        assert_eq!(pipeline.len(), 33);
+        assert_eq!(pipeline.len(), 34);
     }
 
     #[test]
@@ -6306,6 +6325,7 @@ mod tests {
             vec![
                 "ast-transforms",
                 "user-filters-post",
+                "include-inline-fold",
                 "resource-report",
                 "equation-number",
                 "inline-table-css",
@@ -6332,6 +6352,7 @@ mod tests {
             vec![
                 "ast-transforms",
                 "user-filters-post",
+                "include-inline-fold",
                 "resource-report",
                 "equation-number",
                 "math-ml",
@@ -7183,6 +7204,7 @@ mod tests {
                 "website-canonical-url",
                 "format-css",
                 "draft-alert",
+                "about-page-diagnostics",
                 "book-cover-image",
                 "title-block",
                 "sectionize",
@@ -7287,6 +7309,7 @@ mod tests {
                 "website-canonical-url",
                 "format-css",
                 "draft-alert",
+                "about-page-diagnostics",
                 "reveal-columns",
                 "reveal-absolute",
                 "reveal-slides",
@@ -7675,6 +7698,7 @@ mod tests {
                 "website-canonical-url",
                 "format-css",
                 "draft-alert",
+                "about-page-diagnostics",
                 "book-cover-image",
                 "sectionize",
                 "html-columns",
@@ -7756,6 +7780,34 @@ mod tests {
         );
     }
 
+    /// GH #1257: `IncludeInlineFoldStage` must follow `user-filters-post` in
+    /// every pipeline that carries it, or a filter's `header-includes` /
+    /// `include-before` / `include-after` is read before the filter runs. The
+    /// q2-preview pipeline (head injector) and the render pipeline are
+    /// separate consumers of `rendered.includes.*`; both must see the fold.
+    #[test]
+    fn inline_include_fold_follows_post_filters_in_every_pipeline() {
+        let lists: Vec<(&str, Vec<Box<dyn PipelineStage>>)> = vec![
+            ("html", build_html_pipeline_stages_with_options(None)),
+            (
+                "q2-preview",
+                build_q2_preview_pipeline_stages(CapturePayload::Empty),
+            ),
+        ];
+        for (label, stages) in lists {
+            let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
+            let post = names
+                .iter()
+                .position(|n| *n == "user-filters-post")
+                .unwrap_or_else(|| panic!("{label}: no user-filters-post in {names:?}"));
+            let fold = names
+                .iter()
+                .position(|n| *n == "include-inline-fold")
+                .unwrap_or_else(|| panic!("{label}: no include-inline-fold in {names:?}"));
+            assert!(post < fold, "{label}: fold before post filters: {names:?}");
+        }
+    }
+
     /// Task 6 (T6.1): verify every name in [`PANDOC_STAGE_EXCLUDED`] is an
     /// actual stage in the full HTML pipeline. Same drift-mode guard as
     /// `q2_preview_stage_excluded_names_exist_in_html_pipeline`: a
@@ -7814,6 +7866,7 @@ mod tests {
                 "user-filters-pre",
                 "ast-transforms",
                 "user-filters-post",
+                "include-inline-fold",
                 "resource-report",
                 // Survives on purpose: NumberEncoding::Writer is a no-op for
                 // every non-HTML format, and the stage still strips the

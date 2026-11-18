@@ -6,3 +6,4 @@ website:
 format:
   html:
     link-external-icon: true
+quarto-required: "^2"

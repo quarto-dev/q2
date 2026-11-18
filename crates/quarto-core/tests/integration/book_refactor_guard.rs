@@ -106,7 +106,7 @@ fn write_str(path: &Path, contents: &str) {
 fn fixture_basic(dir: &Path) {
     write_str(
         &dir.join("_quarto.yml"),
-        "project:\n  type: book\n\nkeep-typ: true\n\nbook:\n  title: \"Guard Basic\"\n  author: \"A. Author\"\n  chapters:\n    - index.qmd\n    - ch1.qmd\n    - ch2.qmd\n",
+        "quarto-required: \"^2\"\nproject:\n  type: book\n\nkeep-typ: true\n\nbook:\n  title: \"Guard Basic\"\n  author: \"A. Author\"\n  chapters:\n    - index.qmd\n    - ch1.qmd\n    - ch2.qmd\n",
     );
     write_str(
         &dir.join("index.qmd"),
@@ -124,7 +124,7 @@ fn fixture_basic(dir: &Path) {
 fn fixture_rich(dir: &Path) {
     write_str(
         &dir.join("_quarto.yml"),
-        "project:\n  type: book\n\nkeep-typ: true\n\nbook:\n  title: \"Guard Rich\"\n  author: \"A. Author\"\n  cover-image: cover.png\n  chapters:\n    - index.qmd\n    - part: \"Part One\"\n      chapters:\n        - one.qmd\n        - sub/two.qmd\n    - part: \"Part Two\"\n      href: partpage.qmd\n      chapters:\n        - titleonly.qmd\n        - withh1.qmd\n  appendices:\n    - app.qmd\n",
+        "quarto-required: \"^2\"\nproject:\n  type: book\n\nkeep-typ: true\n\nbook:\n  title: \"Guard Rich\"\n  author: \"A. Author\"\n  cover-image: cover.png\n  chapters:\n    - index.qmd\n    - part: \"Part One\"\n      chapters:\n        - one.qmd\n        - sub/two.qmd\n    - part: \"Part Two\"\n      href: partpage.qmd\n      chapters:\n        - titleonly.qmd\n        - withh1.qmd\n  appendices:\n    - app.qmd\n",
     );
     write_str(
         &dir.join("index.qmd"),
@@ -171,7 +171,7 @@ fn fixture_rich(dir: &Path) {
 fn fixture_partpage_image(dir: &Path) {
     write_str(
         &dir.join("_quarto.yml"),
-        "project:\n  type: book\n\nkeep-typ: true\n\nbook:\n  title: \"Guard Part Page\"\n  author: \"A. Author\"\n  chapters:\n    - index.qmd\n    - sub/two.qmd\n    - part: \"Part Two\"\n      href: partpage.qmd\n      chapters:\n        - three.qmd\n",
+        "quarto-required: \"^2\"\nproject:\n  type: book\n\nkeep-typ: true\n\nbook:\n  title: \"Guard Part Page\"\n  author: \"A. Author\"\n  chapters:\n    - index.qmd\n    - sub/two.qmd\n    - part: \"Part Two\"\n      href: partpage.qmd\n      chapters:\n        - three.qmd\n",
     );
     write_str(
         &dir.join("index.qmd"),
@@ -191,7 +191,7 @@ fn fixture_partpage_image(dir: &Path) {
 fn fixture_caption_image(dir: &Path) {
     write_str(
         &dir.join("_quarto.yml"),
-        "project:\n  type: book\n\nkeep-typ: true\n\nbook:\n  title: \"Guard Caption\"\n  author: \"A. Author\"\n  chapters:\n    - index.qmd\n    - one.qmd\n    - sub/two.qmd\n",
+        "quarto-required: \"^2\"\nproject:\n  type: book\n\nkeep-typ: true\n\nbook:\n  title: \"Guard Caption\"\n  author: \"A. Author\"\n  chapters:\n    - index.qmd\n    - one.qmd\n    - sub/two.qmd\n",
     );
     write_str(
         &dir.join("index.qmd"),
@@ -222,7 +222,7 @@ fn citations_yml(extra: &str) -> String {
 fn citations_yml_with(extra: &str, citeproc: bool) -> String {
     let citeproc_line = if citeproc { "citeproc: true\n" } else { "" };
     format!(
-        "project:\n  type: book\n\nkeep-typ: true\n\nbook:\n  title: \"Guard Cites\"\n  author: \"A. Author\"\n  chapters:\n    - index.qmd\n    - ch1.qmd\n    - ch2.qmd\n\nbibliography: refs.bib\n{citeproc_line}{extra}"
+        "quarto-required: \"^2\"\nproject:\n  type: book\n\nkeep-typ: true\n\nbook:\n  title: \"Guard Cites\"\n  author: \"A. Author\"\n  chapters:\n    - index.qmd\n    - ch1.qmd\n    - ch2.qmd\n\nbibliography: refs.bib\n{citeproc_line}{extra}"
     )
 }
 

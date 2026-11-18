@@ -19,3 +19,4 @@ website:
         href: section.qmd
         contents:
           - section-child.qmd
+quarto-required: "^2"

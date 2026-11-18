@@ -3706,7 +3706,7 @@ mod render_once_tests {
         let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         write(
             &dir.join("_quarto.yml"),
-            "project:\n  type: website\nwebsite:\n  title: Base\n",
+            "quarto-required: \"^2\"\nproject:\n  type: website\nwebsite:\n  title: Base\n",
         );
         write(&dir.join("index.qmd"), "---\ntitle: Home\n---\n\nHello.\n");
         write(&dir.join("about.qmd"), "---\ntitle: About\n---\n\nAbout.\n");

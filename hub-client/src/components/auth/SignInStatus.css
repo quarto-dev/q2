@@ -1,0 +1,70 @@
+/* Sign-in status: status text beside the provider's sign-in button
+   (signed out) or a Sign out button (signed in). */
+.sign-in-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sign-in-status-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* "changes stay on this device": warning chip (solid theme tokens). */
+.sign-in-status-warning {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Narrow hosts: text above the button, both end-aligned; the text may
+   wrap instead of truncating. */
+.sign-in-status.stacked {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.sign-in-status.stacked .sign-in-status-text {
+  max-width: none;
+  white-space: normal;
+  text-align: end;
+}
+
+/* Signed out: "Not signed in" stacked on top of the warning chip. */
+.sign-in-status-text.with-warning {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  line-height: 1.15;
+}
+
+/* Signed out, top bar: the whole component sits on a light yellow
+   panel. (In the dialog the host row paints the panel instead; see
+   .connection-status-row.warning.) */
+.sign-in-status.inline.signed-out {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--warning-bg);
+}
+
+/* On a yellow panel the chip steps up to the stronger warning tone so
+   it still reads as a chip. */
+.sign-in-status.inline.signed-out .sign-in-status-warning,
+.connection-status-row.warning .sign-in-status-warning {
+  background: var(--warning-border);
+}
+
+.sign-in-status.signed-out .sign-in-status-text {
+  color: var(--warning-text);
+}

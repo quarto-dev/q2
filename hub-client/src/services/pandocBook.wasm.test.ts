@@ -147,7 +147,7 @@ function parityBook() {
 function smallBook() {
   add(
     '_quarto.yml',
-    'project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\n    - two.qmd\n',
+    'quarto-required: "^2"\nproject:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\n    - two.qmd\n',
   );
   add('index.qmd', '# Preface\n\nHello\n');
   add('one.qmd', '# One\n\nFirst chapter.\n');
@@ -318,7 +318,7 @@ describe('whole-book request (R9)', () => {
   it('serves each chapter its own capture, never an identical cell elsewhere', async () => {
     add(
       '_quarto.yml',
-      'project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\n    - two.qmd\n',
+      'quarto-required: "^2"\nproject:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\n    - two.qmd\n',
     );
     add('index.qmd', '# Preface\n\nHello\n');
     const one = '# One\n\nBefore.\n\n```{r}\nSAME\n```\n';
@@ -363,7 +363,7 @@ describe('whole-book request (R9)', () => {
   it('puts margin citations’ bibliography into the pdf request only', async () => {
     add(
       '_quarto.yml',
-      'project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\nbibliography: refs.bib\ncitation-location: margin\n',
+      'quarto-required: "^2"\nproject:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\nbibliography: refs.bib\ncitation-location: margin\n',
     );
     add('refs.bib', REFS_BIB);
     add('index.qmd', '# Preface\n\nHello\n');
@@ -395,7 +395,7 @@ describe('captures per chapter (R9 D-6)', () => {
   function captureBook() {
     add(
       '_quarto.yml',
-      'project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\n    - two.qmd\n    - sub/three.qmd\n',
+      'quarto-required: "^2"\nproject:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\n    - two.qmd\n    - sub/three.qmd\n',
     );
     add('index.qmd', '# Preface\n\nHello\n');
     add('one.qmd', ONE);

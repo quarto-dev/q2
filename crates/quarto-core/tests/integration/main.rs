@@ -1,6 +1,7 @@
 //! quarto-core integration test binary.
 //! See bd-xvdop / claude-notes/plans/2026-05-28-integration-test-consolidation.md.
 
+pub mod about_page_diagnostics;
 pub mod anchor_sections_pipeline;
 pub mod artifact_scoping_pipeline;
 pub mod attribution_baseline_snapshot;
@@ -98,6 +99,7 @@ pub mod import_support;
 pub mod import_transforms;
 pub mod include_code_fence;
 pub mod include_expansion_diagnostics;
+pub mod include_filter_metadata;
 pub mod include_heading_id_dedup;
 pub mod include_nested_expansion;
 pub mod include_project_absolute;

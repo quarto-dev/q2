@@ -23,6 +23,7 @@ import fastDiff from 'fast-diff';
 import ModalDialog from './ModalDialog';
 import { useNow } from '../hooks/useNow';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import SignInStatus, { useSignInStatus } from './auth/SignInStatus';
 import { dialogs } from '../strings';
 import './ConnectionStatusDialog.css';
 
@@ -217,6 +218,7 @@ export default function ConnectionStatusDialog({
   // subscription rather than the old poll-navigator.onLine-every-tick.
   const now = useNow(1000);
   const browserOnline = useOnlineStatus();
+  const signInStatus = useSignInStatus();
 
   // Resolve the two documents of interest; re-evaluated every tick
   // because handles appear as the project loads / files open.
@@ -248,7 +250,8 @@ export default function ConnectionStatusDialog({
   // Label the file column with the open document's name; "This file"
   // is only the fallback when no file is open.
   const fileLabel = currentFilePath?.split('/').pop() || s.thisFile;
-  const rows: Array<[string, ReactNode]> = [
+  // Optional third entry: extra class for the row.
+  const rows: Array<[string, ReactNode, string?]> = [
     [
       s.browserNetwork,
       <StatusBadge ok={browserOnline} label={browserOnline ? s.browserOnline : s.browserOffline} />,
@@ -269,6 +272,16 @@ export default function ConnectionStatusDialog({
     ],
   ];
 
+  // Sign-in status + button, only when auth is configured.
+  if (signInStatus !== null) {
+    // Signed out: the whole row sits on a light yellow panel.
+    rows.unshift([
+      s.account,
+      <SignInStatus layout="stacked" />,
+      signInStatus.email === null ? 'warning' : undefined,
+    ]);
+  }
+
   const statDefs: Array<[string, keyof DocSyncActivity]> = [
     [s.lastEphemeralMessage, 'lastEphemeralMessageAt'],
     [s.lastRemoteChange, 'lastRemoteChangeAt'],
@@ -288,8 +301,11 @@ export default function ConnectionStatusDialog({
     <ModalDialog title={s.title} className="connection-status-dialog wide" onClose={onClose}>
       <div className="dialog-content">
         <dl className="connection-status-list">
-          {rows.map(([label, value]) => (
-            <div className="connection-status-row" key={label}>
+          {rows.map(([label, value, rowClass]) => (
+            <div
+              className={rowClass === undefined ? 'connection-status-row' : `connection-status-row ${rowClass}`}
+              key={label}
+            >
               <dt>{label}</dt>
               <dd>{value}</dd>
             </div>

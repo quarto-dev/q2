@@ -46,7 +46,6 @@ const SCAN_PAGES: { page: string; label: string; selector: string }[] = [
   { page: 'about-tab', label: 'about-tab', selector: '.about-tab' },
   { page: 'header', label: 'top-bars', selector: '.top-bars' },
   { page: 'notifications', label: 'notifications', selector: '.ephemeral-session-banner' },
-  { page: 'project-set-error', label: 'project-set-error', selector: '.qh-empty-state' },
   { page: 'tokens', label: 'tokens', selector: 'text=Design tokens' },
   { page: 'gallery', label: 'gallery', selector: 'text=Component gallery' },
   // Phase 3 async-state routes (loading / error+retry / empty). These

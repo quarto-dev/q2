@@ -1,2 +1,3 @@
 project:
   title: Multi-element project
+quarto-required: "^2"

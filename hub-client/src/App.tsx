@@ -4,7 +4,6 @@ import ProjectSelector from './components/ProjectSelector';
 import ProjectsHome from './components/ProjectsHome';
 import InviteLanding from './components/InviteLanding';
 import EditorWelcomeBanner from './components/EditorWelcomeBanner';
-import ProjectSetError from './components/ProjectSetError';
 
 // Lazy-loaded dev harness — only fetched when navigating to #/dev/... routes.
 // Dev routes are parsed only in development builds and VITE_E2E=1 test
@@ -27,15 +26,17 @@ function DevHarnessLazy({ page }: { page: string }) {
   );
 }
 import Editor from './components/Editor';
-import { notifications } from './strings';
+import DemoGallery from './components/demo/DemoGallery';
+import { notifications, signInStatus as signInStatusStrings } from './strings';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import LoadingIndicator from './components/Loading';
 import SkipLink from './components/SkipLink';
 import Toast from './components/Toast';
 import { ViewModeProvider } from './components/ViewModeContext';
-import { LoginScreen } from './components/auth/LoginScreen';
-import { readAuthErrorReason } from './auth/authError';
+import { readAuthErrorReason, authErrorMessage } from './auth/authError';
 import { useAuthProvider } from './auth/AuthProvider';
+import { SignInStatusProvider, type SignInStatusValue } from './components/auth/SignInStatus';
+import { LoginScreen } from './components/auth/LoginScreen';
 import {
   connect,
   disconnect,
@@ -67,6 +68,7 @@ import { createConnectionChangeHandler } from './services/connectionHandlers';
 import type { Route, ShareRoute, LinkProjectSetRoute, JoinCollectionRoute } from './utils/routing';
 import { resolveSyncServerUrl, DEFAULT_SYNC_SERVER, parseHashRoute, hubPath, savePreAuthHash, clearPreAuthHash, buildHashRoute } from './utils/routing';
 import { isEphemeralStorage } from './services/ephemeralStorage';
+import { isSyncAllowed, setSyncAllowed } from './services/syncGate';
 import { probeHealth, startEphemeralServerWatchdog } from './services/ephemeralServerWatchdog';
 import { disconnect as disconnectProjectSet } from './services/projectSetService';
 import { fetchPreviewSessionConfig } from './services/previewConfig';
@@ -107,14 +109,14 @@ async function connectAndLoadContents(
   // handshake serialization, stale tabs retrying a dead port delay the
   // new server's handshake past it and the index doc comes back
   // "unavailable" (bd-ug0doz5q). Give them the long budget.
-  const peerTimeoutMs =
-    import.meta.env.VITE_E2E === '1' || isEphemeralStorage() ? 30000 : 1;
   // Ephemeral storage mode (bd-sw4xy1vw): the q2 preview embed build
   // keeps the automerge document cache in memory — each preview session
   // is a fresh origin, so a persisted cache could never hit and would
   // just accumulate in IndexedDB.
   const storage: StorageKind = isEphemeralStorage() ? 'memory' : 'indexeddb';
-  const files = await connect(resolveSyncServerUrl(syncServer), indexDocId, authorId, screenName, color, { peerTimeoutMs, storage });
+  // Optional auth: signed out means local adapters only (see syncGate.ts).
+  const network = isSyncAllowed() ? 'websocket' : 'none';
+  const files = await connect(resolveSyncServerUrl(syncServer), indexDocId, authorId, screenName, color, { storage, network });
   const contents = new Map<string, string>();
   for (const file of files) {
     const content = getFileContent(file.path);
@@ -134,6 +136,11 @@ const AUTH_ENABLED =
   (import.meta.env.VITE_E2E === '1' &&
     (window as any).__QUARTO_TEST_AUTH_ENABLED__ === true);
 
+// Optional auth (prototype): with auth configured, repos start with local
+// adapters only; the gate opens once /auth/me confirms a session (see the
+// effect in App) and closes again on sign-out. Without auth it stays open.
+setSyncAllowed(!AUTH_ENABLED);
+
 
 function App() {
   const {
@@ -145,6 +152,15 @@ function App() {
     applyAuth,
   } = useAuth();
   const authProvider = useAuthProvider();
+  // Signed in through the hub (always false when auth is not configured).
+  const signedIn = AUTH_ENABLED && !!auth;
+
+  // Sync gate (optional auth): open the network to Automerge repos only
+  // while a session exists. Re-evaluated whenever auth resolves or ends.
+  useEffect(() => {
+    if (!AUTH_ENABLED || authLoading) return;
+    setSyncAllowed(!!auth);
+  }, [auth, authLoading]);
 
   const [project, setProject] = useState<ProjectEntry | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -154,6 +170,12 @@ function App() {
   // stay in the sync client; the counter tells the image viewer to re-read.
   const [binaryFileVersions, setBinaryFileVersions] = useState<Map<string, number>>(new Map());
   const [showSaveToast, setShowSaveToast] = useState(false);
+  // Landing screen dismissed with "continue offline": the signed-out,
+  // local-only app shows instead. Not persisted, and it does not need to
+  // be: dismissing lets the personal root be created (see
+  // useAutoEstablishRoot below), and the landing screen only shows while
+  // this browser has no project set.
+  const [continuedOffline, setContinuedOffline] = useState(false);
   const [screenName, setScreenName] = useState<string | undefined>();
   const [cursorColor, setCursorColor] = useState<string | undefined>();
   // Local user id → stable Automerge author when auth is disabled (local-prod).
@@ -232,8 +254,10 @@ function App() {
   // `resolveAuthorIdRequest` for the three-valued contract; callers abandon
   // the open only on `null` (auth failure), proceed on `string`/`undefined`.
   const resolveAuthorId = useCallback(
-    (indexDocId: string) => resolveAuthorIdRequest(indexDocId, AUTH_ENABLED, expireSession, localAuthorId),
-    [expireSession, localAuthorId],
+    // Signed out under optional auth behaves like auth-disabled: the stable
+    // local author id is used and the network is never touched.
+    (indexDocId: string) => resolveAuthorIdRequest(indexDocId, signedIn, expireSession, localAuthorId),
+    [signedIn, expireSession, localAuthorId],
   );
 
   // Capture the auth error reason from the redirect query param (once,
@@ -312,9 +336,21 @@ function App() {
     }
   }, [screenName, cursorColor, resolveAuthorId, projectSetActions]);
 
+  // The landing screen shows only while this browser has no project set,
+  // so a signed-out visitor's root must not be created behind it: setup
+  // waits until they sign in or choose "continue offline". Invite boots
+  // are exempt — their card, not the landing screen, is what shows, and
+  // its CTA needs the root.
+  const setupAwaitsLandingChoice =
+    AUTH_ENABLED && signedIn === false && continuedOffline === false && bootIsInvite === false;
+  // True once the collections hook has reported anything but `loading`;
+  // keeps the boot spinner below from reappearing on a later retry().
+  const projectSetResolvedRef = useRef(false);
+  if (projectSetState.status !== 'loading') projectSetResolvedRef.current = true;
+
   useAutoEstablishRoot({
     status: projectSetState.status,
-    enabled: !bootLinksProjectSet,
+    enabled: !bootLinksProjectSet && setupAwaitsLandingChoice === false,
     createProjectSet: projectSetActions.createProjectSet,
     migrateProjects: projectSetActions.migrateProjects,
     // E2E builds skip seeding: every Playwright test boots a fresh profile,
@@ -682,7 +718,7 @@ function App() {
     // and a connection opened without them stamps no author on its edits and registers no
     // identity, so a docx download names comment authors by raw actor-id prefix. (With auth on,
     // the author id comes from the server, but the screen name is still needed for the identity.)
-    if (screenName === undefined || (!AUTH_ENABLED && localAuthorId === undefined)) return;
+    if (screenName === undefined || (!signedIn && localAuthorId === undefined)) return;
     initialLoadRef.current = true;
 
     const loadFromUrl = async () => {
@@ -792,21 +828,25 @@ function App() {
     };
 
     loadFromUrl();
-  }, [route, navigateToProjectSelector, navigateToProject, navigateToFile, connectToSharedProject, screenName, localAuthorId]);
+  }, [route, navigateToProjectSelector, navigateToProject, navigateToFile, connectToSharedProject, screenName, localAuthorId, signedIn]);
 
-  // Disconnect sync when auth is lost (token expired or user logged out).
-  // Without this, the WebSocket adapter keeps retrying with an expired cookie
-  // and the user sees "Connection lost" instead of the login screen.
+  // Disconnect sync when a session ends (token expired or user logged out)
+  // while a project is open. Without this, the WebSocket adapter keeps
+  // retrying with an expired cookie and the user sees "Connection lost".
+  // Only the signed-in → signed-out transition triggers this: under
+  // optional auth a signed-out user can have a local-only project open.
+  const wasSignedInRef = useRef(false);
   useEffect(() => {
-    if (AUTH_ENABLED && !auth && !authLoading && project) {
+    const lost = wasSignedInRef.current && !signedIn;
+    wasSignedInRef.current = signedIn;
+    if (lost && project) {
       disconnect();
       setProject(null);
       setFiles([]);
       setFileContents(new Map());
       setConnectionError(null);
-
     }
-  }, [auth, authLoading, project]);
+  }, [signedIn, project]);
 
   // Intercept Ctrl+S / Cmd+S to prevent browser save dialog
   useEffect(() => {
@@ -954,6 +994,8 @@ function App() {
         files,
         // Ephemeral storage mode (bd-sw4xy1vw): no IndexedDB cache.
         storage: isEphemeralStorage() ? 'memory' : 'indexeddb',
+        // Optional auth: signed out means local adapters only.
+        network: isSyncAllowed() ? 'websocket' : 'none',
       }, undefined, screenName, cursorColor, resolveAuthorId);
 
       // Store the project in IndexedDB
@@ -1023,9 +1065,14 @@ function App() {
     );
   }
 
+  // Gallery of standalone example pages (#/component-playground, #/component-playground/<id>).
+  if (route.type === 'demo') {
+    return <DemoGallery page={route.page} />;
+  }
+
   if (AUTH_ENABLED && !auth) {
-    // Invite routes render the InviteLanding card instead of the generic
-    // login screen (bd-fxdcxbpq): who invited you, what to, and a single
+    // Invite routes render the InviteLanding card while signed out
+    // (bd-fxdcxbpq): who invited you, what to, and a single
     // Google CTA. The OAuth round trip returns to the same invite URL via
     // the pre-auth hash save/restore, then shows the signed-in variant.
     const signInCta = (
@@ -1069,13 +1116,44 @@ function App() {
         />
       );
     }
-    return (
-      <LoginScreen
-        errorReason={authErrorReason}
-        message={sessionExpired ? 'Your session expired — please sign in again.' : undefined}
-      />
-    );
+    // Signed out with no project set yet (a first visit): the landing /
+    // sign-in screen. "Continue offline" dismisses it, which lets the root
+    // be created, so it does not return on the next open. A browser that
+    // already has a project set falls through to the optional-auth app:
+    // projects home with a sign-in button, local-only until sign-in.
+    const projectSetStatus = projectSetState.status;
+    if (projectSetStatus === 'loading' && projectSetResolvedRef.current === false) {
+      // Not known yet whether a project set exists; avoid flashing the
+      // home (or the landing screen) before it is.
+      return (
+        <div className="project-selector" style={{ alignItems: 'center', justifyContent: 'center' }}>
+          <LoadingIndicator />
+        </div>
+      );
+    }
+    const noProjectSet =
+      projectSetStatus === 'needs-setup' || projectSetStatus === 'needs-migration';
+    if (noProjectSet && continuedOffline === false) {
+      return (
+        <LoginScreen
+          errorReason={authErrorReason}
+          message={sessionExpired ? signInStatusStrings.sessionExpired : undefined}
+          onContinueOffline={() => setContinuedOffline(true)}
+        />
+      );
+    }
   }
+
+  // Sign-in status for the shared SignInStatus component (projects-home
+  // top bar, editor connection-status dialog). null = auth not configured.
+  const authNote = authErrorReason !== undefined
+    ? authErrorMessage(authErrorReason)
+    : sessionExpired
+      ? signInStatusStrings.sessionExpired
+      : undefined;
+  const signInStatus: SignInStatusValue | null = AUTH_ENABLED
+    ? { email: auth?.email ?? null, note: authNote, onSignOut: logout }
+    : null;
 
   // Gate on screen name being loaded (fast IndexedDB read).
   // Prevents connects from firing before the identity can be written.
@@ -1140,36 +1218,37 @@ function App() {
     );
   }
 
-  // The root could not be established or reconnected: offer another
-  // attempt (bd-4h1hv60p). `needs-setup` / `needs-migration` fall through
-  // to the home: useAutoEstablishRoot flips them to 'connecting' in the
-  // same commit, and the home's skeleton covers both. Ephemeral preview
-  // boots skip the error card: the preview works without a project set,
-  // so a set failure must not block it.
-  if (!ephemeralHub && projectSetState.status === 'error') {
-    return (
-      <ProjectSetError
-        error={projectSetState.error}
-        onRetry={() => void projectSetActions.retry()}
-      />
-    );
-  }
+  // The root could not be established or reconnected: the home still
+  // renders, with the failure in its error banner and Retry re-running
+  // the collections initialization. A project-open failure
+  // (`connectionError`) takes precedence, since it is the more recent,
+  // user-triggered one. Ephemeral preview boots show nothing: the
+  // preview works without a project set.
+  const projectSetError =
+    !ephemeralHub && projectSetState.status === 'error'
+      ? (projectSetState.error ?? 'Could not load your project list.')
+      : null;
+  const homeError = connectionError ?? projectSetError;
+  const homeRetry =
+    connectionError !== null
+      ? lastOpenAttempt !== null
+        ? () => void handleSelectProject(lastOpenAttempt.project, lastOpenAttempt.filePathOverride)
+        : undefined
+      : projectSetError !== null
+        ? () => void projectSetActions.retry()
+        : undefined;
 
   return (
-    <>
+    <SignInStatusProvider value={signInStatus}>
       <SkipLink />
       {!project ? (
         uiVariant === 'collections' ? (
           <ProjectsHome
             onSelectProject={handleSelectProject}
             onProjectCreated={handleProjectCreated}
-            error={connectionError}
-            onRetry={
-              lastOpenAttempt
-                ? () => void handleSelectProject(lastOpenAttempt.project, lastOpenAttempt.filePathOverride)
-                : undefined
-            }
-            onSignOut={AUTH_ENABLED ? logout : undefined}
+            error={homeError}
+            onRetry={homeRetry}
+            onSignOut={signedIn ? logout : undefined}
             authEmail={auth?.email}
             authPicture={auth?.picture}
             onScreenNameChange={setScreenName}
@@ -1200,8 +1279,8 @@ function App() {
             <ProjectSelector
               onSelectProject={handleSelectProject}
               onProjectCreated={handleProjectCreated}
-              error={connectionError}
-              onSignOut={AUTH_ENABLED ? logout : undefined}
+              error={homeError}
+              onSignOut={signedIn ? logout : undefined}
               authEmail={auth?.email}
               authPicture={auth?.picture}
               onScreenNameChange={setScreenName}
@@ -1270,7 +1349,7 @@ function App() {
         visible={showSaveToast}
         onHide={() => setShowSaveToast(false)}
       />
-    </>
+    </SignInStatusProvider>
   );
 }
 

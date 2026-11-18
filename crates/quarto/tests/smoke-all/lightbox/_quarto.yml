@@ -6,3 +6,4 @@
 # `ensureFileRegexMatches` over the rendered HTML instead.
 project:
   title: Lightbox Tests
+quarto-required: "^2"

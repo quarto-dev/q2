@@ -1,9 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { initialsFor } from '../utils/facepile';
-// Side effects only: bundles Monaco + workers so no runtime CDN fetch occurs.
-import '../monacoSetup';
-import MonacoEditor, { DiffEditor } from '@monaco-editor/react';
+import { DiffEditor } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
 import { isBinaryExtension, isImageExtension, isSourceFile, isTextExtension, normalizeProjectPath } from '@quarto/preview-renderer/types/project';
@@ -23,24 +21,16 @@ import { vfsAddFile, isWasmReady, clearCapture, getFileContent } from '@quarto/p
 import { PreviewStatusBar } from './render/PreviewStatusBar';
 import { hasExecutableCells } from '../services/executableCells';
 import type { Diagnostic, RenderComment } from '@quarto/preview-renderer/types/diagnostic';
-import { useIntelligenceProviders } from '../hooks/useIntelligenceProviders';
-import { registerQmdLanguage } from './quartoTheme';
-import { processFileForUpload, FILE_SIZE_LIMITS } from '../services/resourceService';
-import {
-  buildDropMarkdown,
-  resolveDefaultDestination,
-  classifyPastePayload,
-  createPasteImageHandler,
-} from './fileUpload';
+import { processFileForUpload } from '../services/resourceService';
+import { buildDropMarkdown, resolveDefaultDestination } from './fileUpload';
 import { useProjectSearch } from '../services/search';
-import { usePresence } from '../hooks/usePresence';
+import type { PresenceState } from '../services/presenceService';
 import { usePreference } from '../hooks/usePreference';
 import { useTheme } from './ThemeContext';
 import { useIntelligence } from '../hooks/useIntelligence';
 import { useSlideThumbnails } from '../hooks/useSlideThumbnails';
 import { useCursorToSlide } from '../hooks/useCursorToSlide';
 import { useReplayMode } from '../hooks/useReplayMode';
-import { useAutomergeSync } from '../hooks/useAutomergeSync';
 import { useSidebarDrawer } from '../hooks/useSidebarDrawer';
 import { editorDocumentTitle, useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useDocBranches } from '../hooks/useDocBranches';
@@ -62,14 +52,14 @@ import { routeDroppedEntries } from '../utils/routeDroppedEntries';
 import { commitImport, defaultImportStorageDeps } from '../services/importStorage';
 import SearchFilesDialog from './SearchFilesDialog';
 import type { MatchRange } from '../services/search';
-import { linkFromPaste } from '../utils/pasteLink';
-import { toggleWrap } from '../utils/markdownToggle';
 import { joinPath } from '../utils/uniquePath';
 import { collectDroppedEntries, type DroppedEntries } from '../utils/droppedEntries';
 import NewAssetDialog from './NewAssetDialog';
 import ShareDialog from './ShareDialog';
 import ProjectTopBar from './ProjectTopBar';
 import DocumentTopBar from './DocumentTopBar';
+import DocumentEditor, { type DocumentEditorHandle } from './DocumentEditor';
+import { getLanguageForFile } from '../utils/monacoLanguage';
 import Tooltip from './Tooltip';
 import { PreviewIcon } from './icons';
 import SyncStatusBadge from './SyncStatusBadge';
@@ -144,76 +134,6 @@ interface Props {
    */
   userName?: string;
 }
-
-// Map file extension to Monaco language ID
-function getLanguageForFile(filePath: string): string {
-  const ext = filePath.split('.').pop()?.toLowerCase();
-  switch (ext) {
-    case 'tsx':
-    case 'ts':
-      return 'typescript';
-    case 'jsx':
-    case 'js':
-      return 'javascript';
-    case 'json':
-      return 'json';
-    case 'html':
-      return 'html';
-    case 'css':
-      return 'css';
-    case 'scss':
-      return 'scss';
-    case 'yaml':
-    case 'yml':
-      return 'yaml';
-    case 'lmd':
-      // An lmd module (Lua plus `{= markdown =}` fragments; bd-76ogq4ew)
-      // highlights as Lua: Monaco has no lmd grammar, and Lua's gets the
-      // code right while leaving the fragments plain.
-      return 'lua';
-    case 'qmd':
-    case 'md':
-      // .md is a renderable source file parsed with the qmd grammar
-      // (bd-6d2wj4zp Phase 5, D11) — giving it the qmd language wires
-      // up the same Monarch highlighting and the qmd-registered
-      // symbol/folding/semantic-token providers as .qmd.
-      return 'qmd';
-    default:
-      return 'markdown';
-  }
-}
-
-// Stable options object — defined at module level so @monaco-editor/react
-// never sees a new reference and skips its internal updateOptions() effect.
-const editorOptions = {
-  minimap: { enabled: false },
-  fontSize: 14,
-  lineNumbers: 'on' as const,
-  // Size the number column near the document's actual digit count
-  // instead of Monaco's default 5-char reserve; the extra char over the
-  // digits acts as left padding (numbers are right-aligned).
-  lineNumbersMinChars: 4,
-  wordWrap: 'on' as const,
-  padding: { top: 16 },
-  scrollBeyondLastLine: false,
-  // Disable paste-as to prevent snippet expansion (e.g., URLs from browser
-  // address bar being pasted with $0 appended). See quarto-dev/kyoto#3.
-  pasteAs: { enabled: false },
-  fixedOverflowWidgets: true,
-  // Prefer showing hover below the line — prevents diagnostic popups near
-  // the top of the editor from overlapping the navbar.
-  hover: { above: false },
-  quickSuggestions: false,
-  suggestOnTriggerCharacters: false,
-  wordBasedSuggestions: 'off' as const,
-  acceptSuggestionOnEnter: 'off' as const,
-  acceptSuggestionOnCommitCharacter: false,
-  suggest: { showWords: false, showSnippets: false },
-  inlineSuggest: { enabled: false },
-  // Enable the semantic-tokens layer (the quarto-{light,dark} themes also set
-  // `semanticHighlighting: true`; setting both is the reliable combination).
-  'semanticHighlighting.enabled': true as const,
-};
 
 // Select the best default file: prefer index.qmd, then first .qmd, then
 // index.md / first .md (bd-6d2wj4zp Phase 5 — .md is a source file, but
@@ -319,15 +239,12 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     }
   }, [route, currentFile, onNavigateToFile]);
 
-  // Monaco editor instance ref
+  // Monaco editor instance ref (set from DocumentEditor's onMount; the
+  // instance is recreated on every file/branch switch).
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
-
-  // Track current file path in a ref for Monaco providers (they need stable callbacks)
-  const currentFilePathRef = useRef<string | null>(currentFile?.path ?? null);
-
-  // Stable path getter for the Monaco intelligence providers (wired up by
-  // useIntelligenceProviders below, once wasmStatus/editorReady exist).
-  const getCurrentFilePath = useCallback(() => currentFilePathRef.current, []);
+  // Imperative handle on the document editor: content setter, AST rewrite,
+  // and the echo guard for edits applied from outside (replay).
+  const documentEditorRef = useRef<DocumentEditorHandle>(null);
 
   // Local document branches ("forks") for the current file — behind an
   // experimental, default-off preference. When the flag is off, the
@@ -354,12 +271,11 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     if (comparingWithMain) setComparingWithMain(false);
   }
 
-  // Presence for collaborative cursors — disabled while on a local branch
-  // (the branch doc is invisible to peers, so cursors would be misleading)
-  const { remoteUsers, userCount, onEditorMount: onPresenceEditorMount } = usePresence(
-    textFile?.path ?? null,
-    { enabled: activeBranchId === null }
-  );
+  // Remote users on the current file, reported by DocumentEditor's presence
+  // (disabled there while on a local branch: the branch doc is invisible to
+  // peers, so cursors would be misleading).
+  const [remoteUsers, setRemoteUsers] = useState<PresenceState[]>([]);
+  const userCount = remoteUsers.length;
 
   // Intelligence for document outline
   const {
@@ -377,27 +293,21 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   // re-renders — so it can guard handleEditorChange against stale closures.
   const { state: replayState, controls: replayControls, isActiveRef: replayActiveRef } = useReplayMode(textFile?.path ?? null);
 
-  // Bidirectional Automerge ↔ Monaco sync
-  const {
-    content,
-    setContent,
-    applyingRemoteRef,
-    handleEditorChange,
-    handleContentRewrite,
-    onEditorMount: onSyncEditorMount,
-  } = useAutomergeSync({
-    currentFile: textFile,
-    fileContents,
-    onContentOperations,
-    replayActiveRef,
-    replayIsActive: replayState.isActive,
-    activeBranchId,
-  });
-
-  // Keep current file path ref in sync for Monaco providers
-  useEffect(() => {
-    currentFilePathRef.current = currentFile?.path ?? null;
-  }, [currentFile]);
+  // Current document text, mirrored synchronously from DocumentEditor's
+  // Automerge sync (`onContentChange`) for the preview and summary.
+  const [content, setContent] = useState('');
+  // Set the content state on a file switch / create. Routed through the
+  // document editor when mounted so its sync state agrees; otherwise (an
+  // image is open, or the branch diff view) set the mirror directly.
+  const setEditorContent = useCallback((next: string) => {
+    const handle = documentEditorRef.current;
+    if (handle) handle.setContent(next);
+    else setContent(next);
+  }, []);
+  // Apply an AST rewrite from the preview through the document editor.
+  const handleContentRewrite = useCallback((next: string) => {
+    documentEditorRef.current?.rewriteContent(next);
+  }, []);
 
   // Diagnostics state for Monaco markers
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
@@ -440,17 +350,6 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   const editorHasFocusRef = useRef(false);
   // Track when editor is mounted (for scroll sync initialization)
   const [editorReady, setEditorReady] = useState(false);
-
-  // Monaco intelligence providers (symbols, folding, semantic tokens). Here
-  // rather than above because it needs wasmStatus/editorReady.
-  const registerIntelligenceProvidersOnMount = useIntelligenceProviders(
-    getCurrentFilePath,
-    wasmStatus,
-    editorReady
-  );
-
-  // Monaco instance ref for setting markers
-  const monacoRef = useRef<typeof Monaco | null>(null);
 
   // Content version for triggering thumbnail regeneration
   const [contentVersion, setContentVersion] = useState(0);
@@ -555,7 +454,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   const [isEditorDragOver, setIsEditorDragOver] = useState(false);
   const pendingDropPositionRef = useRef<Monaco.IPosition | null>(null);
 
-  // Editor drag-drop/paste listeners are attached to Monaco's DOM node
+  // Editor drag-drop listeners are attached to Monaco's DOM node
   // once, at mount, as these stable wrappers. The wrappers read the
   // latest handlers from a ref (synced by an effect below), so handler
   // identity can change with `currentFile`/`files` without the listeners
@@ -566,12 +465,10 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     dragOver: (e: DragEvent) => void;
     dragLeave: (e: DragEvent) => void;
     drop: (e: DragEvent) => void;
-    paste: (e: ClipboardEvent) => void;
-  }>({ dragOver: () => {}, dragLeave: () => {}, drop: () => {}, paste: () => {} });
+  }>({ dragOver: () => {}, dragLeave: () => {}, drop: () => {} });
   const stableEditorDragOver = useCallback((e: DragEvent) => editorDndHandlersRef.current.dragOver(e), []);
   const stableEditorDragLeave = useCallback((e: DragEvent) => editorDndHandlersRef.current.dragLeave(e), []);
   const stableEditorDrop = useCallback((e: DragEvent) => editorDndHandlersRef.current.drop(e), []);
-  const stableEditorPaste = useCallback((e: ClipboardEvent) => editorDndHandlersRef.current.paste(e), []);
 
   // Fullscreen preview mode
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
@@ -602,12 +499,12 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   const handlePreviewFileChange = useCallback((file: FileEntry, anchor?: string) => {
     setCurrentFile(file);
     const fileContent = fileContents.get(file.path);
-    setContent(fileContent ?? '');
+    setEditorContent(fileContent ?? '');
     // Clear diagnostics when switching files
     setDiagnostics([]);
     // Update URL with history entry (link navigation)
     onNavigateToFile(file.path, { anchor, replace: false });
-  }, [fileContents, onNavigateToFile]);
+  }, [fileContents, onNavigateToFile, setEditorContent]);
 
   // Callback for when preview wants to open new file dialog
   const handlePreviewOpenNewFileDialog = useCallback((initialFilename: string) => {
@@ -656,13 +553,6 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   // when exiting to the project selector).
   useDocumentTitle(editorDocumentTitle(project.description, currentFile?.path));
 
-  // Toggle Monaco read-only mode during replay
-  useEffect(() => {
-    if (!editorRef.current) return;
-    const readOnly = replayState.isActive;
-    editorRef.current.updateOptions({ readOnly, domReadOnly: readOnly });
-  }, [replayState.isActive]);
-
   // Content for preview and MarkdownSummary: show replay content when active,
   // otherwise the normal Automerge-synced content. We keep `content` state
   // untouched during replay so that when replay exits, the Automerge sync
@@ -681,13 +571,14 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
 
     const editor = editorRef.current;
     const model = editor?.getModel();
-    if (model && editor) {
+    const handle = documentEditorRef.current;
+    if (model && editor && handle) {
       const prevContent = prevReplayContentRef.current;
       const newContent = replayState.currentContent;
 
       if (prevContent !== newContent) {
         const indexDelta = Math.abs(replayState.currentIndex - prevReplayIndexRef.current);
-        applyingRemoteRef.current = true;
+        handle.applyingRemoteRef.current = true;
         if (indexDelta === 1 && prevContent !== '') {
           // Single-step change (playback or manual step) — use applyEdits
           // for minimal incremental changes. This preserves tokenization
@@ -701,7 +592,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
           // Initial entry or large jump (scrubbing) — use setValue
           model.setValue(newContent);
         }
-        applyingRemoteRef.current = false;
+        handle.applyingRemoteRef.current = false;
 
         // Find the first line that differs and scroll both panes there
         let changedLine = 1;
@@ -769,20 +660,6 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     [diagnostics]
   );
 
-  // Apply Monaco markers when diagnostics change
-  useEffect(() => {
-    if (!editorRef.current || !monacoRef.current) {
-      return;
-    }
-
-    const model = editorRef.current.getModel();
-    if (!model) {
-      return;
-    }
-
-    monacoRef.current.editor.setModelMarkers(model, 'quarto', diagnosticMarkers);
-  }, [diagnosticMarkers]);
-
   // Handle browser back/forward navigation for file changes
   // Note: setState in effect is intentional - syncing with external route state
   const prevRouteFilePathRef = useRef<string | undefined>(
@@ -803,133 +680,19 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
         if (!isBinaryExtension(targetFile.path) || isImageExtension(targetFile.path)) {
           setCurrentFile(targetFile);
           const fileContent = fileContents.get(targetFile.path);
-          setContent(fileContent ?? '');
+          setEditorContent(fileContent ?? '');
           setDiagnostics([]);
         }
       }
     }
     perfSegment('effect.editor-route-nav', fxT0);
-  }, [route, files, fileContents, currentFile]);
+  }, [route, files, fileContents, currentFile, setEditorContent]);
 
-  // Configure Monaco before mount (for TypeScript diagnostics)
-  const handleBeforeMount = (monaco: typeof Monaco) => {
-    // Register the dedicated `qmd` language: Monarch base (Hybrid-A instant
-    // paint + nextEmbedded routing of code/frontmatter) + quarto-{light,dark}
-    // themes. The semantic-tokens provider is the authoritative colour source.
-    registerQmdLanguage(monaco);
-
-    // Disable TypeScript diagnostics to avoid noisy errors in TSX/TS files
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const languages = (monaco.languages as any);
-    try {
-      if (languages.typescript?.typescriptDefaults) {
-        // Enable JSX support
-        languages.typescript.typescriptDefaults.setCompilerOptions({
-          jsx: languages.typescript.JsxEmit.React,
-          jsxFactory: 'React.createElement',
-          reactNamespace: 'React',
-          allowNonTsExtensions: true,
-          allowJs: true,
-        });
-        languages.typescript.typescriptDefaults.setDiagnosticsOptions({
-          noSemanticValidation: true,
-          noSyntaxValidation: true, // Disable all validation
-        });
-      }
-      if (languages.typescript?.javascriptDefaults) {
-        languages.typescript.javascriptDefaults.setCompilerOptions({
-          jsx: languages.typescript.JsxEmit.React,
-          jsxFactory: 'React.createElement',
-          reactNamespace: 'React',
-          allowNonTsExtensions: true,
-        });
-        languages.typescript.javascriptDefaults.setDiagnosticsOptions({
-          noSemanticValidation: true,
-          noSyntaxValidation: true, // Disable all validation
-        });
-      }
-    } catch (e) {
-      // Ignore if TypeScript language service is not available
-      console.warn('Could not configure TypeScript diagnostics:', e);
-    }
-  };
-
-  // Capture Monaco editor instance on mount
-  const handleEditorMount = (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
-    // Cmd/Ctrl+B toggles **bold** around the selection (or inserts an
-    // empty pair at the cursor).
-    const registerToggle = (id: string, label: string, key: number, marker: string) => {
-      editor.addAction({
-        id,
-        label,
-        keybindings: [monaco.KeyMod.CtrlCmd | key],
-        run: (ed) => {
-          const model = ed.getModel();
-          const sel = ed.getSelection();
-          if (!model || !sel) return;
-          const selected = model.getValueInRange(sel);
-          const m = marker.length;
-          const before = model.getValueInRange({
-            startLineNumber: sel.startLineNumber,
-            startColumn: Math.max(1, sel.startColumn - m),
-            endLineNumber: sel.startLineNumber,
-            endColumn: sel.startColumn,
-          });
-          const after = model.getValueInRange({
-            startLineNumber: sel.endLineNumber,
-            startColumn: sel.endColumn,
-            endLineNumber: sel.endLineNumber,
-            endColumn: sel.endColumn + m,
-          });
-          const r = toggleWrap(selected, marker, before, after);
-          const range = {
-            startLineNumber: sel.startLineNumber,
-            startColumn: sel.startColumn - r.extendBefore,
-            endLineNumber: sel.endLineNumber,
-            endColumn: sel.endColumn + r.extendAfter,
-          };
-          ed.executeEdits(id, [{ range, text: r.text, forceMoveMarkers: true }]);
-          // Re-select the inner text (or place the cursor between the markers).
-          const startCol = range.startColumn + r.selectStart;
-          const singleLine = sel.startLineNumber === sel.endLineNumber;
-          ed.setSelection({
-            startLineNumber: sel.startLineNumber,
-            startColumn: startCol,
-            endLineNumber: singleLine ? sel.startLineNumber : sel.endLineNumber,
-            endColumn: singleLine
-              ? range.startColumn + r.selectEnd
-              : sel.endColumn + r.extendAfter - (r.text.length - r.selectEnd),
-          });
-        },
-      });
-    };
-    registerToggle('qmd.toggleBold', 'Toggle bold', monaco.KeyCode.KeyB, '**');
-
+  // Project-level wiring of a freshly created Monaco instance. The editor's
+  // intrinsic behaviours (sync, presence, providers, paste, Cmd+B, gutter
+  // compaction) are attached by DocumentEditor before this runs.
+  const handleEditorMount = (editor: Monaco.editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
-    monacoRef.current = monaco;
-    onSyncEditorMount(editor);
-    onPresenceEditorMount(editor);
-
-    // Compact the gutter when the editor gets narrow (split dragged
-    // small): drop the line numbers and folding arrows, keeping a
-    // sliver of decoration lane as padding.
-    let gutterCompact: boolean | null = null;
-    const applyNarrowLayout = (width: number) => {
-      const compact = width < 400;
-      if (compact === gutterCompact) return;
-      gutterCompact = compact;
-      editor.updateOptions(
-        compact
-          ? { lineNumbers: 'off', folding: false, lineDecorationsWidth: 4 }
-          : { lineNumbers: 'on', folding: true, lineDecorationsWidth: 10 },
-      );
-    };
-    applyNarrowLayout(editor.getLayoutInfo().width);
-    editor.onDidLayoutChange((info) => applyNarrowLayout(info.width));
-
-    // Register intelligence providers (symbols, folding, semantic tokens).
-    // The getter uses a ref so it always returns the current file path.
-    registerIntelligenceProvidersOnMount(monaco);
 
     // Track editor focus state for scroll sync
     editor.onDidFocusEditorText(() => {
@@ -937,27 +700,6 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     });
     editor.onDidBlurEditorText(() => {
       editorHasFocusRef.current = false;
-    });
-
-    // Workaround: normalize backward (RTL) selections to forward (LTR) on
-    // any printable keyDown. On some platforms the browser's input pipeline
-    // silently drops the first character typed into a backward selection
-    // because the hidden textarea's selection state confuses the OS input
-    // method. Flipping to LTR keeps the same highlighted range but places
-    // the cursor at the end, which the input method handles reliably.
-    editor.onKeyDown((e) => {
-      const sel = editor.getSelection();
-      if (!sel || sel.isEmpty() || sel.getDirection() === 0) return; // LTR or no selection
-      // Only intervene for printable characters (single char from e.browserEvent.key)
-      const key = e.browserEvent.key;
-      if (!key || key.length !== 1) return;
-      // Flip to LTR (same range, cursor moves to end)
-      editor.setSelection({
-        selectionStartLineNumber: sel.startLineNumber,
-        selectionStartColumn: sel.startColumn,
-        positionLineNumber: sel.endLineNumber,
-        positionColumn: sel.endColumn,
-      });
     });
 
     // Track cursor position changes for slide navigation
@@ -971,17 +713,12 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
       }
     });
 
-    // Attach drag-drop and paste handlers to editor container
+    // Attach drag-drop handlers to editor container
     const domNode = editor.getDomNode();
     if (domNode) {
       domNode.addEventListener('dragover', stableEditorDragOver);
       domNode.addEventListener('dragleave', stableEditorDragLeave);
       domNode.addEventListener('drop', stableEditorDrop);
-      // Capture phase: the paste event targets Monaco's hidden textarea,
-      // and Monaco's own listener (which preventDefaults and re-implements
-      // text paste) sits on that textarea — capture on the container runs
-      // first, so image payloads can be intercepted (bd-706b0ixu).
-      domNode.addEventListener('paste', stableEditorPaste, true);
     }
 
     // Signal that editor is ready for scroll sync
@@ -1023,12 +760,12 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
 
     setCurrentFile(file);
     const fileContent = fileContents.get(file.path);
-    setContent(fileContent ?? '');
+    setEditorContent(fileContent ?? '');
     // Clear diagnostics when switching files
     setDiagnostics([]);
     // Update URL without adding history entry (sidebar navigation)
     onNavigateToFile(file.path, { replace: true });
-  }, [fileContents, onNavigateToFile, replayState.isActive]);
+  }, [fileContents, onNavigateToFile, replayState.isActive, setEditorContent]);
 
   // Search result picked: open the file and highlight the first match.
   const handleSelectSearchResult = useCallback(
@@ -1149,11 +886,11 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
       // Select the newly created file
       const newFile: FileEntry = { path, docId: '' }; // docId will be set by automerge
       setCurrentFile(newFile);
-      setContent(initialContent);
+      setEditorContent(initialContent);
     } catch (err) {
       console.error('Failed to create file:', err);
     }
-  }, []);
+  }, [setEditorContent]);
 
   // Handle uploading an asset (text files go through text creation,
   // everything else becomes a binary file). `targetPath` is the already-
@@ -1340,90 +1077,16 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     }
   }, [currentFile, handleDropFiles]);
 
-  // Clipboard image paste (bd-706b0ixu, see
-  // claude-notes/plans/2026-08-27-paste-image-clipboard.md): silent
-  // ingest — content-hash-named file next to the current document, then
-  // a markdown reference at the cursor. Every dep reads through a ref or
-  // a stable callback, so both callbacks below are identity-stable and
-  // the DOM listener can be attached once at editor mount.
-  const pasteImageIngest = useMemo(
-    () =>
-      createPasteImageHandler({
-        getCurrentFilePath,
-        getEditor: () => {
-          const editor = editorRef.current;
-          if (!editor) return null;
-          return {
-            getSelection: () => editor.getSelection(),
-            getTextInRange: (range) =>
-              editor.getModel()?.getValueInRange(range) ?? '',
-            replaceRange: (range, text) => {
-              // Monaco's onChange fires synchronously from executeEdits,
-              // updating both React state and CRDT via the splice path.
-              editor.executeEdits('image-paste', [
-                { range, text, forceMoveMarkers: true },
-              ]);
-            },
-          };
-        },
-        processFile: processFileForUpload,
-        createBinaryFile,
-        maxFileSize: FILE_SIZE_LIMITS.MAX_FILE_SIZE,
-        onError: (message) => console.error(message),
-      }),
-    [getCurrentFilePath]
-  );
-
-  const handleEditorPaste = useCallback(
-    (e: ClipboardEvent) => {
-      const clipboard = e.clipboardData;
-      if (!clipboard) return;
-      const files = Array.from(clipboard.files);
-
-      // Pasting a URL over selected text wraps the selection as a link.
-      const editor = editorRef.current;
-      const selection = editor?.getSelection();
-      if (editor && selection && files.length === 0) {
-        const selected = editor.getModel()?.getValueInRange(selection) ?? '';
-        const link = linkFromPaste(selected, clipboard.getData('text/plain'));
-        if (link) {
-          e.preventDefault();
-          e.stopPropagation();
-          editor.executeEdits('paste-link', [{ range: selection, text: link, forceMoveMarkers: true }]);
-          return;
-        }
-      }
-
-      if (
-        classifyPastePayload({
-          files: files.map((f) => ({ name: f.name, type: f.type, size: f.size })),
-          text: clipboard.getData('text/plain'),
-        }) !== 'take-over'
-      ) {
-        return; // text and mixed payloads: Monaco's paste handling runs
-      }
-      // Taking over: stop Monaco's own handler (it would insert the
-      // filename rider as stray text) before the async ingest starts.
-      e.preventDefault();
-      e.stopPropagation();
-      void pasteImageIngest(files);
-    },
-    [pasteImageIngest]
-  );
-
   // Keep the stable listener wrappers pointing at the latest handlers.
   useEffect(() => {
     editorDndHandlersRef.current = {
       dragOver: handleEditorDragOver,
       dragLeave: handleEditorDragLeave,
       drop: handleEditorDrop,
-      paste: handleEditorPaste,
     };
-  }, [handleEditorDragOver, handleEditorDragLeave, handleEditorDrop, handleEditorPaste]);
+  }, [handleEditorDragOver, handleEditorDragLeave, handleEditorDrop]);
 
-  // Detach the editor drag-drop/paste listeners on unmount only. Note:
-  // intelligence-provider disposal lives in useIntelligenceProviders
-  // (mount-only).
+  // Detach the editor drag-drop listeners on unmount only.
   useEffect(() => {
     return () => {
       const domNode = editorRef.current?.getDomNode();
@@ -1431,10 +1094,9 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
         domNode.removeEventListener('dragover', stableEditorDragOver);
         domNode.removeEventListener('dragleave', stableEditorDragLeave);
         domNode.removeEventListener('drop', stableEditorDrop);
-        domNode.removeEventListener('paste', stableEditorPaste, true);
       }
     };
-  }, [stableEditorDragOver, stableEditorDragLeave, stableEditorDrop, stableEditorPaste]);
+  }, [stableEditorDragOver, stableEditorDragLeave, stableEditorDrop]);
 
   // Handle deleting a file
   const handleDeleteFile = useCallback((file: FileEntry) => {
@@ -1545,13 +1207,13 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
       const result = await commitImport(outcome, qmdPath, defaultImportStorageDeps());
       if (result.ok) {
         setCurrentFile({ path: result.qmdPath, docId: result.qmdDocId });
-        setContent(result.qmd);
+        setEditorContent(result.qmd);
         setDiagnostics([]);
         onNavigateToFile(result.qmdPath, { replace: true });
       }
       return result;
     },
-    [onNavigateToFile, setContent]
+    [onNavigateToFile, setEditorContent]
   );
 
   // Place-file dialog confirmed: move an existing file or add a new one.
@@ -1779,26 +1441,22 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
                   options={{ readOnly: true, renderSideBySide: true, minimap: { enabled: false } }}
                 />
               ) : (
-              <MonacoEditor
-                // Key forces remount when switching files or branches
-                // (resets editor state cleanly)
-                key={`${currentFile?.path ?? ''}::${activeBranchId ?? 'main'}`}
-                // Blank fallback: monaco is bundled, so the only wait is the
-                // per-mount editor-instance creation (a frame or two) — the
-                // default "Loading..." text just flashes on every open and
-                // file switch.
-                loading=""
-                height="100%"
-                language={getLanguageForFile(currentFile?.path ?? '')}
-                theme={effectiveTheme === 'dark' ? 'quarto-dark' : 'quarto-light'}
-                // Use defaultValue instead of value to make Monaco uncontrolled.
-                // This prevents the wrapper from calling setValue() on re-renders,
-                // which would reset cursor position. We manage content via executeEdits().
-                defaultValue={content}
-                beforeMount={handleBeforeMount}
-                onChange={handleEditorChange}
+              <DocumentEditor
+                ref={documentEditorRef}
+                file={textFile}
+                fileContents={fileContents}
+                onContentOperations={onContentOperations}
+                theme={effectiveTheme}
+                markers={diagnosticMarkers}
+                readOnly={replayState.isActive}
+                replayActiveRef={replayActiveRef}
+                replayIsActive={replayState.isActive}
+                activeBranchId={activeBranchId}
+                presenceEnabled={activeBranchId === null}
+                wasmStatus={wasmStatus}
+                onContentChange={setContent}
+                onPresenceChange={setRemoteUsers}
                 onMount={handleEditorMount}
-                options={editorOptions}
               />
               )}
             </div>

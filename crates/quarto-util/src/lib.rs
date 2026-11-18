@@ -3,6 +3,7 @@
 pub mod data_dir;
 pub mod output_style;
 pub mod path;
+pub mod quarto_required;
 pub mod runtime_dir;
 pub mod user_status;
 pub mod verbose;

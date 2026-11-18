@@ -1,2 +1,3 @@
 project:
   title: Skip-to-content link tests
+quarto-required: "^2"

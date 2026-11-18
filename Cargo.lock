@@ -7864,6 +7864,7 @@ version = "0.47.0"
 dependencies = [
  "anstyle-query",
  "dirs",
+ "nodejs-semver",
  "serde",
  "supports-hyperlinks",
  "thiserror 2.0.21",

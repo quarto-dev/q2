@@ -36,3 +36,4 @@ crossref:
 format:
   typst:
     keep-typ: true
+quarto-required: "^2"

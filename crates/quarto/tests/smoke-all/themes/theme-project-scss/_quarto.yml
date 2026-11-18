@@ -5,3 +5,4 @@ format:
     theme:
       - vapor
       - !path custom-root.scss
+quarto-required: "^2"

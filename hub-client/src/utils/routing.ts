@@ -184,14 +184,24 @@ export interface JoinCollectionRoute {
  */
 export interface DevRoute {
   type: 'dev';
-  /** The dev page to render (e.g. 'projects-home', 'project-set-error') */
+  /** The dev page to render (e.g. 'projects-home', 'tokens') */
   page: string;
+}
+
+/**
+ * Route for the gallery of example pages shipped in every build.
+ *
+ * URL format: #/component-playground (gallery) or #/component-playground/<page> (one demo, e.g. 'simple-auth')
+ */
+export interface DemoRoute {
+  type: 'demo';
+  page?: string;
 }
 
 /**
  * Union of all possible routes.
  */
-export type Route = ProjectSelectorRoute | ProjectRoute | FileRoute | ShareRoute | LinkProjectSetRoute | JoinCollectionRoute | DevRoute;
+export type Route = ProjectSelectorRoute | ProjectRoute | FileRoute | ShareRoute | LinkProjectSetRoute | JoinCollectionRoute | DevRoute | DemoRoute;
 
 // ============================================================================
 // URL Parsing
@@ -336,6 +346,14 @@ export function parseHashRoute(hash: string): Route {
     return { type: 'project', projectId };
   }
 
+  // Parse demo routes: /component-playground and /component-playground/<page>. Unlike dev routes these
+  // ship everywhere.
+  if (segments[0] === 'component-playground') {
+    return segments[1]
+      ? { type: 'demo', page: decodeURIComponent(segments[1]) }
+      : { type: 'demo' };
+  }
+
   // Parse dev route: /dev/<page>. Parsed in development builds and in
   // VITE_E2E=1 test builds — the Playwright harness suite runs against a
   // production bundle served by `vite preview`, so DEV is false there and
@@ -422,6 +440,9 @@ export function buildHashRoute(route: Route): string {
 
     case 'dev':
       return `#/dev/${encodeURIComponent(route.page)}`;
+
+    case 'demo':
+      return route.page !== undefined ? `#/component-playground/${encodeURIComponent(route.page)}` : '#/component-playground';
   }
 }
 
@@ -591,6 +612,9 @@ export function routesEqual(a: Route, b: Route): boolean {
 
     case 'dev':
       return a.page === (b as DevRoute).page;
+
+    case 'demo':
+      return a.page === (b as DemoRoute).page;
   }
 }
 

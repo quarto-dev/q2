@@ -1,2 +1,3 @@
 project:
   title: Filter Tests
+quarto-required: "^2"

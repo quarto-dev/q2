@@ -4,3 +4,4 @@ project:
 
 website:
   title: "Components"
+quarto-required: "^2"
