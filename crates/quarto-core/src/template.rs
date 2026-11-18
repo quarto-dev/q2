@@ -1065,10 +1065,11 @@ pub fn render_with_template(
 /// * `meta` - Document metadata from the Pandoc AST (as ConfigValue).
 ///   Include slots are read from `meta.rendered.includes.{header,
 ///   before-body, after-body}` — populated upstream by
-///   [`IncludeResolveStage`](crate::stage::IncludeResolveStage). Authored
+///   [`IncludeResolveStage`](crate::stage::IncludeResolveStage). The
 ///   `header-includes` / `include-before` / `include-after` literals at the
 ///   top level are NOT read here; they are folded into `rendered.includes.*`
-///   by the resolve stage.
+///   by [`IncludeInlineFoldStage`](crate::stage::IncludeInlineFoldStage)
+///   after user filters run.
 /// * `css_paths` - Paths to CSS files (relative to output HTML)
 /// * `script_paths` - Paths to JS files (relative to output HTML)
 ///
@@ -1088,7 +1089,7 @@ pub fn render_with_compiled_template(
     // leak into the template context as variables. The authored
     // `header-includes` / `include-before` / `include-after` keys (Pandoc
     // inline-content form) are also excluded here so they don't shadow the
-    // resolved values. The resolve stage already folded them into
+    // resolved values. `IncludeInlineFoldStage` already folded them into
     // `rendered.includes.*`; reading them again here would double-count.
     add_metadata_to_context_except(
         meta,
