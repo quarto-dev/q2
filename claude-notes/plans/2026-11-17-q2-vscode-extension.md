@@ -501,3 +501,35 @@ P2 and P4.
   `quarto-services`) that the future manager would own? I lean toward
   `quarto-lsp` now and extracting the crate when a second host appears, to
   avoid guessing the manager's API with only one consumer.
+
+## As built
+
+- **P1 (bd-jnc96yah).** As designed. `Workspace::open_document_text`
+  gives the handler the buffer text without an analysis. The legend lives
+  in `crates/quarto-lsp/src/semantic_tokens.rs`. A test there reads
+  `editors/vscode/package.json` and fails if the extension's declared
+  custom types drift from the legend.
+- **P2 (bd-zeqx62cq).** As designed, plus a `@vscode/test-electron` smoke
+  test (`npm run test:smoke`) that checks tokens and the outline arrive in
+  a real VS Code. `@vscode/vsce` runs through `npx` rather than as a
+  devDependency, so the lockfile stays free of `keytar`'s native install
+  script.
+- **P3 (bd-y723xoye). Deviation: the session API stays in the `quarto`
+  binary crate** (`commands/preview_static.rs`: `run_session`,
+  `SessionEvent`, `SessionReady`, `SessionError`, `EventSink`). It is not
+  in `quarto-preview`. The driver is welded to `RenderArgs` /
+  `render_once` / `RenderReport`, which live in the binary crate, so a
+  move would mean abstracting the whole render report behind a trait. The
+  constraint D-E actually needs is "`quarto-lsp` doesn't depend on the
+  binary", and P4's injected launcher already satisfies it.
+  - `run_cli` is the terminal host.
+  - The stop future also races the boot render, so Ctrl-C during a long
+    first render still exits promptly. Before, the handler was installed
+    only after the boot render; Ctrl-C then killed the process by default
+    disposition.
+- **Stdout hygiene (for P4).** Auditing the render path found many child
+  spawns: engines, pandoc, typst, and user pre/post-render scripts. Some
+  of them inherit stdout. Rather than fix each call site, `q2 lsp` will
+  move JSON-RPC to a duplicate of fd 1 and point fd 1 at stderr
+  (`SetStdHandle` on Windows), so nothing else in the process, children
+  included, can write into the protocol stream.
