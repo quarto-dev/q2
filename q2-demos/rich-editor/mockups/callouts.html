@@ -689,7 +689,7 @@ function renderMenu() {
     for (const t of KINDS) item(kindIcon(t), NAME[t], () => choose(t), { check: c?.type === t })
   } else if (menu.kind === 'appearance') {
     for (const [a, name, sub] of [['default', 'Default', 'A tinted header, always'], ['simple', 'Simple', 'No tint; a header only for a title'], ['minimal', 'Minimal', 'No tint and no icon; a header only for a title']])
-      item('', name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub, hint: a === 'default' ? '' : `appearance="${a}"` })
+      item('', name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub })
   } else if (menu.kind === 'collapse') {
     for (const [v, name, sub] of [[null, 'Not collapsible', 'Always open'], [false, 'Starts open', 'Readers can collapse it'], [true, 'Starts collapsed', 'Readers open it to read it']])
       item('', name, () => change(c, () => { c.collapse = v; peek.delete(c.k) }), { check: c.collapse === v, sub, hint: v == null ? '' : `collapse="${v}"` })
