@@ -190,9 +190,11 @@ const GROUPS = [
     ['image', 'Inside its corner, as an image\'s', 'An image\'s hover bar (blocks.html), on a callout: icon buttons inside its top-right corner, over what\'s there, while the pointer\'s over its title. Kind, its current kind\'s icon, opens the kinds.'],
     ['toolbar', 'In the toolbar', 'With the caret in a callout, the toolbar grows a Callout section, as Google Docs\' does for a table.'],
   ]},
-  { key: 'kind', title: 'Choosing its kind', options: [
-    ['menu', 'A menu', 'The kinds by name, with their icons, the current one ticked.'],
-    ['row', 'A row of icons', 'The five icons side by side, their names in tooltips: quicker, once you know the icons.'],
+  // (Keyed 'kind', as it was before it covered appearance and collapsing,
+  // so addresses kept from then still work.)
+  { key: 'kind', title: 'Choosing a setting', options: [
+    ['menu', 'Menus', 'Its kind, appearance and collapsing each in a menu, by name, the current one marked.'],
+    ['row', 'Rows of icons', 'Each as a row of icons under its button, names in tooltips, the current one pressed: quicker, once you know the icons.'],
   ]},
   { key: 'create', title: 'Callout in the toolbar', options: [
     ['note', 'A note, then change it', 'Wraps the paragraph in a note at once; change its kind after.'],
@@ -397,6 +399,22 @@ const KIND_PATHS = {
   warning: '<path d="M7.938 2.016A.13.13 0 0 1 8.002 2a.13.13 0 0 1 .063.016.146.146 0 0 1 .054.057l6.857 11.667c.036.06.035.124.002.183a.163.163 0 0 1-.054.06.116.116 0 0 1-.066.017H1.146a.115.115 0 0 1-.066-.017.163.163 0 0 1-.054-.06.176.176 0 0 1 .002-.183L7.884 2.073a.147.147 0 0 1 .054-.057zm1.044-.45a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566z"/><path d="M7.002 12a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 5.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995z"/>',
   caution: '<path d="M9.97 4.88l.953 3.811C10.158 8.878 9.14 9 8 9c-1.14 0-2.159-.122-2.923-.309L6.03 4.88C6.635 4.957 7.3 5 8 5s1.365-.043 1.97-.12zm-.245-.978L8.97.88C8.718-.13 7.282-.13 7.03.88L6.274 3.9C6.8 3.965 7.382 4 8 4c.618 0 1.2-.036 1.725-.098zm4.396 8.613a.5.5 0 0 1 .037.96l-6 2a.5.5 0 0 1-.316 0l-6-2a.5.5 0 0 1 .037-.96l2.391-.598.565-2.257c.862.212 1.964.339 3.165.339s2.303-.127 3.165-.339l.565 2.257 2.391.598z"/>',
   important: '<path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995z"/>',
+}
+// Each appearance and each way of collapsing as a little callout: a box
+// with its thick left edge. Default's header is ruled off (where its tint
+// is); simple's isn't; minimal has no icon. Collapsing: no marker; a
+// chevron down (it starts open); only its header, chevron right (it starts
+// collapsed). In a picker of states the chevrons show a state, not a button.
+const MINI = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`
+const APPEARANCE_ICONS = {
+  default: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 4v16" stroke-width="2.8"/><path d="M3.5 10h17"/><circle cx="8" cy="7" r="1.1"/><path d="M11 7h6M7.5 14h9M7.5 17h6"/>'),
+  simple: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 4v16" stroke-width="2.8"/><circle cx="8" cy="8" r="1.1"/><path d="M11 8h6M7.5 13h9M7.5 16h6"/>'),
+  minimal: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 4v16" stroke-width="2.8"/><path d="M7.5 8.5h9M7.5 12h9M7.5 15.5h6"/>'),
+}
+const COLLAPSE_ICONS = {
+  null: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 10h17M7 7h7M7 14h10M7 17h6"/>'),
+  false: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 10h17M7 7h6M7 14h10M7 17h6M15.5 6.2l1.6 1.6 1.6-1.6"/>'),
+  true: MINI('<rect x="3.5" y="8.5" width="17" height="7" rx="1.5"/><path d="M7 12h6M16.3 10.4l1.6 1.6-1.6 1.6"/>'),
 }
 const kindIcon = (t) => `<svg viewBox="0 0 16 16" class="kicon k-${t}">${KIND_PATHS[t]}</svg>`
 // The same icon in a control: uncoloured, in the control's ink. Only the
@@ -746,30 +764,38 @@ function renderMenu() {
     list.append(b)
   }
   const heading = (t) => list.append(Object.assign(document.createElement('h3'), { textContent: t }))
+  // A setting's choices as a row of icons under its button, names (and what
+  // they mean) in tooltips, the current one pressed.
+  const row = (choices) => {
+    const bar = document.createElement('div')
+    bar.className = 'hbar hui'
+    bar.addEventListener('mousedown', (e) => e.preventDefault())
+    for (const ch of choices) {
+      const btn = document.createElement('button')
+      btn.innerHTML = ch.icon
+      btn.dataset.tip = ch.tip
+      btn.setAttribute('aria-label', ch.tip)
+      btn.setAttribute('aria-pressed', String(ch.on))
+      btn.onclick = ch.act
+      bar.append(btn)
+    }
+    place(bar, true)
+  }
+  const rows = opts.kind === 'row'
   if (menu.kind === 'kind' || menu.kind === 'create') {
     const choose = (t) => (menu.kind === 'create' ? wrap(t) : setKind(c, t))
-    if (opts.kind === 'row') {
-      const row = document.createElement('div')
-      row.className = 'hbar hui'
-      row.addEventListener('mousedown', (e) => e.preventDefault())
-      for (const t of KINDS) {
-        const btn = document.createElement('button')
-        btn.innerHTML = kindGlyph(t)
-        btn.dataset.tip = NAME[t]
-        btn.setAttribute('aria-pressed', String(c?.type === t))
-        btn.onclick = () => choose(t)
-        row.append(btn)
-      }
-      return place(row, true)
-    }
+    if (rows) return row(KINDS.map((t) => ({ icon: kindGlyph(t), tip: NAME[t], on: c?.type === t, act: () => choose(t) })))
     if (menu.kind === 'create') heading('A callout of this kind')
     for (const t of KINDS) item(kindGlyph(t), NAME[t], () => choose(t), { check: c?.type === t })
   } else if (menu.kind === 'appearance') {
-    for (const [a, name, sub] of [['default', 'Default', 'A tinted header, always'], ['simple', 'Simple', 'No tint; a header only for a title'], ['minimal', 'Minimal', 'No tint and no icon; a header only for a title']])
-      item('', name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub })
+    const choices = [['default', 'Default', 'A tinted header, always'], ['simple', 'Simple', 'No tint; a header only for a title'], ['minimal', 'Minimal', 'No tint and no icon; a header only for a title']]
+    if (rows) return row(choices.map(([a, name, sub]) => ({ icon: APPEARANCE_ICONS[a], tip: `${name}: ${sub.toLowerCase()}`, on: c.appearance === a, act: () => change(c, () => { c.appearance = a }) })))
+    for (const [a, name, sub] of choices) item('', name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub })
   } else if (menu.kind === 'collapse') {
-    for (const [v, name, sub] of [[null, 'Not collapsible', 'Always open'], [false, 'Starts open', 'Readers can collapse it'], [true, 'Starts collapsed', 'Readers open it to read it']])
-      item('', name, () => change(c, () => { c.collapse = v; peek.delete(c.k) }), { check: c.collapse === v, sub })
+    const choices = [[null, 'Not collapsible', 'Always open'], [false, 'Starts open', 'Readers can collapse it'], [true, 'Starts collapsed', 'Readers open it to read it']]
+    const set = (v) => () => change(c, () => { c.collapse = v; peek.delete(c.k) })
+    if (rows) return row(choices.map(([v, name, sub]) => ({ icon: COLLAPSE_ICONS[String(v)], tip: `${name}: ${sub.toLowerCase()}`, on: c.collapse === v, act: set(v) })))
+    for (const [v, name, sub] of choices) item('', name, set(v), { check: c.collapse === v, sub })
   } else if (menu.kind === 'more') {
     if (!showHeader(c)) item(ICONS.title, 'Add a title', () => addTitle(c))
     else if (c.title) item(ICONS.title, 'Remove the title', () => change(c, () => { c.title = ''; if (sel?.u === 't:' + c.k) sel = { u: 'p:' + c.body[0].k, o: 0 } }))
