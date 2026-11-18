@@ -722,3 +722,122 @@ fn scrollable_and_center_classes_reach_the_section() {
         "`.center` on the slide heading must land on its section; body:\n{body}"
     );
 }
+
+// ── math ─────────────────────────────────────────────────────────────────
+//
+// `MathJsStage` puts the engine's config and loader markup into `meta.math`;
+// the HTML templates print it through `$math$`. The reveal scaffold writes its
+// own `<head>`, so it must print the slot itself. Typesetting was measured in a
+// browser against Quarto 1 (see the revealjs math plan).
+
+const MATH_DECK_BODY: &str = "## Inline\n\nInline $e^{i\\pi}+1=0$ here.\n\n\
+     $$\\int_0^1 x^2\\,dx = \\frac13$$ {#eq-one}\n\n## Later\n\nSee @eq-one.\n";
+
+fn math_deck(method: Option<&str>) -> String {
+    let method_line = method
+        .map(|m| format!("html-math-method: {m}\n"))
+        .unwrap_or_default();
+    render_revealjs(&format!(
+        "---\nformat: revealjs\n{method_line}---\n\n{MATH_DECK_BODY}"
+    ))
+}
+
+/// The `<head>` of a rendered deck.
+fn head_markup(html: &str) -> &str {
+    &html[..html.find("</head>").expect("deck has </head>")]
+}
+
+/// Default engine (MathJax 3): the config block and the loader land in
+/// `<head>` once each, config first, and the math markup is intact.
+#[test]
+fn mathjax_loader_reaches_deck_head() {
+    let html = math_deck(None);
+    let head = head_markup(&html);
+    assert_eq!(
+        count(&html, "window.MathJax = {"),
+        1,
+        "one MathJax config block; head:\n{head}"
+    );
+    let config = head
+        .find("window.MathJax = {")
+        .expect("MathJax config must be in <head>");
+    let loader = head
+        .find(r#"<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js""#)
+        .expect("MathJax loader must be in <head>");
+    assert!(config < loader, "config must precede the loader");
+    assert!(
+        head.find("quarto-reveal.css").expect("stylesheet") < config,
+        "math must follow the deck stylesheets"
+    );
+    assert!(html.contains(r#"<span class="math inline">\(e^{i\pi}+1=0\)</span>"#));
+    assert!(
+        html.contains(r"\tag{1}"),
+        "the labelled equation keeps its tag"
+    );
+}
+
+/// `html-math-method: katex`: stylesheet, KaTeX, and the auto-render call.
+#[test]
+fn katex_loader_reaches_deck_head() {
+    let html = math_deck(Some("katex"));
+    let head = head_markup(&html);
+    assert!(
+        head.contains(
+            r#"<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.19.1/dist/katex.min.css">"#
+        ),
+        "KaTeX stylesheet in <head>; head:\n{head}"
+    );
+    assert!(head.contains(r#"<script defer src="https://cdn.jsdelivr.net/npm/katex@0.19.1/dist/katex.min.js"></script>"#));
+    assert!(head.contains("renderMathInElement(document.body"));
+    assert!(!html.contains("MathJax"), "KaTeX deck loads no MathJax");
+}
+
+/// A deck without math loads no engine.
+#[test]
+fn deck_without_math_loads_no_engine() {
+    let html = render_revealjs("---\nformat: revealjs\n---\n\n## S\n\nNo math.\n");
+    assert!(!html.contains("MathJax"), "no MathJax without math");
+    assert!(!html.contains("katex"), "no KaTeX without math");
+}
+
+/// `plain`, `webtex` and `gladtex` leave `meta.math` unset, as in the HTML
+/// format: the deck keeps the math markup and loads no engine.
+#[test]
+fn unsupported_math_methods_load_no_engine() {
+    for method in ["plain", "webtex", "gladtex"] {
+        let html = math_deck(Some(method));
+        assert!(
+            !html.contains("MathJax") && !html.contains("katex"),
+            "`html-math-method: {method}` must load no engine"
+        );
+    }
+}
+
+/// `html-math-method: mathml` converts every expression in the AST, so no
+/// loader is needed and none is added.
+#[test]
+fn mathml_deck_needs_no_loader() {
+    let html = math_deck(Some("mathml"));
+    assert!(html.contains("<math"), "math converted to MathML");
+    assert!(
+        !html.contains("MathJax"),
+        "no loader for a fully converted deck"
+    );
+}
+
+/// Math in a callout, a table, and a speaker note is found and the loader is
+/// added (the deck has no other math).
+#[test]
+fn math_in_callout_table_and_notes_loads_engine() {
+    for body in [
+        "## S\n\n::: {.callout-note}\nIn a callout $x^2$.\n:::\n",
+        "## S\n\n| a | b |\n|---|---|\n| $y^2$ | 1 |\n",
+        "## S\n\nText.\n\n::: {.notes}\nNote $z^2$.\n:::\n",
+    ] {
+        let html = render_revealjs(&format!("---\nformat: revealjs\n---\n\n{body}"));
+        assert!(
+            head_markup(&html).contains("window.MathJax = {"),
+            "math must load the engine for body:\n{body}"
+        );
+    }
+}
