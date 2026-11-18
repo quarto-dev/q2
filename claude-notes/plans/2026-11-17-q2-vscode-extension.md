@@ -533,3 +533,42 @@ P2 and P4.
   move JSON-RPC to a duplicate of fd 1 and point fd 1 at stderr
   (`SetStdHandle` on Windows), so nothing else in the process, children
   included, can write into the protocol stream.
+- **P4 (bd-foum4ql3).** As designed, plus these details:
+  - **`quarto-lsp`.**
+    - `preview.rs` has `HostServices`, `PreviewLauncher`/`PreviewSession`
+      and `PreviewEvent`, plus a transport-free `PreviewRegistry`. Each
+      registry call returns the messages to send, so it is unit-tested
+      with a fake launcher.
+    - `stdio.rs` is the stdout redirect described above.
+    - `run_server_with` / `serve_with` take the services, and
+      `experimental.quarto.preview: 1` is advertised only when there is
+      a launcher.
+  - **The `quarto` binary.** `commands/lsp.rs` implements the launcher on
+    `run_session`. It uses one lazily created multi-threaded runtime,
+    a kernel scope per session (dropped on the server thread), and
+    `session_root` as the dedup key. `SessionReady.pages` (a merged
+    `PageIndex`) lets a second document in the same project get its own
+    page URL.
+  - **Wire shapes.**
+    - `previewStart {textDocument, format?}` returns
+      `{previewId, url, root}`.
+    - `previewStop {previewId}` returns `null`.
+    - `previewStatus {previewId, state}`, where `state` is one of:
+      - `ready` (with `url`);
+      - `rendering`;
+      - `rendered` (with `ok`, `errors`, `warnings`, `text`);
+      - `stopped` (with `error?`).
+    - A different `format` for a running root replaces the session.
+  - **Tests.** `crates/quarto/tests/integration/lsp_preview.rs` drives
+    the real binary over framed stdio:
+    - serving a page, reuse within a project, re-rendering on edit,
+      stop, and `exit` closing the port;
+    - an epub document failing the start request;
+    - two projects previewing at once.
+
+    A pre-render script that prints to stdout proves the protocol stays
+    clean. A negative control (redirect disabled) fails that test.
+  - **Windows.** `quarto` and `quarto-lsp` can't be cross-checked from
+    macOS (C build scripts). The `stdio.rs` Windows branch was
+    type-checked in a scratch crate with the same dependencies, but it
+    needs a native Windows run.

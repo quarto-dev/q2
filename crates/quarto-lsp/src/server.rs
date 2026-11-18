@@ -32,6 +32,10 @@ use serde_json::Value;
 
 use crate::capabilities::server_capabilities;
 use crate::convert;
+use crate::preview::{
+    HostServices, PREVIEW_PROTOCOL_VERSION, PREVIEW_START, PREVIEW_STOP, PreviewEvent,
+    PreviewRegistry, PreviewRequest,
+};
 
 /// The one client a stdio server talks to.
 const CLIENT: ClientId = 0;
@@ -67,8 +71,17 @@ impl InitOptions {
 
 /// Run the LSP server over stdio until the client exits.
 pub fn run_server() -> Result<()> {
-    let (connection, io_threads) = Connection::stdio();
-    serve(connection)?;
+    run_server_with(HostServices::default())
+}
+
+/// [`run_server`] with host-provided services (previews; bd-foum4ql3).
+///
+/// Stdout is reserved for JSON-RPC: the process's own stdout is pointed at
+/// stderr first (see [`crate::stdio`]), so renders and their child
+/// processes cannot corrupt the protocol.
+pub fn run_server_with(services: HostServices) -> Result<()> {
+    let (connection, io_threads) = crate::stdio::protocol_stdio()?;
+    serve_with(connection, services)?;
     // The reader thread stops on `exit` even when the client keeps stdin
     // open, so this join does not hang (the bug q2 hub-lsp found in
     // tower-lsp; see its plan).
@@ -79,14 +92,23 @@ pub fn run_server() -> Result<()> {
 /// Run the server over an established connection (stdio, or an in-memory
 /// pair in tests) until `exit`.
 pub fn serve(connection: Connection) -> Result<()> {
+    serve_with(connection, HostServices::default())
+}
+
+/// [`serve`] with host-provided services.
+pub fn serve_with(connection: Connection, services: HostServices) -> Result<()> {
     let (id, params) = connection.initialize_start()?;
     let options = InitOptions::from_json(params.get("initializationOptions"));
     let client_watches = params
         .pointer("/capabilities/workspace/didChangeWatchedFiles/dynamicRegistration")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let mut capabilities = serde_json::to_value(server_capabilities())?;
+    if services.previews.is_some() {
+        capabilities["experimental"]["quarto"]["preview"] = PREVIEW_PROTOCOL_VERSION.into();
+    }
     let result = serde_json::json!({
-        "capabilities": server_capabilities(),
+        "capabilities": capabilities,
         "serverInfo": {
             "name": "quarto-lsp",
             // The effective Quarto version (nightly override aware,
@@ -102,13 +124,20 @@ pub fn serve(connection: Connection) -> Result<()> {
     if let Some(sweep) = options.sweep {
         config.sweep = sweep;
     }
-    Host::new(connection, Workspace::new(config), client_watches).run()
+    let mut host = Host::new(connection, Workspace::new(config), client_watches);
+    host.previews = services.previews.map(PreviewRegistry::new);
+    let result = host.run();
+    if let Some(previews) = host.previews.as_mut() {
+        previews.stop_all();
+    }
+    result
 }
 
 enum Event {
     Lsp(Message),
     Job(JobOutput),
     Files(Vec<FileChange>),
+    Preview(String, PreviewEvent),
 }
 
 struct Host {
@@ -122,12 +151,17 @@ struct Host {
     /// Kept alive for as long as their roots are watched.
     watchers: Vec<notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>>,
     next_request: i32,
+    /// Preview sessions, when the host provides a launcher.
+    previews: Option<PreviewRegistry>,
+    preview_tx: Sender<(String, PreviewEvent)>,
+    preview_rx: Receiver<(String, PreviewEvent)>,
 }
 
 impl Host {
     fn new(connection: Connection, workspace: Workspace, client_watches: bool) -> Self {
         let (jobs_tx, jobs_rx) = crossbeam_channel::unbounded();
         let (files_tx, files_rx) = crossbeam_channel::unbounded();
+        let (preview_tx, preview_rx) = crossbeam_channel::unbounded();
         Self {
             connection,
             workspace,
@@ -138,10 +172,13 @@ impl Host {
             files_rx,
             watchers: Vec::new(),
             next_request: 0,
+            previews: None,
+            preview_tx,
+            preview_rx,
         }
     }
 
-    fn run(mut self) -> Result<()> {
+    fn run(&mut self) -> Result<()> {
         loop {
             let first = select! {
                 recv(self.connection.receiver) -> m => match m {
@@ -150,6 +187,10 @@ impl Host {
                 },
                 recv(self.jobs_rx) -> j => Event::Job(j.expect("the host holds a sender")),
                 recv(self.files_rx) -> f => Event::Files(f.expect("the host holds a sender")),
+                recv(self.preview_rx) -> p => {
+                    let (id, event) = p.expect("the host holds a sender");
+                    Event::Preview(id, event)
+                }
             };
             if self.handle(first)? {
                 return Ok(());
@@ -162,6 +203,8 @@ impl Host {
                     Event::Job(j)
                 } else if let Ok(f) = self.files_rx.try_recv() {
                     Event::Files(f)
+                } else if let Ok((id, event)) = self.preview_rx.try_recv() {
+                    Event::Preview(id, event)
                 } else {
                     break;
                 };
@@ -195,6 +238,13 @@ impl Host {
                 let outputs = self.workspace.handle(Input::JobDone(output));
                 self.apply(outputs);
             }
+            Event::Preview(id, event) => {
+                if let Some(previews) = self.previews.as_mut() {
+                    for message in previews.event(&id, event) {
+                        self.send(message);
+                    }
+                }
+            }
             Event::Files(changes) => {
                 let outputs = self.workspace.handle(Input::Files(changes));
                 self.apply(outputs);
@@ -204,6 +254,10 @@ impl Host {
     }
 
     fn request(&mut self, req: Request) {
+        if req.method == PREVIEW_START || req.method == PREVIEW_STOP {
+            self.preview_request(req);
+            return;
+        }
         let response = match req.method.as_str() {
             lsp_types::request::DocumentSymbolRequest::METHOD => {
                 match text_document_uri(&req.params) {
@@ -234,6 +288,49 @@ impl Host {
             ),
         };
         self.send(response.into());
+    }
+
+    /// `quarto/previewStart` / `quarto/previewStop` (bd-foum4ql3). A
+    /// start is answered once its session is ready, from the event arm.
+    fn preview_request(&mut self, req: Request) {
+        let Some(previews) = self.previews.as_mut() else {
+            self.send(
+                Response::new_err(
+                    req.id,
+                    ErrorCode::MethodNotFound as i32,
+                    format!("{} is not available in this server", req.method),
+                )
+                .into(),
+            );
+            return;
+        };
+        let messages = if req.method == PREVIEW_START {
+            let path = text_document_uri(&req.params).and_then(|uri| uri.to_file_path());
+            match path {
+                Some(path) => {
+                    let format = req
+                        .params
+                        .get("format")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                    let tx = self.preview_tx.clone();
+                    previews.start(req.id, PreviewRequest { path, format }, move |id| {
+                        Box::new(move |event| {
+                            let _ = tx.send((id.clone(), event));
+                        })
+                    })
+                }
+                None => vec![invalid_params(req.id, "missing or non-file textDocument.uri").into()],
+            }
+        } else {
+            match req.params.get("previewId").and_then(Value::as_str) {
+                Some(preview_id) => previews.stop(req.id, preview_id),
+                None => vec![invalid_params(req.id, "missing previewId").into()],
+            }
+        };
+        for message in messages {
+            self.send(message);
+        }
     }
 
     /// `textDocument/semanticTokens/full` (bd-xnpyb2vv P1): highlight
