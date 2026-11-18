@@ -77,6 +77,9 @@ button.icon svg { width:20px; height:20px; display:block; }
 .callout .title { flex:1; min-width:4ch; }
 .callout .title:empty::before { content:attr(data-ph); color:inherit; }
 .callout .title.ghost:empty::before { color:var(--faint); font-weight:400; }
+/* A callout with nothing in it: its one empty line, as the editor's empty
+   document has it. */
+.callout p.ph:empty::before { content:attr(data-ph); color:var(--faint); pointer-events:none; }
 .callout .num { white-space:pre; }
 /* .9 of the body's 17px (15.3px), as rendered. */
 .callout-body-container { font-size:.9em; }
@@ -446,6 +449,23 @@ function smallButton(name, icon, kind, c, pressed = false) {
   return opener(b, kind, c)
 }
 
+/** A callout's paragraphs; with nothing in it, its one line shows "Start writing…". */
+function bodyEls(c) {
+  const els = c.body.map((p) => textEl('p', 'p:' + p.k, p.text))
+  if (isEmptyBody(c)) { els[0].classList.add('ph'); els[0].dataset.ph = 'Start writing…' }
+  return els
+}
+const isEmptyBody = (c) => c.body.length === 1 && !c.body[0].text
+/**
+ * Put a paragraph in a callout. Into one with nothing in it, it takes the
+ * place of its empty line, so moving its only paragraph out and back in
+ * leaves it as it was.
+ */
+function putInCallout(c, i, blk) {
+  if (isEmptyBody(c) && c.body[0] !== blk) c.body.splice(0, 1, blk)
+  else c.body.splice(i, 0, blk)
+}
+
 function renderBlock(b) {
   if (b.tag !== 'callout') return textEl(b.tag, 'p:' + b.k, b.text)
   const c = b
@@ -505,7 +525,7 @@ function renderBlock(b) {
     if (shown) {
       const body = document.createElement('div')
       body.className = 'callout-body-container callout-body'
-      body.append(...c.body.map((p) => textEl('p', 'p:' + p.k, p.text)))
+      body.append(...bodyEls(c))
       box.append(body)
     }
   } else {
@@ -515,7 +535,7 @@ function renderBlock(b) {
     if (icon) row.append(kslot())
     const body = document.createElement('div')
     body.className = 'callout-body-container'
-    body.append(...c.body.map((p) => textEl('p', 'p:' + p.k, p.text)))
+    body.append(...bodyEls(c))
     row.append(body)
     box.append(row)
     if (opts.controls === 'header') box.append(cbar())
@@ -918,9 +938,9 @@ function hoveredBlock(e) {
   if (e.target.closest?.('.grip')) return grip
   if (e.target.closest?.('.hui')) return null
   const x = e.clientX, y = e.clientY, er = editor.getBoundingClientRect()
-  // Only near the handles: in the gutter, or the left quarter of the text,
-  // so they don't flicker beside everything the pointer crosses.
-  if (x < er.left - 70 || x > er.left + er.width / 4) return null
+  // Only near the handles: in the gutter, or the left 12% of the text, so
+  // they don't flicker beside everything the pointer crosses.
+  if (x < er.left - 70 || x > er.left + er.width * 0.12) return null
   for (const el of editor.children) {
     const r = el.getBoundingClientRect(), cs = getComputedStyle(el)
     if (y < r.top - parseFloat(cs.marginTop) / 2 || y > r.bottom + parseFloat(cs.marginBottom) / 2) continue
@@ -1055,7 +1075,9 @@ function moveBlock(k, at) {
   const loc = locate('p:' + k)
   const [blk] = loc.list.splice(loc.i, 1)
   const i = at.list === loc.list && loc.i < at.i ? at.i - 1 : at.i
-  at.list.splice(i, 0, blk)
+  const into = doc.find((b) => b.tag === 'callout' && b.body === at.list)
+  if (into) putInCallout(into, i, blk)
+  else at.list.splice(i, 0, blk)
   // A callout keeps a line to type in.
   if (loc.c && !loc.c.body.length) loc.c.body.push(para(''))
   render()
@@ -1084,7 +1106,7 @@ function moveByKey(loc, dir) {
   if (!next) return
   record()
   doc.splice(i, 1)
-  if (next.tag === 'callout' && blk.tag === 'p' && bodyShown(next)) next.body.splice(dir < 0 ? next.body.length : 0, 0, blk)
+  if (next.tag === 'callout' && blk.tag === 'p' && bodyShown(next)) putInCallout(next, dir < 0 ? next.body.length : 0, blk)
   else doc.splice(i + dir, 0, blk)
   render()
 }
