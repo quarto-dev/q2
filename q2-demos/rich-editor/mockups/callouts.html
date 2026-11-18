@@ -534,6 +534,23 @@ function setCollapse(c, v) {
   c.collapse = v
   if (bodyShown(c) !== shown) peek.has(c.k) ? peek.delete(c.k) : peek.add(c.k)
 }
+/**
+ * Title, as an image's Caption: pressed while it has one; clicked, the caret
+ * goes into it. With none, its header comes back with "Add a title" (a
+ * simple or minimal one shows none without a title), and goes again if it's
+ * left empty. Always in the bar, so it's always found in the same place.
+ */
+function titleButton(c, inToolbar = false) {
+  const b = document.createElement('button')
+  if (inToolbar) { b.className = 'pick'; b.textContent = 'Title' }
+  else { b.innerHTML = ICONS.title; b.dataset.tip = 'Title' }
+  b.classList.add('hui')
+  b.setAttribute('aria-label', 'Title')
+  b.setAttribute('aria-pressed', String(Boolean(c.title)))
+  b.onmousedown = (e) => e.preventDefault()
+  b.onclick = (e) => { e.stopPropagation(); addTitle(c) }
+  return b
+}
 function collapseButton(c, inToolbar = false) {
   const b = document.createElement('button')
   if (inToolbar) { b.className = 'pick'; b.textContent = 'Collapsible' }
@@ -567,7 +584,7 @@ function renderBlock(b) {
     const bar = document.createElement('span')
     bar.className = 'cbar'
     if (!icon) bar.append(smallButton(`Kind: ${NAME[c.type]}`, kindGlyph(c.type), 'kind', c))
-    bar.append(smallButton('Appearance', ICONS.appearance, 'appearance', c), collapseButton(c), smallButton('More', ICONS.more, 'more', c))
+    bar.append(titleButton(c), smallButton('Appearance', ICONS.appearance, 'appearance', c), collapseButton(c), smallButton('More', ICONS.more, 'more', c))
     return bar
   }
   const shown = bodyShown(c)
@@ -710,7 +727,7 @@ function renderToolbar() {
       bar.append(b)
     }
   } else bar.append(pick(NAME[c.type], kindGlyph(c.type), 'kind', 'Kind'))
-  bar.append(pick({ default: 'Default', simple: 'Simple', minimal: 'Minimal' }[c.appearance], '', 'appearance', 'Appearance'),
+  bar.append(titleButton(c, true), pick({ default: 'Default', simple: 'Simple', minimal: 'Minimal' }[c.appearance], '', 'appearance', 'Appearance'),
     collapseButton(c, true))
   const more = toolButton('More', ICONS.more, (b) => toggleMenu('more', c.k, b))
   more.classList.add('hui')
@@ -769,7 +786,7 @@ function renderLayer() {
         const kb = b('Kind', `${kindGlyph(c.type)}<span>${NAME[c.type]}</span>`, 'kind', true)
         bar.append(kb, Object.assign(document.createElement('span'), { className: 'vsep' }))
       }
-      bar.append(b('Appearance', ICONS.appearance, 'appearance'), collapseButton(c), b('More', ICONS.more, 'more'))
+      bar.append(titleButton(c), b('Appearance', ICONS.appearance, 'appearance'), collapseButton(c), b('More', ICONS.more, 'more'))
       layer.append(bar)
       const r = el.getBoundingClientRect()
       if (asImage) {
@@ -858,8 +875,7 @@ function renderMenu() {
     if (opts.appearancePick === 'row') return row(choices.map(([a, name, sub]) => ({ icon: APPEARANCE_ICONS[a], tip: `${name}: ${sub.toLowerCase()}`, on: c.appearance === a, act: () => change(c, () => { c.appearance = a }) })))
     for (const [a, name, sub] of choices) item('', name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub })
   } else if (menu.kind === 'more') {
-    if (!showHeader(c)) item(ICONS.title, 'Add a title', () => addTitle(c))
-    else if (c.title) item(ICONS.title, 'Remove the title', () => change(c, () => { c.title = ''; if (sel?.u === 't:' + c.k) sel = { u: 'p:' + c.body[0].k, o: 0 } }))
+    if (c.title) item(ICONS.title, 'Remove the title', () => change(c, () => { c.title = ''; if (sel?.u === 't:' + c.k) sel = { u: 'p:' + c.body[0].k, o: 0 } }))
     item(ICONS.icon, 'Icon', () => change(c, () => { c.icon = !c.icon }), { check: hasIcon(c), disabled: c.appearance === 'minimal', hint: c.appearance === 'minimal' ? 'minimal has none' : '' })
     // Named for what it does, as Add / Remove the title is: no on/off state
     // to read. Collapsible callouts start collapsed (collapse="true"); this
@@ -906,7 +922,10 @@ editor.addEventListener('input', (e) => {
   // Empty, it's truly empty, so its placeholder shows.
   if (!el.textContent) { el.replaceChildren(); setCaret(el, 0) }
   if (loc.title) {
+    // Its Title button is pressed while it has one: redrawn when that turns.
+    const had = Boolean(loc.c.title)
     loc.c.title = el.textContent
+    if (had !== Boolean(loc.c.title)) renderLayer()
     const num = el.parentElement.querySelector('.num')
     if (num) num.textContent = `${NAME[loc.c.type]} ${numberOf(loc.c)}: `
   } else loc.blk.text = el.textContent
