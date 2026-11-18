@@ -205,8 +205,8 @@ const GROUPS = [
     ['menu', 'A menu', 'The appearances by name, each with what it means.'],
   ]},
   { key: 'collapsePick', title: 'Choosing how it collapses', options: [
-    ['menu', 'A menu', 'Off, Open and Collapsed by name, each with what readers can do.'],
-    ['row', 'A row of icons', 'A little callout for each, under its button; names and what they mean in tooltips.'],
+    ['menu', 'A menu', 'Off, Open and Collapsed by name.'],
+    ['row', 'A row of icons', 'A little callout for each, under its button; names in tooltips.'],
   ]},
   { key: 'create', title: 'Callout in the toolbar', options: [
     ['note', 'A note, then change it', 'Wraps the paragraph in a note at once; change its kind after.'],
@@ -803,10 +803,10 @@ function renderMenu() {
     if (opts.appearancePick === 'row') return row(choices.map(([a, name, sub]) => ({ icon: APPEARANCE_ICONS[a], tip: `${name}: ${sub.toLowerCase()}`, on: c.appearance === a, act: () => change(c, () => { c.appearance = a }) })))
     for (const [a, name, sub] of choices) item('', name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub })
   } else if (menu.kind === 'collapse') {
-    const choices = [[null, 'Off', 'Readers can\'t collapse it'], [false, 'Open', 'Starts open; readers can collapse it'], [true, 'Collapsed', 'Starts collapsed; readers open it to read it']]
+    const choices = [[null, 'Off'], [false, 'Open'], [true, 'Collapsed']]
     const set = (v) => () => change(c, () => { c.collapse = v; peek.delete(c.k) })
-    if (opts.collapsePick === 'row') return row(choices.map(([v, name, sub]) => ({ icon: COLLAPSE_ICONS[String(v)], tip: `${name}: ${sub.toLowerCase()}`, on: c.collapse === v, act: set(v) })))
-    for (const [v, name, sub] of choices) item('', name, set(v), { check: c.collapse === v, sub })
+    if (opts.collapsePick === 'row') return row(choices.map(([v, name]) => ({ icon: COLLAPSE_ICONS[String(v)], tip: `Collapsing: ${name}`, on: c.collapse === v, act: set(v) })))
+    for (const [v, name] of choices) item('', name, set(v), { check: c.collapse === v })
   } else if (menu.kind === 'more') {
     if (!showHeader(c)) item(ICONS.title, 'Add a title', () => addTitle(c))
     else if (c.title) item(ICONS.title, 'Remove the title', () => change(c, () => { c.title = ''; if (sel?.u === 't:' + c.k) sel = { u: 'p:' + c.body[0].k, o: 0 } }))
