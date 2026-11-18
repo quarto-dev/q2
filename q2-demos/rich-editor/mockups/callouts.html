@@ -160,6 +160,13 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 
 /* Things laid over the page. */
 #layer { position:fixed; inset:0; pointer-events:none; z-index:20; }
+/* A selection across lines, the editor's own (the browser's can't cross
+   from one line to another here): under the menus, multiplied over the page
+   so the text shows through a solid colour. */
+#selayer { position:fixed; inset:0; pointer-events:none; z-index:19; mix-blend-mode:multiply; }
+.sel-box { position:absolute; background:#b9d3fb; }
+.sel-block { border-radius:4px; }
+#editor.xsel ::selection { background:transparent; }
 .hbar { position:absolute; pointer-events:auto; display:flex; align-items:center; gap:2px; background:#fff; border-radius:7px; padding:3px;
   box-shadow:0 0 0 1px rgba(15,15,15,.06), 0 3px 10px rgba(15,15,15,.14); }
 .hbar button { width:28px; height:28px; display:grid; place-items:center; padding:0; border:0; background:none; border-radius:6px; cursor:pointer; color:#37352f; }
@@ -224,6 +231,7 @@ body.dragging, body.dragging * { cursor:grabbing !important; user-select:none; }
         Try changing kinds, appearances and collapsing on the callouts below, and making one with <b>Callout</b> in the toolbar (with the caret in it again, the same button takes it away and keeps its contents).
         Some settings take away the place other settings live: a simple or minimal callout has no header without a title, and a minimal one has no icon. Changing the kind of a numbered one renames its label (<code>#nte-</code> → <code>#tip-</code>) and the references to it.
         To move a block, drag the handle that shows in the gutter beside it: a callout goes between blocks; a paragraph goes between blocks or into a callout (and out of one). ⌥⇧↑ and ⌥⇧↓ move the block with the caret a step at a time, into and out of callouts; with the caret in a callout's title, they move the callout.
+        Select across blocks with Shift and an arrow, a Shift-click or a drag: into and out of callouts, and from a callout's text up through its title. The choices on the left say what that selects at a callout's edges; Backspace, typing and copy (as qmd) then act on what's shown selected.
         The choices on the left change how the controls work; the address keeps them.
       </div>
       <div class="page">
@@ -233,6 +241,7 @@ body.dragging, body.dragging * { cursor:grabbing !important; user-select:none; }
   </div>
   <div class="source"><h2>Source (qmd)</h2><div id="source"></div></div>
 </div>
+<div id="selayer"></div>
 <div id="layer"></div>
 
 <script>
@@ -267,6 +276,20 @@ const GROUPS = [
   { key: 'collapse', title: 'A callout that starts collapsed', options: [
     ['faithful', 'Collapsed here too', 'Only its header shows, as when rendered. Its chevron opens it here without changing the document; how it starts is in its settings.'],
     ['open', 'Always open here', 'Its body always shows while editing. The chevron shows how it starts when rendered, and clicking it changes that.'],
+  ]},
+  // A selection with its ends in different places (outside and in a
+  // callout; its title and its text) grows to cover what it's partly over,
+  // whole, as table cells do in Word and Google Docs. Where it is decides
+  // only what's selected, never how it got there: Shift and an arrow back
+  // the other way give back the selection before.
+  { key: 'select', title: 'Selecting into a callout', options: [
+    ['whole', 'The whole callout', 'From outside, Shift and an arrow select all of a callout in one step, then on past it. From inside out, the selection takes all of the callout with it; back inside, it\'s text again.'],
+    ['text', 'Its text, as any lines', 'Shift and an arrow go on into a callout\'s title and text a line (or character) at a time. Deleting keeps the callout and what\'s left in it. (A collapsed one is still selected whole.)'],
+  ]},
+  { key: 'crossTitle', title: 'Selecting from its title into its text', options: [
+    ['callout', 'The whole callout', 'One end in its title, one in its text: the callout is selected, as from outside it. Deleting takes it away.'],
+    ['all', 'All of its title and text', 'All of what\'s in it, not the callout: deleting empties its title and text and keeps it.'],
+    ['text', 'As any lines', 'From the middle of its text to the middle of its title, as across any two lines. Deleting keeps both, never joining a title and a paragraph.'],
   ]},
 ]
 const opts = Object.fromEntries(GROUPS.map((g) => [g.key, g.options[0][0]]))
@@ -722,6 +745,7 @@ function renderBlock(b) {
 
 function placeCaret() {
   if (!sel) return
+  if (sel.anchor) { getSelection().removeAllRanges(); return editor.focus({ preventScroll: true }) }
   if (sel.gap != null) return editor.focus({ preventScroll: true })
   let el = editor.querySelector(`[data-u="${sel.u}"]`)
   if (!el) return
@@ -821,6 +845,7 @@ const calloutByKey = (k) => doc.find((b) => b.k === k && b.tag === 'callout')
 
 function renderLayer() {
   layer.replaceChildren()
+  renderSelection()
   if (drag) return
   renderGrip()
   renderGapCaret()
@@ -1051,6 +1076,8 @@ editor.addEventListener('keydown', (e) => {
     return moveByKey(loc, e.key === 'ArrowUp' ? -1 : 1)
   }
   if (e.metaKey || e.ctrlKey || e.altKey) return
+  // Shift with an arrow selects (selecting), within a line the browser's way.
+  if (e.shiftKey && e.key.startsWith('Arrow')) return
   if (e.key === 'Enter') {
     e.preventDefault()
     if (loc.title) {
@@ -1203,6 +1230,8 @@ document.addEventListener('keydown', (e) => {
 
 // Where the caret is: the toolbar, the source and the controls follow it.
 document.addEventListener('selectionchange', () => {
+  // A drag across lines: the selection is the editor's (selecting).
+  if (dragging) return
   const el = document.activeElement?.closest?.('[data-u]')
   if (!el || !editor.contains(el)) return
   const at = caretIn(el)
@@ -1340,6 +1369,440 @@ page.addEventListener('mousedown', (e) => {
   toGapAt(i)
 })
 page.addEventListener('mousemove', (e) => { page.style.cursor = gapAt(e) == null ? '' : 'text' })
+
+// ----------------------------------------------------------- selecting
+// Each line here is its own editable element, so the browser's selection
+// stays in one. Within a line it's the browser's; once one end leaves the
+// line, the selection is the editor's: sel = { anchor, focus }, where a
+// position is { u, o } in a line or { edge: i } between blocks i - 1 and i,
+// painted on #selayer. What it covers (effective) is up to where its ends
+// are, never how they got there (opts.select, opts.crossTitle).
+const selLayer = document.getElementById('selayer')
+const unitEl = (u) => editor.querySelector(`[data-u="${u}"]`)
+const unitText = (u) => { const loc = locate(u); return loc.title ? loc.c.title : loc.blk.text }
+/** Positions in reading order: an edge comes before the block it's before. */
+function posKey(p) {
+  if (p.edge != null) return [p.edge, -1, 0]
+  const b = blockOf(p.u)
+  return [b, unitsOf(b).indexOf(p.u), p.o]
+}
+function cmp(p, q) {
+  const a = posKey(p), b = posKey(q)
+  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2]
+}
+/** The callout a position's in, and which part of it: its title (t) or its text (b). */
+function partOf(p) {
+  if (p.u == null) return null
+  const loc = locate(p.u)
+  return loc?.c ? { c: loc.c, part: loc.title ? 't' : 'b' } : null
+}
+const inCallout = (p, c) => partOf(p)?.c === c
+// Selected whole: from outside it in, as opts.select says (a collapsed one
+// always, its text being out of sight).
+const wholeFromOutside = (c) => opts.select === 'whole' || !bodyShown(c)
+
+/** What the selection covers: [start, end]. */
+function effective(a = sel.anchor, f = sel.focus) {
+  let [s, e] = cmp(a, f) <= 0 ? [a, f] : [f, a]
+  const ps = partOf(s), pe = partOf(e)
+  if (ps?.c !== pe?.c) {
+    if (ps && wholeFromOutside(ps.c)) s = { edge: doc.indexOf(ps.c) }
+    if (pe && wholeFromOutside(pe.c)) e = { edge: doc.indexOf(pe.c) + 1 }
+  } else if (ps && ps.part !== pe.part) {
+    const c = ps.c, i = doc.indexOf(c)
+    if (opts.crossTitle === 'callout') { s = { edge: i }; e = { edge: i + 1 } }
+    else if (opts.crossTitle === 'all') { const last = c.body.at(-1); s = { u: 't:' + c.k, o: 0 }; e = { u: 'p:' + last.k, o: last.text.length } }
+  }
+  return [s, e]
+}
+/** What of line u [start, end] covers, as [from, to] offsets; null for none of it. */
+function cover(u, s, e) {
+  const uS = { u, o: 0 }, uE = { u, o: unitText(u).length }
+  const from = cmp(s, uS) > 0 ? s : uS, to = cmp(e, uE) < 0 ? e : uE
+  return cmp(from, to) > 0 ? null : [from.o, to.o]
+}
+/** Whether block i, as a block (a callout itself, not its text), is in [s, e]. */
+const blockIn = (i, s, e) => cmp(s, { edge: i }) <= 0 && cmp(e, { edge: i + 1 }) >= 0
+/** Whether all of what's in block i is in [s, e]. */
+function allOf(i, s, e) {
+  const us = unitsOf(i)
+  if (!us.length || blockIn(i, s, e)) return blockIn(i, s, e)
+  return cmp(s, { u: us[0], o: 0 }) <= 0 && cmp(e, { u: us.at(-1), o: unitText(us.at(-1)).length }) >= 0
+}
+
+// ---- where things are on the page
+/** Offset in el of a point in it. */
+function offsetIn(el, node, off) {
+  const r = document.createRange()
+  r.selectNodeContents(el)
+  r.setEnd(node, off)
+  return r.toString().length
+}
+/** The caret's box at offset o in el: { x, top, bottom }. */
+function caretRect(el, o) {
+  const t = el.firstChild
+  if (!t || t.nodeType !== 3 || !t.length) {
+    const b = el.getBoundingClientRect(), lh = parseFloat(getComputedStyle(el).lineHeight) || 24
+    return { x: b.left, top: b.top, bottom: b.top + Math.min(lh, b.height || lh) }
+  }
+  const r = document.createRange()
+  // By the character after it, if any: at a line's wrap, the caret is at
+  // the start of the next line.
+  if (o < t.length) { r.setStart(t, o); r.setEnd(t, o + 1); const b = r.getClientRects()[0]; if (b) return { x: b.left, top: b.top, bottom: b.bottom } }
+  r.setStart(t, Math.max(0, o - 1)); r.setEnd(t, o)
+  const b = [...r.getClientRects()].at(-1)
+  return { x: b.right, top: b.top, bottom: b.bottom }
+}
+/** el's lines, top to bottom: [{ top, bottom }]. */
+function lineBoxes(el) {
+  const r = document.createRange()
+  r.selectNodeContents(el)
+  const out = []
+  for (const b of [...r.getClientRects()].filter((b) => b.height > 0).sort((a, b) => a.top - b.top)) {
+    const last = out.at(-1)
+    if (last && b.top < last.bottom - 2) last.bottom = Math.max(last.bottom, b.bottom)
+    else out.push({ top: b.top, bottom: b.bottom })
+  }
+  return out
+}
+/** The offset in el nearest x on its line (a { top, bottom }). */
+function offsetAt(el, x, line) {
+  const r = el.getBoundingClientRect()
+  const cx = Math.max(r.left + 1, Math.min(x, r.right - 1)), y = (line.top + line.bottom) / 2
+  let node = null, off = 0
+  if (document.caretPositionFromPoint) { const p = document.caretPositionFromPoint(cx, y); node = p?.offsetNode; off = p?.offset ?? 0 }
+  else { const p = document.caretRangeFromPoint(cx, y); node = p?.startContainer; off = p?.startOffset ?? 0 }
+  return node && el.contains(node) ? offsetIn(el, node, off) : null
+}
+/** A position under the pointer: in a line, or a gap; null elsewhere. */
+function pointPos(e) {
+  const g = gapAt(e)
+  if (g != null) return { edge: g }
+  const el = e.target.closest?.('[data-u]')
+  if (!el || !editor.contains(el)) return null
+  const lines = lineBoxes(el)
+  const line = lines.find((l) => e.clientY >= l.top && e.clientY <= l.bottom) ?? (e.clientY < (lines[0]?.top ?? 0) ? lines[0] : lines.at(-1))
+  const o = line ? offsetAt(el, e.clientX, line) : null
+  return { u: el.dataset.u, o: o ?? (e.clientX < el.getBoundingClientRect().left + el.offsetWidth / 2 ? 0 : el.textContent.length) }
+}
+
+// ---- moving one end
+// Where across the page Shift with ↑/↓ keeps the selection's moving end.
+let selGoalX = null
+const posX = (p) => (p.u != null ? caretRect(unitEl(p.u), p.o).x : editor.getBoundingClientRect().left)
+
+/** A step within line p.u; null at its edge, where it'd leave it. */
+function stepInLine(p, dir, vertical) {
+  const len = unitText(p.u).length
+  if (!vertical) return p.o + dir < 0 || p.o + dir > len ? null : { u: p.u, o: p.o + dir }
+  const el = unitEl(p.u), lines = lineBoxes(el)
+  const r = caretRect(el, p.o), mid = (r.top + r.bottom) / 2
+  const at = lines.findIndex((l) => mid >= l.top && mid <= l.bottom)
+  const to = lines[(at < 0 ? (dir > 0 ? lines.length - 1 : 0) : at) + dir]
+  if (!to) return null
+  return { u: p.u, o: offsetAt(el, selGoalX ?? r.x, to) ?? (dir > 0 ? len : 0) }
+}
+/** Arriving in line v going dir: its start (end), or for ↑/↓ its first (last) line at the goal. */
+function arrive(v, dir, vertical) {
+  const el = unitEl(v), len = unitText(v).length
+  if (!vertical || selGoalX == null) return { u: v, o: dir > 0 ? 0 : len }
+  const lines = lineBoxes(el)
+  const line = dir > 0 ? lines[0] : lines.at(-1)
+  return { u: v, o: (line && offsetAt(el, selGoalX, line)) ?? (dir > 0 ? 0 : len) }
+}
+/**
+ * Into the block on the far side of edge i, going dir. A callout the
+ * anchor's not in, selected whole from outside: over it, to the next stop
+ * (a gap, or the near end of the text past it). One it's in: into the part
+ * of it the anchor's in, so coming back retraces the way out.
+ */
+function beyond(i, dir, anchor, vertical) {
+  const n = dir > 0 ? i : i - 1, blk = doc[n]
+  if (!blk) return null
+  if (blk.tag === 'callout' && !inCallout(anchor, blk) && wholeFromOutside(blk)) {
+    const j = dir > 0 ? n + 1 : n
+    const next = doc[dir > 0 ? j : j - 1]
+    if (!next || isGap(j)) return { edge: j }
+    return { u: 'p:' + next.k, o: dir > 0 ? 0 : next.text.length }
+  }
+  let us = unitsOf(n)
+  if (blk.tag === 'callout' && inCallout(anchor, blk) && opts.crossTitle !== 'text') {
+    const part = partOf(anchor).part
+    us = us.filter((u) => u.startsWith(part === 't' ? 't:' : 'p:'))
+  }
+  return arrive(dir > 0 ? us[0] : us.at(-1), dir, vertical)
+}
+/** The selection's moving end, a step on: null at the document's end. */
+function stepFocus(p, dir, vertical, anchor) {
+  if (p.edge != null) return beyond(p.edge, dir, anchor, vertical)
+  const inLine = stepInLine(p, dir, vertical)
+  if (inLine) return inLine
+  const list = units(), b = blockOf(p.u), v = list[list.indexOf(p.u) + dir]
+  if (v != null && blockOf(v) === b) {
+    // Between a callout's title and its text. With the anchor on the other
+    // side, crossing selects them whole (opts.crossTitle): to the far end of
+    // this part, so the next step leaves the callout.
+    const here = partOf(p), there = partOf({ u: v, o: 0 })
+    if (opts.crossTitle !== 'text' && here.part !== there.part && inCallout(anchor, here.c) && partOf(anchor).part === here.part) {
+      if (dir < 0) return { u: v, o: 0 }
+      const last = here.c.body.at(-1)
+      return { u: 'p:' + last.k, o: last.text.length }
+    }
+    return arrive(v, dir, vertical)
+  }
+  // Off the block: into the gap past it, if there's one, or on beyond it.
+  const i = dir > 0 ? b + 1 : b
+  if (isGap(i)) return { edge: i }
+  const on = beyond(i, dir, anchor, vertical)
+  if (on) return on
+  // ↑ on the document's first line (↓ on its last): to its start (end).
+  const end = dir < 0 ? 0 : unitText(p.u).length
+  return end === p.o ? null : { u: p.u, o: end }
+}
+
+/** Select from anchor to focus: within one line, the browser's own selection. */
+function setRange(anchor, focus) {
+  if (anchor.u != null && anchor.u === focus.u) {
+    const el = unitEl(anchor.u), t = el.firstChild
+    el.focus({ preventScroll: true })
+    if (t?.nodeType === 3) getSelection().setBaseAndExtent(t, anchor.o, t, focus.o)
+    else setCaret(el, 0)
+    sel = { u: anchor.u, o: focus.o }
+  } else if (anchor.edge != null && anchor.edge === focus.edge) return toGapAt(anchor.edge)
+  else {
+    sel = { anchor, focus }
+    getSelection().removeAllRanges()
+    editor.focus({ preventScroll: true })
+  }
+  renderToolbar()
+  renderSource()
+  renderLayer()
+}
+/** The caret at a position: an edge's, its gap, or the text beside it. */
+function caretAt(p) {
+  if (p.u != null) return { u: p.u, o: p.o }
+  const i = Math.min(p.edge, doc.length)
+  const after = doc[i], before = doc[i - 1]
+  if (isGap(i)) return { gap: i }
+  if (isText(after)) return { u: 'p:' + after.k, o: 0 }
+  if (isText(before)) return { u: 'p:' + before.k, o: before.text.length }
+  return { gap: i }
+}
+/** Where the caret (or the browser's selection's anchor) is now, as a position. */
+function anchorNow() {
+  if (sel?.anchor) return sel.anchor
+  if (sel?.gap != null) return { edge: sel.gap }
+  if (sel?.u == null) return null
+  const el = unitEl(sel.u), s = getSelection()
+  return { u: sel.u, o: el && s.rangeCount && el.contains(s.anchorNode) ? offsetIn(el, s.anchorNode, s.anchorOffset) : sel.o }
+}
+
+// ---- editing what's selected
+/** Line by line, a callout's title (0) and paragraphs (1…). */
+const cellOf = (c, p) => (p.u.startsWith('t:') ? 0 : 1 + c.body.findIndex((x) => 'p:' + x.k === p.u))
+const cellText = (c, i) => (i === 0 ? c.title : c.body[i - 1].text)
+function setCell(c, i, text) { if (i === 0) c.title = text; else c.body[i - 1].text = text }
+/**
+ * Take [from, to] out of a callout (null: from its start, to its end). Its
+ * paragraphs join where the cut meets in them; its title never joins one.
+ */
+function cutCallout(c, from, to) {
+  const fi = from ? cellOf(c, from) : 0, fo = from ? from.o : 0
+  const ti = to ? cellOf(c, to) : c.body.length, to_ = to ? to.o : cellText(c, ti).length
+  if (fi === ti) setCell(c, fi, cellText(c, fi).slice(0, fo) + cellText(c, fi).slice(to_))
+  else {
+    setCell(c, fi, cellText(c, fi).slice(0, fo))
+    setCell(c, ti, cellText(c, ti).slice(to_))
+    // The paragraphs between go (cells fi + 1 … ti - 1 are body fi … ti - 2).
+    c.body.splice(fi, ti - 1 - fi)
+    // Both in its text: the two paragraphs join.
+    if (fi >= 1) { const [end] = c.body.splice(fi, 1); c.body[fi - 1].text += end.text }
+  }
+  if (!c.body.length) c.body.push(para(''))
+}
+/** Delete [s, e]; the caret where it began. Two lines of text either side join. */
+function deleteRange([s, e]) {
+  const sb = s.edge ?? blockOf(s.u), eb = e.edge != null ? e.edge - 1 : blockOf(e.u)
+  if (sb > eb) return
+  record()
+  const S = doc[sb], E = doc[eb]
+  let caret
+  if (sb === eb) {
+    if (s.edge != null && e.edge != null) { doc.splice(sb, 1); caret = { edge: sb } }
+    else if (S.tag !== 'callout') { const a = s.edge != null ? 0 : s.o, b = e.edge != null ? S.text.length : e.o; S.text = S.text.slice(0, a) + S.text.slice(b); caret = { u: 'p:' + S.k, o: a } }
+    else { cutCallout(S, s.edge != null ? null : s, e.edge != null ? null : e); caret = s.edge != null ? { edge: sb } : s }
+  } else {
+    const keepE = e.edge == null, keepS = s.edge == null
+    if (keepE) { if (E.tag !== 'callout') E.text = E.text.slice(e.o); else cutCallout(E, null, e) }
+    if (keepS) { if (S.tag !== 'callout') S.text = S.text.slice(0, s.o); else cutCallout(S, s, null) }
+    const from = keepS ? sb + 1 : sb, to = keepE ? eb : eb + 1
+    doc.splice(from, to - from)
+    if (keepS && keepE && S.tag !== 'callout' && E.tag !== 'callout') { S.text += E.text; doc.splice(sb + 1, 1) }
+    caret = keepS ? s : { edge: sb }
+  }
+  if (!doc.length) doc.push(para(''))
+  sel = caretAt(caret)
+}
+/** Type ch at the caret (in a gap, a paragraph with it). */
+function insertText(ch) {
+  if (sel.gap != null) { const p = para(ch); doc.splice(sel.gap, 0, p); sel = { u: 'p:' + p.k, o: 1 }; return render() }
+  const loc = locate(sel.u)
+  const t = unitText(sel.u), text = t.slice(0, sel.o) + ch + t.slice(sel.o)
+  if (loc.title) loc.c.title = text
+  else loc.blk.text = text
+  sel = { u: sel.u, o: sel.o + 1 }
+  render()
+}
+/** What [s, e] covers, as qmd: a callout partly covered, in its fences with what of it is. */
+function qmdOf([s, e]) {
+  const parts = []
+  doc.forEach((b, i) => {
+    if (b.tag !== 'callout') {
+      const r = cover('p:' + b.k, s, e)
+      if (r && r[0] < r[1]) parts.push((b.tag === 'h2' ? '## ' : '') + b.text.slice(...r))
+      return
+    }
+    if (allOf(i, s, e)) return parts.push(calloutQmd(b))
+    const us = unitsOf(i)
+    const slice = (u) => { if (!us.includes(u)) return ''; const r = cover(u, s, e); return r ? unitText(u).slice(...r) : '' }
+    const title = slice('t:' + b.k), body = b.body.map((p) => ({ text: slice('p:' + p.k) })).filter((p) => p.text)
+    if (title || body.length) parts.push(calloutQmd({ ...b, title, body }))
+  })
+  return parts.join('\n\n')
+}
+
+// ---- drawing it
+function renderSelection() {
+  selLayer.replaceChildren()
+  if (!sel?.anchor) return
+  const [s, e] = effective()
+  const paint = (r, cls = 'sel-box') => {
+    const d = Object.assign(document.createElement('div'), { className: cls })
+    Object.assign(d.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' })
+    selLayer.append(d)
+  }
+  doc.forEach((b, i) => {
+    // A callout selected as a block: all of it, as a block.
+    if (b.tag === 'callout' && blockIn(i, s, e)) return paint(editor.children[i].getBoundingClientRect(), 'sel-box sel-block')
+    for (const u of unitsOf(i)) {
+      const r = cover(u, s, e)
+      if (!r) continue
+      const el = unitEl(u), t = el.firstChild
+      if (r[0] < r[1] && t?.nodeType === 3) {
+        const rg = document.createRange()
+        rg.setStart(t, r[0]); rg.setEnd(t, r[1])
+        for (const box of rg.getClientRects()) paint(box)
+      }
+      // On past its end: a sliver for the line's end, as Google Docs shows it.
+      if (cmp(e, { u, o: unitText(u).length }) > 0) {
+        const c = caretRect(el, unitText(u).length)
+        paint({ left: c.x, top: c.top, width: 6, height: c.bottom - c.top })
+      }
+    }
+  })
+}
+
+// ---- keys and the pointer
+document.addEventListener('keydown', (e) => {
+  const mod = e.metaKey || e.ctrlKey
+  const arrow = e.key.startsWith('Arrow')
+  const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1
+  const vertical = e.key === 'ArrowUp' || e.key === 'ArrowDown'
+  const done = () => { e.preventDefault(); e.stopPropagation() }
+  if (sel?.anchor) {
+    // Undo, copy and cut go on as ever; a modifier alone does nothing.
+    if (mod || e.altKey || ['Shift', 'Meta', 'Control', 'Alt', 'CapsLock', 'Tab'].includes(e.key) || (e.key === 'Escape' && menu)) return
+    if (arrow && e.shiftKey) {
+      if (!vertical) selGoalX = null
+      else selGoalX ??= posX(sel.focus)
+      const to = stepFocus(sel.focus, dir, vertical, sel.anchor)
+      if (to) setRange(sel.anchor, to)
+    } else if (arrow) {
+      // To its start (←/↑) or end (→/↓).
+      const [s, en] = effective()
+      sel = caretAt(dir < 0 ? s : en)
+      render()
+    } else if (e.key === 'Escape') { sel = caretAt(sel.focus); render() }
+    else if (e.key === 'Backspace' || e.key === 'Delete') { deleteRange(effective()); render() }
+    else if (e.key === 'Enter') {
+      deleteRange(effective())
+      render()
+      done()
+      // Then Enter where the caret is, as ever.
+      return document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    } else if (e.key.length === 1) { deleteRange(effective()); insertText(e.key) }
+    else return
+    return done()
+  }
+  if (!arrow || !e.shiftKey || mod || e.altKey) return
+  // Shift and an arrow at the edge of a line (or from a gap): the
+  // selection becomes the editor's. Anywhere else, the browser's.
+  let anchor, focus
+  if (sel?.gap != null) {
+    anchor = focus = { edge: sel.gap }
+    selGoalX = vertical ? goalX ?? editor.getBoundingClientRect().left : null
+  } else {
+    const el = document.activeElement?.closest?.('[data-u]'), s = getSelection()
+    if (!el || !editor.contains(el) || !s.rangeCount || !el.contains(s.focusNode)) return
+    anchor = { u: el.dataset.u, o: offsetIn(el, s.anchorNode, s.anchorOffset) }
+    focus = { u: el.dataset.u, o: offsetIn(el, s.focusNode, s.focusOffset) }
+    selGoalX = vertical ? caretRect(el, focus.o).x : null
+    if (stepInLine(focus, dir, vertical)) return
+  }
+  const to = stepFocus(focus, dir, vertical, anchor)
+  done()
+  if (to) setRange(anchor, to)
+}, true)
+
+// Shift-click: from the caret (or the selection's anchor) to there. A drag
+// from one line into another: the editor's selection, from where it began.
+let dragFrom = null, dragging = false
+document.addEventListener('mousedown', (e) => {
+  if (e.button !== 0 || layer.contains(e.target) || e.target.closest?.('.hui, .chev, .kslot')) return
+  selGoalX = null
+  const p = pointPos(e)
+  const anchor = e.shiftKey && p ? anchorNow() : null
+  if (anchor) {
+    e.preventDefault()
+    e.stopPropagation()
+    setRange(anchor, p)
+    dragFrom = anchor
+    return
+  }
+  dragFrom = p?.u != null ? p : null
+}, true)
+document.addEventListener('mousemove', (e) => {
+  if (!dragFrom || !(e.buttons & 1)) return
+  const p = pointPos(e)
+  if (!p || (!dragging && p.u === dragFrom.u)) return
+  if (!dragging) { dragging = true; editor.classList.add('xsel') }
+  sel = { anchor: dragFrom, focus: p }
+  getSelection().removeAllRanges()
+  editor.focus({ preventScroll: true })
+  renderToolbar()
+  renderSource()
+  renderLayer()
+}, true)
+document.addEventListener('mouseup', () => {
+  if (dragging) {
+    dragging = false
+    editor.classList.remove('xsel')
+    if (sel?.anchor) setRange(sel.anchor, sel.focus)
+  }
+  dragFrom = null
+}, true)
+document.addEventListener('copy', (e) => {
+  if (!sel?.anchor) return
+  e.preventDefault()
+  e.clipboardData.setData('text/plain', qmdOf(effective()))
+})
+document.addEventListener('cut', (e) => {
+  if (!sel?.anchor) return
+  e.preventDefault()
+  e.clipboardData.setData('text/plain', qmdOf(effective()))
+  deleteRange(effective())
+  render()
+})
 
 // ------------------------------------------------------------- moving
 // Any block moves by the handle beside it in the gutter (a callout's beside
