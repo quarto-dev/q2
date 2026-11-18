@@ -196,6 +196,11 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 .grip { position:absolute; width:18px; height:24px; display:grid; place-items:center; color:#9a9a97; border-radius:4px; cursor:grab; pointer-events:auto; }
 .grip:hover { background:#efeeec; color:#5f5e5b; }
 .grip svg { width:10px; height:16px; }
+/* The caret between two blocks (a gap): a short blinking line at the text's
+   left, in the text's colour, unlike the blue bar of a drop. */
+.gap-caret { position:absolute; width:22px; height:2px; background:var(--ink); border-radius:1px; pointer-events:none; animation:blink 1.06s steps(1) infinite; }
+@keyframes blink { 50% { visibility:hidden; } }
+#editor:focus { outline:none; }
 .drop-line { position:absolute; height:2px; background:var(--accent); border-radius:1px; pointer-events:none; }
 .move-ghost { position:fixed; z-index:200; pointer-events:none; max-width:260px; padding:5px 9px; border-radius:6px; background:#fff; font-size:13px; color:#37352f;
   box-shadow:0 0 0 1px rgba(15,15,15,.06), 0 3px 10px rgba(15,15,15,.14); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; gap:6px; align-items:center; }
@@ -219,7 +224,7 @@ body.dragging, body.dragging * { cursor:grabbing !important; user-select:none; }
         The choices on the left change how the controls work; the address keeps them.
       </div>
       <div class="page">
-        <div class="body" id="editor"></div>
+        <div class="body" id="editor" tabindex="-1"></div>
       </div>
     </div>
   </div>
@@ -713,6 +718,7 @@ function renderBlock(b) {
 
 function placeCaret() {
   if (!sel) return
+  if (sel.gap != null) return editor.focus({ preventScroll: true })
   let el = editor.querySelector(`[data-u="${sel.u}"]`)
   if (!el) return
   setCaret(el, sel.o)
@@ -812,6 +818,7 @@ function renderLayer() {
   layer.replaceChildren()
   if (drag) return
   renderGrip()
+  renderGapCaret()
   const asImage = opts.controls === 'image'
   if (opts.controls === 'hover' || asImage) {
     // Only for the one under the pointer (or whose menu is open), as an
@@ -1080,12 +1087,23 @@ editor.addEventListener('keydown', (e) => {
     placeAtX(t, goalX, line)
     sel = { u: v, o: caretIn(t)?.o ?? 0 }
   }
-  if (e.key === 'ArrowUp' && atLineEdge(el, -1, at.o, len)) { if (ui > 0) vertical(list[ui - 1], 'last') }
-  else if (e.key === 'ArrowDown' && atLineEdge(el, 1, at.o, len)) { if (ui < list.length - 1) vertical(list[ui + 1], 'first') }
-  else if (e.key === 'ArrowLeft' && at.o === 0) { if (ui > 0) go(list[ui - 1], true) }
-  else if (e.key === 'ArrowRight' && at.o === len) { if (ui < list.length - 1) go(list[ui + 1], false) }
+  // Off a block's first or last line, into the gap beside it, if there's
+  // one (no text there to hold a caret), before going on past it.
+  const b = blockOf(u)
+  const toGap = (dir) => {
+    const i = dir < 0 ? b : b + 1
+    const edge = dir < 0 ? unitsOf(b)[0] === u : unitsOf(b).at(-1) === u
+    if (!edge || !isGap(i)) return false
+    e.preventDefault()
+    goalX ??= caretX(el)
+    toGapAt(i)
+    return true
+  }
+  if (e.key === 'ArrowUp' && atLineEdge(el, -1, at.o, len)) { if (!toGap(-1) && ui > 0) vertical(list[ui - 1], 'last') }
+  else if (e.key === 'ArrowDown' && atLineEdge(el, 1, at.o, len)) { if (!toGap(1) && ui < list.length - 1) vertical(list[ui + 1], 'first') }
+  else if (e.key === 'ArrowLeft' && at.o === 0) { if (!toGap(-1) && ui > 0) go(list[ui - 1], true) }
+  else if (e.key === 'ArrowRight' && at.o === len) { if (!toGap(1) && ui < list.length - 1) go(list[ui + 1], false) }
 })
-/** Whether the caret's on the first (dir -1) or last (dir 1) line of el. */
 // Where across the page ↑/↓ keep the caret, through a run of them.
 let goalX = null
 document.addEventListener('mousedown', () => { goalX = null }, true)
@@ -1114,6 +1132,7 @@ function placeAtX(el, x, line) {
   s.addRange(rg)
 }
 
+/** Whether the caret's on the first (dir -1) or last (dir 1) line of el. */
 function atLineEdge(el, dir, o, len) {
   const s = getSelection()
   const rect = s.rangeCount ? s.getRangeAt(0).getClientRects()[0] : null
@@ -1128,6 +1147,8 @@ document.addEventListener('keydown', (e) => {
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
   else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo() }
   else if (e.key === 'Escape' && menu) { menu = null; render() }
+  // (Not a key the text already handled: moving into the gap is one.)
+  else if (sel?.gap != null && !mod && !e.altKey && !e.defaultPrevented) gapKey(e)
 })
 
 // Where the caret is: the toolbar, the source and the controls follow it.
@@ -1167,6 +1188,81 @@ document.addEventListener('mousemove', (e) => {
   if (k === hoverK && !gripMoved) return
   if (k !== hoverK) { hoverK = k; renderSource() }
   renderLayer()
+})
+
+// ----------------------------------------------------------- gap caret
+// Between two blocks with no text to hold a caret (two callouts; a callout
+// at the start or end), the caret is a gap: { gap: i }, before doc[i], as
+// beside a figure in blocks.html (and ProseMirror's gap cursor). Typing
+// there starts a paragraph; the arrows go on into the blocks either side.
+const isText = (blk) => blk && blk.tag !== 'callout'
+/** Whether there's a gap before doc[i]. */
+function isGap(i) {
+  if (i < 0 || i > doc.length) return false
+  const before = doc[i - 1], after = doc[i]
+  return !isText(before) && !isText(after) && Boolean(before || after)
+}
+/** The top-level block a unit of text is in. */
+function blockOf(u) {
+  const loc = locate(u)
+  return loc.c ? doc.indexOf(loc.c) : loc.i
+}
+/** The units of text in doc[b], in order. */
+const unitsOf = (b) => units().filter((v) => blockOf(v) === b)
+function toGapAt(i) {
+  sel = { gap: i }
+  getSelection().removeAllRanges()
+  editor.focus({ preventScroll: true })
+  renderToolbar()
+  renderSource()
+  renderLayer()
+}
+function renderGapCaret() {
+  if (sel?.gap == null) return
+  const i = sel.gap, kids = editor.children, er = editor.getBoundingClientRect()
+  const a = kids[i - 1]?.getBoundingClientRect(), b = kids[i]?.getBoundingClientRect()
+  const y = a && b ? (a.bottom + b.top) / 2 : a ? a.bottom + 10 : b.top - 10
+  const caret = Object.assign(document.createElement('div'), { className: 'gap-caret' })
+  caret.style.left = er.left + 'px'
+  caret.style.top = y - 1 + 'px'
+  layer.append(caret)
+}
+/** Keys with the caret in a gap. */
+function gapKey(e) {
+  const i = sel.gap
+  const into = (b, end) => {
+    const list = unitsOf(b)
+    const v = end ? list.at(-1) : list[0]
+    const t = v && editor.querySelector(`[data-u="${v}"]`)
+    if (!t) return
+    if (goalX != null && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) placeAtX(t, goalX, end ? 'last' : 'first')
+    else setCaret(t, end ? t.textContent.length : 0)
+    sel = { u: v, o: caretIn(t)?.o ?? 0 }
+  }
+  if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); if (e.key === 'ArrowLeft') goalX = null; if (i > 0) into(i - 1, true) }
+  else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); if (e.key === 'ArrowRight') goalX = null; if (i < doc.length) into(i, false) }
+  else if (e.key === 'Enter' || e.key.length === 1) {
+    // A paragraph here, the character in it.
+    e.preventDefault()
+    record()
+    const p = para(e.key === 'Enter' ? '' : e.key)
+    doc.splice(i, 0, p)
+    sel = { u: 'p:' + p.k, o: p.text.length }
+    render()
+  }
+  else if (e.key === 'Backspace' && i > 0) { e.preventDefault(); into(i - 1, true) }
+  else if (e.key === 'Delete' && i < doc.length) { e.preventDefault(); into(i, false) }
+}
+// A click in the space between two blocks, where there's a gap: the caret
+// goes there.
+document.querySelector('.page').addEventListener('mousedown', (e) => {
+  if (e.target !== editor && e.target !== e.currentTarget) return
+  const kids = [...editor.children]
+  for (let i = 0; i <= kids.length; i++) {
+    const a = kids[i - 1]?.getBoundingClientRect(), b = kids[i]?.getBoundingClientRect()
+    const top = a ? a.bottom : -Infinity, bottom = b ? b.top : Infinity
+    if (e.clientY >= top && e.clientY <= bottom && isGap(i)) { e.preventDefault(); goalX = null; return toGapAt(i) }
+  }
 })
 
 // ------------------------------------------------------------- moving
