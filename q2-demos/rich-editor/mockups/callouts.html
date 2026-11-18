@@ -494,12 +494,47 @@ const ICONS = {
 }
 
 function render() {
+  const headers = headerHeights()
   editor.replaceChildren(...doc.map(renderBlock))
+  easeHeaders(headers)
   lastState = snapshot()
   placeCaret()
   renderToolbar()
   renderSource()
   renderLayer()
+}
+
+// A collapsible callout's header is taller (q2 renders it 35px, for the
+// chevron's button, not 28px). Made collapsible or not, its header eases
+// from the old height to the new, and the text under it with it, instead of
+// jumping: the page is rebuilt, so it starts the new header at the old one's
+// height and lets it grow or shrink.
+let wasCollapsible = new Map()
+function headerHeights() {
+  const out = new Map()
+  for (const el of editor.querySelectorAll('.callout')) {
+    const h = el.querySelector(':scope > .callout-header')
+    if (h) out.set(Number(el.dataset.k), h.getBoundingClientRect().height)
+  }
+  return out
+}
+function easeHeaders(before) {
+  const now = new Map(doc.filter((b) => b.tag === 'callout').map((c) => [c.k, c.collapse != null]))
+  for (const [k, collapsible] of now) {
+    const from = before.get(k)
+    if (from == null || wasCollapsible.get(k) === collapsible || wasCollapsible.get(k) == null) continue
+    const h = editor.querySelector(`.callout[data-k="${k}"] > .callout-header`)
+    if (!h) continue
+    const to = h.getBoundingClientRect().height
+    if (Math.abs(to - from) < 1) continue
+    h.style.height = from + 'px'
+    h.style.minHeight = '0'
+    h.getBoundingClientRect()
+    h.style.transition = 'height .2s ease'
+    h.style.height = to + 'px'
+    h.addEventListener('transitionend', () => { h.style.height = h.style.minHeight = h.style.transition = ''; renderLayer() }, { once: true })
+  }
+  wasCollapsible = now
 }
 
 function textEl(tag, u, text, cls = '') {
