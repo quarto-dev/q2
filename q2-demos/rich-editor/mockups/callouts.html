@@ -894,7 +894,7 @@ document.addEventListener('mousemove', (e) => {
   const t = e.target
   const k = Number(t.closest?.('.callout')?.dataset.k ?? t.closest?.('[data-hk]')?.dataset.hk ?? 0) || null
   const g = hoveredBlock(e)
-  const gripMoved = g?.k !== grip?.k
+  const gripMoved = g?.k !== grip?.k || g?.top !== grip?.top
   grip = g
   if (k === hoverK && !gripMoved) return
   if (k !== hoverK) { hoverK = k; renderSource() }
@@ -918,34 +918,52 @@ function hoveredBlock(e) {
   if (e.target.closest?.('.grip')) return grip
   if (e.target.closest?.('.hui')) return null
   const x = e.clientX, y = e.clientY, er = editor.getBoundingClientRect()
-  if (x < er.left - 60 || x > er.right + 10) return null
+  // Only near the handles: in the gutter, or the left quarter of the text,
+  // so they don't flicker beside everything the pointer crosses.
+  if (x < er.left - 70 || x > er.left + er.width / 4) return null
   for (const el of editor.children) {
     const r = el.getBoundingClientRect(), cs = getComputedStyle(el)
     if (y < r.top - parseFloat(cs.marginTop) / 2 || y > r.bottom + parseFloat(cs.marginBottom) / 2) continue
-    if (el.classList.contains('callout') && x >= r.left) {
+    const left = r.left - 24
+    if (el.classList.contains('callout')) {
+      // Level with one of its paragraphs: that paragraph. Anywhere else in
+      // it (its header, the space around its paragraphs, its left edge):
+      // the callout, its handle level with its title.
+      const k = Number(el.dataset.k)
+      const onEdge = x >= r.left - 1 && x <= r.left + 6
       for (const p of el.querySelectorAll('.callout-body-container > p')) {
         const pr = p.getBoundingClientRect()
-        if (y >= pr.top - 4 && y <= pr.bottom + 4) return { k: Number(p.dataset.u.slice(2)) }
+        if (!onEdge && y >= pr.top - 2 && y <= pr.bottom + 2) return { k: Number(p.dataset.u.slice(2)), left, top: lineTop(p) }
       }
+      const title = el.querySelector(':scope > .callout-header .callout-title-container')
+      return { k, left, top: title ? lineTop(title) : r.top + 2 }
     }
-    return { k: Number(el.dataset.k ?? el.dataset.u.slice(2)) }
+    return { k: Number(el.dataset.u.slice(2)), left, top: lineTop(el) }
   }
   return null
 }
 
+/** A handle's top, level with an element's first line. */
+function lineTop(el) {
+  const r = el.getBoundingClientRect()
+  const lh = parseFloat(getComputedStyle(el).lineHeight) || 24
+  return r.top + (Math.min(lh, r.height) - 24) / 2
+}
+/**
+ * One handle at a time, all in one column in the gutter, close to the text:
+ * a paragraph's level with its first line, whether it's in a callout or not
+ * (never on a callout's border); a callout's level with its title.
+ */
 function renderGrip() {
-  const el = grip && elFor(grip.k)
-  if (!el) return
-  const r = el.getBoundingClientRect(), loc = locate('p:' + grip.k)
+  if (!grip) return
   const h = document.createElement('div')
   h.className = 'grip'
   h.innerHTML = ICONS.grip
   h.dataset.tip = 'Drag to move'
-  // Level with its first line; a callout's, with its top.
-  const lh = parseFloat(getComputedStyle(el).lineHeight) || 24
-  h.style.left = (loc?.c ? r.left - 20 : r.left - 26) + 'px'
-  h.style.top = (loc?.blk.tag === 'callout' ? r.top + 3 : r.top + (Math.min(lh, r.height) - 24) / 2) + 'px'
-  h.onmousedown = (e) => pressGrip(e, grip.k)
+  h.style.left = grip.left + 'px'
+  h.style.top = grip.top + 'px'
+  const k = grip.k
+  h.onmousedown = (e) => pressGrip(e, k)
   layer.append(h)
 }
 
@@ -1081,7 +1099,7 @@ function moveCallout(c, dir) {
 document.addEventListener('mousedown', (e) => {
   if (menu && !e.target.closest('.hui')) { menu = null; renderLayer(); for (const el of editor.querySelectorAll('.menu-open')) el.classList.remove('menu-open') }
 })
-document.getElementById('scroller').addEventListener('scroll', () => { menu = null; renderLayer() })
+document.getElementById('scroller').addEventListener('scroll', () => { menu = null; grip = null; renderLayer() })
 window.addEventListener('resize', () => renderLayer())
 
 let toastTimer = null
