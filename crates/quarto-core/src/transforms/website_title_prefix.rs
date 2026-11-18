@@ -32,6 +32,11 @@
 //! Source: `external-sources/quarto-cli/src/project/types/website/website-shared.ts`
 //! lines 90–115 (`computePageTitle`).
 //!
+//! **RevealJS decks** ([`WebsiteTitlePrefixTransform::site_first`]) put the
+//! site title first: `Site – Deck`. Quarto 1 hands decks to Pandoc's
+//! reveal.js template, which writes `$title-prefix$ – $pagetitle$`, so a
+//! deck's tab reads the other way round from a page's.
+//!
 //! [`MetadataNormalizeTransform`]: crate::transforms::MetadataNormalizeTransform
 
 use quarto_pandoc_types::ConfigMapEntry;
@@ -52,11 +57,32 @@ const TITLE_SEPARATOR: &str = " – ";
 
 /// AST transform: combine `title` and `website.title` into a
 /// site-aware `pagetitle`.
-pub struct WebsiteTitlePrefixTransform;
+pub struct WebsiteTitlePrefixTransform {
+    order: TitleOrder,
+}
+
+/// Which title comes first in the combined `pagetitle`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TitleOrder {
+    /// `Page – Site` (website pages; Quarto 1's `computePageTitle`).
+    PageFirst,
+    /// `Site – Deck` (RevealJS decks; Pandoc's reveal.js template).
+    SiteFirst,
+}
 
 impl WebsiteTitlePrefixTransform {
+    /// Page order: `Page – Site`.
     pub fn new() -> Self {
-        Self
+        Self {
+            order: TitleOrder::PageFirst,
+        }
+    }
+
+    /// Deck order: `Site – Deck` (see the module docs).
+    pub fn site_first() -> Self {
+        Self {
+            order: TitleOrder::SiteFirst,
+        }
     }
 }
 
@@ -77,7 +103,7 @@ impl AstTransform for WebsiteTitlePrefixTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
-        apply_title_prefix(&mut ast.meta);
+        apply_title_prefix_ordered(&mut ast.meta, self.order);
         Ok(())
     }
 }
@@ -87,7 +113,12 @@ impl AstTransform for WebsiteTitlePrefixTransform {
 /// Idempotent: running this twice on the same metadata produces the
 /// same final `pagetitle` (the second run sees `pagetitle != title`
 /// because of the en-dash, and short-circuits).
+#[cfg(test)]
 fn apply_title_prefix(meta: &mut ConfigValue) {
+    apply_title_prefix_ordered(meta, TitleOrder::PageFirst);
+}
+
+fn apply_title_prefix_ordered(meta: &mut ConfigValue, order: TitleOrder) {
     let Some(site_title) = website_title(meta) else {
         return;
     };
@@ -119,7 +150,10 @@ fn apply_title_prefix(meta: &mut ConfigValue) {
 
     let new_pagetitle = match (title, &site_title) {
         (Some(t), st) if &t == st => t,
-        (Some(t), st) => format!("{t}{TITLE_SEPARATOR}{st}"),
+        (Some(t), st) => match order {
+            TitleOrder::PageFirst => format!("{t}{TITLE_SEPARATOR}{st}"),
+            TitleOrder::SiteFirst => format!("{st}{TITLE_SEPARATOR}{t}"),
+        },
         (None, st) => st.clone(),
     };
 
@@ -266,6 +300,29 @@ mod tests {
         apply_title_prefix(&mut meta);
         apply_title_prefix(&mut meta);
         assert_eq!(pagetitle_of(&meta), Some("Doc – Site".to_string()));
+    }
+
+    /// Decks put the site first (`Site – Deck`), like Pandoc's reveal.js
+    /// template in Quarto 1; the other rules are unchanged.
+    #[test]
+    fn site_first_order_for_decks() {
+        let mut meta = map(vec![
+            ("title", s("Deck")),
+            ("pagetitle", s("Deck")),
+            ("website", map(vec![("title", s("Site"))])),
+        ]);
+        apply_title_prefix_ordered(&mut meta, TitleOrder::SiteFirst);
+        assert_eq!(pagetitle_of(&meta), Some("Site – Deck".to_string()));
+        apply_title_prefix_ordered(&mut meta, TitleOrder::SiteFirst);
+        assert_eq!(pagetitle_of(&meta), Some("Site – Deck".to_string()));
+
+        let mut same = map(vec![
+            ("title", s("Site")),
+            ("pagetitle", s("Site")),
+            ("website", map(vec![("title", s("Site"))])),
+        ]);
+        apply_title_prefix_ordered(&mut same, TitleOrder::SiteFirst);
+        assert_eq!(pagetitle_of(&same), Some("Site".to_string()));
     }
 
     /// Defensive: a non-map metadata is left alone.

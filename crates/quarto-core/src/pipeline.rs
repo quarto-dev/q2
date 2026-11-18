@@ -2506,7 +2506,12 @@ pub fn build_transform_pipeline(
     // in the future; today they're independent.
     // See `claude-notes/plans/2026-04-27-websites-phase-7.md`
     // §Decision 3.
-    pipeline.push(Box::new(WebsiteTitlePrefixTransform::new()));
+    // Decks put the site title first (`Site – Deck`), as Quarto 1 does.
+    pipeline.push(Box::new(if is_revealjs {
+        WebsiteTitlePrefixTransform::site_first()
+    } else {
+        WebsiteTitlePrefixTransform::new()
+    }));
     pipeline.push(Box::new(WebsiteFaviconTransform::new()));
     pipeline.push(Box::new(WebsiteBootstrapIconsTransform::new()));
     pipeline.push(Box::new(WebsiteCanonicalUrlTransform::new()));
@@ -2647,7 +2652,13 @@ pub fn build_transform_pipeline(
     // PageNavGenerate must run after SidebarGenerate so it reads the
     // resolved `navigation.sidebar` for the current page.
     pipeline.push(Box::new(PageNavGenerateTransform::new()));
-    pipeline.push(Box::new(FooterGenerateTransform::new()));
+    // Decks read only the top-level `page-footer:` (their own `footer:` is
+    // aliased there): the website footer is site chrome, not a slide footer.
+    pipeline.push(Box::new(if is_revealjs {
+        FooterGenerateTransform::top_level_only()
+    } else {
+        FooterGenerateTransform::new()
+    }));
     // Announcement banner (bd-website-announcement-w1gtpzki): resolves
     // `website.announcement` from the merged page metadata into
     // `navigation.announcement`. Format-agnostic like the footer generate.

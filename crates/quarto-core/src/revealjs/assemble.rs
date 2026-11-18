@@ -371,9 +371,14 @@ pub fn render_revealjs_document(
     css_urls: &[String],
     js_urls: &[String],
 ) -> String {
+    // `<title>` is `pagetitle` (plain text; `MetadataNormalizeTransform`
+    // derives it from `title`, and in a website `WebsiteTitlePrefixTransform`
+    // adds the site title), falling back to `title`, as Pandoc's reveal.js
+    // template does.
     let title = meta
-        .get("title")
+        .get("pagetitle")
         .and_then(|v| v.as_plain_text())
+        .or_else(|| meta.get("title").and_then(|v| v.as_plain_text()))
         .unwrap_or_default();
     // Document language for `<html lang>`; previously hardcoded "en"
     // (bd-llhlzd7p). Falls back to "en" when unset, matching the html
@@ -973,6 +978,13 @@ mod tests {
         assert!(html.contains("class=\"slides\""));
         assert!(html.contains("Reveal.initialize"));
         assert!(html.contains("<title>My Talk</title>"));
+    }
+
+    #[test]
+    fn title_element_prefers_pagetitle() {
+        let m = meta(vec![("title", s("Deck")), ("pagetitle", s("Site – Deck"))]);
+        let html = render_revealjs_document("", &m, &[], &[]);
+        assert!(html.contains("<title>Site – Deck</title>"), "{html}");
     }
 
     /// bd-jij5gge2: the assembler must **link** vendored assets, not
