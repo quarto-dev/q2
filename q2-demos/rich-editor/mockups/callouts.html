@@ -108,7 +108,9 @@ button.icon svg { width:20px; height:20px; display:block; }
 /* Across its top edge, not in its header: there it'd take room from the
    title even while hidden, and wrap it sooner than it renders. */
 .cbar { position:absolute; top:-14px; right:8px; z-index:2; display:flex; gap:1px; visibility:hidden; background:#fff; border-radius:6px; box-shadow:0 0 0 1px var(--line); padding:1px; }
-.callout:hover .cbar, .callout.has-caret .cbar, .callout.menu-open .cbar { visibility:visible; }
+/* Over its title area (anywhere in one with no header), or the bar itself. */
+.callout:has(> .callout-header:hover) .cbar, .callout:not(.callout-titled):hover .cbar, .cbar:hover,
+.callout.has-caret .cbar, .callout.menu-open .cbar { visibility:visible; }
 .cbar button { width:24px; height:24px; display:grid; place-items:center; padding:0; border:0; background:none; border-radius:5px; cursor:pointer; color:#4a4e52; }
 .cbar button:hover, .cbar button[aria-pressed="true"] { background:color-mix(in srgb, var(--c) 18%, #fff); }
 .cbar svg { width:16px; height:16px; }
@@ -943,7 +945,10 @@ document.addEventListener('selectionchange', () => {
 document.addEventListener('mousemove', (e) => {
   if (drag) return
   const t = e.target
-  const k = Number(t.closest?.('.callout')?.dataset.k ?? t.closest?.('[data-hk]')?.dataset.hk ?? 0) || null
+  // Its settings for the callout whose title area is under the pointer (or
+  // its bar); one with no header has no title area, so anywhere in it.
+  const box = t.closest?.('.callout'), header = box?.querySelector(':scope > .callout-header')
+  const k = Number(t.closest?.('[data-hk]')?.dataset.hk ?? (box && (!header || header.contains(t)) ? box.dataset.k : 0)) || null
   const g = hoveredBlock(e)
   const gripMoved = g?.k !== grip?.k || g?.top !== grip?.top
   grip = g
