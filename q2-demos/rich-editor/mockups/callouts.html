@@ -970,8 +970,9 @@ function renderMenu() {
     if (menu.kind === 'create') heading('A callout of this kind')
     for (const t of KINDS) item(kindGlyph(t), NAME[t], () => choose(t), { check: c?.type === t, preview: look(t) })
   } else if (menu.kind === 'appearance') {
-    // What each looks like, by its title bar, each a step from the last.
-    const choices = [['default', 'Default', 'Title bar'], ['simple', 'Simple', 'No title bar'], ['minimal', 'Minimal', 'No title bar or icon']]
+    // What each looks like, in the words of Quarto's docs ("colored header",
+    // "header background color or icon"), each a step from the last.
+    const choices = [['default', 'Default', 'Colored header'], ['simple', 'Simple', 'No colored header'], ['minimal', 'Minimal', 'No colored header or icon']]
     // Pictures of each, named (under them in a row, beside them in a menu):
     // the pictures alone are too alike to tell apart at a glance.
     if (opts.appearancePick === 'row') return row(choices.map(([a, name, sub]) => ({ icon: APPEARANCE_ICONS[a], label: name, tip: sub, on: c.appearance === a, act: () => change(c, () => { c.appearance = a }), preview: { appearance: a } })))
