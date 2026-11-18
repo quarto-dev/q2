@@ -829,7 +829,10 @@ function renderMenu() {
     if (!showHeader(c)) item(ICONS.title, 'Add a title', () => addTitle(c))
     else if (c.title) item(ICONS.title, 'Remove the title', () => change(c, () => { c.title = ''; if (sel?.u === 't:' + c.k) sel = { u: 'p:' + c.body[0].k, o: 0 } }))
     item(ICONS.icon, 'Icon', () => change(c, () => { c.icon = !c.icon }), { check: hasIcon(c), disabled: c.appearance === 'minimal', hint: c.appearance === 'minimal' ? 'minimal has none' : '' })
-    if (c.collapse != null) item(ICONS.collapse, 'Starts open', () => change(c, () => setCollapse(c, !c.collapse)), { check: c.collapse === false })
+    // Named for what it does, as Add / Remove the title is: no on/off state
+    // to read. Collapsible callouts start collapsed (collapse="true"); this
+    // swaps that for starting open ("false"), and back.
+    if (c.collapse != null) item(ICONS.collapse, c.collapse ? 'Start open' : 'Start collapsed', () => change(c, () => setCollapse(c, !c.collapse)))
     item(ICONS.numbered, 'Numbered', () => change(c, () => { c.id = c.id ? null : `${PREFIX[c.type]}-${slug(c.title || NAME[c.type])}` }), { check: Boolean(c.id), hint: c.id ? '#' + c.id : '' })
     list.append(document.createElement('hr'))
     const i = doc.indexOf(c)
