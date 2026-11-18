@@ -7,6 +7,12 @@ Language support for Quarto 2 (`q2`) documents, served by `q2 lsp`:
   your VS Code theme.
 - **Diagnostics** for parse errors and YAML validation.
 - **Outline** of headings and code cells.
+- **Preview** (the preview icon in the editor title, or Cmd/Ctrl+Shift+K):
+  renders the document with `q2 preview --static` inside `q2 lsp` and
+  shows it beside the editor. Saving re-renders and the page reloads.
+  Documents of one project share a preview. Closing the panel stops it.
+  The status bar shows render progress and errors (details in the
+  Quarto 2 output).
 
 The extension registers the language `quarto2` for `.qmd` files. If the
 Quarto 1 extension (`quarto.quarto`) is also installed, choose per
@@ -25,10 +31,12 @@ A `q2` binary. The extension looks at the `q2.path` setting, then `q2` on
 
 - `q2.path`: path to `q2`. Relative paths resolve against the first
   workspace folder; `~` expands.
+- `q2.preview.target`: `panel` (default) or `browser`.
 - `q2.trace.server`: `off` / `messages` / `verbose` LSP tracing.
 
 ## Commands
 
+- **Quarto 2: Preview**
 - **Quarto 2: Restart Language Server**
 - **Quarto 2: Show Output**
 

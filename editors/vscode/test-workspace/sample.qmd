@@ -1,6 +1,7 @@
 ---
 title: "Quarto 2 highlighting sample"
 format: html
+engine: markdown  # highlight every language; execute none
 ---
 
 # A heading
