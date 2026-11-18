@@ -143,13 +143,9 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 .hmenu button.on:hover { background:#d8e8fa; }
 .hmenu button.on .label small { color:#4f7fb3; }
 .hmenu .danger { color:#c4342d; }
-/* A switch, for a yes-or-no setting in a menu. */
-.hmenu .toggle { gap:14px; }
-.hmenu .switch { flex:none; width:28px; height:16px; border-radius:8px; background:#cfd4da; position:relative; transition:background .12s; }
-.hmenu .switch i { position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:#fff; transition:left .12s; }
-.hmenu .toggle[aria-checked="true"] .switch { background:var(--accent); }
-.hmenu .toggle[aria-checked="true"] .switch i { left:14px; }
-.hmenu .toggle:disabled .switch { background:#e9ecef; }
+/* A button that's a switch (Collapsible): on, it's tinted as chosen menu
+   items are, so it doesn't look merely hovered. */
+.hbar button.switch[aria-pressed="true"], .cbar button.switch[aria-pressed="true"] { background:var(--sel-bg); color:var(--sel-ink); }
 .hmenu hr { border:0; border-top:1px solid var(--line); margin:4px 0; }
 .hmenu h3 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:6px 8px 4px; font-weight:600; }
 .kicon.k-note { --i:#0c63e4; } .kicon.k-tip { --i:#177a4c; } .kicon.k-warning { --i:#e6ae06; } .kicon.k-caution { --i:#e47112; } .kicon.k-important { --i:#c6303e; }
@@ -503,6 +499,24 @@ function putInCallout(c, i, blk) {
   else c.body.splice(i, 0, blk)
 }
 
+/**
+ * Collapsible, as a button that's the switch itself: pressed while readers
+ * can collapse the callout. On, it starts collapsed (collapse="true"), as
+ * collapsible callouts mostly do; starting open instead (collapse="false")
+ * is rarer, so it's in More, only then. In the toolbar, it's spelled out.
+ */
+function collapseButton(c, inToolbar = false) {
+  const b = document.createElement('button')
+  if (inToolbar) { b.className = 'pick'; b.textContent = 'Collapsible' }
+  else { b.className = 'switch'; b.innerHTML = ICONS.collapse; b.dataset.tip = 'Collapsible' }
+  b.classList.add('hui')
+  b.setAttribute('aria-label', 'Collapsible')
+  b.setAttribute('aria-pressed', String(c.collapse != null))
+  b.onmousedown = (e) => e.preventDefault()
+  b.onclick = (e) => { e.stopPropagation(); record(); c.collapse = c.collapse == null ? true : null; peek.delete(c.k); menu = null; render() }
+  return b
+}
+
 function renderBlock(b) {
   if (b.tag !== 'callout') return textEl(b.tag, 'p:' + b.k, b.text)
   const c = b
@@ -524,7 +538,7 @@ function renderBlock(b) {
     const bar = document.createElement('span')
     bar.className = 'cbar'
     if (!icon) bar.append(smallButton(`Kind: ${NAME[c.type]}`, kindGlyph(c.type), 'kind', c))
-    bar.append(smallButton('Appearance', ICONS.appearance, 'appearance', c), smallButton('Collapsing', ICONS.collapse, 'collapse', c), smallButton('More', ICONS.more, 'more', c))
+    bar.append(smallButton('Appearance', ICONS.appearance, 'appearance', c), collapseButton(c), smallButton('More', ICONS.more, 'more', c))
     return bar
   }
   const shown = bodyShown(c)
@@ -666,7 +680,7 @@ function renderToolbar() {
     }
   } else bar.append(pick(NAME[c.type], kindGlyph(c.type), 'kind', 'Kind'))
   bar.append(pick({ default: 'Default', simple: 'Simple', minimal: 'Minimal' }[c.appearance], '', 'appearance', 'Appearance'),
-    pick(c.collapse == null ? 'Not collapsible' : c.collapse ? 'Collapsible, starts collapsed' : 'Collapsible', '', 'collapse', 'Collapsing'))
+    collapseButton(c, true))
   const more = toolButton('More', ICONS.more, (b) => toggleMenu('more', c.k, b))
   more.classList.add('hui')
   bar.append(more)
@@ -674,7 +688,7 @@ function renderToolbar() {
 
 // ------------------------------------------------------------ the layer
 // Menus, and the hover bar: over everything, in the window's coordinates.
-let menu = null    // { kind: 'kind' | 'create' | 'appearance' | 'collapse' | 'more', k, x, y }
+let menu = null    // { kind: 'kind' | 'create' | 'appearance' | 'more', k, x, y }
 let hoverK = null
 function toggleMenu(kind, k, el) {
   if (menu && menu.kind === kind && menu.k === k) { menu = null; return render() }
@@ -722,7 +736,7 @@ function renderLayer() {
         const kb = b('Kind', `${kindGlyph(c.type)}<span>${NAME[c.type]}</span>`, 'kind', true)
         bar.append(kb, Object.assign(document.createElement('span'), { className: 'vsep' }))
       }
-      bar.append(b('Appearance', ICONS.appearance, 'appearance'), b('Collapsing', ICONS.collapse, 'collapse'), b('More', ICONS.more, 'more'))
+      bar.append(b('Appearance', ICONS.appearance, 'appearance'), collapseButton(c), b('More', ICONS.more, 'more'))
       layer.append(bar)
       const r = el.getBoundingClientRect()
       if (asImage) {
@@ -771,17 +785,6 @@ function renderMenu() {
     b.onclick = action
     list.append(b)
   }
-  const toggle = (label, on, action, disabled = false) => {
-    const b = document.createElement('button')
-    b.className = 'toggle'
-    b.setAttribute('role', 'switch')
-    b.setAttribute('aria-checked', String(on))
-    b.innerHTML = '<span class="label"></span><span class="switch"><i></i></span>'
-    b.querySelector('.label').textContent = label
-    b.disabled = disabled
-    b.onclick = action
-    list.append(b)
-  }
   const heading = (t) => list.append(Object.assign(document.createElement('h3'), { textContent: t }))
   // A setting's choices as a row of icons under its button, names (and what
   // they mean) in tooltips, the current one pressed.
@@ -809,17 +812,11 @@ function renderMenu() {
     const choices = [['default', 'Default', 'A tinted header, always'], ['simple', 'Simple', 'No tint; a header only for a title'], ['minimal', 'Minimal', 'No tint and no icon; a header only for a title']]
     if (opts.appearancePick === 'row') return row(choices.map(([a, name, sub]) => ({ icon: APPEARANCE_ICONS[a], tip: `${name}: ${sub.toLowerCase()}`, on: c.appearance === a, act: () => change(c, () => { c.appearance = a }) })))
     for (const [a, name, sub] of choices) item('', name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub })
-  } else if (menu.kind === 'collapse') {
-    // Two yes-or-no questions, not three named states: can readers collapse
-    // it (collapse= at all), and does it start collapsed ("true" or
-    // "false"). The menu stays open, to flip both.
-    const flip = (fn) => () => { record(); fn(); peek.delete(c.k); render() }
-    toggle('Collapsible', c.collapse != null, flip(() => { c.collapse = c.collapse == null ? false : null }))
-    toggle('Starts collapsed', c.collapse === true, flip(() => { c.collapse = !c.collapse }), c.collapse == null)
   } else if (menu.kind === 'more') {
     if (!showHeader(c)) item(ICONS.title, 'Add a title', () => addTitle(c))
     else if (c.title) item(ICONS.title, 'Remove the title', () => change(c, () => { c.title = ''; if (sel?.u === 't:' + c.k) sel = { u: 'p:' + c.body[0].k, o: 0 } }))
     item(ICONS.icon, 'Icon', () => change(c, () => { c.icon = !c.icon }), { check: hasIcon(c), disabled: c.appearance === 'minimal', hint: c.appearance === 'minimal' ? 'minimal has none' : '' })
+    if (c.collapse != null) item(ICONS.collapse, 'Starts open', () => change(c, () => { c.collapse = !c.collapse; peek.delete(c.k) }), { check: c.collapse === false })
     item(ICONS.numbered, 'Numbered', () => change(c, () => { c.id = c.id ? null : `${PREFIX[c.type]}-${slug(c.title || NAME[c.type])}` }), { check: Boolean(c.id), hint: c.id ? '#' + c.id : '' })
     list.append(document.createElement('hr'))
     const i = doc.indexOf(c)
