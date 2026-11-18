@@ -198,7 +198,132 @@ pub fn execute(args: StaticArgs) -> Result<()> {
     // returns, outside the runtime, so kernels get the polite
     // `shutdown_request` path before the kill backstop.
     let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
-    runtime.block_on(run(args))
+    runtime.block_on(run_cli(args))
+}
+
+/// The terminal host of a session: OS signals stop it, its ready event
+/// prints the banner and opens the browser, and a boot-render abort
+/// exits the way `q2 render` does.
+async fn run_cli(args: StaticArgs) -> Result<()> {
+    // Installed before anything renders or binds, so a signal that
+    // arrives the instant a client can connect is caught rather than
+    // killing the process with the default disposition. During the boot
+    // render it ends the session (`run_session` races the two).
+    let mut shutdown = ShutdownSignal::install()?;
+    let browser = args.browser.clone();
+    let sink: EventSink = Arc::new(move |event| {
+        if let SessionEvent::Ready(ready) = event {
+            print_banner(&ready);
+            if ready.open_browser {
+                spawn_browser_open_when_ready(
+                    ready.host.clone(),
+                    ready.port,
+                    ready.url.clone(),
+                    browser.clone(),
+                );
+            }
+        }
+    });
+    let stop = async move {
+        shutdown.wait().await;
+        println!("Received Ctrl-C, shutting down the static preview");
+    };
+    match run_session(args, sink, stop).await {
+        Ok(()) => Ok(()),
+        // Fails the way `q2 render` would: structured errors print and
+        // exit 1, the rest surface through `main`.
+        Err(SessionError::BootAbort { abort, args }) => Err(exit_with_abort(abort, &args)),
+        Err(SessionError::Other(e)) => Err(e),
+    }
+}
+
+fn print_banner(ready: &SessionReady) {
+    println!();
+    println!("  q2 preview --static");
+    println!("  → {}", ready.url);
+    println!("  Serving {}", ready.output_dir.display());
+    if ready.watching {
+        println!(
+            "  Watching {} for changes (Ctrl-C to stop)",
+            ready.project_dir.display()
+        );
+    } else {
+        println!("  --no-watch: serving this render as is (Ctrl-C to stop)");
+    }
+    println!();
+}
+
+/// What a running session tells its host (the terminal, or `q2 lsp`'s
+/// preview launcher; plan `2026-11-17-q2-vscode-extension.md` D-E).
+#[derive(Debug, Clone)]
+pub(crate) enum SessionEvent {
+    /// The boot render finished and the server is listening.
+    Ready(SessionReady),
+    /// What the render loop also sends the browser over SSE.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "read by q2 lsp's preview launcher (bd-foum4ql3)")
+    )]
+    Render(ReloadEvent),
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SessionReady {
+    /// The page to open: `http://HOST:PORT/<page>`.
+    pub url: String,
+    pub host: String,
+    pub port: u16,
+    pub output_dir: PathBuf,
+    pub project_dir: PathBuf,
+    /// The project (or document) root the session serves.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "read by q2 lsp's preview launcher (bd-foum4ql3)")
+    )]
+    pub input: PathBuf,
+    pub watching: bool,
+    /// Whether the flags and `_quarto.yml` ask for a browser tab. The
+    /// session never opens one itself.
+    pub open_browser: bool,
+}
+
+/// Where a session's events go. Called from the session's tasks, never
+/// while a lock the host might need is held.
+pub(crate) type EventSink = Arc<dyn Fn(SessionEvent) + Send + Sync>;
+
+/// Why a session ended other than by being stopped.
+#[derive(Debug)]
+pub(crate) enum SessionError {
+    /// The boot render failed outright (no outputs to serve). The CLI
+    /// host reports it with [`exit_with_abort`]; other hosts use
+    /// [`RenderAbort::user_message`].
+    BootAbort {
+        abort: RenderAbort,
+        args: RenderArgs,
+    },
+    Other(anyhow::Error),
+}
+
+impl From<anyhow::Error> for SessionError {
+    fn from(e: anyhow::Error) -> Self {
+        SessionError::Other(e)
+    }
+}
+
+impl SessionError {
+    /// A plain-text description for hosts without a terminal.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "read by q2 lsp's preview launcher (bd-foum4ql3)")
+    )]
+    pub(crate) fn plain_message(&self) -> String {
+        match self {
+            SessionError::BootAbort { abort, .. } => strip_ansi_escapes(
+                &abort.user_message(&quarto_error_reporting::TextRenderOptions::plain()),
+            ),
+            SessionError::Other(e) => format!("{e:#}"),
+        }
+    }
 }
 
 /// The outcome of one render on the blocking thread.
@@ -406,7 +531,16 @@ impl ShutdownSignal {
     }
 }
 
-async fn run(args: StaticArgs) -> Result<()> {
+/// Run one static-preview session until `stop` resolves: boot render,
+/// serve, watch and re-render. Host-agnostic: it writes nothing to
+/// stdout, never exits the process and installs no signal handlers;
+/// everything a host needs arrives through `sink`.
+pub(crate) async fn run_session(
+    args: StaticArgs,
+    sink: EventSink,
+    stop: impl std::future::Future<Output = ()>,
+) -> std::result::Result<(), SessionError> {
+    let mut stop = std::pin::pin!(stop);
     let raw = args
         .path
         .clone()
@@ -489,14 +623,23 @@ async fn run(args: StaticArgs) -> Result<()> {
         false,
         policy_for(&executed, engine_off),
     );
-    let report = match render_blocking(boot_args.clone()).await {
+    let outcome = tokio::select! {
+        outcome = render_blocking(boot_args.clone()) => outcome,
+        // Stopped mid-boot: the render thread finishes on its own; its
+        // output is left as is.
+        () = &mut stop => return Ok(()),
+    };
+    let report = match outcome {
         RenderOutcome::Report(report) => *report,
         RenderOutcome::Abort(abort) => {
-            // Fails the way `q2 render` would: structured errors print
-            // and exit 1, the rest surface through `main`.
-            return Err(exit_with_abort(abort, &boot_args));
+            return Err(SessionError::BootAbort {
+                abort,
+                args: boot_args,
+            });
         }
-        RenderOutcome::Panicked(message) => anyhow::bail!("render panicked: {message}"),
+        RenderOutcome::Panicked(message) => {
+            return Err(anyhow::anyhow!("render panicked: {message}").into());
+        }
     };
     if report.exit_nonzero {
         // Per-page failures are not fatal: the pages that rendered are
@@ -530,7 +673,6 @@ async fn run(args: StaticArgs) -> Result<()> {
             .chain(report.config_sources.iter())
             .cloned(),
     );
-    let mut shutdown = ShutdownSignal::install()?;
 
     // ── Server ─────────────────────────────────────────────────────
     // Bind first, print second: the listener is ours, so there is no
@@ -539,11 +681,18 @@ async fn run(args: StaticArgs) -> Result<()> {
     let requested_port = args.port.or(defaults.port).unwrap_or(0);
     let listener = match tokio::net::TcpListener::bind((host.as_str(), requested_port)).await {
         Ok(listener) => listener,
-        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => anyhow::bail!(
-            "port {requested_port} on {host} is already in use; pass --port 0 to let the OS \
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+            return Err(anyhow::anyhow!(
+                "port {requested_port} on {host} is already in use; pass --port 0 to let the OS \
              pick a free port, or omit --port for the default behaviour"
-        ),
-        Err(e) => return Err(e).with_context(|| format!("binding {host}:{requested_port}")),
+            )
+            .into());
+        }
+        Err(e) => {
+            return Err(anyhow::Error::from(e)
+                .context(format!("binding {host}:{requested_port}"))
+                .into());
+        }
     };
     let port = listener
         .local_addr()
@@ -583,22 +732,30 @@ async fn run(args: StaticArgs) -> Result<()> {
             .unwrap_or_default()
     );
     info!(%url, "starting q2 preview --static server");
-    println!();
-    println!("  q2 preview --static");
-    println!("  → {url}");
-    println!("  Serving {}", report.output_dir.display());
-    if watching {
-        println!(
-            "  Watching {} for changes (Ctrl-C to stop)",
-            report.project_dir.display()
-        );
-    } else {
-        println!("  --no-watch: serving this render as is (Ctrl-C to stop)");
-    }
-    println!();
-    if open_browser {
-        spawn_browser_open_when_ready(host.clone(), port, url.clone(), args.browser.clone());
-    }
+    // The render loop's browser events, for the host too. Subscribed
+    // before the first render can start; ends when the hub's last sender
+    // drops at shutdown.
+    let mut render_events = hub.subscribe();
+    let forward_sink = sink.clone();
+    let forwarder = tokio::spawn(async move {
+        loop {
+            match render_events.recv().await {
+                Ok(event) => forward_sink(SessionEvent::Render(event)),
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
+    sink(SessionEvent::Ready(SessionReady {
+        url: url.clone(),
+        host: host.clone(),
+        port,
+        output_dir: report.output_dir.clone(),
+        project_dir: report.project_dir.clone(),
+        input: full_input.clone(),
+        watching,
+        open_browser,
+    }));
 
     let (stop_server_tx, stop_server_rx) = tokio::sync::oneshot::channel::<()>();
     let server = tokio::spawn(serve(router, listener, async move {
@@ -637,7 +794,7 @@ async fn run(args: StaticArgs) -> Result<()> {
 
     loop {
         tokio::select! {
-            _ = shutdown.wait() => break,
+            () = &mut stop => break,
             Some(output) = page_rx.recv() => {
                 // First view of a page the last render left inert: it
                 // joins the executed set and re-renders. Anything else
@@ -726,9 +883,9 @@ async fn run(args: StaticArgs) -> Result<()> {
     }
 
     // ── Shutdown ───────────────────────────────────────────────────
-    println!("Received Ctrl-C, shutting down the static preview");
     drop(watcher);
     hub.shutdown();
+    forwarder.abort();
     let _ = stop_server_tx.send(());
     match tokio::time::timeout(Duration::from_secs(5), server).await {
         Ok(Ok(Ok(()))) => {}
@@ -930,6 +1087,102 @@ mod tests {
             profile: profile.iter().map(|s| s.to_string()).collect(),
             ..RenderArgs::default()
         }
+    }
+
+    fn http_get(port: u16, path: &str) -> String {
+        use std::io::{Read, Write};
+        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        write!(stream, "GET {path} HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n").unwrap();
+        let mut out = String::new();
+        stream.read_to_string(&mut out).unwrap();
+        out
+    }
+
+    /// The session API without a terminal (bd-y723xoye): events reach the
+    /// sink, the server serves, an edit re-renders, and `stop` ends it.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_session_reports_ready_and_render_events_and_stops() {
+        let (_temp, root) = project("project:\n  type: default\n");
+        let events: Arc<std::sync::Mutex<Vec<SessionEvent>>> = Arc::default();
+        let seen = events.clone();
+        let sink: EventSink = Arc::new(move |e| seen.lock().unwrap().push(e));
+        let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
+        let args = StaticArgs {
+            path: Some(root.join("index.qmd")),
+            port: Some(0),
+            host: None,
+            no_browser: true,
+            browser: None,
+            no_watch: false,
+            no_navigate: false,
+            to: None,
+            metadata: Vec::new(),
+            profile: Vec::new(),
+        };
+        let session = tokio::spawn(run_session(args, sink, async move {
+            let _ = stop_rx.await;
+        }));
+
+        let wait_for = |pred: &dyn Fn(&SessionEvent) -> bool| {
+            let deadline = std::time::Instant::now() + Duration::from_secs(60);
+            loop {
+                if let Some(e) = events.lock().unwrap().iter().find(|e| pred(e)) {
+                    return e.clone();
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "timed out waiting for an event"
+                );
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        };
+        let SessionEvent::Ready(ready) = wait_for(&|e| matches!(e, SessionEvent::Ready(_))) else {
+            unreachable!()
+        };
+        assert_eq!(ready.input, root);
+        assert!(ready.watching);
+        assert!(!ready.open_browser);
+        let port = ready.port;
+        let page = tokio::task::spawn_blocking(move || http_get(port, "/index.html"))
+            .await
+            .unwrap();
+        assert!(page.contains("Home"), "{page}");
+
+        write(&root, "index.qmd", "# Home again\n");
+        wait_for(&|e| matches!(e, SessionEvent::Render(ReloadEvent::Reload { .. })));
+
+        stop_tx.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(30), session)
+            .await
+            .expect("the session stops")
+            .unwrap()
+            .expect("a clean stop");
+    }
+
+    #[tokio::test]
+    async fn an_unservable_format_is_a_session_error_with_a_plain_message() {
+        let (_temp, root) = project("project:\n  type: default\nformat: epub\n");
+        let sink: EventSink = Arc::new(|_| {});
+        let args = StaticArgs {
+            path: Some(root),
+            port: Some(0),
+            host: None,
+            no_browser: true,
+            browser: None,
+            no_watch: true,
+            no_navigate: false,
+            to: None,
+            metadata: Vec::new(),
+            profile: Vec::new(),
+        };
+        let err = run_session(args, sink, std::future::pending())
+            .await
+            .expect_err("epub cannot be previewed");
+        assert!(
+            err.plain_message().contains("epub"),
+            "{}",
+            err.plain_message()
+        );
     }
 
     #[test]
