@@ -52,8 +52,10 @@ npm test -w quarto2-vscode           # unit tests (vitest)
 ```
 
 Open `editors/vscode/` in VS Code and press F5 ("Run Quarto 2 extension").
-To use your local build, set `q2.path` in the dev host to
-`<repo>/target/debug/q2`.
+The dev host opens `test-workspace/`, whose `.vscode/settings.json` points
+`q2.path` at the repo's `target/debug/q2`, so build that first. To use another
+`q2`, edit that file, or open Settings (Cmd/Ctrl+,), search for `q2.path`,
+and set it under the Workspace tab.
 
 Smoke test in a real VS Code (downloads one unless `VSCODE_EXECUTABLE` is
 set):

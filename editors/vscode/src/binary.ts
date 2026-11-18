@@ -53,6 +53,10 @@ export function findQ2(lookup: BinaryLookup): BinaryResult {
     let p = expandHome(configured, lookup.home);
     if (!path.isAbsolute(p) && lookup.workspaceRoot) p = path.join(lookup.workspaceRoot, p);
     if (isFile(p)) return { found: true, path: p, source: 'setting' };
+    // `target/debug/q2` names `q2.exe` on Windows.
+    if (lookup.platform === 'win32' && path.extname(p) === '' && isFile(`${p}.exe`)) {
+      return { found: true, path: `${p}.exe`, source: 'setting' };
+    }
     return { found: false, reason: `q2.path is set to "${configured}", but no file exists at ${p}.` };
   }
   const sep = lookup.platform === 'win32' ? ';' : ':';

@@ -32,6 +32,12 @@ describe('findQ2', () => {
     ).toMatchObject({ found: true, path: path.join('/ws', 'target/debug/q2') });
   });
 
+  it('accepts a configured path without .exe on Windows', () => {
+    const exe = path.join('C:\\repo', 'q2.exe');
+    const r = findQ2(lookup([exe], { platform: 'win32', configured: path.join('C:\\repo', 'q2') }));
+    expect(r).toMatchObject({ found: true, path: exe });
+  });
+
   it('reports a configured path that does not exist instead of falling back', () => {
     const r = findQ2(lookup(['/usr/bin/q2'], { configured: '/nope/q2', pathEnv: '/usr/bin' }));
     expect(r.found).toBe(false);

@@ -46,8 +46,9 @@ npm run build -w quarto2-vscode
 npm test -w quarto2-vscode           # vitest unit tests
 ```
 
-- **Interactive.** Open `editors/vscode/` in VS Code and press F5. In the
-  dev host, set `q2.path` to `<repo>/target/debug/q2`.
+- **Interactive.** Open `editors/vscode/` in VS Code and press F5. The
+  dev host opens `test-workspace/`, whose `.vscode/settings.json` sets
+  `q2.path` to the repo's `target/debug/q2`.
   `test-workspace/sample.qmd` exercises most token types.
 - **Smoke test in a real VS Code.** This is not run in CI, because it needs
   a q2 build and a display.
