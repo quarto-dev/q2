@@ -291,6 +291,14 @@ const GROUPS = [
     ['all', 'All of its title and text', 'All of what\'s in it, not the callout: deleting empties its title and text and keeps it.'],
     ['text', 'As any lines', 'From the middle of its text to the middle of its title, as across any two lines. Deleting keeps both, never joining a title and a paragraph.'],
   ]},
+  // A title is one field: Shift with ↑ selects to its start, ↓ to its end,
+  // and the next a step on, all of the callout. Back the other way, either
+  // a field's way or each press undoing the one before; both can't hold, as
+  // after ↑ and after ↑ ↑ ↓ the selection's the same.
+  { key: 'titleKeys', title: 'Shift with ↑ then ↓ in its title', options: [
+    ['ends', 'To the end of the title', '↑ selects to its start, then ↓ from the caret to its end, as in a one-line field. ↑ ↑ (all of the callout) ↓ ↓ ends at the end of the title too.'],
+    ['retrace', 'Back to the caret', 'Each press back the other way undoes the one before: ↑ ↓ and ↑ ↑ ↓ ↓ both end at the caret where you started.'],
+  ]},
 ]
 const opts = Object.fromEntries(GROUPS.map((g) => [g.key, g.options[0][0]]))
 for (const [k, v] of new URLSearchParams(location.hash.slice(1))) if (k in opts) opts[k] = v
@@ -1495,6 +1503,8 @@ const posX = (p) => (p.u != null ? caretRect(unitEl(p.u), p.o).x : editor.getBou
 function stepInLine(p, dir, vertical) {
   const len = unitText(p.u).length
   if (!vertical) return p.o + dir < 0 || p.o + dir > len ? null : { u: p.u, o: p.o + dir }
+  // A title is one field, however it wraps: ↑ to its start, ↓ to its end.
+  if (p.u.startsWith('t:')) { const o = dir < 0 ? 0 : len; return o === p.o ? null : { u: p.u, o } }
   const el = unitEl(p.u), lines = lineBoxes(el)
   const r = caretRect(el, p.o), mid = (r.top + r.bottom) / 2
   const at = lines.findIndex((l) => mid >= l.top && mid <= l.bottom)
@@ -1505,7 +1515,8 @@ function stepInLine(p, dir, vertical) {
 /** Arriving in line v going dir: its start (end), or for ↑/↓ its first (last) line at the goal. */
 function arrive(v, dir, vertical) {
   const el = unitEl(v), len = unitText(v).length
-  if (!vertical || selGoalX == null) return { u: v, o: dir > 0 ? 0 : len }
+  // Into a title, at its near end (a field, as stepInLine).
+  if (!vertical || selGoalX == null || v.startsWith('t:')) return { u: v, o: dir > 0 ? 0 : len }
   const lines = lineBoxes(el)
   const line = dir > 0 ? lines[0] : lines.at(-1)
   return { u: v, o: (line && offsetAt(el, selGoalX, line)) ?? (dir > 0 ? 0 : len) }
@@ -1553,6 +1564,10 @@ function stepFocus(p, dir, vertical, anchor) {
   // Off the block: into the gap past it, if there's one, or on beyond it.
   const i = dir > 0 ? b + 1 : b
   if (isGap(i)) return { edge: i }
+  // Out of the callout the anchor's in, selected whole from outside: first
+  // just the callout, a step of its own (its edge), then on past it.
+  const here = partOf(p)?.c
+  if (here && inCallout(anchor, here) && wholeFromOutside(here)) return { edge: i }
   const on = beyond(i, dir, anchor, vertical)
   if (on) return on
   // ↑ on the document's first line (↓ on its last): to its start (end).
@@ -1715,8 +1730,7 @@ document.addEventListener('keydown', (e) => {
     if (arrow && e.shiftKey) {
       if (!vertical) selGoalX = null
       else selGoalX ??= posX(sel.focus)
-      const to = stepFocus(sel.focus, dir, vertical, sel.anchor)
-      if (to) setRange(sel.anchor, to)
+      extend(sel.anchor, sel.focus, dir, vertical)
     } else if (arrow) {
       // To its start (←/↑) or end (→/↓).
       const [s, en] = effective()
@@ -1747,12 +1761,31 @@ document.addEventListener('keydown', (e) => {
     anchor = { u: el.dataset.u, o: offsetIn(el, s.anchorNode, s.anchorOffset) }
     focus = { u: el.dataset.u, o: offsetIn(el, s.focusNode, s.focusOffset) }
     selGoalX = vertical ? caretRect(el, focus.o).x : null
-    if (stepInLine(focus, dir, vertical)) return
+    const inLine = stepInLine(focus, dir, vertical)
+    // Within the line, the browser's; but a title's ↑/↓ go to its ends.
+    if (inLine && !(vertical && focus.u.startsWith('t:'))) return
+  }
+  done()
+  extend(anchor, focus, dir, vertical)
+}, true)
+
+// Shift and an arrow in a row, as steps (opts.titleKeys): with "retrace",
+// one back the other way undoes the last, wherever it went.
+let steps = []
+const samePos = (p, q) => Boolean(p && q) && p.edge === q.edge && p.u === q.u && p.o === q.o
+/** Move the selection's focus a step, from anchor and focus as they are now. */
+function extend(anchor, focus, dir, vertical) {
+  const last = steps.at(-1)
+  if (!last || !samePos(last.anchor, anchor) || !samePos(last.to, focus)) steps = []
+  else if (opts.titleKeys === 'retrace' && last.dir === -dir && last.vertical === vertical) {
+    steps.pop()
+    return setRange(anchor, last.from)
   }
   const to = stepFocus(focus, dir, vertical, anchor)
-  done()
-  if (to) setRange(anchor, to)
-}, true)
+  if (!to) return
+  steps.push({ anchor, from: focus, to, dir, vertical })
+  setRange(anchor, to)
+}
 
 // Shift-click: from the caret (or the selection's anchor) to there. A drag
 // from one line into another: the editor's selection, from where it began.
