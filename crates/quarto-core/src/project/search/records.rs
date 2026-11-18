@@ -23,6 +23,10 @@
 //!   headings folded in;
 //! - `crumbs` on every record when the page has a breadcrumb trail.
 //!
+//! A RevealJS deck reaches here with each slide marked `level2` and its
+//! title slide removed ([`super::capture::prepare_deck_body`]), so it
+//! gets Quarto 1's one record per slide.
+//!
 //! Two deliberate departures from Quarto 1, both strictly more content:
 //! level-1 section wrappers are transparent (Quarto 1 lost text that
 //! sat in a `section.level1` outside any level-2 section), and
