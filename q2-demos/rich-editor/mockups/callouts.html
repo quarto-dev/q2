@@ -82,6 +82,9 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
    placeholders are: it isn't text (not "## Note", no places for the caret in
    it), and typing replaces it. A drift from the render in colour only. */
 .callout .title:empty::before { content:attr(data-ph); color:var(--faint); }
+/* Or as rendered, with a hint after it that says what it is. */
+.callout .title.hinted:empty::before { color:inherit; }
+.callout .title.hinted:empty::after { content:attr(data-hint); color:var(--faint); font-weight:400; margin-left:.6em; }
 .callout .title.ghost:empty::before { color:var(--faint); font-weight:400; }
 /* A callout with nothing in it: its one empty line, as the editor's empty
    document has it. */
@@ -210,6 +213,11 @@ const GROUPS = [
   { key: 'appearancePick', title: 'Choosing its appearance', options: [
     ['row', 'A row of icons', 'A little callout for each appearance, under its button; names and what they mean in tooltips.'],
     ['menu', 'A menu', 'The appearances by name, each with what it means.'],
+  ]},
+  { key: 'untitled', title: 'An untitled callout\'s header', options: [
+    ['faint', 'Its kind\'s name, faint', 'Where it renders "Note", "Note" in placeholder grey: not a title; typing replaces it.'],
+    ['placeholder', 'A title placeholder', '"Add a title" in placeholder grey instead: plainly a field, but not the word it renders.'],
+    ['hint', 'Its kind\'s name and a hint', '"Note" as it renders, then a faint "Type a title" after it.'],
   ]},
   { key: 'create', title: 'Callout in the toolbar', options: [
     ['note', 'A note, then change it', 'Wraps the paragraph in a note at once; change its kind after.'],
@@ -563,11 +571,15 @@ function renderBlock(b) {
     const tc = document.createElement('div')
     tc.className = 'callout-title-container'
     if (num) tc.append(Object.assign(document.createElement('span'), { className: 'num', textContent: `${NAME[c.type]} ${num}${c.title || sel?.u === 't:' + c.k ? ': ' : ''}` }))
-    // With no title: the kind's name, as it renders (none with a number,
-    // which says the kind already); "Add a title" where it'd render none.
-    const ghost = !c.title && c.appearance !== 'default' && c.collapse == null && !num
-    const t = textEl('span', 't:' + c.k, c.title, 'title' + (ghost ? ' ghost' : ''))
+    // With no title: "Add a title" where it'd render none; where it renders
+    // its kind's name (none with a number, which says the kind already), as
+    // opts.untitled says: that name faint, "Add a title" instead, or that
+    // name as rendered with a hint after it.
+    const rendersName = !c.title && !num && !(c.appearance !== 'default' && c.collapse == null)
+    const ghost = !c.title && !num && (!rendersName || opts.untitled === 'placeholder')
+    const t = textEl('span', 't:' + c.k, c.title, 'title' + (ghost ? ' ghost' : '') + (rendersName && opts.untitled === 'hint' ? ' hinted' : ''))
     t.dataset.ph = num ? '' : ghost ? 'Add a title' : NAME[c.type]
+    t.dataset.hint = 'Type a title'
     tc.append(t)
     h.append(tc)
     if (opts.controls === 'header') box.append(cbar())
