@@ -893,6 +893,28 @@ function renderLayer() {
     }
   }
   if (menu) renderMenu()
+  else endPreview()
+}
+
+// Pointing at a kind or an appearance shows it on the callout, for a look:
+// only the page shows it (not the document or its source); clicking keeps
+// it, and moving off it, or closing the menu, puts the callout back.
+let previewing = null   // the callout key shown with a preview
+function previewOn(el, c, look) {
+  el.addEventListener('mouseenter', () => showPreview(c, look))
+  el.addEventListener('mouseleave', () => endPreview())
+}
+function showPreview(c, look) {
+  const el = editor.querySelector(`.callout[data-k="${c.k}"]`)
+  if (!el) return
+  el.replaceWith(renderBlock({ ...c, ...look }))
+  previewing = c.k
+}
+function endPreview() {
+  if (previewing == null) return
+  const c = calloutByKey(previewing), el = editor.querySelector(`.callout[data-k="${previewing}"]`)
+  previewing = null
+  if (c && el) el.replaceWith(renderBlock(c))
 }
 
 function renderMenu() {
@@ -907,7 +929,7 @@ function renderMenu() {
   const list = document.createElement('div')
   list.className = 'hmenu hui'
   list.addEventListener('mousedown', (e) => e.preventDefault())
-  const item = (icon, label, action, { check = null, hint = '', sub = '', disabled = false, danger = false } = {}) => {
+  const item = (icon, label, action, { check = null, hint = '', sub = '', disabled = false, danger = false, preview = null } = {}) => {
     const b = document.createElement('button')
     // What's chosen: its row tinted, so no column is kept for a tick.
     b.innerHTML = `${icon ? `<span class="icon">${icon}</span>` : ''}<span class="label"></span><span class="hint"></span>`
@@ -918,6 +940,7 @@ function renderMenu() {
     if (danger) b.classList.add('danger')
     b.disabled = disabled
     b.onclick = action
+    if (preview) previewOn(b, c, preview)
     list.append(b)
   }
   const heading = (t) => list.append(Object.assign(document.createElement('h3'), { textContent: t }))
@@ -935,22 +958,24 @@ function renderMenu() {
       btn.setAttribute('aria-label', ch.tip)
       btn.setAttribute('aria-pressed', String(ch.on))
       btn.onclick = ch.act
+      if (ch.preview) previewOn(btn, c, ch.preview)
       bar.append(btn)
     }
     place(bar, true)
   }
   if (menu.kind === 'kind' || menu.kind === 'create') {
     const choose = (t) => (menu.kind === 'create' ? wrap(t) : setKind(c, t))
-    if (opts.kind === 'row') return row(KINDS.map((t) => ({ icon: kindGlyph(t), tip: NAME[t], on: c?.type === t, act: () => choose(t) })))
+    const look = (t) => (menu.kind === 'create' ? null : { type: t })
+    if (opts.kind === 'row') return row(KINDS.map((t) => ({ icon: kindGlyph(t), tip: NAME[t], on: c?.type === t, act: () => choose(t), preview: look(t) })))
     if (menu.kind === 'create') heading('A callout of this kind')
-    for (const t of KINDS) item(kindGlyph(t), NAME[t], () => choose(t), { check: c?.type === t })
+    for (const t of KINDS) item(kindGlyph(t), NAME[t], () => choose(t), { check: c?.type === t, preview: look(t) })
   } else if (menu.kind === 'appearance') {
     // What each looks like, by its title bar, each a step from the last.
-    const choices = [['default', 'Default', 'Coloured title bar'], ['simple', 'Simple', 'No title bar'], ['minimal', 'Minimal', 'No title bar or icon']]
+    const choices = [['default', 'Default', 'Title bar'], ['simple', 'Simple', 'No title bar'], ['minimal', 'Minimal', 'No title bar or icon']]
     // Pictures of each, named (under them in a row, beside them in a menu):
     // the pictures alone are too alike to tell apart at a glance.
-    if (opts.appearancePick === 'row') return row(choices.map(([a, name, sub]) => ({ icon: APPEARANCE_ICONS[a], label: name, tip: sub, on: c.appearance === a, act: () => change(c, () => { c.appearance = a }) })))
-    for (const [a, name, sub] of choices) item(APPEARANCE_ICONS[a], name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub })
+    if (opts.appearancePick === 'row') return row(choices.map(([a, name, sub]) => ({ icon: APPEARANCE_ICONS[a], label: name, tip: sub, on: c.appearance === a, act: () => change(c, () => { c.appearance = a }), preview: { appearance: a } })))
+    for (const [a, name, sub] of choices) item(APPEARANCE_ICONS[a], name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub, preview: { appearance: a } })
   } else if (menu.kind === 'more') {
     if (c.title) item(ICONS.title, 'Remove the title', () => change(c, () => { c.title = ''; if (sel?.u === 't:' + c.k) sel = { u: 'p:' + c.body[0].k, o: 0 } }))
     item(ICONS.icon, 'Icon', () => change(c, () => { c.icon = !c.icon }), { check: hasIcon(c), disabled: c.appearance === 'minimal', hint: c.appearance === 'minimal' ? 'minimal has none' : '' })
