@@ -368,7 +368,8 @@
     "package": "npx --yes @vscode/vsce@3 package --no-dependencies",
     "clean": "rm -rf dist *.vsix",
     "test": "vitest run",
-    "test:smoke": "npm run build && node test/run.mjs"
+    "test:smoke": "npm run build && node test/run.mjs",
+    "vscode:prepublish": "node esbuild.mjs --minify"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
