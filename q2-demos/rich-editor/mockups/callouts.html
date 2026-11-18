@@ -2072,7 +2072,16 @@ function dropTarget(ev, [s, e], slice) {
   // What's under the pointer now (the page may have scrolled under it).
   const target = document.elementFromPoint(ev.clientX, ev.clientY)
   if (!target) return null
-  let d = pointPos({ clientX: ev.clientX, clientY: ev.clientY, target })
+  let d = null
+  // In the space between two blocks (or past the first or last): there,
+  // between them, as a block of its own; over a line, into it.
+  const kids = [...editor.children]
+  for (let i = 0; i <= kids.length && !d; i++) {
+    const a = kids[i - 1]?.getBoundingClientRect(), b = kids[i]?.getBoundingClientRect()
+    const top = a ? a.bottom : b.top - 24, bottom = b ? b.top : a.bottom + 24
+    if (ev.clientY > top && ev.clientY < bottom) d = { edge: i }
+  }
+  d ??= pointPos({ clientX: ev.clientX, clientY: ev.clientY, target })
   if (!d) return null
   if (d.u != null) {
     const loc = locate(d.u)
@@ -2121,6 +2130,12 @@ function moveSelection([s, e], d) {
     for (const p of [s, e]) if (p.u === d.u && p.o >= d.o) p.o++
   }
   deleteRange([s, e])
+  // A whole line moved to a place of its own: its paragraph goes too, not
+  // left empty (a callout keeps one, though, to type in).
+  if (d.edge != null && inline(slice) && s.u?.startsWith('p:') && s.o === 0 && e.o === slice.pieces[0].text.length) {
+    const loc = locate(s.u)
+    if (loc && !loc.blk.text && (loc.list === doc || loc.list.length > 1)) loc.list.splice(loc.i, 1)
+  }
   let at
   if (mark) { const i = doc.indexOf(mark); doc.splice(i, 1); at = { edge: i } }
   else {
@@ -2182,7 +2197,9 @@ function insertSlice(d, { pieces, openStart, openEnd }) {
 
 /** What's selected, if the pointer's on it: [s, e]; null if not. */
 function selectionUnder(ev) {
-  const hit = (rects) => [...rects].some((r) => ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom)
+  // Text's boxes are shorter than its lines: a few pixels' slack, so the
+  // whole height of a selected line takes a press.
+  const hit = (rects) => [...rects].some((r) => ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top - 5 && ev.clientY <= r.bottom + 5)
   if (sel?.anchor) return hit([...selLayer.children].map((el) => el.getBoundingClientRect())) ? effective() : null
   // The browser's own, in a line.
   const el = ev.target.closest?.('[data-u]'), s = getSelection()
