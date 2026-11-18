@@ -155,14 +155,14 @@ fn native_request(doc_path: &Path, format_key: &str) -> PandocRequest {
     ctx.pandoc_request.take().expect("request")
 }
 
-const DEFAULT_PROJECT: &str = "project:\n  type: default\n";
+const DEFAULT_PROJECT: &str = "quarto-required: \"^2\"\nproject:\n  type: default\n";
 
 #[test]
 fn a_project_with_format_html_still_yields_a_docx_request() {
     let (_guard, root) = scratch();
     write(
         &root.join("_quarto.yml"),
-        b"project:\n  type: default\nformat:\n  html:\n    toc: true\n",
+        b"quarto-required: \"^2\"\nproject:\n  type: default\nformat:\n  html:\n    toc: true\n",
     );
     let doc = root.join("doc.qmd");
     write(&doc, b"---\ntitle: T\n---\n\n# Hi\n");
@@ -191,7 +191,7 @@ fn project_level_reference_doc_resolves_against_the_declaring_file() {
     let (_guard, root) = scratch();
     write(
         &root.join("_quarto.yml"),
-        b"project:\n  type: default\nformat:\n  docx:\n    reference-doc: ref.docx\n",
+        b"quarto-required: \"^2\"\nproject:\n  type: default\nformat:\n  docx:\n    reference-doc: ref.docx\n",
     );
     write(&root.join("ref.docx"), b"REFDOCX");
     // A same-named decoy next to the document: resolving against the
@@ -232,7 +232,7 @@ fn a_document_level_reference_doc_resolves_against_the_document() {
     let (_guard, root) = scratch();
     write(
         &root.join("_quarto.yml"),
-        b"project:\n  type: default\nformat:\n  docx:\n    reference-doc: ref.docx\n",
+        b"quarto-required: \"^2\"\nproject:\n  type: default\nformat:\n  docx:\n    reference-doc: ref.docx\n",
     );
     write(&root.join("ref.docx"), b"REFDOCX");
     write(&root.join("sub/own.docx"), b"OWNDOCX");
@@ -292,7 +292,10 @@ fn image_targets_equal_native_when_output_dir_is_the_project_dir() {
 #[test]
 fn image_targets_equal_native_when_output_dir_differs() {
     let (_guard, root) = scratch();
-    assert_images_match_native(&root, "project:\n  type: default\n  output-dir: _out\n");
+    assert_images_match_native(
+        &root,
+        "quarto-required: \"^2\"\nproject:\n  type: default\n  output-dir: _out\n",
+    );
 }
 
 #[test]
@@ -300,7 +303,7 @@ fn a_website_project_document_yields_a_request() {
     let (_guard, root) = scratch();
     write(
         &root.join("_quarto.yml"),
-        b"project:\n  type: website\nwebsite:\n  title: W\n  navbar:\n    left:\n      - index.qmd\n",
+        b"quarto-required: \"^2\"\nproject:\n  type: website\nwebsite:\n  title: W\n  navbar:\n    left:\n      - index.qmd\n",
     );
     write(&root.join("index.qmd"), b"---\ntitle: Home\n---\n\nHome\n");
     let doc = root.join("about.qmd");
@@ -340,7 +343,7 @@ fn project_sibling_with_errors_does_not_block_the_active_page() {
 fn book_project(root: &Path) {
     write(
         &root.join("_quarto.yml"),
-        b"project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\n    - two.qmd\n",
+        b"quarto-required: \"^2\"\nproject:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\n    - two.qmd\n",
     );
     write(&root.join("index.qmd"), b"# Preface\n\nHello\n");
     // Single-token markers: pandoc JSON splits prose into `Str` /

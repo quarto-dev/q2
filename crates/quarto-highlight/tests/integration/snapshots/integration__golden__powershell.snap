@@ -1,0 +1,42 @@
+---
+source: crates/quarto-highlight/tests/integration/golden.rs
+assertion_line: 49
+description: "# Restart the service\n$name = \"widget\"\nif ($name) {\n    Restart-Service -Name $name -Force\n}\n"
+---
+[
+  [
+    0,
+    21,
+    "comment"
+  ],
+  [
+    22,
+    27,
+    "variable"
+  ],
+  [
+    30,
+    38,
+    "string"
+  ],
+  [
+    39,
+    41,
+    "keyword"
+  ],
+  [
+    43,
+    48,
+    "variable"
+  ],
+  [
+    56,
+    71,
+    "function"
+  ],
+  [
+    78,
+    83,
+    "variable"
+  ]
+]

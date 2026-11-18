@@ -25,10 +25,10 @@ matching close.
 
 The most common cause is an apostrophe being read as an opening
 quote. A `'` directly after a word (`it's`, `the dogs' toys`,
-`d'` before a code span) is always an apostrophe, but a `'` after
-a closing delimiter such as `` ` ``, `**` or `_` (`` `a.rs`'s ``),
-after whitespace, or at the start of a token is read as a quote
-opener.
+`d'` before a code span) or directly after the end of an inline
+construct (`` `a.rs`'s ``, `_book_'s`, `[book](url)'s`) is always an
+apostrophe, but a `'` after whitespace or at the start of a token is
+read as a quote opener.
 
 ## How to fix
 

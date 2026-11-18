@@ -1,3 +1,4 @@
 project:
   type: default
 title: "Dir Metadata Path Resolution Test"
+quarto-required: "^2"

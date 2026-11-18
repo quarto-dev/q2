@@ -118,7 +118,10 @@ fn snapshot_tree(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
 /// A website project: one clean page, one page with a Pass-1 warning,
 /// one page that fails to parse.
 fn write_mixed_project(dir: &Path) {
-    write_file(&dir.join("_quarto.yml"), "project:\n  type: website\n");
+    write_file(
+        &dir.join("_quarto.yml"),
+        "quarto-required: \"^2\"\nproject:\n  type: website\n",
+    );
     write_file(&dir.join("index.qmd"), "---\ntitle: Home\n---\n\nHello.\n");
     write_file(&dir.join("warn.qmd"), CSS_WARNING_QMD);
     write_file(&dir.join("broken.qmd"), BROKEN_QMD);
@@ -189,7 +192,10 @@ fn project_dry_run_reports_problems_and_writes_nothing() {
 fn warning_only_dry_run_exits_zero_unless_strict() {
     let temp = TempDir::new().unwrap();
     let dir = canonical(temp.path());
-    write_file(&dir.join("_quarto.yml"), "project:\n  type: website\n");
+    write_file(
+        &dir.join("_quarto.yml"),
+        "quarto-required: \"^2\"\nproject:\n  type: website\n",
+    );
     write_file(&dir.join("index.qmd"), CSS_WARNING_QMD);
 
     let output = run_q2(&dir, &["--dry-run"]);
@@ -207,7 +213,10 @@ fn warning_only_dry_run_exits_zero_unless_strict() {
 fn dry_run_reports_warnings_despite_a_warm_profile_cache() {
     let temp = TempDir::new().unwrap();
     let dir = canonical(temp.path());
-    write_file(&dir.join("_quarto.yml"), "project:\n  type: website\n");
+    write_file(
+        &dir.join("_quarto.yml"),
+        "quarto-required: \"^2\"\nproject:\n  type: website\n",
+    );
     write_file(&dir.join("index.qmd"), CSS_WARNING_QMD);
 
     let real = run_q2(&dir, &[]);
@@ -281,7 +290,7 @@ fn book_dry_run_reports_missing_chapter() {
     let dir = canonical(temp.path());
     write_file(
         &dir.join("_quarto.yml"),
-        "project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - missing.qmd\n",
+        "quarto-required: \"^2\"\nproject:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - missing.qmd\n",
     );
     write_file(&dir.join("index.qmd"), CSS_WARNING_QMD);
 
@@ -300,7 +309,10 @@ fn book_dry_run_reports_missing_chapter() {
 fn fail_fast_dry_run_stops_at_first_failure() {
     let temp = TempDir::new().unwrap();
     let dir = canonical(temp.path());
-    write_file(&dir.join("_quarto.yml"), "project:\n  type: website\n");
+    write_file(
+        &dir.join("_quarto.yml"),
+        "quarto-required: \"^2\"\nproject:\n  type: website\n",
+    );
     write_file(&dir.join("a.qmd"), BROKEN_QMD);
     write_file(&dir.join("b.qmd"), BROKEN_QMD);
 
@@ -396,7 +408,10 @@ fn json_dry_run_verbose_adds_files_and_keeps_stderr_pure() {
 fn json_dry_run_strict_promotes_in_stderr_and_summary() {
     let temp = TempDir::new().unwrap();
     let dir = canonical(temp.path());
-    write_file(&dir.join("_quarto.yml"), "project:\n  type: website\n");
+    write_file(
+        &dir.join("_quarto.yml"),
+        "quarto-required: \"^2\"\nproject:\n  type: website\n",
+    );
     write_file(&dir.join("index.qmd"), CSS_WARNING_QMD);
 
     let output = run_q2(&dir, &["--dry-run", "--json-errors", "--strict"]);
@@ -438,7 +453,10 @@ fn json_dry_run_single_file() {
 fn json_dry_run_pass1_failure_matches_real_render() {
     let temp = TempDir::new().unwrap();
     let dir = canonical(temp.path());
-    write_file(&dir.join("_quarto.yml"), "project:\n  type: website\n");
+    write_file(
+        &dir.join("_quarto.yml"),
+        "quarto-required: \"^2\"\nproject:\n  type: website\n",
+    );
     write_file(&dir.join("index.qmd"), "---\ntitle: Home\n---\n\nHello.\n");
     write_file(&dir.join("broken.qmd"), BROKEN_QMD);
 

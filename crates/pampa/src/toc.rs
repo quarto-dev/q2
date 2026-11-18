@@ -174,6 +174,13 @@ pub struct TocEntry {
     /// Child entries (nested headings)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<TocEntry>,
+
+    /// Where the heading is in the source (the `Header` block's span), so
+    /// an outline consumer can jump to it — the language server's
+    /// `quarto/documentProfile` outline ranges (bd-kkmn4413). `None` for
+    /// entries not built from a heading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_info: Option<SourceInfo>,
 }
 
 impl TocEntry {
@@ -256,6 +263,7 @@ impl TocEntry {
             level,
             number,
             children,
+            source_info: None,
         })
     }
 }
@@ -359,6 +367,7 @@ struct FlatTocEntry {
     title: Inlines,
     level: i32,
     number: Option<String>,
+    source_info: SourceInfo,
 }
 
 /// Collect TOC entries from blocks (flat list, not hierarchical).
@@ -461,6 +470,7 @@ fn extract_entry_from_section(div: &Div, max_depth: i32) -> Option<FlatTocEntry>
         level,
         // TODO: Implement actual section numbering
         number: if is_numbered { None } else { None },
+        source_info: header.source_info.clone(),
     })
 }
 
@@ -496,6 +506,7 @@ fn extract_entry_from_header(header: &Header, max_depth: i32) -> Option<FlatTocE
         level,
         // TODO: Implement actual section numbering
         number: if is_numbered { None } else { None },
+        source_info: header.source_info.clone(),
     })
 }
 
@@ -515,6 +526,7 @@ fn build_hierarchy(flat_entries: Vec<FlatTocEntry>) -> Vec<TocEntry> {
             level: flat.level,
             number: flat.number,
             children: vec![],
+            source_info: Some(flat.source_info),
         };
 
         // Pop entries from stack that are at same or higher level
@@ -895,7 +907,9 @@ mod tests {
                 level: 3,
                 number: None,
                 children: vec![],
+                source_info: None,
             }],
+            source_info: None,
         };
 
         let cv = entry.to_config_value();
@@ -929,7 +943,9 @@ mod tests {
                 level: 3,
                 number: None,
                 children: vec![],
+                source_info: None,
             }],
+            source_info: None,
         };
 
         let cv = original.to_config_value();
@@ -948,6 +964,7 @@ mod tests {
                 level: 1,
                 number: None,
                 children: vec![],
+                source_info: None,
             }],
         };
 
@@ -973,6 +990,7 @@ mod tests {
                     level: 1,
                     number: None,
                     children: vec![],
+                    source_info: None,
                 },
                 TocEntry {
                     id: "b".to_string(),
@@ -980,6 +998,7 @@ mod tests {
                     level: 1,
                     number: None,
                     children: vec![],
+                    source_info: None,
                 },
             ],
         };
@@ -1030,6 +1049,7 @@ mod tests {
             level: 2,
             number: None,
             children: vec![],
+            source_info: None,
         };
 
         let restored = TocEntry::from_config_value(&original.to_config_value()).unwrap();

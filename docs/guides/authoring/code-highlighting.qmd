@@ -39,18 +39,23 @@ code block class, and so does each alias.
 |------------|-------------|
 | bash       | `sh`        |
 | css        |             |
+| dockerfile |             |
 | html       |             |
+| ini        |             |
 | javascript | `js`, `jsx` |
 | json       |             |
 | julia      | `jl`        |
 | lmd        |             |
 | lua        |             |
+| powershell | `ps1`       |
 | python     | `py`        |
 | r          |             |
 | rust       | `rs`        |
 | sql        |             |
+| toml       | `conf`      |
 | tsx        |             |
 | typescript | `ts`        |
+| xml        |             |
 | yaml       | `yml`       |
 
 ## Adding a language with a tree-sitter grammar
@@ -65,19 +70,21 @@ my-project/
 ├── document.qmd
 └── _quarto/
     └── grammars/
-        └── toml/
-            ├── toml.wasm        # the grammar, compiled to WebAssembly
+        └── properties/
+            ├── properties.wasm  # the grammar, compiled to WebAssembly
             └── highlights.scm   # the grammar's highlight query
 ```
 
 No `_quarto.yml` setting is needed: every subfolder that contains both a
 `.wasm` file and a `highlights.scm` file is loaded, and the language it
 serves is the `.wasm` file's name without the extension. With the layout
-above, ```` ```toml ```` blocks and `` `…`{.toml} `` inline code are
-highlighted with the TOML grammar. For a single document that isn't part
-of a project, `_quarto/grammars/` sits next to the document.
+above, ```` ```properties ```` blocks and `` `…`{.properties} `` inline
+code are highlighted with the grammar for Java properties files. For a
+single document that isn't part of a project, `_quarto/grammars/` sits
+next to the document.
 
-@demo-user-grammar shows a document highlighting TOML this way:
+@demo-user-grammar shows a document highlighting Java properties files
+this way:
 
 :::: {#demo-user-grammar .embed-example-iframe file="/examples/highlighting/01-user-grammar/document.html"}
 ````markdown
@@ -86,25 +93,32 @@ title: "A user-supplied grammar"
 format: html
 ---
 
-TOML is not one of Quarto's built-in highlighting languages. This
-project adds it by shipping a tree-sitter grammar in
-`_quarto/grammars/toml/`: the compiled `toml.wasm` and its
-`highlights.scm` query. Any code block marked `toml` now picks it up:
+Java properties files are not one of Quarto's built-in highlighting
+languages. This project adds them by shipping a tree-sitter grammar in
+`_quarto/grammars/properties/`: the compiled `properties.wasm` and its
+`highlights.scm` query. Any code block marked `properties` now picks it
+up:
 
-```toml
-# Site configuration
-[server]
-host = "localhost"
-port = 8080
-debug = false
-started = 2026-11-05T09:30:00Z
-
-[[server.routes]]
-path = "/docs"
-cache = { enabled = true, max-age = 3600 }
+```properties
+# Application settings
+server.port = 8080
+server.address = localhost
+app.name = Report Builder
+app.data-dir = ${HOME}/reports
 ```
 
-Inline code works the same way: `retries = 3`{.toml}.
+Inline code works the same way: `retries = 3`{.properties}.
+
+The grammar's capture names become CSS classes: a capture `@name.sub`
+is emitted as `<span class="hl-name-sub">`. This grammar's query
+captures keys as `@property`, so the style block below sets
+`.hl-property` in bold; the colors come from the default palette.
+
+```{=html}
+<style>
+.hl-property { font-weight: 600; }
+</style>
+```
 ````
 
 [View source](https://github.com/quarto-dev/q2/tree/main/examples/highlighting/01-user-grammar)
@@ -114,9 +128,9 @@ Inline code works the same way: `retries = 3`{.toml}.
 
 Many tree-sitter grammars publish a compiled `tree-sitter-<language>.wasm`
 with each GitHub release, for example
-[tree-sitter-toml](https://github.com/tree-sitter-grammars/tree-sitter-toml/releases).
+[tree-sitter-properties](https://github.com/tree-sitter-grammars/tree-sitter-properties/releases).
 Download it and rename it to the class you want to write on your code
-blocks (`tree-sitter-toml.wasm` becomes `toml.wasm`). Without a release
+blocks (`tree-sitter-properties.wasm` becomes `properties.wasm`). Without a release
 asset, build one from the grammar's repository with
 `tree-sitter build --wasm`.
 
@@ -134,7 +148,7 @@ tree-sitter language ABI versions 13 to 15.
   skipped without a warning. The folder's own name doesn't matter; the
   `.wasm` file name does.
 - **The file name is the language name.** User grammars have no aliases. To
-  serve both `toml` and another class, use two folders.
+  serve both `properties` and another class, use two folders.
 - **A user grammar replaces a built-in one.** Quarto checks user grammars
   before its built-in grammars, so a `_quarto/grammars/python/python.wasm`
   takes over every `python` block. A user grammar named after a built-in
@@ -154,7 +168,8 @@ tree-sitter language ABI versions 13 to 15.
 ## How capture names become CSS classes
 
 A grammar's `highlights.scm` assigns **capture names** to parts of the
-syntax tree. For example, this line from the TOML query marks every comment:
+syntax tree. For example, this line from the properties query marks every
+comment:
 
 ```scheme
 (comment) @comment
@@ -186,8 +201,8 @@ stylesheet:
 ```
 
 The same approach adjusts a standard capture. The full document behind
-@demo-user-grammar ends with a rule that sets `.hl-type` (which the TOML query uses
-for keys) in bold.
+@demo-user-grammar ends with a rule that sets `.hl-property` (which the
+properties query uses for keys) in bold.
 
 ## Highlighting from a filter
 

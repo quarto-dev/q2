@@ -2,6 +2,8 @@
 #
 # Only .md files render: `.qmd` files here are repro fixtures, and a
 # positive render pattern replaces the default `**/*.qmd`.
+quarto-required: "^2"
+
 project:
   type: website
   output-dir: _site

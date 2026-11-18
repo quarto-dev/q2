@@ -1,2 +1,3 @@
 project:
   title: Mermaid Tests
+quarto-required: "^2"

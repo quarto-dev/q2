@@ -45,8 +45,8 @@ const LEAF_LEVEL: usize = 7;
 /// Analyze a document, extracting symbols, folding ranges, and diagnostics.
 ///
 /// Internally runs `quarto_core::pipeline::build_analysis_pipeline()` —
-/// Parse + MetadataMerge + PreEngineSugaring + AstTransforms (analysis
-/// subset). Meta shortcodes in headers are resolved after the pipeline so
+/// the render head (through the profile checkpoint) + PreEngineSugaring +
+/// AstTransforms (analysis subset). Meta shortcodes in headers are resolved after the pipeline so
 /// `# {{< meta title >}}` shows its resolved value in the outline.
 pub fn analyze_document(doc: &Document) -> DocumentAnalysis {
     pollster::block_on(analyze_document_async(doc))
@@ -54,20 +54,70 @@ pub fn analyze_document(doc: &Document) -> DocumentAnalysis {
 
 /// Async variant of [`analyze_document`]. The sync entry point blocks on
 /// this; it is exposed for callers that are already in an async context.
+///
+/// Analyses the text as a lone document (`/input.qmd`, a minimal
+/// single-file project, `html`) — the hub-client's contract. A language
+/// server with a real project calls [`analyze_in_project`] instead.
 pub async fn analyze_document_async(doc: &Document) -> DocumentAnalysis {
     // The pipeline wants a concrete path on the filesystem-style VFS. A
     // virtual `/input.qmd` matches the WASM render path's convention and
     // avoids pulling in whatever absolute path the editor uses.
     let virtual_path = PathBuf::from("/input.qmd");
-
     let project = minimal_project_context(&virtual_path);
     let document = DocumentInfo::from_path(&virtual_path);
-    let binaries = BinaryDependencies::new();
     let format = Format::from_format_string("html").unwrap_or_else(|_| Format::default());
-
-    let mut render_ctx = RenderContext::new(&project, &document, &format, &binaries);
-
     let runtime: Arc<dyn SystemRuntime> = Arc::new(default_runtime());
+    analyze_in_project(runtime, &project, &format, &document, doc.content())
+        .await
+        .analysis
+}
+
+/// Everything one analysis run yields (epic bd-3f6ijnw9, C3).
+///
+/// The analysis pipeline is the render head plus the analysis tail
+/// (`quarto_core::pipeline::build_analysis_pipeline`), so besides the
+/// editor-facing [`DocumentAnalysis`] the same run produces the Pass-1
+/// profile and the authored metadata.
+#[derive(Debug)]
+pub struct ProjectAnalysis {
+    /// Symbols, folding ranges and diagnostics.
+    pub analysis: DocumentAnalysis,
+    /// The document profile; `None` when the pipeline failed before the
+    /// profile checkpoint (the diagnostics say why).
+    pub profile: Option<quarto_core::document_profile::DocumentProfile>,
+    /// The authored, merged metadata (what `q2 get-config` reports);
+    /// `None` when the pipeline failed before the ingest phase ended.
+    pub authored_meta: Option<quarto_pandoc_types::ConfigValue>,
+    /// Needed to project prose values in `authored_meta`.
+    pub ast_context: Option<pampa::pandoc::ASTContext>,
+}
+
+/// Analyse `text` as the contents of `document` inside `project`, for
+/// `format`, reading every other file (includes, `_metadata.yml`,
+/// `_quarto.yml`) through `runtime`.
+pub async fn analyze_in_project(
+    runtime: Arc<dyn SystemRuntime>,
+    project: &ProjectContext,
+    format: &Format,
+    document: &DocumentInfo,
+    text: &str,
+) -> ProjectAnalysis {
+    let binaries = BinaryDependencies::new();
+    let mut render_ctx = RenderContext::new(project, document, format, &binaries);
+    let fallback_context = || {
+        let mut ctx = SourceContext::default();
+        ctx.add_file(
+            document.input.to_string_lossy().to_string(),
+            Some(text.to_string()),
+        );
+        ctx
+    };
+    let failed = |analysis: DocumentAnalysis| ProjectAnalysis {
+        analysis,
+        profile: None,
+        authored_meta: None,
+        ast_context: None,
+    };
 
     let mut stage_ctx = match StageContext::new(
         runtime,
@@ -79,14 +129,14 @@ pub async fn analyze_document_async(doc: &Document) -> DocumentAnalysis {
         Err(e) => {
             // Creating the stage context should not fail for an in-memory
             // single-file doc, but propagate the failure rather than panic.
-            let source_context = doc.create_source_context();
+            let source_context = fallback_context();
             let diag = DiagnosticMessage::error(format!("analysis setup failed: {e}"));
-            return DocumentAnalysis::with_data(
+            return failed(DocumentAnalysis::with_data(
                 Vec::new(),
                 Vec::new(),
                 diagnostics_from_messages(std::slice::from_ref(&diag), &source_context),
                 source_context,
-            );
+            ));
         }
     };
     // Artifacts flow through RenderContext in the standard pipeline; we
@@ -95,8 +145,8 @@ pub async fn analyze_document_async(doc: &Document) -> DocumentAnalysis {
     stage_ctx.artifacts = std::mem::take(&mut render_ctx.artifacts);
 
     let input = PipelineData::LoadedSource(LoadedSource::new(
-        virtual_path.clone(),
-        doc.content_bytes().to_vec(),
+        document.input.clone(),
+        text.as_bytes().to_vec(),
     ));
 
     let pipeline = build_analysis_pipeline();
@@ -120,8 +170,7 @@ pub async fn analyze_document_async(doc: &Document) -> DocumentAnalysis {
                 let _ = run_analysis_transforms(&mut pandoc, &mut analysis_ctx, &transforms);
 
                 let symbols = extract_symbols(&pandoc, &source_context);
-                let folding_ranges =
-                    extract_folding_ranges(&pandoc, &source_context, doc.content());
+                let folding_ranges = extract_folding_ranges(&pandoc, &source_context, text);
 
                 let mut diagnostics =
                     diagnostics_from_messages(&pipeline_diagnostics, &source_context);
@@ -131,32 +180,39 @@ pub async fn analyze_document_async(doc: &Document) -> DocumentAnalysis {
                     }
                 }
 
-                DocumentAnalysis::with_data(symbols, folding_ranges, diagnostics, source_context)
+                ProjectAnalysis {
+                    analysis: DocumentAnalysis::with_data(
+                        symbols,
+                        folding_ranges,
+                        diagnostics,
+                        source_context,
+                    ),
+                    profile: stage_ctx.document_profile.take(),
+                    authored_meta: doc_ast.authored_meta,
+                    ast_context: Some(doc_ast.ast_context),
+                }
             }
             None => {
-                let source_context = doc.create_source_context();
+                let source_context = fallback_context();
                 let diag = DiagnosticMessage::error(
                     "analysis pipeline did not produce a DocumentAst".to_string(),
                 );
-                DocumentAnalysis::with_data(
+                failed(DocumentAnalysis::with_data(
                     Vec::new(),
                     Vec::new(),
                     diagnostics_from_messages(std::slice::from_ref(&diag), &source_context),
                     source_context,
-                )
+                ))
             }
         },
         Err(err) => {
-            // Warnings collected before the failing stage live on the stage
-            // context; the failure's own diagnostics travel inside the error.
-            // Each is resolved against the context whose file ids its spans
-            // reference: a `Structured` error carries its own, while a parse
-            // stage's `StageError` spans point at FileId(0), which is where
-            // the document is registered both by the parse stage and by
-            // `create_source_context`. (Resolving only the stage context's
-            // diagnostics here dropped the parse error's span, leaving a
-            // single unlocated diagnostic at the top of the document.)
-            let source_context = doc.create_source_context();
+            // Parse errors carry their own source context (attached by the
+            // parse stage). The pipeline error type does not expose it
+            // directly, so rebuild one from the document. Any parse-time
+            // diagnostics surface via `StageContext::diagnostics` which
+            // pollster already drained above — except here, where the
+            // pipeline returned before diagnostic transfer.
+            let source_context = fallback_context();
             let mut diagnostics =
                 diagnostics_from_messages(&stage_ctx.diagnostics, &source_context);
             match &err {
@@ -180,7 +236,12 @@ pub async fn analyze_document_async(doc: &Document) -> DocumentAnalysis {
                     &source_context,
                 ));
             }
-            DocumentAnalysis::with_data(Vec::new(), Vec::new(), diagnostics, source_context)
+            failed(DocumentAnalysis::with_data(
+                Vec::new(),
+                Vec::new(),
+                diagnostics,
+                source_context,
+            ))
         }
     }
 }

@@ -1378,9 +1378,8 @@ mod tests {
 
     /// bd-t3n1nghb: the external-link layer is unconditional, so a
     /// hand-written `.external` link gets its icon without
-    /// `link-external-icon`, and the SVG fill is a real color (Quarto 1's
-    /// `colorToRGB()` is undefined on the HTML path and would be emitted
-    /// verbatim).
+    /// `link-external-icon`, and the SVG fill is a real color (the layer's
+    /// `colorToRGB()` call must evaluate, not be emitted verbatim).
     #[test]
     fn test_compile_default_css_includes_link_external_rules() {
         let runtime = NativeRuntime::new();
@@ -1433,6 +1432,10 @@ mod tests {
         assert!(
             css.contains(".code-copy-outer-scaffold"),
             "reveal theme CSS must contain the .code-copy-outer-scaffold scaffold rule"
+        );
+        assert!(
+            !css.contains("colorToRGB("),
+            "reveal theme CSS must evaluate colorToRGB() in the SVG icon fills"
         );
     }
 
@@ -1737,6 +1740,53 @@ mod tests {
             css.contains("fill=rgba(") || css.contains("fill=\"rgba("),
             "toggle icon SVG fill must be a concrete rgba() color"
         );
+    }
+
+    /// bd-65ja3het: `colorToRGB()` (ported from Q1's
+    /// `_quarto-functions.scss`) fills the SVG data-URI icons for the
+    /// code-copy button, code-tools button, notebook link and collapsible
+    /// callout toggles. When it was missing on the HTML path, sass emitted
+    /// `fill="colorToRGB(#6a737d)"` verbatim; the bare `#` starts a URL
+    /// fragment, truncating the SVG, so every one of those icons was
+    /// invisible. Check the default CSS and a light and a dark Bootswatch
+    /// theme.
+    #[test]
+    fn test_compile_html_css_evaluates_color_to_rgb_in_svg_icons() {
+        let runtime = NativeRuntime::new();
+        let mut outputs = vec![(
+            "default".to_string(),
+            compile_default_css(&runtime, true).unwrap(),
+        )];
+        for theme in ["cosmo", "darkly"] {
+            let config = ThemeConfig::new(vec![ThemeSpec::parse(theme).unwrap()], true);
+            let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
+            outputs.push((
+                theme.to_string(),
+                compile_theme_css(&config, &context).unwrap().css,
+            ));
+        }
+        for (name, css) in outputs {
+            assert!(
+                !css.contains("colorToRGB("),
+                "{name}: colorToRGB() must be evaluated, not emitted literally"
+            );
+            for selector in [
+                "div.code-copy-outer-scaffold:hover>.code-copy-button>.bi::before{",
+                ".callout-toggle::before{",
+                ".code-tools-button>.bi::before{",
+            ] {
+                // A selector can head several rules (sizing, then icon), so
+                // look for one whose SVG fill is a concrete rgb() color.
+                let has_rgb_fill = css.match_indices(selector).any(|(start, _)| {
+                    let end = css[start..].find('}').map_or(css.len(), |i| start + i);
+                    css[start..end].contains("fill=\"rgb(")
+                });
+                assert!(
+                    has_rgb_fill,
+                    "{name}: no {selector} rule with a concrete rgb() icon fill"
+                );
+            }
+        }
     }
 
     /// bd-0pic6 phase B: `highlight-style` selects the `.hl-*` palette

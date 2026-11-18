@@ -2,3 +2,4 @@ project:
   type: default
 license: "CC BY 4.0"
 appendix-style: plain
+quarto-required: "^2"

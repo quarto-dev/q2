@@ -1006,6 +1006,34 @@ struct NamedFile {
     membership: crate::project::book::BookMembership,
 }
 
+/// The last step of every project render, whichever dispatch it took
+/// ([`ProjectPipeline::run`] and [`ProjectPipeline::run_with_book_support`]
+/// both end here, exactly once per render):
+///
+/// 1. prepend the Quarto-version declaration warnings (Q-5-53..56,
+///    bd-gw8fmaz3) — a property of the project's `_quarto.yml`, so it is
+///    reported once per render rather than once per document, and on every
+///    host (CLI render, dry run, hub, `q2 preview`);
+/// 2. apply the project's `diagnostics:` policy to the project-scoped
+///    diagnostics. Per-document diagnostics get their policy in
+///    `run_pipeline`; project-scoped ones never pass through it, so without
+///    this step a project could not silence them. The policy is read from
+///    the merged project config (profiles and `_quarto.yml.local`
+///    included); a document's front matter cannot silence a project-scoped
+///    warning. Malformed policy entries are not reported here — every
+///    document's metadata merge already reports them (Q-5-27).
+///
+/// Runs before the CLI's `--strict` promotion, so a silenced warning stays
+/// silent under `--strict`, as per-document suppression does.
+fn finish_project_diagnostics<O>(project: &ProjectContext, summary: &mut ProjectRenderSummary<O>) {
+    let marker = super::version_marker::version_marker_diagnostics(&project.config);
+    summary.project_diagnostics.splice(0..0, marker);
+    if let Some(metadata) = &project.config.metadata {
+        let (policy, _) = crate::diagnostic_policy::DiagnosticPolicy::from_metadata(metadata);
+        policy.apply(&mut summary.project_diagnostics);
+    }
+}
+
 /// What [`ProjectPipeline::run_head`] hands on to Pass 2 and the tail.
 struct RunHeadState {
     initial_diagnostics: Vec<DiagnosticMessage>,
@@ -1267,6 +1295,7 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
         }
         if let Ok(summary) = &mut result {
             summary.project_diagnostics.extend(scope_diagnostics);
+            finish_project_diagnostics(self.project, summary);
         }
         if let Err(e) = self.project.registry.shutdown_all() {
             tracing::warn!("engine registry shutdown_all failed at end of project render: {e}");
@@ -2095,11 +2124,14 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         // explicit `registry.shutdown_all()` (not Drop) to reap TS-engine Node
         // subprocesses at end-of-render. Best-effort: log at WARN and continue;
         // the host's own Drop is the backstop if this errs.
-        let result = if self.dry_run {
+        let mut result = if self.dry_run {
             self.run_dry().await
         } else {
             self.run_inner().await
         };
+        if let Ok(summary) = &mut result {
+            finish_project_diagnostics(self.project, summary);
+        }
         if let Err(e) = self.project.registry.shutdown_all() {
             tracing::warn!("engine registry shutdown_all failed at end of project render: {e}");
         }
@@ -3380,7 +3412,12 @@ async fn pass1_profile_with_cache(
     // a cache hit would hide the file's warnings; and a dry run writes
     // nothing, so the cache is not saved either.
     if dry_run {
-        let (profile, diagnostics, source_context) = pass1_profile_single_file_live(
+        let crate::pass1::Pass1Document {
+            profile,
+            diagnostics,
+            source_context,
+            ..
+        } = crate::pass1::profile_document(
             runtime.clone(),
             project,
             format,
@@ -3496,9 +3533,12 @@ async fn pass1_profile_with_cache(
         });
     }
 
-    let (profile, _diagnostics, _source_context) =
-        pass1_profile_single_file_live(runtime.clone(), project, format, doc_info, &source_bytes)
-            .await?;
+    // The non-fatal diagnostics are dropped: Pass 2 reruns these stages and
+    // reports them (a dry run, above, keeps them).
+    let profile =
+        crate::pass1::profile_document(runtime.clone(), project, format, doc_info, &source_bytes)
+            .await?
+            .profile;
 
     // Best-effort save. A save failure is also non-fatal — the
     // profile is already computed and downstream code can use it for
@@ -3509,55 +3549,6 @@ async fn pass1_profile_with_cache(
         profile,
         diagnostics: None,
     })
-}
-
-/// Run the head pipeline live (no cache lookup). Used by
-/// [`pass1_profile_with_cache`] when the cache misses.
-async fn pass1_profile_single_file_live(
-    runtime: Arc<dyn SystemRuntime>,
-    project: &ProjectContext,
-    format: &Format,
-    doc_info: &DocumentInfo,
-    source_bytes: &[u8],
-) -> Result<(
-    crate::document_profile::DocumentProfile,
-    Vec<DiagnosticMessage>,
-    quarto_source_map::SourceContext,
-)> {
-    use crate::pipeline::{build_head_stages, run_pipeline};
-    use crate::render::{BinaryDependencies, RenderContext};
-
-    let source_name = doc_info.input.to_string_lossy().to_string();
-    let binaries = BinaryDependencies::new();
-    let mut ctx = RenderContext::new(project, doc_info, format, &binaries);
-    // This pass runs before the real render, which writes the trace. Its own trace would
-    // replace the recording a replay is reading (KNR-6).
-    ctx.suppress_trace_output = true;
-
-    // Exactly the full pipeline's head, so the Pass-1 profile equals
-    // the one the full render computes (see `build_head_stages`).
-    // Source conversion runs first: a non-QMD input without it would
-    // yield a garbage DocumentProfile / ProjectIndex entry
-    // (plan1c §1067-1086); include expansion precedes the checkpoint so
-    // transitive `{{< include … >}}` content and body links are visible
-    // (bd-xfwx, Phase 8.0d).
-    let stages = build_head_stages();
-
-    // The non-fatal diagnostics are returned for a dry run; a full render
-    // drops them, because Pass 2 reruns these stages and reports them.
-    let (output, diagnostics) =
-        run_pipeline(source_bytes, &source_name, &mut ctx, runtime, stages).await?;
-
-    let at_profile = output.into_at_profile().ok_or_else(|| {
-        QuartoError::other(
-            "Pass 1 did not produce an AtProfile variant — pipeline shape unexpected",
-        )
-    })?;
-    Ok((
-        at_profile.profile,
-        diagnostics,
-        at_profile.ast.source_context,
-    ))
 }
 
 #[cfg(test)]

@@ -5,3 +5,4 @@ website:
   repo-url: https://github.com/example/docs
   repo-branch: main
   repo-actions: [edit, publish]
+quarto-required: "^2"

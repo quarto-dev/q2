@@ -114,7 +114,7 @@ the documentation (`docs/guides/authoring/code-highlighting.qmd`).
 
 | Example | Demonstrates |
 |---|---|
-| [`highlighting/01-user-grammar`](highlighting/01-user-grammar/) | A tree-sitter grammar (TOML) shipped in `_quarto/grammars/toml/`, highlighting blocks and inline code, and a CSS rule on one `hl-*` capture class |
+| [`highlighting/01-user-grammar`](highlighting/01-user-grammar/) | A tree-sitter grammar (Java properties) shipped in `_quarto/grammars/properties/`, highlighting blocks and inline code, and a CSS rule on one `hl-*` capture class |
 
 ## Other example categories
 

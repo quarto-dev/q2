@@ -1,28 +1,23 @@
 //! Quarto Language Server Protocol implementation.
 //!
 //! This crate provides the LSP server for Quarto documents, wrapping
-//! `quarto-lsp-core` with the tower-lsp framework.
+//! a project-aware `quarto-lsp-project` workspace with `lsp-server` (JSON-RPC over stdio).
 //!
 //! # Architecture
 //!
 //! ```text
-//! ┌───────────────────────────────────────────────────────────────┐
-//! │                         quarto-lsp                             │
-//! │   tower-lsp wrapper, JSON-RPC/stdio, `quarto lsp` command     │
-//! │                                                                │
-//! │  ┌─────────────┐  ┌─────────────┐  ┌───────────────────────┐  │
-//! │  │  server.rs  │  │ convert.rs  │  │    capabilities.rs    │  │
-//! │  │ LanguageServer│ │Core ↔ LSP  │  │  Capability negotiation│  │
-//! │  └──────┬──────┘  └──────┬──────┘  └───────────────────────┘  │
-//! │         │                │                                     │
-//! │         └────────────────┴──────────────────┐                  │
-//! │                                             │                  │
-//! │  ┌──────────────────────────────────────────▼───────────────┐  │
-//! │  │                    quarto-lsp-core                        │  │
-//! │  │         (Transport-agnostic analysis logic)               │  │
-//! │  └───────────────────────────────────────────────────────────┘  │
-//! └───────────────────────────────────────────────────────────────┘
+//!  client ──JSON-RPC/stdio──▶ quarto-lsp (lsp-server loop: server.rs)
+//!                               │ Input / queries        ▲ Output
+//!                               ▼                        │
+//!                     quarto-lsp-project::Workspace (sans-IO sessions)
+//!                               │
+//!                     quarto-lsp-core (per-document analysis)
 //! ```
+//!
+//! `server.rs` is a thin host: it translates LSP messages to workspace
+//! inputs and queries, publishes diagnostics, watches project roots, and
+//! runs background jobs on rayon. All analysis state lives in the
+//! [`quarto_lsp_project::Workspace`] (epic bd-3f6ijnw9, C3).
 //!
 //! # Usage
 //!
@@ -35,7 +30,7 @@
 //! Or programmatically:
 //!
 //! ```rust,ignore
-//! quarto_lsp::run_server().await;
+//! quarto_lsp::run_server()?;
 //! ```
 
 pub mod capabilities;

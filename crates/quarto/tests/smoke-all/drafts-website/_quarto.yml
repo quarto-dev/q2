@@ -8,3 +8,4 @@ website:
     left:
       - index.qmd
       - item2.qmd
+quarto-required: "^2"

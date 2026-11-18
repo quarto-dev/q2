@@ -1,2 +1,3 @@
 project:
   title: Render-components override smoke
+quarto-required: "^2"

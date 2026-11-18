@@ -508,7 +508,7 @@ const BINARY_EXTENSIONS = new Set([
   // Import sources (document import I21): stored as-is via Add asset and
   // by import when EMF/WMF conversion fails. No viewer, so selecting one
   // is a no-op like pdf. Mirror of `BINARY_EXTENSIONS` in
-  // crates/quarto-hub/src/resource.rs.
+  // crates/quarto-project-files/src/lib.rs.
   'docx',
   'odt',
   'rtf',
@@ -517,7 +517,7 @@ const BINARY_EXTENSIONS = new Set([
   'emf',
   'wmf',
   // hephaestus plot documents (bd-sxiv2tio). Mirror of
-  // `BINARY_EXTENSIONS` in crates/quarto-hub/src/resource.rs.
+  // `BINARY_EXTENSIONS` in crates/quarto-project-files/src/lib.rs.
   'hep',
   // Fonts
   'woff',

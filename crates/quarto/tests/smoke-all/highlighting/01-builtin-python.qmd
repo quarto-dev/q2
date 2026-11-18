@@ -17,9 +17,10 @@ _quarto:
 ---
 
 Quarto highlights every fenced code block whose first class matches a
-known language. The 15 built-in languages are `bash`/`sh`, `css`, `html`,
-`javascript`/`js`/`jsx`, `json`, `julia`/`jl`, `lua`, `python`/`py`, `r`,
-`rust`/`rs`, `sql`, `tsx`, `typescript`/`ts`, `yaml`/`yml`.
+known language. The built-in languages are `bash`/`sh`, `css`,
+`dockerfile`, `html`, `ini`, `javascript`/`js`/`jsx`, `json`, `julia`/`jl`,
+`lua`, `powershell`/`ps1`, `python`/`py`, `r`, `rust`/`rs`, `sql`,
+`toml`/`conf`, `tsx`, `typescript`/`ts`, `xml`, `yaml`/`yml`.
 
 ```python
 def hello():

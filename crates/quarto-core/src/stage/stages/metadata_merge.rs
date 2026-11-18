@@ -732,6 +732,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
         MetadataMergeStage::new()
             .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
@@ -818,6 +819,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -873,6 +875,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -932,6 +935,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
         let output = MetadataMergeStage::new()
             .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
@@ -992,6 +996,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1054,6 +1059,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1104,6 +1110,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1165,6 +1172,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1368,6 +1376,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1419,6 +1428,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1460,6 +1470,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1504,6 +1515,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1570,6 +1582,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let output = stage
@@ -1635,6 +1648,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1695,6 +1709,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1747,6 +1762,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1795,6 +1811,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1844,6 +1861,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1889,6 +1907,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1936,6 +1955,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1994,6 +2014,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -2079,6 +2100,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -2132,6 +2154,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -2181,6 +2204,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         }
     }
 
@@ -2450,6 +2474,7 @@ mod tests {
             warnings: vec![],
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         };
         // The document sets its own subtitle — it must win.
         doc_ast.ast.meta = config_map(vec![("subtitle", config_str("doc subtitle"))]);

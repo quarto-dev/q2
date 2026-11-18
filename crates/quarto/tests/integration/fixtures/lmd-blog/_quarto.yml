@@ -3,3 +3,4 @@ project:
   output-dir: _site
 website:
   title: "lmd blog"
+quarto-required: "^2"

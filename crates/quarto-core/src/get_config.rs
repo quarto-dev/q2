@@ -23,10 +23,9 @@ use quarto_system_runtime::SystemRuntime;
 
 use crate::error::{QuartoError, Result};
 use crate::format::Format;
-use crate::pipeline::run_pipeline;
+use crate::pipeline::{build_ingest_stages, run_pipeline};
 use crate::project::{DocumentInfo, ProjectContext};
 use crate::render::{BinaryDependencies, RenderContext};
-use crate::stage::{MetadataMergeStage, ParseDocumentStage, PipelineStage};
 
 /// JSON-projection helpers for the merged [`ConfigValue`], re-exported so CLI
 /// callers can stay within the `quarto-core` API surface rather than depending
@@ -39,9 +38,21 @@ pub use pampa::config_json::{ProseMode, config_value_to_json, navigate};
 ///
 /// The merge applies, in render precedence: project `_quarto.yml`, directory
 /// `_metadata.yml` layers, document frontmatter, and `format.<id>.*` flattening
-/// for `format`. The pipeline is `[ParseDocumentStage, MetadataMergeStage]`;
-/// include expansion, engines, filters, and rendering do not run (includes do
-/// not affect `meta`).
+/// for `format`. The pipeline is the head pipeline's ingest phase,
+/// [`build_ingest_stages`] (source conversion, parse, merge), so the value is
+/// by construction the one a render's `AuthoredMetadataStage` records. Nothing
+/// after the ingest phase runs: no include expansion, engines, filters or
+/// rendering, and none of the enrich stages that write derived keys
+/// (`quarto.language`, `rendered.includes`, `listing-item`) into `meta`.
+///
+/// Running only the prefix is a choice, not a necessity: the full head would
+/// produce the same authored metadata (see
+/// `crate::pass1::Pass1Document::authored_meta`) but would also expand
+/// includes and run listing autofill, which costs I/O and lets a broken
+/// include fail `get-config` although includes cannot change this value.
+/// Revisit if a stage ever needs to contribute to authored metadata after
+/// the merge (plan: `claude-notes/plans/2026-11-16-lsp-document-profile-requests.md`,
+/// C1b).
 pub async fn merge_document_metadata(
     runtime: Arc<dyn SystemRuntime>,
     project: &ProjectContext,
@@ -53,10 +64,7 @@ pub async fn merge_document_metadata(
     let binaries = BinaryDependencies::new();
     let mut ctx = RenderContext::new(project, doc_info, format, &binaries);
 
-    let stages: Vec<Box<dyn PipelineStage>> = vec![
-        Box::new(ParseDocumentStage::new()),
-        Box::new(MetadataMergeStage::new()),
-    ];
+    let stages = build_ingest_stages();
 
     let (output, _diagnostics) =
         run_pipeline(source_bytes, &source_name, &mut ctx, runtime, stages).await?;

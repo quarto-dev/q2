@@ -42,7 +42,7 @@ lives on `review/1a-host`, `review/1a-engine`, and `feature/ts-engine-extensions
 2. **Plan contradicts itself on the embedding *model*.** §Build-model (lines 36–44) and
    §runtime (line 1121) cite the reveal.js "bundle is *source*, commit-and-`include_str!`"
    precedent; **Phase 4 (lines 1058–1060) explicitly says that framing is wrong** ("treated
-   exactly like `q2 mcp`'s `dist-bundle/`… the earlier 'bundle is source like reveal.js\' framing
+   exactly like `q2 mcp`'s `dist-bundle/`… the earlier 'bundle is source like reveal.js' framing
    was wrong; the cited `quarto-system-runtime`/`ejs-bundle.js` precedent does not exist").
    Reconcile to the Phase-4 (generated-artifact) framing.
 

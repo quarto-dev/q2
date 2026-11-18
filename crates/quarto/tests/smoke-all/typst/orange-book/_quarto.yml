@@ -35,3 +35,4 @@ format:
     keep-typ: true
     toc-depth: 17
     theorem-appearance: fancy
+quarto-required: "^2"

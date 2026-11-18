@@ -105,6 +105,9 @@ pub fn execute(args: AddArgs) -> Result<()> {
     if !args.json {
         print_table(&plan);
     }
+    for note in &plan.notes {
+        emit_diagnostic(note, args.json);
+    }
     let prompter: Option<&mut dyn Prompter> = if can_prompt {
         Some(&mut inquire_prompter)
     } else {
@@ -140,6 +143,13 @@ fn allow_prompt(no_prompt: bool, json: bool) -> bool {
 /// Report a fatal diagnostic on the right channel and exit non-zero.
 /// Stdout carries no result on failure.
 fn fail(diag: &DiagnosticMessage, json: bool) -> ! {
+    emit_diagnostic(diag, json);
+    std::process::exit(1);
+}
+
+/// Write a diagnostic to stderr: as text, or as one JSON line under
+/// `--json`.
+fn emit_diagnostic(diag: &DiagnosticMessage, json: bool) {
     if json {
         match serde_json::to_string(&diagnostic_to_json(diag, &SourceContext::new())) {
             Ok(line) => eprintln!("{line}"),
@@ -154,7 +164,6 @@ fn fail(diag: &DiagnosticMessage, json: bool) -> ! {
             )
         );
     }
-    std::process::exit(1);
 }
 
 // ====================================================================

@@ -311,6 +311,7 @@ fn pandoc_to_document_ast(pandoc: Pandoc, ast_context: ASTContext, path: PathBuf
         warnings: Vec::new(),
         recorded_includes: Vec::new(),
         derived_listing: Default::default(),
+        authored_meta: None,
     }
 }
 

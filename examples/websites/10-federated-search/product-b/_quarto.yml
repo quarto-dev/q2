@@ -1,3 +1,5 @@
+quarto-required: "^2"
+
 project:
   type: website
   output-dir: ../www/product-b

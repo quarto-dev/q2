@@ -458,6 +458,7 @@ mod tests {
             level,
             number: None,
             children: vec![],
+            source_info: None,
         }
     }
 
@@ -591,6 +592,7 @@ mod tests {
                     make_toc_entry("section-a", "Section A", 2),
                     make_toc_entry("section-b", "Section B", 2),
                 ],
+                source_info: None,
             }],
         };
         ast.meta
@@ -642,7 +644,9 @@ mod tests {
                     level: 2,
                     number: Some("1.1".to_string()),
                     children: vec![],
+                    source_info: None,
                 }],
+                source_info: None,
             }],
         };
         ast.meta
@@ -702,6 +706,7 @@ mod tests {
                 level: 1,
                 number: None,
                 children: vec![],
+                source_info: None,
             }],
         };
         ast.meta
@@ -1333,6 +1338,7 @@ mod tests {
                     level: 1,
                     number: None,
                     children: vec![make_toc_entry("why", "Why", 2)],
+                    source_info: None,
                 },
                 make_toc_entry("methods", "Methods", 1),
             ],

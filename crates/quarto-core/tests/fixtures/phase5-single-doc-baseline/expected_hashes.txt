@@ -518,5 +518,19 @@
 # because the diagram alignment rules now also select `pre.graphviz > svg`
 # (the Graphviz sibling of `pre.mermaid > svg`). doc.html hash unchanged:
 # the fixture has no diagram, so no runtime script is added.
+# Re-captured 2026-11-17 (bd-65ja3het): doc_files/styles.css changed
+# because `colorToRGB()` is now defined on the HTML path, so the SVG
+# data-URI icon fills (code-copy, code-tools, callout toggle, notebook
+# link, external link) compile to `rgb(...)` instead of the literal
+# `colorToRGB(#...)` call text. doc.html hash unchanged.
+# Re-captured 2026-11-17 (layout gaps slice C, no strand yet; plan
+# `2026-11-13-layout-gaps-revealjs-absolute-aside-html-columns.md`):
+# doc_files/styles.css changed because `div.columns` is now a wrapping flex
+# row (`display:flex;flex-wrap:wrap;align-items:flex-start`) and `div.column`
+# gained `min-width:0`, so Pandoc `.columns` sit side by side at their widths
+# despite the newline q2 writes between column divs. Verified the only delta
+# in the compiled CSS is those two rules (a rule-by-rule diff against the
+# stylesheet from `main`). doc.html hash
+# unchanged: the fixture has no columns.
 doc.html cb911871a3a0f9328ae6a32df4e2d72da647ff8696169aec56c01d66984cd8ef
-doc_files/styles.css 3e7189fd3921cf5a6ba6e732a51858205298eb04a4563dc04d4d42a4b2dcf43b
+doc_files/styles.css 8c84e5825a6ad4327e8dba7780bc5aed17c6af12194b285f39499a83f2e7c9d5

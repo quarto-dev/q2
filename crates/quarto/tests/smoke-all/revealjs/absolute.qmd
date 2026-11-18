@@ -1,0 +1,46 @@
+---
+title: "revealjs: absolute positioning"
+format: revealjs
+# Port of Quarto 1 tests/docs/reveal/mini/absolute.qmd, which had no
+# assertions. The position attributes of an `.absolute` Div, Span or Image
+# move into its inline style (bare numbers get `px`, units pass through, the
+# order is Quarto 1's fixed top/left/bottom/right/width/height) and no
+# `data-top`-style attribute is left behind. An author style is kept in front.
+_quarto:
+  tests:
+    revealjs:
+      ensureHtmlElements:
+        - - 'section img.absolute[style="top: 200px; left: 0px; width: 350px; height: 300px;"]'
+          - 'section img.absolute[style="top: 50px; right: 50px; width: 450px; height: 250px;"]'
+          - 'section img.absolute[style="bottom: 20px; right: 100px; width: 300px; height: 300px;"]'
+          - 'section div.absolute[style="left: 2em; bottom: 10%;"]'
+          - 'section span.absolute[style="color: red; top: 0px; right: 0px;"]'
+          - 'section p > img.absolute'
+        - - '[data-top]'
+          - '[data-left]'
+          - '[data-bottom]'
+          - '[data-right]'
+          - 'img.absolute[width]'
+          - 'img.absolute[height]'
+          - 'img.absolute.r-stretch'
+---
+
+## Absolute
+
+![](placeholder.png){.absolute top="200" left="0" width="350" height="300"}
+
+![](placeholder.png){.absolute top="50" right="50" width="450" height="250"}
+
+![](placeholder.png){.absolute bottom="20" right="100" width="300" height="300"}
+
+## Div and span
+
+::: {.absolute bottom="10%" left="2em"}
+ABS-DIV
+:::
+
+Body with a [pinned span]{.absolute style="color: red" top=0 right=0}.
+
+## One image
+
+![](placeholder.png){.absolute top=10 left=10}

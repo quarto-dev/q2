@@ -1,2 +1,3 @@
 project:
   title: Graphviz Tests
+quarto-required: "^2"

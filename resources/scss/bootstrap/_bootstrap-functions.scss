@@ -1,3 +1,14 @@
+// Renders a color as an rgb() string, for interpolating colors into
+// SVG data-URI fills (code-copy and code-tools icons, callout toggles,
+// the external-link icon, ...). Ported from Q1's _quarto-functions.scss.
+// Sass emits an undefined function verbatim instead of erroring, and the
+// literal `#` it leaves inside the data URI starts a URL fragment that
+// truncates the SVG, so the icon silently disappears (bd-65ja3het).
+@function colorToRGB($color) {
+  @return "rgb(" + red($color) + ", " + green($color) + ", " + blue($color) +
+    ")";
+}
+
 // Renders a color as an rgba() string (used to interpolate colors
 // into SVG data-URI fills, e.g. the color-scheme toggle icons).
 // Ported from Q1's _quarto-functions.scss; without it, the call

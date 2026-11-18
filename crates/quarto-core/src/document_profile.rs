@@ -162,7 +162,13 @@ use crate::project::drafts::{DraftMode, meta_is_draft, resolve_draft_mode};
 ///   the `jupyter:` / `knitr:` shorthand) now stamps that engine in its
 ///   sequence, where it used to stamp an empty one. A cached v16 profile
 ///   of such a page would claim no engine.
-pub const DOCUMENT_PROFILE_VERSION: u32 = 17;
+/// - `18`: bd-kkmn4413 (LSP epic bd-3f6ijnw9, decision D5). `outline`
+///   entries (`TocEntry`) carry `source_info`: the heading's span, so an
+///   outline consumer (the language server's `quarto/documentProfile`,
+///   hub navigation) can point at the heading. Strictly additive in
+///   serialized shape, but bumped: a cached v17 profile would deserialize
+///   with every span missing.
+pub const DOCUMENT_PROFILE_VERSION: u32 = 18;
 
 /// Listing values L1 (`ListingItemInfoStage`) derives from a document's
 /// body, kept apart from anything the author wrote.
@@ -2715,8 +2721,8 @@ Body.
     }
 
     #[test]
-    fn document_profile_version_is_17() {
-        assert_eq!(DOCUMENT_PROFILE_VERSION, 17);
+    fn document_profile_version_is_18() {
+        assert_eq!(DOCUMENT_PROFILE_VERSION, 18);
     }
 
     // bd-2hy80x1j: `draft-mode` is read from merged metadata in either
