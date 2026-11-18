@@ -239,16 +239,25 @@ besides an optional React hook, so it could become its own package.
 
 ## Opening a file on your machine
 
-`bin/rich-editor <file>` opens any file in the editor, in your browser,
-and keeps the two in step until Ctrl-C: edits are written to the file as
-they're made, and changes to the file from elsewhere (a text editor, git)
-show in the editor. It runs a sync hub on 127.0.0.1 and the dev server
-in one process, so nothing leaves the machine. To run it from anywhere,
-link it onto your `PATH`:
+`bin/rich-editor <file>` opens any file in the editor, in a desktop app
+of its own (Tauri, `src-tauri/`), and keeps the two in step: edits are
+written to the file as they're made, and changes to the file from
+elsewhere (a text editor, an agent, git) show in the editor. There's no
+sync server: the page (`desktop.html`, `src/desktop/main.tsx`) keeps the
+text in an automerge document of its own (`diskFile.ts`), and the app's
+Rust side reads, writes and watches the file. A change on disk is merged
+with edits that haven't been saved yet, so neither is lost.
+
+It runs the app from source (`tauri dev`), so it's always this
+checkout's code; the first run compiles the app, which takes a few
+minutes. To run it from anywhere, link it onto your `PATH`:
 
 ```bash
 ln -s "$PWD/bin/rich-editor" ~/.local/bin/rich-editor
 ```
+
+`src-tauri/` isn't in the repo's Cargo workspace: Tauri needs system
+webview libraries that CI's Rust jobs don't have.
 
 ## Trying it together
 
