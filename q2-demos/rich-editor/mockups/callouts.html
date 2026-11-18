@@ -1059,7 +1059,15 @@ editor.addEventListener('keydown', (e) => {
     }
     if (prev?.tag === 'callout') {
       // After a callout: an empty line goes; a line of text doesn't join it.
-      if (!loc.blk.text) { record(); loc.list.splice(loc.i, 1); sel = null; render() }
+      // One that leaves a gap where it was (as typing in a gap made it) puts
+      // the caret back in that gap.
+      if (!loc.blk.text) {
+        record()
+        loc.list.splice(loc.i, 1)
+        if (loc.list === doc && isGap(loc.i)) { sel = { gap: loc.i }; return render() }
+        sel = null
+        render()
+      }
       if (ui > 0) { const v = list[ui - 1]; const t = editor.querySelector(`[data-u="${v}"]`); if (t) { sel = { u: v, o: t.textContent.length }; setCaret(t, sel.o); renderToolbar(); renderSource(); renderLayer() } }
       return
     }
@@ -1075,6 +1083,13 @@ editor.addEventListener('keydown', (e) => {
       loc.blk.text += next.text
       loc.list.splice(loc.i + 1, 1)
       sel = { u, o: at.o }
+      return render()
+    }
+    // An empty line before a callout goes, back to the gap it leaves, if any.
+    if (next && !loc.blk.text && loc.list === doc) {
+      record()
+      doc.splice(loc.i, 1)
+      sel = isGap(loc.i) ? { gap: loc.i } : sel
       return render()
     }
     return
