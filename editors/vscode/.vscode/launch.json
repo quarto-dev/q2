@@ -10,7 +10,7 @@
         "${workspaceFolder}/test-workspace"
       ],
       "outFiles": ["${workspaceFolder}/dist/**/*.js"],
-      "preLaunchTask": "npm: build"
+      "preLaunchTask": "build quarto2-vscode"
     }
   ]
 }

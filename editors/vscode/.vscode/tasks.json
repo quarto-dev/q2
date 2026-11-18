@@ -2,8 +2,13 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "type": "npm",
-      "script": "build",
+      // A shell task, not `"type": "npm"`: VS Code's npm task type picks
+      // the package manager by detection (or the `npm.packageManager`
+      // setting), and from this folder it cannot see the workspace's
+      // package-lock.json at the repo root, so it may run yarn.
+      "label": "build quarto2-vscode",
+      "type": "shell",
+      "command": "npm run build",
       "group": "build",
       "problemMatcher": []
     }
