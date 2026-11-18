@@ -41,10 +41,13 @@ const RULE: &str = "ci-test-suite-unwired";
 
 /// Workflows that may satisfy the rule. `sync-test-harness` lives in the e2e
 /// workflow because its hub tier shells out to `cargo run --bin hub`, which
-/// only that workflow pre-builds — hence a list, not a single file.
+/// only that workflow pre-builds — hence a list, not a single file. The VS
+/// Code extension (`quarto2-vscode`) is tested in its own path-filtered
+/// workflow, next to the step that packages it (bd-xnpyb2vv).
 const WORKFLOWS: &[&str] = &[
     ".github/workflows/ts-test-suite.yml",
     ".github/workflows/hub-client-e2e.yml",
+    ".github/workflows/vscode-extension.yml",
 ];
 
 /// Substrings that mark a step's `run:` script as actually running tests.
