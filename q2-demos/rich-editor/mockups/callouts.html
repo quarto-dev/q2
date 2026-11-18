@@ -218,7 +218,7 @@ const GROUPS = [
     ['menu', 'A menu', 'The appearances by name, each with what it means.'],
   ]},
   { key: 'untitled', title: 'An untitled callout\'s header', options: [
-    ['hint', 'Its kind\'s name and a hint', '"Note" as it renders, and a faint "Type a title" after it while the pointer\'s over its header or the caret\'s in its title.'],
+    ['hint', 'Its kind\'s name and a hint', '"Note" as it renders, and a faint "Add a title" after it while the pointer\'s over its header or the caret\'s in its title.'],
     ['faint', 'Its kind\'s name, faint', 'Where it renders "Note", "Note" in placeholder grey: not a title; typing replaces it.'],
     ['placeholder', 'A title placeholder', '"Add a title" in placeholder grey instead: plainly a field, but not the word it renders.'],
   ]},
@@ -582,7 +582,7 @@ function renderBlock(b) {
     const ghost = !c.title && !num && (!rendersName || opts.untitled === 'placeholder')
     const t = textEl('span', 't:' + c.k, c.title, 'title' + (ghost ? ' ghost' : '') + (rendersName && opts.untitled === 'hint' ? ' hinted' : ''))
     t.dataset.ph = num ? '' : ghost ? 'Add a title' : NAME[c.type]
-    t.dataset.hint = 'Type a title'
+    t.dataset.hint = 'Add a title'
     tc.append(t)
     h.append(tc)
     if (opts.controls === 'header') box.append(cbar())
