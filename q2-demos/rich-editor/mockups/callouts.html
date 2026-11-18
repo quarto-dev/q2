@@ -198,7 +198,7 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 .grip svg { width:10px; height:16px; }
 /* The caret between two blocks (a gap): a short blinking line at the text's
    left, in the text's colour, unlike the blue bar of a drop. */
-.gap-caret { position:absolute; width:22px; height:2px; background:var(--ink); border-radius:1px; pointer-events:none; animation:blink 1.06s steps(1) infinite; }
+.gap-caret { position:absolute; width:22px; height:1px; background:var(--ink); border-radius:1px; pointer-events:none; animation:blink 1.06s steps(1) infinite; }
 @keyframes blink { 50% { visibility:hidden; } }
 #editor:focus { outline:none; }
 .drop-line { position:absolute; height:2px; background:var(--accent); border-radius:1px; pointer-events:none; }
@@ -1236,7 +1236,7 @@ function renderGapCaret() {
   const y = a && b ? (a.bottom + b.top) / 2 : a ? a.bottom + 10 : b.top - 10
   const caret = Object.assign(document.createElement('div'), { className: 'gap-caret' })
   caret.style.left = er.left + 'px'
-  caret.style.top = y - 1 + 'px'
+  caret.style.top = y - 0.5 + 'px'
   layer.append(caret)
 }
 /** Keys with the caret in a gap. */
