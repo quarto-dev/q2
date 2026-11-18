@@ -505,6 +505,16 @@ function putInCallout(c, i, blk) {
  * collapsible callouts mostly do; starting open instead (collapse="false")
  * is rarer, so it's in More, only then. In the toolbar, it's spelled out.
  */
+/**
+ * Set how it collapses when rendered, leaving it as it is here: making it
+ * collapsible (or starting it collapsed) doesn't collapse it under the
+ * caret; its chevron still shuts it here, to look.
+ */
+function setCollapse(c, v) {
+  const shown = bodyShown(c)
+  c.collapse = v
+  if (bodyShown(c) !== shown) peek.has(c.k) ? peek.delete(c.k) : peek.add(c.k)
+}
 function collapseButton(c, inToolbar = false) {
   const b = document.createElement('button')
   if (inToolbar) { b.className = 'pick'; b.textContent = 'Collapsible' }
@@ -513,7 +523,7 @@ function collapseButton(c, inToolbar = false) {
   b.setAttribute('aria-label', 'Collapsible')
   b.setAttribute('aria-pressed', String(c.collapse != null))
   b.onmousedown = (e) => e.preventDefault()
-  b.onclick = (e) => { e.stopPropagation(); record(); c.collapse = c.collapse == null ? true : null; peek.delete(c.k); menu = null; render() }
+  b.onclick = (e) => { e.stopPropagation(); record(); setCollapse(c, c.collapse == null ? true : null); menu = null; render() }
   return b
 }
 
@@ -822,7 +832,7 @@ function renderMenu() {
     if (!showHeader(c)) item(ICONS.title, 'Add a title', () => addTitle(c))
     else if (c.title) item(ICONS.title, 'Remove the title', () => change(c, () => { c.title = ''; if (sel?.u === 't:' + c.k) sel = { u: 'p:' + c.body[0].k, o: 0 } }))
     item(ICONS.icon, 'Icon', () => change(c, () => { c.icon = !c.icon }), { check: hasIcon(c), disabled: c.appearance === 'minimal', hint: c.appearance === 'minimal' ? 'minimal has none' : '' })
-    if (c.collapse != null) item(ICONS.collapse, 'Starts open', () => change(c, () => { c.collapse = !c.collapse; peek.delete(c.k) }), { check: c.collapse === false })
+    if (c.collapse != null) item(ICONS.collapse, 'Starts open', () => change(c, () => setCollapse(c, !c.collapse)), { check: c.collapse === false })
     item(ICONS.numbered, 'Numbered', () => change(c, () => { c.id = c.id ? null : `${PREFIX[c.type]}-${slug(c.title || NAME[c.type])}` }), { check: Boolean(c.id), hint: c.id ? '#' + c.id : '' })
     list.append(document.createElement('hr'))
     const i = doc.indexOf(c)
