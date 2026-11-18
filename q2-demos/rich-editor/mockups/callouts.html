@@ -402,8 +402,9 @@ const ICONS = {
   appearance: STROKE('<path d="M12 4a8 8 0 1 0 0 16c1.2 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.6 1.7-1.6H16a4 4 0 0 0 4-4c0-3.5-3.6-6.3-8-6.3z"/><circle cx="8" cy="11" r="1" fill="currentColor"/><circle cx="10.5" cy="7.8" r="1" fill="currentColor"/><circle cx="14.5" cy="8" r="1" fill="currentColor"/>'),
   chevron: '<svg viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/></svg>',
   // Not a chevron: beside Quarto's own, which does collapse the callout, it
-  // read as a button that would. A header, and the body it can hide, dashed.
-  collapse: STROKE('<rect x="4" y="4" width="16" height="5" rx="1"/><path d="M4 12.5v6.5a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-6.5" stroke-dasharray="2.2 2.2"/>'),
+  // read as a button that would. A header, and the lines of text under it
+  // that it can hide.
+  collapse: STROKE('<rect x="4" y="4" width="16" height="5" rx="1"/><path d="M6.5 13h11M6.5 16.5h11M6.5 20h7"/>'),
   more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>',
   bold: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z"/></svg>',
   italic: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z"/></svg>',
