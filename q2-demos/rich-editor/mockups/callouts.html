@@ -1265,6 +1265,11 @@ function gapKey(e) {
     if (goalX != null && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) placeAtX(t, goalX, end ? 'last' : 'first')
     else setCaret(t, end ? t.textContent.length : 0)
     sel = { u: v, o: caretIn(t)?.o ?? 0 }
+    // Out of the gap: its caret goes (selectionchange won't redraw it, since
+    // sel already says where the caret is).
+    renderToolbar()
+    renderSource()
+    renderLayer()
   }
   if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); if (e.key === 'ArrowLeft') goalX = null; if (i > 0) into(i - 1, true) }
   else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); if (e.key === 'ArrowRight') goalX = null; if (i < doc.length) into(i, false) }
