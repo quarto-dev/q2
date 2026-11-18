@@ -102,11 +102,11 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 /* #646b72: at least 4.5:1 (WCAG AA for its size) on every kind's header
    tint and on white; placeholder grey is under 2:1 there. */
 .callout .title.hinted:empty::after { content:attr(data-hint); color:#646b72; font-weight:400; font-size:calc(1em - 3px); margin-left:.6em; opacity:0; }
-/* The hint shows on hover over the header, saying what "Note" is, fading
-   in; and with the caret in the title (the Title button gets there without
+/* The hint shows on hover over the header (left of its settings bar: see
+   hintK), saying what "Note" is, fading in; and with the caret in the title (the Title button gets there without
    a hover), at once: a click redraws the callout, and a fade there flickered
    it out and back in. "Note" fades to a placeholder, which typing replaces. */
-.callout-header:hover .title.hinted:empty::after { opacity:1; transition:opacity .2s; }
+.callout .title.hinted.hint-on:empty::after { opacity:1; transition:opacity .2s; }
 .callout .title.hinted:empty:focus::after { opacity:1; transition:none; }
 .callout .title.hinted:empty:focus::before { color:var(--faint); }
 .callout .title.ghost:empty::before { color:var(--faint); font-weight:400; }
@@ -673,6 +673,7 @@ function renderBlock(b) {
     const t = textEl('span', 't:' + c.k, c.title, 'title' + (ghost ? ' ghost' : '') + (rendersName && opts.untitled === 'hint' ? ' hinted' : ''))
     t.dataset.ph = num ? '' : ghost ? 'Add a title' : NAME[c.type]
     t.dataset.hint = 'Using the default title. Add your own.'
+    if (hintK === c.k) t.classList.add('hint-on')
     tc.append(t)
     h.append(tc)
     if (opts.controls === 'header') box.append(cbar())
@@ -806,6 +807,7 @@ function renderToolbar() {
 let menu = null    // { kind: 'kind' | 'create' | 'appearance' | 'more', k, x, y }
 let hoverK = null
 let lastBar = null  // where the bar on its corner was: { k, left, chev }
+let hintK = null    // the callout whose untitled hint the pointer's over
 function toggleMenu(kind, k, el) {
   if (menu && menu.kind === kind && menu.k === k) { menu = null; return render() }
   const r = el.getBoundingClientRect()
@@ -1185,6 +1187,16 @@ document.addEventListener('mousemove', (e) => {
   const g = hoveredBlock(e)
   const gripMoved = g?.k !== grip?.k || g?.top !== grip?.top
   grip = g
+  // The untitled hint: over the header, but stopping 24px short of its
+  // settings bar (or its right end, with none), not under the bar.
+  const bar = layer.querySelector('.hbar')?.getBoundingClientRect()
+  const hr = header?.getBoundingClientRect()
+  const limit = hr && (bar && bar.bottom > hr.top && bar.top < hr.bottom ? bar.left : hr.right) - 24
+  const hint = hr && header.contains(t) && e.clientX < limit ? Number(box.dataset.k) : null
+  if (hint !== hintK) {
+    hintK = hint
+    for (const el of editor.querySelectorAll('.title.hinted')) el.classList.toggle('hint-on', Number(el.dataset.u.slice(2)) === hintK)
+  }
   if (k === hoverK && !gripMoved) return
   if (k !== hoverK) { hoverK = k; renderSource() }
   renderLayer()
