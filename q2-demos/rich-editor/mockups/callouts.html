@@ -205,7 +205,7 @@ body.dragging, body.dragging * { cursor:grabbing !important; user-select:none; }
 // ---------------------------------------------------------------- options
 const GROUPS = [
   { key: 'controls', title: 'Where its settings are', options: [
-    ['hover', 'A bar on its corner', 'Its kind (by name), appearance, collapsing and More in a bar across its top-right corner, while the pointer\'s over its title. On Quarto\'s chevron (which it would partly cover) it goes, so the chevron can be clicked.'],
+    ['hover', 'A bar on its corner', 'Its kind (by name), appearance, collapsing and More in a bar across its top-right corner, while the pointer\'s over its title. It slides clear of Quarto\'s chevron when the callout is made collapsible, and back when it isn\'t.'],
     ['header', 'On the callout itself', 'Click its icon to change its kind. Its other settings are at the right end of its header (in its top-right corner without one), while the pointer\'s over its title.'],
     ['image', 'Inside its corner, as an image\'s', 'An image\'s hover bar (blocks.html), on a callout: icon buttons inside its top-right corner, over what\'s there, while the pointer\'s over its title. Kind, its current kind\'s icon, opens the kinds.'],
     ['toolbar', 'In the toolbar', 'With the caret in a callout, the toolbar grows a Callout section, as Google Docs\' does for a table.'],
@@ -721,7 +721,7 @@ function renderToolbar() {
 // Menus, and the hover bar: over everything, in the window's coordinates.
 let menu = null    // { kind: 'kind' | 'create' | 'appearance' | 'more', k, x, y }
 let hoverK = null
-let chevK = null    // the callout whose chevron is under the pointer
+let lastBar = null  // where the bar on its corner was: { k, left, chev }
 function toggleMenu(kind, k, el) {
   if (menu && menu.kind === kind && menu.k === k) { menu = null; return render() }
   const r = el.getBoundingClientRect()
@@ -739,10 +739,7 @@ function renderLayer() {
     // Only for the one under the pointer (or whose menu is open), as an
     // image's: never just for the caret being in it.
     const c = calloutByKey(menu?.k ?? hoverK)
-    // Across its top edge, it covers the top of Quarto's chevron: on the
-    // chevron, it goes, so the chevron's all there to click.
-    const offChev = opts.controls !== 'hover' || chevK !== c?.k || menu?.k === c?.k
-    const el = c && offChev && editor.querySelector(`.callout[data-k="${c.k}"]`)
+    const el = c && editor.querySelector(`.callout[data-k="${c.k}"]`)
     if (el) {
       const bar = document.createElement('div')
       bar.className = 'hbar hui'
@@ -789,9 +786,19 @@ function renderLayer() {
         bar.style.top = (hr ? hr.top + (hr.height - bar.offsetHeight) / 2 : r.top + 3) + 'px'
       } else {
         // On its top-right corner, across its top edge, so the pointer can
-        // reach it without leaving the callout.
-        bar.style.left = r.right - bar.offsetWidth - 8 + 'px'
+        // reach it without leaving the callout; clear of Quarto's chevron
+        // when it has one. Made collapsible (or not), it slides there from
+        // where it was, so the move can be followed.
+        const chev = el.querySelector(':scope > .callout-header .chev')?.getBoundingClientRect()
+        const left = (chev ? chev.left - 4 : r.right - 8) - bar.offsetWidth
         bar.style.top = r.top - bar.offsetHeight / 2 - 2 + 'px'
+        if (lastBar?.k === c.k && lastBar.chev !== Boolean(chev)) {
+          bar.style.left = lastBar.left + 'px'
+          bar.getBoundingClientRect()
+          bar.style.transition = 'left .2s ease'
+        }
+        bar.style.left = left + 'px'
+        lastBar = { k: c.k, left, chev: Boolean(chev) }
       }
     }
   }
@@ -1039,10 +1046,7 @@ document.addEventListener('mousemove', (e) => {
   const g = hoveredBlock(e)
   const gripMoved = g?.k !== grip?.k || g?.top !== grip?.top
   grip = g
-  const chev = t.closest?.('.chev') ? Number(box.dataset.k) : null
-  const chevMoved = chev !== chevK
-  chevK = chev
-  if (k === hoverK && !gripMoved && !chevMoved) return
+  if (k === hoverK && !gripMoved) return
   if (k !== hoverK) { hoverK = k; renderSource() }
   renderLayer()
 })
