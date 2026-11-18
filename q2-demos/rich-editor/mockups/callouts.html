@@ -1002,6 +1002,7 @@ editor.addEventListener('keydown', (e) => {
   sel = { u, o: at.o }
   const len = el.textContent.length
   const list = units(), ui = list.indexOf(u)
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') goalX = null
   const go = (v, end) => { const t = editor.querySelector(`[data-u="${v}"]`); if (!t) return; e.preventDefault(); sel = { u: v, o: end ? t.textContent.length : 0 }; setCaret(t, sel.o) }
   if (e.altKey && e.shiftKey && !e.metaKey && !e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
     e.preventDefault()
@@ -1069,10 +1070,50 @@ editor.addEventListener('keydown', (e) => {
     }
     return
   }
-  if ((e.key === 'ArrowUp' && atLineEdge(el, -1, at.o, len)) || (e.key === 'ArrowLeft' && at.o === 0)) { if (ui > 0) go(list[ui - 1], true) }
-  else if ((e.key === 'ArrowDown' && atLineEdge(el, 1, at.o, len)) || (e.key === 'ArrowRight' && at.o === len)) { if (ui < list.length - 1) go(list[ui + 1], false) }
+  // ↑/↓ off a line's edge: to the line above or below, where the caret was
+  // across the page (kept through a run of them), as between any lines.
+  const vertical = (v, line) => {
+    const t = editor.querySelector(`[data-u="${v}"]`)
+    if (!t) return
+    e.preventDefault()
+    goalX ??= caretX(el)
+    placeAtX(t, goalX, line)
+    sel = { u: v, o: caretIn(t)?.o ?? 0 }
+  }
+  if (e.key === 'ArrowUp' && atLineEdge(el, -1, at.o, len)) { if (ui > 0) vertical(list[ui - 1], 'last') }
+  else if (e.key === 'ArrowDown' && atLineEdge(el, 1, at.o, len)) { if (ui < list.length - 1) vertical(list[ui + 1], 'first') }
+  else if (e.key === 'ArrowLeft' && at.o === 0) { if (ui > 0) go(list[ui - 1], true) }
+  else if (e.key === 'ArrowRight' && at.o === len) { if (ui < list.length - 1) go(list[ui + 1], false) }
 })
 /** Whether the caret's on the first (dir -1) or last (dir 1) line of el. */
+// Where across the page ↑/↓ keep the caret, through a run of them.
+let goalX = null
+document.addEventListener('mousedown', () => { goalX = null }, true)
+/** The caret's x in el (its left edge, empty). */
+function caretX(el) {
+  const s = getSelection()
+  const rect = s.rangeCount ? s.getRangeAt(0).getClientRects()[0] : null
+  return rect ? rect.left : el.getBoundingClientRect().left
+}
+/** The caret in el's first or last line, as near x as that line goes. */
+function placeAtX(el, x, line) {
+  const r = el.getBoundingClientRect()
+  const lh = Math.min(parseFloat(getComputedStyle(el).lineHeight) || 24, r.height)
+  const y = line === 'first' ? r.top + lh / 2 : r.bottom - lh / 2
+  const cx = Math.max(r.left + 1, Math.min(x, r.right - 1))
+  let node = null, offset = 0
+  if (document.caretPositionFromPoint) { const pos = document.caretPositionFromPoint(cx, y); node = pos?.offsetNode; offset = pos?.offset ?? 0 }
+  else { const rg = document.caretRangeFromPoint(cx, y); node = rg?.startContainer; offset = rg?.startOffset ?? 0 }
+  if (!node || !el.contains(node)) return setCaret(el, line === 'first' ? 0 : el.textContent.length)
+  el.focus({ preventScroll: true })
+  const rg = document.createRange()
+  rg.setStart(node, offset)
+  rg.collapse(true)
+  const s = getSelection()
+  s.removeAllRanges()
+  s.addRange(rg)
+}
+
 function atLineEdge(el, dir, o, len) {
   const s = getSelection()
   const rect = s.rangeCount ? s.getRangeAt(0).getClientRects()[0] : null
