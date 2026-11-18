@@ -616,11 +616,10 @@ export class ConnectionManager {
     // uses the browser adapter (no header).
     await client.connect(serverUrl, indexDocId, authorId, undefined, undefined, {
       auth,
-      // Server-backed client with memory storage: offline mode would
+      // Server-backed client with memory storage: running offline would
       // be a silent data black hole — demand a live peer or fail
       // loudly (bd-xnmd5ni1). The budget covers the auth round-trips
-      // (health probe, author fetch, token refresh) that made the old
-      // 1 ms default lose deterministically.
+      // (health probe, author fetch, token refresh).
       requireOnline: true,
       peerTimeoutMs: PEER_TIMEOUT_MS,
     });

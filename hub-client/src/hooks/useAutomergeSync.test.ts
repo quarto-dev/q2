@@ -14,6 +14,8 @@ vi.mock('@quarto/preview-runtime', () => ({
   setImmediateFileChangeCallback: vi.fn(),
   diffToEditorChanges: vi.fn(),
   vfsAddFile: vi.fn(),
+  // The hook only mirrors content into the VFS once WASM is up.
+  isWasmReady: vi.fn(() => true),
 }));
 
 // Mock diffToMonacoEdits

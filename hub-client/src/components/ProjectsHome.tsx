@@ -78,6 +78,7 @@ function renderChoiceTree(
 import Tooltip from './Tooltip';
 import ModalDialog from './ModalDialog';
 import { common } from '../strings';
+import SignInStatus from './auth/SignInStatus';
 import { sortProjectItems, sortOrderLabel, type SortOrder } from '../utils/projectSort';
 import { buildProjectListExport, parseProjectListImport } from '../services/projectListExport';
 import type { Face } from '../utils/facepile';
@@ -1781,6 +1782,9 @@ export default function ProjectsHome({
               </Menu>
             )}
           </div>
+          {/* Optional auth (prototype): sign-in status + button. Renders
+              nothing when auth is off. */}
+          <SignInStatus className="qh-auth" />
           <div className="qh-menu-anchor qh-avatar-anchor">
             <button
               className="qh-avatar"

@@ -1,29 +1,23 @@
 /**
- * Behavior-preservation contract for q2-debug's rendering surface.
+ * Contract for q2-debug's rendering surface.
  *
- * Plan 2pre's promise is "byte-equivalent for q2-debug across the
- * carve-up, with one deliberate exception (the literal `// TODO:`
- * text in the bordered Figure)." Before 2pre, this contract had no
- * test coverage — only manual eyes. These tests lock the contract so
- * the carve-up's Phase 2 (consumer migration + rename + shim deletion)
- * has a real regression gate, and so future format additions can rely
- * on q2-debug being a stable reference output.
+ * q2-debug renders the AST as a collapsible tree (`.q2d`): each node is
+ * a tag (`.q2d-tag`, the node type) followed by its properties and
+ * children. These tests pin what a reader of that tree relies on, so
+ * other formats can keep treating q2-debug as a reference output.
  *
- * Coverage per Plan 2pre §"What stays exactly the same":
- *   - Bordered debug aesthetic — every q2-debug leaf renders inside a
- *     `border` styling.
- *   - Figure caption branch — when a Figure has a short caption, the
- *     bordered "Caption:" line is emitted (port-for-port from the
- *     pre-carve-up renderChildrenRegistry entry, minus Bug A).
- *   - Bug A: the literal `// TODO:` text from
- *     `ReactAstDebugRenderer.tsx`'s old Figure entry is gone from the
- *     rendered DOM.
- *   - 'Not registered' miss path renders a bordered message for an
- *     unknown node type — the dispatcher fallback removal didn't
- *     break this.
+ * Coverage:
+ *   - Tree view — every node shows its type as a tag, with its
+ *     properties (Header level, list item count) and its text.
+ *   - Figure caption — a short caption is shown in a `caption:` slot,
+ *     and the slot is absent when there is no short caption.
+ *   - Bug A: the literal `// TODO:` text from the old Figure entry is
+ *     gone from the rendered DOM.
+ *   - Unknown node types still render, tagged as unknown
+ *     (`.q2d-tag-unknown`), rather than breaking the tree.
  *   - Override path resolves: registering a custom Para under the
- *     q2-debug registry wins over q2-debug's bordered Para. (Locks
- *     the framework→<Block>→registry[node.t] dispatch chain.)
+ *     q2-debug registry wins over q2-debug's own Para. (Locks the
+ *     framework→<Block>→registry[node.t] dispatch chain.)
  */
 
 import { describe, it, expect } from 'vitest';
@@ -56,6 +50,16 @@ function mount(blocks: any[]) {
   );
 }
 
+/** Node-type tags in the rendered tree, in document order. */
+function tags(container: HTMLElement): string[] {
+  return [...container.querySelectorAll('.q2d-tag')].map((el) => el.textContent ?? '');
+}
+
+/** Slot labels (`caption:` etc.) in the rendered tree. */
+function slots(container: HTMLElement): string[] {
+  return [...container.querySelectorAll('.q2d-slot')].map((el) => el.textContent ?? '');
+}
+
 // ---------------------------------------------------------------------------
 // Block / inline fixtures
 // ---------------------------------------------------------------------------
@@ -77,31 +81,31 @@ const FIGURE_WITH_SHORT_CAPTION = (shortCaption: string, body: any[]) => ({
 });
 
 // ---------------------------------------------------------------------------
-// Bordered debug aesthetic
+// Tree view
 // ---------------------------------------------------------------------------
 
-describe('q2-debug bordered aesthetic', () => {
-  it('renders Para inside a bordered block', () => {
+describe('q2-debug tree view', () => {
+  it('renders Para as a tagged node in the tree', () => {
     const { container } = mount([PARA('hello')]);
-    const bordered = container.querySelector('div[style*="border"]');
-    expect(bordered).not.toBeNull();
-    expect(container.textContent).toContain('Para:');
+    expect(container.querySelector('.q2d')).not.toBeNull();
+    expect(tags(container)).toContain('Para');
     expect(container.textContent).toContain('hello');
   });
 
-  it('renders Header inside a bordered block with the level annotation', () => {
+  it('renders Header as a tagged node with the level annotation', () => {
     const { container } = mount([HEADER(2, 'Section')]);
-    expect(container.textContent).toContain('Header(level=2):');
+    expect(tags(container)).toContain('Header');
+    expect(container.textContent).toContain('level=2');
     expect(container.textContent).toContain('Section');
-    const bordered = container.querySelector('div[style*="border"]');
-    expect(bordered).not.toBeNull();
   });
 
   it('renders BulletList items recursively', () => {
     const { container } = mount([
       BULLET_LIST([[PARA('item one')], [PARA('item two')]]),
     ]);
-    expect(container.textContent).toContain('BulletList:');
+    expect(tags(container)).toContain('BulletList');
+    expect(container.textContent).toContain('items=2');
+    expect(tags(container).filter((t) => t === 'Para')).toHaveLength(2);
     expect(container.textContent).toContain('item one');
     expect(container.textContent).toContain('item two');
   });
@@ -111,18 +115,18 @@ describe('q2-debug bordered aesthetic', () => {
 // Figure: Bug A + caption-branch port
 // ---------------------------------------------------------------------------
 
-describe('q2-debug Figure (Bug A + caption-branch port)', () => {
-  it('renders the bordered "Caption:" line for a short-captioned figure', () => {
+describe('q2-debug Figure (Bug A + caption slot)', () => {
+  it('renders the "caption:" slot for a short-captioned figure', () => {
     const { container } = mount([
       FIGURE_WITH_SHORT_CAPTION('alt-text', [PARA('figure body')]),
     ]);
 
-    // Figure leaf header
-    expect(container.textContent).toContain('Figure:');
-    // Body block recursed through framework's renderChildrenRegistry.Figure
+    // Figure node tag
+    expect(tags(container)).toContain('Figure');
+    // Body blocks are rendered as the figure's children
     expect(container.textContent).toContain('figure body');
-    // Caption branch ported port-for-port from the pre-carve-up registry entry
-    expect(container.textContent).toContain('Caption:');
+    // The short caption gets its own labeled slot
+    expect(slots(container)).toContain('caption:');
     expect(container.textContent).toContain('alt-text');
   });
 
@@ -137,7 +141,7 @@ describe('q2-debug Figure (Bug A + caption-branch port)', () => {
     expect(container.textContent).not.toContain('// TODO');
   });
 
-  it('omits the Caption line when the figure has no short caption', () => {
+  it('omits the caption slot when the figure has no short caption', () => {
     const figureNoCaption = {
       t: 'Figure',
       c: [
@@ -147,22 +151,23 @@ describe('q2-debug Figure (Bug A + caption-branch port)', () => {
       ],
     };
     const { container } = mount([figureNoCaption]);
-    expect(container.textContent).toContain('Figure:');
+    expect(tags(container)).toContain('Figure');
     expect(container.textContent).toContain('body only');
-    expect(container.textContent).not.toContain('Caption:');
+    expect(slots(container)).not.toContain('caption:');
   });
 });
 
 // ---------------------------------------------------------------------------
-// Miss path: dispatcher fallback removal didn't break the "Not registered"
-// rendering for unknown node types.
+// Miss path: an unknown node type still renders, marked as unknown.
 // ---------------------------------------------------------------------------
 
-describe('q2-debug "Not registered" miss path', () => {
-  it('renders a bordered "Not registered" message for an unknown block type', () => {
+describe('q2-debug unknown-node miss path', () => {
+  it('renders an unknown block type as a node tagged unknown', () => {
     const unknownBlock = { t: 'TotallyMadeUpBlock', c: [] };
     const { container } = mount([unknownBlock]);
-    expect(container.textContent).toContain('Not registered: TotallyMadeUpBlock');
+    const unknown = container.querySelector('.q2d-tag-unknown');
+    expect(unknown).not.toBeNull();
+    expect(unknown!.textContent).toBe('TotallyMadeUpBlock');
   });
 });
 
@@ -172,7 +177,7 @@ describe('q2-debug "Not registered" miss path', () => {
 // ---------------------------------------------------------------------------
 
 describe('q2-debug override path', () => {
-  it('user-registered Para overrides q2-debug bordered Para', () => {
+  it('user-registered Para overrides q2-debug Para', () => {
     const overrideRegistry = {
       ...q2DebugRegistry,
       Para: ({ node }: any) => (
@@ -192,9 +197,9 @@ describe('q2-debug override path', () => {
 
     expect(queryByTestId('user-para')).not.toBeNull();
     expect(queryByTestId('user-para')!.textContent).toBe('hello override');
-    // q2-debug bordered Para's "Para:" prefix should NOT appear because the
-    // override took over completely.
-    expect(container.textContent).not.toContain('Para:');
+    // q2-debug's own "Para" tag should NOT appear because the override
+    // took over completely.
+    expect(tags(container)).not.toContain('Para');
   });
 });
 

@@ -54,7 +54,7 @@ describe('documents created during the offline-fallback window', () => {
     const fileDocId = result.files[0]!.docId;
 
     // The connection arrives "moments later" — the production
-    // sequence behind 'Peer connected - switching to online mode'.
+    // sequence behind the 'Peer connected' log.
     hub.releaseUpgrades();
 
     // Ground truth: the hub must end up holding BOTH documents, in full.

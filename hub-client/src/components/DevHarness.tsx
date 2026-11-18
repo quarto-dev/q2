@@ -9,7 +9,6 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import ProjectSetError from './ProjectSetError';
 import ProjectsHome from './ProjectsHome';
 import NewFileDialog from './NewFileDialog';
 import ShareDialog from './ShareDialog';
@@ -979,12 +978,6 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
     <AuthProviderRoot provider={harnessAuthProvider}>
       <LoginScreen errorReason="denied" />
     </AuthProviderRoot>
-  ),
-  'project-set-error': () => (
-    <ProjectSetError
-      error="Connection failed: could not reach sync server"
-      onRetry={noop}
-    />
   ),
 
   /* ---- Phase 0 baseline routes (characterization testing) ---- */

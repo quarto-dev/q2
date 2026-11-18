@@ -26,7 +26,7 @@ use quarto_core::format::Format;
 use quarto_core::pipeline::build_analysis_pipeline;
 use quarto_core::project::{DocumentInfo, ProjectConfig, ProjectContext};
 use quarto_core::render::{BinaryDependencies, RenderContext};
-use quarto_core::stage::{LoadedSource, PipelineData, StageContext};
+use quarto_core::stage::{LoadedSource, PipelineData, PipelineError, StageContext};
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::{SystemRuntime, default_runtime};
@@ -215,6 +215,20 @@ pub async fn analyze_in_project(
             let source_context = fallback_context();
             let mut diagnostics =
                 diagnostics_from_messages(&stage_ctx.diagnostics, &source_context);
+            match &err {
+                PipelineError::Structured(pe) => {
+                    diagnostics.extend(diagnostics_from_messages(
+                        &pe.diagnostics,
+                        &pe.source_context,
+                    ));
+                }
+                PipelineError::StageError {
+                    diagnostics: errs, ..
+                } if !errs.is_empty() => {
+                    diagnostics.extend(diagnostics_from_messages(errs, &source_context));
+                }
+                _ => {}
+            }
             if diagnostics.is_empty() {
                 let diag = DiagnosticMessage::error(err.to_string());
                 diagnostics.extend(diagnostics_from_messages(

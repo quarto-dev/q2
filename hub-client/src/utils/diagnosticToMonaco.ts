@@ -151,15 +151,18 @@ function formatLspMessage(diag: LspDiagnostic): string {
     msg += '\n' + diag.problem.content;
   }
 
-  // Merge details into the message
-  if (diag.details.length > 0) {
+  // Merge details into the message. The WASM omits `details`/`hints`
+  // entirely when empty, so neither can be assumed present.
+  const details = diag.details ?? [];
+  if (details.length > 0) {
     msg +=
-      '\n\nDetails:\n' + diag.details.map((d) => '  \u2022 ' + d.content.content).join('\n');
+      '\n\nDetails:\n' + details.map((d) => '  \u2022 ' + d.content.content).join('\n');
   }
 
-  if (diag.hints.length > 0) {
+  const hints = diag.hints ?? [];
+  if (hints.length > 0) {
     msg +=
-      '\n\nSuggestions:\n' + diag.hints.map((h) => '  \u2192 ' + h.content).join('\n');
+      '\n\nSuggestions:\n' + hints.map((h) => '  \u2192 ' + h.content).join('\n');
   }
 
   return msg;

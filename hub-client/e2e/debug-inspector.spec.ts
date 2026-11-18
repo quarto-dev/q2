@@ -20,7 +20,11 @@ declare global {
   interface Window {
     quartoDebug?: {
       openInspector(): Promise<void>;
-      am: { repos(): { name: string }[]; doctor(): unknown[] };
+      am: {
+        repos(): { name: string }[];
+        docs(): { role: string }[];
+        doctor(): unknown[];
+      };
     };
   }
 }
@@ -53,12 +57,20 @@ test.describe('quartoDebug live inspector', () => {
     const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);
     await page.goto(`/#/p/${localId}/file/index.qmd`);
 
-    // Wait for the project to actually connect (sync-client repo live).
+    // Wait for the project to actually connect: the sync-client repo is
+    // live AND its index doc is loaded. The repo exists as soon as connect
+    // starts (connect no longer waits for a peer), while the inspector
+    // seeds its viewer from the index doc once, when it opens — so a repo
+    // with no index yet would open an empty inspector.
     await page.waitForFunction(
-      () =>
-        window.quartoDebug?.am
-          .repos()
-          .some((r: { name: string }) => r.name === 'sync-client') ?? false,
+      () => {
+        const am = window.quartoDebug?.am;
+        if (am === undefined) return false;
+        return (
+          am.repos().some((r: { name: string }) => r.name === 'sync-client') &&
+          am.docs().some((d: { role: string }) => d.role === 'index')
+        );
+      },
       undefined,
       { timeout: 30000 },
     );

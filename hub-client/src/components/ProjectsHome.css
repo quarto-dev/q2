@@ -849,3 +849,32 @@
   margin-inline-start: 0.5em;
   white-space: nowrap;
 }
+
+/* Header placement of the shared SignInStatus component (its own layout
+   lives in auth/SignInStatus.css): a divider before the avatar. */
+.qh-auth {
+  padding-inline-end: 6px;
+  margin-inline-end: 2px;
+  border-inline-end: 1px solid var(--border-color);
+}
+
+/* Signed out: the yellow panel (auth/SignInStatus.css) continues behind
+   the profile circle, so the two read as one block — no divider, and the
+   avatar cell cancels the row gap to butt against the sign-in status. */
+/* (.sign-in-status.inline spelled out to outrank the component's own
+   signed-out radius.) */
+.sign-in-status.inline.qh-auth.signed-out {
+  align-self: stretch;
+  margin-inline-end: 0;
+  border-inline-end: none;
+  border-radius: 6px 0 0 6px;
+}
+.qh-auth.signed-out + .qh-avatar-anchor {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  margin-inline-start: -8px;
+  padding: 4px 8px 4px 2px;
+  border-radius: 0 6px 6px 0;
+  background: var(--warning-bg);
+}
