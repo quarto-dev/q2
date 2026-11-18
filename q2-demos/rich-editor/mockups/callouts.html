@@ -161,9 +161,12 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
 /* Things laid over the page. */
 #layer { position:fixed; inset:0; pointer-events:none; z-index:20; }
 /* A selection across lines, the editor's own (the browser's can't cross
-   from one line to another here): under the menus, multiplied over the page
-   so the text shows through a solid colour. */
-#selayer { position:fixed; inset:0; pointer-events:none; z-index:19; mix-blend-mode:multiply; }
+   from one line to another here): multiplied over the page so the text
+   shows through a solid colour. In the page, not over it, so it moves with
+   the text however the page scrolls (a scroll past its end bounces it
+   without a scroll event to redraw by). */
+.page { position:relative; }
+#selayer { position:absolute; inset:0; pointer-events:none; mix-blend-mode:multiply; }
 .sel-box { position:absolute; background:#b9d3fb; }
 .sel-block { border-radius:4px; }
 #editor.xsel ::selection { background:transparent; }
@@ -236,12 +239,12 @@ body.dragging, body.dragging * { cursor:grabbing !important; user-select:none; }
       </div>
       <div class="page">
         <div class="body" id="editor" tabindex="-1"></div>
+        <div id="selayer"></div>
       </div>
     </div>
   </div>
   <div class="source"><h2>Source (qmd)</h2><div id="source"></div></div>
 </div>
-<div id="selayer"></div>
 <div id="layer"></div>
 
 <script>
@@ -1483,6 +1486,9 @@ function lineBoxes(el) {
 }
 /** The offset in el nearest x on its line (a { top, bottom }). */
 function offsetAt(el, x, line) {
+  // A point off the screen has no caret position: that line in sight first.
+  const dy = scrollToShow(line.top, line.bottom)
+  line = { top: line.top - dy, bottom: line.bottom - dy }
   const r = el.getBoundingClientRect()
   const cx = Math.max(r.left + 1, Math.min(x, r.right - 1)), y = (line.top + line.bottom) / 2
   let node = null, off = 0
@@ -1575,6 +1581,10 @@ function stepFocus(p, dir, vertical, anchor) {
   // just the callout, a step of its own (its edge), then on past it.
   const here = partOf(p)?.c
   if (here && inCallout(anchor, here) && wholeFromOutside(here)) return { edge: i }
+  // Toward a callout that'd be selected whole: first to its edge, out of
+  // this text (on, if that shows nothing new; see extend), then over it.
+  const there = doc[dir > 0 ? i : i - 1]
+  if (there?.tag === 'callout' && !inCallout(anchor, there) && wholeFromOutside(there)) return { edge: i }
   const on = beyond(i, dir, anchor, vertical)
   if (on) return on
   // ↑ on the document's first line (↓ on its last): to its start (end).
@@ -1591,7 +1601,12 @@ function setRange(anchor, focus) {
     else setCaret(el, 0)
     sel = { u: anchor.u, o: focus.o }
   } else if (anchor.edge != null && anchor.edge === focus.edge) return toGapAt(anchor.edge)
-  else {
+  else if (!coverage(...effective(anchor, focus)).length) {
+    // Covering nothing (from the end of a line to the edge after it): the
+    // caret, where the selection began.
+    sel = caretAt(anchor)
+    return render()
+  } else {
     sel = { anchor, focus }
     getSelection().removeAllRanges()
     editor.focus({ preventScroll: true })
@@ -1610,9 +1625,14 @@ function reveal(p) {
     top = a ? a.bottom : b.top
     bottom = b ? b.top : a.bottom
   }
-  const sc = document.getElementById('scroller'), r = sc.getBoundingClientRect(), pad = 40
+  scrollToShow(top, bottom)
+}
+/** Scroll the page just enough to show from top to bottom (on the screen now); how far it went. */
+function scrollToShow(top, bottom) {
+  const sc = document.getElementById('scroller'), r = sc.getBoundingClientRect(), pad = 40, was = sc.scrollTop
   if (top < r.top + pad) sc.scrollBy(0, top - r.top - pad)
   else if (bottom > r.bottom - pad) sc.scrollBy(0, bottom - r.bottom + pad)
+  return sc.scrollTop - was
 }
 /** The caret at a position: an edge's, its gap, or the text beside it. */
 function caretAt(p) {
@@ -1712,9 +1732,10 @@ function renderSelection() {
   selLayer.replaceChildren()
   if (!sel?.anchor) return
   const [s, e] = effective()
+  const at = selLayer.getBoundingClientRect()
   const paint = (r, cls = 'sel-box') => {
     const d = Object.assign(document.createElement('div'), { className: cls })
-    Object.assign(d.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' })
+    Object.assign(d.style, { left: r.left - at.left + 'px', top: r.top - at.top + 'px', width: r.width + 'px', height: r.height + 'px' })
     selLayer.append(d)
   }
   for (const c of coverage(s, e)) {
