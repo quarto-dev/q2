@@ -1999,7 +1999,10 @@ document.addEventListener('mousemove', (e) => {
   if (!e.buttons) editor.classList.toggle('over-sel', !drag && Boolean(selectionUnder(e)))
   if (!dragFrom || !(e.buttons & 1)) return
   const p = pointPos(e)
-  if (!p || (!dragging && p.u === dragFrom.u && p.edge === dragFrom.edge)) return
+  // Within the line it began in, the browser's; but a double or triple
+  // click's drag is the editor's from the first move, browsers not all
+  // keeping the word or line clicked selected as it goes.
+  if (!p || (!dragging && !dragFirst && p.u === dragFrom.u && p.edge === dragFrom.edge)) return
   if (!dragging) { dragging = true; editor.classList.add('xsel') }
   if (dragFirst) {
     // By words or lines: from the far side of the one clicked, to the far
