@@ -183,7 +183,8 @@ body.dragging, body.dragging * { cursor:grabbing !important; user-select:none; }
 const GROUPS = [
   { key: 'controls', title: 'Where its settings are', options: [
     ['header', 'On the callout itself', 'Click its icon to change its kind. Its other settings are at the right end of its header (in its top-right corner without one), while the pointer\'s over it or the caret\'s in it.'],
-    ['hover', 'A bar on its corner', 'As an image\'s hover bar: its kind, appearance, collapsing and More in a bar on its top-right corner, for the callout under the pointer or with the caret.'],
+    ['hover', 'A bar on its corner', 'Its kind (by name), appearance, collapsing and More in a bar across its top-right corner, for the callout under the pointer or with the caret.'],
+    ['image', 'Inside its corner, as an image\'s', 'An image\'s hover bar (blocks.html), on a callout: icon buttons inside its top-right corner, over what\'s there, while the pointer\'s over it. Its kind is its icon, which opens the kinds.'],
     ['toolbar', 'In the toolbar', 'With the caret in a callout, the toolbar grows a Callout section, as Google Docs\' does for a table.'],
   ]},
   { key: 'kind', title: 'Choosing its kind', options: [
@@ -648,8 +649,10 @@ function renderLayer() {
   layer.replaceChildren()
   if (drag) return
   renderGrip()
-  if (opts.controls === 'hover') {
-    const c = calloutByKey(menu?.k ?? hoverK ?? caretCallout()?.k)
+  const asImage = opts.controls === 'image'
+  if (opts.controls === 'hover' || asImage) {
+    // As an image's, only for the one under the pointer (or whose menu is open).
+    const c = calloutByKey(menu?.k ?? hoverK ?? (asImage ? null : caretCallout()?.k))
     const el = c && editor.querySelector(`.callout[data-k="${c.k}"]`)
     if (el) {
       const bar = document.createElement('div')
@@ -661,7 +664,11 @@ function renderLayer() {
         if (wide) btn.classList.add('wide')
         return btn
       }
-      if (opts.kind === 'row') {
+      if (asImage) {
+        // Its icon, as the image's Alignment: the kinds open from it (a
+        // menu, or a row of icons under it).
+        bar.append(b(`Kind: ${NAME[c.type]}`, kindIcon(c.type), 'kind'))
+      } else if (opts.kind === 'row') {
         for (const t of KINDS) {
           const btn = document.createElement('button')
           btn.innerHTML = kindIcon(t)
@@ -677,11 +684,21 @@ function renderLayer() {
       }
       bar.append(b('Appearance', ICONS.appearance, 'appearance'), b('Collapsing', ICONS.collapse, 'collapse'), b('More', ICONS.more, 'more'))
       layer.append(bar)
-      // On its top-right corner, across its top edge, so the pointer can
-      // reach it without leaving the callout.
       const r = el.getBoundingClientRect()
-      bar.style.left = r.right - bar.offsetWidth - 8 + 'px'
-      bar.style.top = r.top - bar.offsetHeight / 2 - 2 + 'px'
+      if (asImage) {
+        // Inside its top-right corner, 3px in, as on an image; clear of
+        // Quarto's chevron, which it would otherwise cover.
+        const chev = el.querySelector(':scope > .callout-header .chev')?.getBoundingClientRect()
+        bar.style.left = (chev ? chev.left - 4 : r.right - 3) - bar.offsetWidth + 'px'
+        // Above one too short to hold it (a collapsed one), as above a short
+        // image, overlapping its edge so the pointer crosses no gap to it.
+        bar.style.top = (r.height < bar.offsetHeight + 6 ? r.top - bar.offsetHeight + 2 : r.top + 3) + 'px'
+      } else {
+        // On its top-right corner, across its top edge, so the pointer can
+        // reach it without leaving the callout.
+        bar.style.left = r.right - bar.offsetWidth - 8 + 'px'
+        bar.style.top = r.top - bar.offsetHeight / 2 - 2 + 'px'
+      }
     }
   }
   if (menu) renderMenu()
@@ -1122,6 +1139,12 @@ document.addEventListener('mousedown', (e) => {
   if (menu && !e.target.closest('.hui')) { menu = null; renderLayer(); for (const el of editor.querySelectorAll('.menu-open')) el.classList.remove('menu-open') }
 })
 document.getElementById('scroller').addEventListener('scroll', () => { menu = null; grip = null; renderLayer() })
+// The layer's over the page, not in what scrolls: the wheel over a handle,
+// a bar or a menu scrolls the document as it would over the page.
+layer.addEventListener('wheel', (e) => {
+  const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1
+  document.getElementById('scroller').scrollBy(e.deltaX * unit, e.deltaY * unit)
+}, { passive: true })
 window.addEventListener('resize', () => renderLayer())
 
 let toastTimer = null
