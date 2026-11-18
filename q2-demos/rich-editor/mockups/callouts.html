@@ -223,6 +223,8 @@ body.tips-held [data-tip]::after { visibility:hidden !important; }
   box-shadow:0 0 0 1px rgba(15,15,15,.06), 0 3px 10px rgba(15,15,15,.14); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; gap:6px; align-items:center; }
 .move-ghost .kicon { width:14px; height:14px; flex:none; }
 .moving-from { opacity:.35; }
+/* Blocks selected whole: pressed and dragged, they move. */
+#editor > .picked, #editor > .picked * { cursor:default; }
 body.dragging, body.dragging * { cursor:grabbing !important; user-select:none; }
 .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#343a40; color:#fff; font:13px system-ui, sans-serif; padding:8px 12px; border-radius:6px; z-index:300; pointer-events:none; }
 </style>
@@ -1825,7 +1827,7 @@ function qmdOf([s, e]) {
 // ---- drawing it
 function renderSelection() {
   selLayer.replaceChildren()
-  if (!sel?.anchor) return
+  if (!sel?.anchor) { for (const el of editor.querySelectorAll(':scope > .picked')) el.classList.remove('picked'); return }
   const [s, e] = effective()
   const at = selLayer.getBoundingClientRect()
   const paint = (r, cls = 'sel-box') => {
@@ -1833,6 +1835,8 @@ function renderSelection() {
     Object.assign(d.style, { left: r.left - at.left + 'px', top: r.top - at.top + 'px', width: r.width + 'px', height: r.height + 'px' })
     selLayer.append(d)
   }
+  const blocks = selectedBlocks()
+  ;[...editor.children].forEach((el, i) => el.classList.toggle('picked', Boolean(blocks) && i >= blocks[0] && i < blocks[1]))
   for (const c of coverage(s, e)) {
     // A callout selected as a block: all of it, as a block.
     if (c.block != null) { paint(editor.children[c.block].getBoundingClientRect(), 'sel-box sel-block'); continue }
@@ -1951,6 +1955,10 @@ function extend(anchor, focus, dir, vertical) {
 let dragFrom = null, dragging = false
 document.addEventListener('mousedown', (e) => {
   if (e.button !== 0 || layer.contains(e.target) || e.target.closest?.('.hui, .chev, .kslot')) return
+  // On blocks selected whole: they move, dragged (pressSelection).
+  const blocks = !e.shiftKey && selectedBlocks()
+  const on = blocks && [...editor.children].findIndex((el) => el.contains(e.target))
+  if (blocks && on >= blocks[0] && on < blocks[1]) return pressSelection(e, blocks)
   selGoalX = null
   const p = pointPos(e)
   const anchor = e.shiftKey && p ? anchorNow() : null
@@ -1962,7 +1970,11 @@ document.addEventListener('mousedown', (e) => {
     return
   }
   dragFrom = p
+  clickFrom = sel?.anchor ? p : null
 }, true)
+// A click off any text (a callout's header, its padding, a margin) with a
+// selection showing: the caret at the nearest line, as a click in text does.
+let clickFrom = null
 document.addEventListener('mousemove', (e) => {
   if (!dragFrom || !(e.buttons & 1)) return
   const p = pointPos(e)
@@ -1976,6 +1988,8 @@ document.addEventListener('mousemove', (e) => {
   renderLayer()
 }, true)
 document.addEventListener('mouseup', () => {
+  if (!dragging && clickFrom && sel?.anchor) { sel = caretAt(clickFrom); render() }
+  clickFrom = null
   if (dragging) {
     dragging = false
     editor.classList.remove('xsel')
@@ -1983,6 +1997,92 @@ document.addEventListener('mouseup', () => {
   }
   dragFrom = null
 }, true)
+
+// ---- moving what's selected
+// A selection of whole blocks (callouts, and lines of text all in it)
+// moves as the handle moves one block: pressed and dragged, between blocks.
+/** The blocks the selection covers whole, [from, to), with nothing else; or null. */
+function selectedBlocks() {
+  if (!sel?.anchor) return null
+  const [s, e] = effective()
+  // An end of a line of its own (not in a callout) is the edge beside it.
+  const boundary = (p, atEnd) => {
+    if (p.edge != null) return p.edge
+    const loc = locate(p.u)
+    if (!loc || loc.c || loc.title) return null
+    if (p.o === 0) return loc.i
+    if (p.o === loc.blk.text.length) return loc.i + 1
+    return null
+  }
+  const i = boundary(s), j = boundary(e)
+  return i != null && j != null && i < j && doc.slice(i, j).some((b) => b.tag === 'callout') ? [i, j] : null
+}
+function pressSelection(e, [i, j]) {
+  e.preventDefault()
+  e.stopPropagation()
+  const x0 = e.clientX, y0 = e.clientY
+  let moving = null
+  const move = (ev) => {
+    if (!moving) {
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return
+      const ghost = document.createElement('div')
+      ghost.className = 'move-ghost'
+      const first = doc[i]
+      if (j - i > 1) ghost.textContent = `${j - i} blocks`
+      else { ghost.innerHTML = kindGlyph(first.type); ghost.append(first.title || NAME[first.type]) }
+      document.body.append(ghost)
+      moving = drag = { k: null, ghost, at: null }
+      menu = null
+      document.body.classList.add('dragging')
+      layer.replaceChildren()
+      for (let n = i; n < j; n++) editor.children[n].classList.add('moving-from')
+    }
+    moving.ghost.style.left = ev.clientX + 14 + 'px'
+    moving.ghost.style.top = ev.clientY + 10 + 'px'
+    moving.at = rangeDropAt(ev, i, j)
+    markDrop(moving.at)
+  }
+  const up = (ev) => {
+    document.removeEventListener('mousemove', move)
+    document.removeEventListener('mouseup', up)
+    if (!moving) {
+      // A click: the caret there, as anywhere.
+      const p = pointPos(ev)
+      if (p) { sel = caretAt(p); render() }
+      return
+    }
+    moving.ghost.remove()
+    dropLine.remove()
+    document.body.classList.remove('dragging')
+    drag = null
+    grip = null
+    if (moving.at) moveBlocks(i, j, moving.at.i)
+    else render()
+  }
+  document.addEventListener('mousemove', move)
+  document.addEventListener('mouseup', up)
+}
+/** Where blocks [i, j) would go: { i, y, left, right }, between blocks; null where they'd stay. */
+function rangeDropAt(ev, i, j) {
+  const kids = [...editor.children], er = editor.getBoundingClientRect()
+  let best = null
+  for (let t = 0; t <= kids.length; t++) {
+    const a = kids[t - 1]?.getBoundingClientRect(), b = kids[t]?.getBoundingClientRect()
+    const y = !a ? b.top - 6 : !b ? a.bottom + 6 : (a.bottom + b.top) / 2
+    if (!best || Math.abs(y - ev.clientY) < Math.abs(best.y - ev.clientY)) best = { i: t, y, left: er.left, right: er.right }
+  }
+  return !best || (best.i >= i && best.i <= j) ? null : best
+}
+/** Move blocks [i, j) to before block t; still selected there. */
+function moveBlocks(i, j, t) {
+  record()
+  const moved = doc.splice(i, j - i)
+  const at = t > i ? t - moved.length : t
+  doc.splice(at, 0, ...moved)
+  sel = { anchor: { edge: at }, focus: { edge: at + moved.length } }
+  render()
+}
+
 document.addEventListener('copy', (e) => {
   if (!sel?.anchor) return
   e.preventDefault()
