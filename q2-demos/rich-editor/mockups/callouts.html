@@ -190,7 +190,7 @@ const GROUPS = [
   { key: 'controls', title: 'Where its settings are', options: [
     ['header', 'On the callout itself', 'Click its icon to change its kind. Its other settings are at the right end of its header (in its top-right corner without one), while the pointer\'s over it or the caret\'s in it.'],
     ['hover', 'A bar on its corner', 'Its kind (by name), appearance, collapsing and More in a bar across its top-right corner, for the callout under the pointer or with the caret.'],
-    ['image', 'Inside its corner, as an image\'s', 'An image\'s hover bar (blocks.html), on a callout: icon buttons inside its top-right corner, over what\'s there, while the pointer\'s over it. Its kind is its icon, which opens the kinds.'],
+    ['image', 'Inside its corner, as an image\'s', 'An image\'s hover bar (blocks.html), on a callout: icon buttons inside its top-right corner, over what\'s there, while the pointer\'s over its title. Kind (shapes) opens the kinds, the current one marked.'],
     ['toolbar', 'In the toolbar', 'With the caret in a callout, the toolbar grows a Callout section, as Google Docs\' does for a table.'],
   ]},
   { key: 'kind', title: 'Choosing its kind', options: [
@@ -411,6 +411,9 @@ const ICONS = {
   // read as a button that would. A header, and the lines of text under it
   // that it can hide.
   collapse: STROKE('<rect x="4" y="4" width="16" height="5" rx="1"/><path d="M6.5 13h11M6.5 16.5h11M6.5 20h7"/>'),
+  // Its kind, as a button that only changes it: shapes, not the current
+  // kind's icon, which the callout shows already.
+  kind: STROKE('<circle cx="7.5" cy="7.5" r="3.5"/><path d="M16.5 3.8 20.5 11h-8z"/><rect x="4" y="13.5" width="7" height="7" rx="1"/><circle cx="16.5" cy="17" r="3.5"/>'),
   more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>',
   bold: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z"/></svg>',
   italic: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z"/></svg>',
@@ -497,7 +500,7 @@ function renderBlock(b) {
   const cbar = () => {
     const bar = document.createElement('span')
     bar.className = 'cbar'
-    if (!icon) bar.append(smallButton(`${NAME[c.type]}: change its kind`, kindIcon(c.type), 'kind', c))
+    if (!icon) bar.append(smallButton('Kind', ICONS.kind, 'kind', c))
     bar.append(smallButton('Appearance', ICONS.appearance, 'appearance', c), smallButton('Collapsing', ICONS.collapse, 'collapse', c), smallButton('More', ICONS.more, 'more', c))
     return bar
   }
@@ -678,9 +681,9 @@ function renderLayer() {
         return btn
       }
       if (asImage) {
-        // Its icon, as the image's Alignment: the kinds open from it (a
-        // menu, or a row of icons under it).
-        bar.append(b(`Kind: ${NAME[c.type]}`, kindIcon(c.type), 'kind'))
+        // The kinds open from it (a menu, or a row of icons under it), the
+        // current one marked there.
+        bar.append(b('Kind', ICONS.kind, 'kind'))
       } else if (opts.kind === 'row') {
         for (const t of KINDS) {
           const btn = document.createElement('button')
