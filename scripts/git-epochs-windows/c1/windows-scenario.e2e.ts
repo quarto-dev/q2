@@ -35,6 +35,8 @@ interface Step {
 }
 const transcript: Step[] = [];
 const cleanups: (() => Promise<void> | void)[] = [];
+/** Set once the hub and mirror exist: what to record when a step fails (the hub log, the gate, the decisions, a.qmd on each side). */
+let diag: (() => Promise<unknown>) | undefined;
 
 function record(step: string, observed: unknown, ok = true): void {
   transcript.push({ step, ok, observed });
@@ -50,6 +52,7 @@ async function step<T>(name: string, fn: () => Promise<T>, show: (v: T) => unkno
     return observed;
   } catch (e) {
     record(name, String(e instanceof Error ? e.message : e), false);
+    if (diag) record(`${name} [diagnostics]`, await diag().catch((d: unknown) => `diagnostics failed: ${String(d)}`), false);
     throw e;
   }
 }
@@ -66,6 +69,7 @@ test.beforeAll(async () => {
   await ensureWasm();
 });
 test.afterEach(async () => {
+  diag = undefined;
   for (const fn of cleanups.splice(0).reverse()) await Promise.resolve(fn()).catch(() => {});
 });
 
@@ -290,6 +294,18 @@ test('c1 steps 1-8: gate, classifier, registry, flips, unlists, a binary file', 
 
   const mirror = await mirrorOf(hub, 'mirror');
   const clone = await cloneOf(hub, projectDir, 'clone');
+  diag = async () => {
+    const tail = async (dir: string) => ((await read(dir, 'a.qmd')) ?? '<absent>').slice(-120);
+    return {
+      hubExit: hub.proc.exitCode,
+      hubLogTail: hub.log().slice(-3000),
+      gitStatus: await gitStatus(hub.url).catch((e: unknown) => String(e)),
+      decisions: (await decisionsOf(hub).catch(() => [])).map((d) => `${d.kind}(discarded=${d.discarded})`),
+      hubDiskA: await tail(projectDir),
+      mirrorA: await tail(mirror.dir),
+      cloneA: await tail(clone.dir),
+    };
+  };
   await step('3 peers attached and the clone edits a.qmd', async () => {
     await fileIs(mirror.dir, 'a.qmd', MAIN_FILES['a.qmd']!, 'the mirror holds a.qmd', 480_000);
     await mirrorHolds(hub, mirror.dir, bulkPath(FILES - 1), bulkBody(FILES - 1, 'main'), 'the mirror holds the last bulk file');
