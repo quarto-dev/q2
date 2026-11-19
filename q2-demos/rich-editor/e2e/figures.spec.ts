@@ -7,8 +7,9 @@
  * text as a paragraph, joined to the line the selection started in, and
  * undo brings the figure back. Enter at the end of a caption starts a
  * paragraph after the figure, and in its middle moves the rest of the
- * caption to one. An emptied caption leaves the figure, with a
- * placeholder, written as an image alone on its line (`![](tray.png)`).
+ * caption to one. An emptied caption leaves the figure with no caption
+ * (and no placeholder), written as an image alone on its line
+ * (`![](tray.png)`).
  */
 
 import { createDocument, expect, fixture, lineEnd, lineStart, openEditor, test } from './helpers.ts'
@@ -67,7 +68,7 @@ test.describe('captions', () => {
     await document.expectSource(figures.replace(sketch, '![A sketch of the trench](sketch.png){fig-alt="A pencil sketch of the trench"}'))
   })
 
-  test('an emptied caption leaves the figure, with a placeholder, and typing gives it a caption again', async ({ page }) => {
+  test('an emptied caption leaves the figure with no caption, and typing gives it a caption again', async ({ page }) => {
     const document = await createDocument(figures)
     const editor = await document.open(page)
     await editor.placeCaretInLine(2, 'The sample tray'.length)
@@ -77,7 +78,7 @@ test.describe('captions', () => {
 
     await document.expectSource(figures.replace(tray, '![](tray.png){#tray .bordered}'))
     await expect(editor.frame.locator('figure > img')).toHaveCount(3)
-    await expect(editor.frame.locator('figcaption.qe-field').nth(1)).toHaveAttribute('data-placeholder', 'Add a caption')
+    await expect(editor.frame.locator('figcaption.qe-field').nth(1)).not.toHaveAttribute('data-placeholder')
 
     await page.keyboard.type('Trays')
 

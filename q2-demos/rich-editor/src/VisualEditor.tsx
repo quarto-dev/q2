@@ -328,7 +328,6 @@ export function VisualEditor({ file, devTools }: VisualEditorProps) {
         return {
           as: 'figcaption',
           attrs: hasOwnAlt(image.attr) ? undefined : { 'aria-hidden': 'true' },
-          placeholder: 'Add a caption',
           wrap: (line: ReactNode) => (
             <FigureFrame id={id} classes={[]} src={image.src} imageAttr={['', classes, image.attr[2]]} caption={caption}>
               {line}

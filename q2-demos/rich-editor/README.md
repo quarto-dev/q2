@@ -110,9 +110,9 @@ whole and as much of the caption as it covers. Deleting the image
 takes it in) leaves the caption's text as a paragraph, joined to the line
 the selection started in. Enter at the end of a caption starts a
 paragraph after the figure, and in its middle moves the rest of the
-caption to one. An emptied caption leaves the figure, with "Add a
-caption", written as an image alone on its line (`![](tray.png)`), which
-reads back as a figure with no caption. Its design is
+caption to one. An emptied caption leaves the figure with no caption
+(and no placeholder), written as an image alone on its line
+(`![](tray.png)`), which reads back as a figure with no caption. Its design is
 `mockups/figure.html`, of which only this much is built. Copy takes the
 caption's text alone. The qmd writer writes every attribute's value
 quoted when it writes a figure again (`width="50%"`; a fixme in
