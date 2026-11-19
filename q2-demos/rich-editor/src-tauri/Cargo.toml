@@ -1,0 +1,20 @@
+[package]
+name = "rich-editor-desktop"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Not part of the repo's workspace: Tauri needs system webview libraries
+# that CI's Rust jobs don't have, and this is a demo.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+notify = "8"
+
+[dev-dependencies]
+tempfile = "3"

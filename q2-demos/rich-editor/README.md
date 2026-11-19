@@ -241,16 +241,25 @@ besides an optional React hook, so it could become its own package.
 
 ## Opening a file on your machine
 
-`bin/rich-editor <file>` opens any file in the editor, in your browser,
-and keeps the two in step until Ctrl-C: edits are written to the file as
-they're made, and changes to the file from elsewhere (a text editor, git)
-show in the editor. It runs a sync hub on 127.0.0.1 and the dev server
-in one process, so nothing leaves the machine. To run it from anywhere,
-link it onto your `PATH`:
+`bin/rich-editor <file>` opens any file in the editor, in a desktop app
+of its own (Tauri, `src-tauri/`), and keeps the two in step: edits are
+written to the file as they're made, and changes to the file from
+elsewhere (a text editor, an agent, git) show in the editor. There's no
+sync server: the page (`desktop.html`, `src/desktop/main.tsx`) keeps the
+text in an automerge document of its own (`diskFile.ts`), and the app's
+Rust side reads, writes and watches the file. A change on disk is merged
+with edits that haven't been saved yet, so neither is lost.
+
+It runs the app from source (`tauri dev`), so it's always this
+checkout's code; the first run compiles the app, which takes a few
+minutes. To run it from anywhere, link it onto your `PATH`:
 
 ```bash
 ln -s "$PWD/bin/rich-editor" ~/.local/bin/rich-editor
 ```
+
+`src-tauri/` isn't in the repo's Cargo workspace: Tauri needs system
+webview libraries that CI's Rust jobs don't have.
 
 ## Trying it together
 
@@ -297,6 +306,7 @@ npm run test:unit   # editing logic, in Node
 npm run test:wasm   # needs the WASM build from step 1
 npm run test:e2e    # the app in Chromium, Firefox and WebKit, on a test hub; needs the WASM build
 npm run test:e2e:chromium   # the same in Chromium only, for iterating
+npm run test:desktop   # the desktop app's Rust side (src-tauri/)
 ```
 
 While iterating, run Chromium only, on the specs you're changing
@@ -341,7 +351,9 @@ and drop),
 block is shown), `read-only.spec.ts` (when nothing can be edited),
 `source.spec.ts` (what an edit does to the source text),
 `collaboration.spec.ts` (more than one person in a document),
-`render-parity.spec.ts` (the editor shows a document as `q2 render` would)
+`render-parity.spec.ts` (the editor shows a document as `q2 render` would),
+`desktop.spec.ts` (the desktop app: the file it opens, saving, changes on
+disk; the test stands in for the app's Rust side, `e2e/desktop.ts`)
 and `app.spec.ts` (the page around the editor: which document it opens,
 the source pane, the connection to the hub, the status line, the layout
 in a narrow window).

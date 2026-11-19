@@ -30,3 +30,13 @@ don't slow each other down. Time spent waiting in the queue counts against the
 Bash tool's timeout, so run a whole suite in the background.
 Run the unit tests (`npm run test:unit`) and `npm run typecheck` too
 before committing.
+
+## The desktop app is tested for what it adds
+
+The desktop app (`src-tauri/`, `desktop.html`) is the same editor on a
+local file. Specify and test editing in the browser app, as above; the
+desktop app's tests cover only what it adds: which file it opens,
+saving, and changes made on disk. `e2e/desktop.spec.ts` runs its page in
+the browsers with the test standing in for the Rust side, and
+`npm run test:desktop` tests the Rust side itself. (Tauri has no WebDriver
+on macOS, so nothing drives the real window.)

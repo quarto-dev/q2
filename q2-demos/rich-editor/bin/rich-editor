@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
-# Open a file in the rich-editor prototype: `rich-editor <file>`.
+# Open a file in the rich-editor prototype's desktop app: `rich-editor <file>`.
 # Symlink this script onto your PATH to run it from anywhere.
+#
+# It runs the app from source (`tauri dev`), so it's always this
+# checkout's code: the first run compiles the app, which takes a while.
+# Each run serves the page on a port of its own, so several files can be
+# open at once.
 set -euo pipefail
-here="$(cd "$(dirname "$(realpath "$0")")/.." && pwd)"
-export RICH_EDITOR_CWD="$PWD"
-cd "$here"
-NODE_OPTIONS="--conditions=source ${NODE_OPTIONS:-}" exec npx --no-install tsx scripts/open.ts "$@"
+if [ $# -ne 1 ]; then
+  echo "Usage: rich-editor <file>" >&2
+  exit 2
+fi
+file="$(realpath "$1")"
+cd "$(dirname "$(realpath "$0")")/.."
+port="$(node -e 'const s = require("net").createServer().listen(0, () => { console.log(s.address().port); s.close() })')"
+config="{\"build\":{\"devUrl\":\"http://localhost:$port\",\"beforeDevCommand\":\"npx vite --port $port --strictPort\"}}"
+exec npx --no-install tauri dev --no-watch --config "$config" -- -- "$file"

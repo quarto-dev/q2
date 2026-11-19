@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Rich Editor",
+  "identifier": "dev.quarto.rich-editor-prototype",
+  "build": {
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [{ "title": "Rich Editor", "url": "desktop.html", "width": 1100, "height": 900 }],
+    "security": { "csp": null }
+  },
+  "bundle": { "active": false, "icon": ["icons/icon.png"] }
+}
