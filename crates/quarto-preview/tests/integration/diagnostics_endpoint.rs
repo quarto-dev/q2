@@ -50,6 +50,7 @@ async fn boot_server_for_test() -> (
 
     let port = pick_free_port();
     let config = PreviewConfig {
+        git: Default::default(),
         render: Default::default(),
         upstream: None,
         host: "127.0.0.1".to_string(),

@@ -79,6 +79,7 @@ async fn capture_failure_lands_in_sink() {
     registry.register(Arc::new(FailingTestEngine));
 
     let config = PreviewConfig {
+        git: Default::default(),
         render: Default::default(),
         upstream: None,
         host: "127.0.0.1".to_string(),

@@ -285,6 +285,7 @@ async fn boot_rig_with(
 
     let port = pick_free_port();
     let config = PreviewConfig {
+        git: Default::default(),
         render,
         upstream: None,
         host: "127.0.0.1".to_string(),

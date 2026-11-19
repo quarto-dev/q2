@@ -29,6 +29,7 @@ async fn config_body(render: RenderFlags) -> serde_json::Value {
     let data = tempfile::TempDir::with_prefix("q2-preview-render-flags-data-").unwrap();
     let port = pick_free_port();
     let config = PreviewConfig {
+        git: Default::default(),
         render,
         upstream: None,
         host: "127.0.0.1".to_string(),

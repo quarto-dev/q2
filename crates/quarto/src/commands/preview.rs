@@ -59,6 +59,8 @@ pub struct PreviewArgs {
     /// plan Phase 4, bd-jt1etjbn): the read-only preview SPA (default)
     /// or the full hub-client editor. Never changes the write policy.
     pub ui: quarto_preview::PreviewUi,
+    /// `--git` (GE-4, G33): whether the hub follows git checkouts.
+    pub git: quarto_preview::PreviewGit,
     /// `--to`, as `q2 render --to` (F8). Applies to the viewer UI only.
     pub to: Option<String>,
     /// `-M/--metadata` arguments, unparsed, as `q2 render -M` (F8).
@@ -440,6 +442,15 @@ async fn run(args: PreviewArgs) -> Result<()> {
         "resolved resources-scoped .html for VFS sync"
     );
 
+    // GE-4: `--git track` needs a directory to follow. With `--no-project`
+    // nothing is served from disk, so run without git logic and say so.
+    let git = if args.git == quarto_preview::PreviewGit::Track && project_root.is_none() {
+        info!("--git track has no effect without a project directory; running without git logic");
+        quarto_preview::PreviewGit::Ignore
+    } else {
+        args.git
+    };
+
     let config = PreviewConfig {
         host,
         port,
@@ -459,6 +470,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
         allow_edit: args.allow_edit,
         share: args.share,
         ui: args.ui,
+        git,
         render: render_flags,
         upstream,
     };

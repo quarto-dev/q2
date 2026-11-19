@@ -339,6 +339,22 @@ enum Commands {
         #[arg(long, value_enum, default_value_t = PreviewUiArg::Viewer)]
         ui: PreviewUiArg,
 
+        /// Follow git (experimental): `track` makes this preview own
+        /// the project's pointer, so documents stay in step with git
+        /// checkouts (a branch switch, a pull, a reset) instead of
+        /// being overwritten by or fighting with them. `ignore`, the
+        /// default, is the behavior from before git support: the hub
+        /// syncs files without looking at git. Colocated jj
+        /// repositories work too. Takes a value; a bare `--git` is an
+        /// error.
+        #[arg(
+            long,
+            value_enum,
+            default_value_t = PreviewGitArg::Ignore,
+            conflicts_with_all = ["join", "static_mode", "hub_url"]
+        )]
+        git: PreviewGitArg,
+
         /// Print the embedded SPA asset manifest hashes and exit.
         /// Release CI compares these across the per-platform builds —
         /// a mismatch silently disables live-share local asset serving
@@ -1238,6 +1254,26 @@ impl From<PreviewUiArg> for quarto_preview::PreviewUi {
     }
 }
 
+/// `--git` values for `q2 preview` (GE-4, G33). CLI-side mirror of
+/// [`quarto_preview::PreviewGit`] so the library doesn't grow a clap
+/// dependency.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum PreviewGitArg {
+    /// Do not follow git (the default).
+    Ignore,
+    /// This preview owns the project's pointer and follows git checkouts.
+    Track,
+}
+
+impl From<PreviewGitArg> for quarto_preview::PreviewGit {
+    fn from(arg: PreviewGitArg) -> Self {
+        match arg {
+            PreviewGitArg::Ignore => quarto_preview::PreviewGit::Ignore,
+            PreviewGitArg::Track => quarto_preview::PreviewGit::Track,
+        }
+    }
+}
+
 /// The execution policy for `q2 render` (issue #1008, bd-2luq2ath).
 ///
 /// `--no-execute` skips every engine. `--execute`, or neither flag, executes
@@ -1800,6 +1836,122 @@ mod cli_parse_tests {
         assert_join_conflict(&["preview", "--join", "x", "--ui", "editor"]);
     }
 
+    // ── GE-4 (G33): `--git <track|ignore>` ───────────────────────────
+    // Experimental. `track` means this preview owns the project's
+    // pointer. A value is required, and the flag is meaningless for a
+    // guest (`--join`), a static server (`--static`), or a mirror of a
+    // remote hub (`--hub-url`).
+
+    use super::PreviewGitArg;
+
+    #[test]
+    fn preview_git_defaults_to_ignore() {
+        let Commands::Preview { git, .. } = parse_preview(&["preview"]) else {
+            unreachable!()
+        };
+        assert_eq!(git, PreviewGitArg::Ignore, "--git must default to ignore");
+    }
+
+    #[test]
+    fn preview_git_parses_track_and_ignore() {
+        for (value, expected) in [
+            ("track", PreviewGitArg::Track),
+            ("ignore", PreviewGitArg::Ignore),
+        ] {
+            let Commands::Preview { git, .. } = parse_preview(&["preview", "--git", value]) else {
+                unreachable!()
+            };
+            assert_eq!(git, expected, "--git {value}");
+        }
+    }
+
+    #[test]
+    fn preview_git_bare_flag_is_an_error_naming_the_flag() {
+        let err = match try_parse(&["preview", "--git"]) {
+            Ok(_) => panic!("a bare --git must be rejected: a value is required"),
+            Err(e) => e,
+        };
+        assert_eq!(err.kind(), clap::error::ErrorKind::InvalidValue);
+        assert!(
+            err.to_string().contains("--git"),
+            "the error must name --git; got: {err}"
+        );
+    }
+
+    #[test]
+    fn preview_git_rejects_unknown_value() {
+        let err = match try_parse(&["preview", "--git", "bogus"]) {
+            Ok(_) => panic!("--git bogus must be rejected"),
+            Err(e) => e,
+        };
+        assert_eq!(err.kind(), clap::error::ErrorKind::InvalidValue);
+        let msg = err.to_string();
+        assert!(
+            msg.contains("track") && msg.contains("ignore"),
+            "the error must list the valid values; got: {msg}"
+        );
+    }
+
+    #[test]
+    fn preview_git_conflicts_with_join() {
+        assert_join_conflict(&["preview", "--join", "x", "--git", "track"]);
+    }
+
+    #[test]
+    fn preview_git_conflicts_with_static() {
+        assert_join_conflict(&["preview", "--static", "--git", "track"]);
+    }
+
+    #[test]
+    fn preview_git_conflicts_with_hub_url() {
+        assert_join_conflict(&[
+            "preview",
+            "--hub-url",
+            "ws://127.0.0.1:1",
+            "--project",
+            "abc",
+            "--git",
+            "track",
+        ]);
+    }
+
+    #[test]
+    fn preview_git_track_composes_with_ui_editor_allow_edit_and_share() {
+        let Commands::Preview {
+            git,
+            ui,
+            allow_edit,
+            share,
+            ..
+        } = parse_preview(&[
+            "preview",
+            "--git",
+            "track",
+            "--ui",
+            "editor",
+            "--allow-edit",
+            "--share",
+        ])
+        else {
+            unreachable!()
+        };
+        assert_eq!(git, PreviewGitArg::Track);
+        assert_eq!(ui, PreviewUiArg::Editor);
+        assert!(allow_edit && share);
+    }
+
+    #[test]
+    fn preview_git_arg_maps_to_library_enum() {
+        assert_eq!(
+            quarto_preview::PreviewGit::from(PreviewGitArg::Ignore),
+            quarto_preview::PreviewGit::Ignore
+        );
+        assert_eq!(
+            quarto_preview::PreviewGit::from(PreviewGitArg::Track),
+            quarto_preview::PreviewGit::Track
+        );
+    }
+
     #[test]
     fn preview_join_composes_with_guest_flags() {
         // `--port` picks the local proxy port, `--host` its bind
@@ -1987,6 +2139,7 @@ fn run() -> Result<()> {
             allow_edit,
             share,
             ui,
+            git,
             print_asset_manifest_hashes,
             join,
             static_mode,
@@ -2048,6 +2201,7 @@ fn run() -> Result<()> {
                     allow_edit,
                     share,
                     ui,
+                    git: git.into(),
                     to,
                     metadata,
                     profile,

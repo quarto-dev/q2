@@ -47,6 +47,7 @@ async fn boot_server_for_test(
 
     let port = pick_free_port();
     let config = PreviewConfig {
+        git: Default::default(),
         render: Default::default(),
         upstream: None,
         host: "127.0.0.1".to_string(),
@@ -191,6 +192,7 @@ async fn config_reports_editor_boot_when_stashed() {
 
     let port = pick_free_port();
     let config = PreviewConfig {
+        git: Default::default(),
         render: Default::default(),
         upstream: None,
         host: "127.0.0.1".to_string(),
@@ -375,6 +377,7 @@ async fn config_omits_assets_under_spa_dir_override() {
 
     let port = pick_free_port();
     let config = PreviewConfig {
+        git: Default::default(),
         render: Default::default(),
         upstream: None,
         host: "127.0.0.1".to_string(),

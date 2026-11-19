@@ -229,6 +229,20 @@ pub enum PreviewUi {
     Editor,
 }
 
+/// Whether the preview follows git (`--git`, GE-4, G33). Experimental.
+///
+/// `Track` means this preview owns the project's pointer: the hub keeps
+/// documents in step with git checkouts. `Ignore` is the behavior from
+/// before git epochs existed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PreviewGit {
+    /// Do not follow git (the default).
+    #[default]
+    Ignore,
+    /// Follow git: the hub owns the project's pointer.
+    Track,
+}
+
 /// Runtime configuration for the preview server.
 #[derive(Clone)]
 pub struct PreviewConfig {
@@ -310,6 +324,8 @@ pub struct PreviewConfig {
     /// editor. Orthogonal to `allow_edit` — the UI choice never changes
     /// the disk write policy.
     pub ui: PreviewUi,
+    /// `--git` (GE-4, G33): whether the hub tracks git checkouts.
+    pub git: PreviewGit,
     /// `--to`, `-M` and `--profile` (F8). Default: none of them.
     pub render: RenderFlags,
     /// Mirror a project from an existing sync server instead of serving a
@@ -755,7 +771,10 @@ fn build_hub_config(config: &PreviewConfig) -> HubConfig {
         socket_group: None,
         socket_allow_uid: Vec::new(),
         upstream: config.upstream.clone(),
-        git_tracking: quarto_hub::git_epochs::GitTracking::Ignore,
+        git_tracking: match config.git {
+            PreviewGit::Ignore => quarto_hub::git_epochs::GitTracking::Ignore,
+            PreviewGit::Track => quarto_hub::git_epochs::GitTracking::Track,
+        },
     }
 }
 
@@ -1436,7 +1455,23 @@ mod tests {
             allow_edit,
             share: false,
             ui,
+            git: PreviewGit::default(),
         }
+    }
+
+    #[test]
+    fn preview_git_defaults_to_ignore() {
+        assert_eq!(PreviewGit::default(), PreviewGit::Ignore);
+    }
+
+    #[test]
+    fn hub_config_git_track_sets_the_hub_option_and_ignore_leaves_it_off() {
+        use quarto_hub::git_epochs::GitTracking;
+        let plain = build_hub_config(&test_config(PreviewUi::Viewer, false));
+        assert_eq!(plain.git_tracking, GitTracking::Ignore);
+        let mut tracking = test_config(PreviewUi::Viewer, false);
+        tracking.git = PreviewGit::Track;
+        assert_eq!(build_hub_config(&tracking).git_tracking, GitTracking::Track);
     }
 
     #[test]

@@ -69,6 +69,7 @@ async fn boots_serves_spa_plus_hub_health() {
 
     let port = pick_free_port();
     let config = PreviewConfig {
+        git: Default::default(),
         render: Default::default(),
         upstream: None,
         host: "127.0.0.1".to_string(),

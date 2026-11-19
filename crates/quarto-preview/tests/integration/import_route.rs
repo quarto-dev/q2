@@ -40,6 +40,7 @@ async fn boot() -> Server {
     let data = tempfile::TempDir::with_prefix("q2-preview-import-route-data-").unwrap();
     let port = pick_free_port();
     let config = PreviewConfig {
+        git: Default::default(),
         render: Default::default(),
         upstream: None,
         host: "127.0.0.1".to_string(),

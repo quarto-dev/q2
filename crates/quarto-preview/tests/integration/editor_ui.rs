@@ -53,6 +53,7 @@ async fn editor_ui_serves_editor_index_and_keeps_hub_routes() {
 
     let port = pick_free_port();
     let config = PreviewConfig {
+        git: Default::default(),
         render: Default::default(),
         upstream: None,
         host: "127.0.0.1".to_string(),
@@ -139,6 +140,7 @@ async fn editor_ui_serves_pdfjs_from_the_viewer_bundle() {
 
     let port = pick_free_port();
     let config = PreviewConfig {
+        git: Default::default(),
         render: Default::default(),
         upstream: None,
         host: "127.0.0.1".to_string(),
