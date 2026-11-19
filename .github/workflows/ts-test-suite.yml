@@ -165,6 +165,12 @@ jobs:
           node-version: '24'
           cache: 'npm'
 
+      # npm runs package scripts under cmd.exe on Windows, which rejects the
+      # `VAR=value cmd` form several scripts use. Run them under Git Bash.
+      - name: Use bash for npm scripts (Windows)
+        if: runner.os == 'Windows'
+        run: echo 'npm_config_script_shell=C:\Program Files\Git\bin\bash.exe' >> "$GITHUB_ENV"
+
       - name: Install npm dependencies
         shell: bash
         run: npm ci
@@ -338,6 +344,12 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
+
+      # npm runs package scripts under cmd.exe on Windows, which rejects the
+      # `VAR=value cmd` form several scripts use. Run them under Git Bash.
+      - name: Use bash for npm scripts (Windows)
+        if: runner.os == 'Windows'
+        run: echo 'npm_config_script_shell=C:\Program Files\Git\bin\bash.exe' >> "$GITHUB_ENV"
 
       - name: Install npm dependencies
         shell: bash
