@@ -9,6 +9,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   testDir: path.join(here, 'tests'),
   testMatch: '**/*.e2e.ts',
+  // The cross-client scenarios (GE-14) need a built q2, the hub-client embed, and chromium; they have their own config.
+  testIgnore: '**/cross-client/**',
   // One VS Code at a time: each launch is heavy, and the tests share the download cache.
   workers: 1,
   fullyParallel: false,

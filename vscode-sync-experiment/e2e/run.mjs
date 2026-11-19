@@ -19,8 +19,10 @@ const env = { ...process.env, NODE_OPTIONS: [process.env.NODE_OPTIONS, '--condit
 // `--timing` selects the checkout-reload timing test (its own config; see tests/checkout-reload.timing.ts).
 const args = process.argv.slice(2);
 const timing = args.includes('--timing');
-const config = join(here, timing ? 'playwright.timing.config.ts' : 'playwright.config.ts');
-const result = spawnSync(process.execPath, [cli, 'test', '--config', config, ...args.filter((a) => a !== '--timing')], {
+// `--cross` selects the cross-client scenarios (GE-14; tests/cross-client, its own config).
+const cross = args.includes('--cross');
+const config = join(here, timing ? 'playwright.timing.config.ts' : cross ? 'playwright.cross-client.config.ts' : 'playwright.config.ts');
+const result = spawnSync(process.execPath, [cli, 'test', '--config', config, ...args.filter((a) => a !== '--timing' && a !== '--cross')], {
   stdio: 'inherit',
   env,
 });

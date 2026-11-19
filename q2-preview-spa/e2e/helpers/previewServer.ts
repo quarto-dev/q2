@@ -113,7 +113,7 @@ function waitForUrl(
         // then read as `page=index.qmd/` (no match → falls back to
         // firstQmd alphabetically). Normalize by parsing the URL
         // and ensuring the *path* (not the whole string) ends in `/`.
-        const parsed = new URL(match[1]);
+        const parsed = new URL(match[1]!);
         if (!parsed.pathname.endsWith('/')) parsed.pathname += '/';
         const url = parsed.toString();
         const portMatch = url.match(/:(\d+)\//);
@@ -123,7 +123,7 @@ function waitForUrl(
           return;
         }
         cleanup();
-        resolve({ url, port: parseInt(portMatch[1], 10) });
+        resolve({ url, port: parseInt(portMatch[1]!, 10) });
       }
     };
 
@@ -230,6 +230,14 @@ export interface StartOptions {
   /** GE-13: with `gitRepo`, run `jj git init --colocate` on the repository before the server starts (needs `jj`). */
   jjColocate?: boolean;
   /**
+   * GE-14: preview a project that lives on an existing sync server (`--hub-url <ws url> --project <id>`) instead of a
+   * local directory. Requires `project`; builds no project (pass no `fixtureFiles`, `copyFromDir`, or `gitRepo`); the
+   * hub must need no sign-in. `projectDir` is then an empty temp dir the server never reads.
+   */
+  hubUrl?: string;
+  /** GE-14: with `hubUrl`, the project's index document id (or a share URL). */
+  project?: string;
+  /**
    * bd-eip0naf4: launch `q2 preview --static --no-watch` instead of the
    * default hub/SPA preview — render the project to `_site/` through
    * the `q2 render` path and serve it as plain HTML. The SUT is then
@@ -284,10 +292,16 @@ async function copyDirRecursive(src: string, dst: string): Promise<void> {
  */
 export async function startPreviewServer(opts: StartOptions): Promise<PreviewServerHandle> {
   const inlineCount = opts.fixtureFiles?.length ?? 0;
+  if (opts.hubUrl || opts.project) {
+    if (!opts.hubUrl || !opts.project) throw new Error('startPreviewServer: hubUrl and project go together');
+    if (opts.gitRepo || inlineCount > 0 || opts.copyFromDir || opts.targetFile || opts.staticMode || opts.share) {
+      throw new Error('startPreviewServer: hubUrl mirrors a remote project; do not pass a local project, targetFile, staticMode, or share');
+    }
+  }
   if (opts.gitRepo && (inlineCount > 0 || opts.copyFromDir)) {
     throw new Error('startPreviewServer: gitRepo builds its own project; do not pass fixtureFiles or copyFromDir');
   }
-  if (inlineCount === 0 && !opts.copyFromDir && !opts.gitRepo) {
+  if (inlineCount === 0 && !opts.copyFromDir && !opts.gitRepo && !opts.hubUrl) {
     throw new Error(
       'startPreviewServer: provide fixtureFiles or copyFromDir',
     );
@@ -307,7 +321,7 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
     if (opts.jjColocate) repo.jjColocate();
   } else if (opts.copyFromDir) {
     await copyDirRecursive(opts.copyFromDir, projectDir);
-  } else {
+  } else if (!opts.hubUrl) {
     for (const file of opts.fixtureFiles!) {
       const absPath = path.join(projectDir, file.path);
       await mkdir(path.dirname(absPath), { recursive: true });
@@ -340,9 +354,10 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
       ...(opts.ui === 'editor' ? ['--ui', 'editor'] : []),
       ...(opts.share ? ['--share'] : []),
       ...(opts.git ? ['--git', opts.git] : []),
+      ...(opts.hubUrl ? ['--hub-url', opts.hubUrl, '--project', opts.project!] : []),
       // Single-file mode targets one file inside the temp project;
-      // project mode targets the directory (the default).
-      opts.targetFile ? path.join(projectDir, opts.targetFile) : projectDir,
+      // project mode targets the directory (the default). `--hub-url` takes no path.
+      ...(opts.hubUrl ? [] : [opts.targetFile ? path.join(projectDir, opts.targetFile) : projectDir]),
     ],
     {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -425,7 +440,7 @@ async function ticketFrom(log: () => string, shared: boolean, timeoutMs: number)
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const match = log().match(/q2 preview --join (q2preview\S+)/);
-    if (match) return match[1];
+    if (match) return match[1]!;
     if (Date.now() > deadline) throw new Error(`no join string within ${timeoutMs}ms; log:\n${log()}`);
     await new Promise((r) => setTimeout(r, 100));
   }
