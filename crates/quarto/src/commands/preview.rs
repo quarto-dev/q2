@@ -260,6 +260,23 @@ pub fn print_asset_manifest_hashes() -> Result<()> {
     Ok(())
 }
 
+/// GE-4 (G28): whether a VS Code extension has bound `project_root` to a Quarto Hub folder.
+///
+/// True when `<root>/.quarto-hub/project.json` exists and its `mode` is not `editor-only` (an editor-only
+/// binding does not sync the files). A marker that cannot be parsed still counts as bound: the extension wrote
+/// it, so the folder is its own. The names mirror the extension's `META_DIR` and `META_FILE`
+/// (`vscode-sync-experiment/src/project.ts`).
+fn extension_bound(project_root: &Path) -> bool {
+    let marker = project_root.join(".quarto-hub").join("project.json");
+    let Ok(text) = std::fs::read_to_string(&marker) else {
+        return false;
+    };
+    let mode = serde_json::from_str::<serde_json::Value>(&text)
+        .ok()
+        .and_then(|v| v.get("mode").and_then(|m| m.as_str().map(str::to_owned)));
+    mode.as_deref() != Some("editor-only")
+}
+
 async fn run(args: PreviewArgs) -> Result<()> {
     // Project mode is the default (epic plan Q5); --no-project is
     // the explicit standalone-server escape hatch. Canonicalize so
@@ -302,6 +319,17 @@ async fn run(args: PreviewArgs) -> Result<()> {
             resolved.single_file,
         )
     };
+
+    // GE-4 (G28): warn, never refuse, when an extension owns this directory. Only a served directory counts:
+    // `--no-project`, a single file's mirror, and `--hub-url` serve no directory.
+    if let Some(root) = project_root.as_deref()
+        && extension_bound(root)
+    {
+        tracing::warn!(
+            "this directory is bound to a Quarto Hub folder (.quarto-hub/project.json), so running a hub here \
+             syncs the same files twice"
+        );
+    }
 
     // F8: `--to`, `-M` and `--profile`. A malformed `-M` fails here, before
     // any port is probed or server started; an unservable format is refused
@@ -1316,6 +1344,42 @@ pub(crate) fn pick_editor_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// GE-4 (G28): a directory counts as bound by a VS Code extension only
+    /// when `<root>/.quarto-hub/project.json` exists and its `mode` is not
+    /// `editor-only`.
+    #[test]
+    fn extension_bound_needs_the_marker_and_a_syncing_mode() {
+        let write = |root: &Path, body: &str| {
+            let dir = root.join(".quarto-hub");
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("project.json"), body).unwrap();
+        };
+        let none = tempfile::TempDir::new().unwrap();
+        assert!(!extension_bound(none.path()), "no marker, not bound");
+
+        let bound = tempfile::TempDir::new().unwrap();
+        write(bound.path(), "{}");
+        assert!(extension_bound(bound.path()), "marker without a mode");
+
+        let synced = tempfile::TempDir::new().unwrap();
+        write(synced.path(), r#"{"mode": "sync"}"#);
+        assert!(extension_bound(synced.path()), "a syncing mode");
+
+        let editor_only = tempfile::TempDir::new().unwrap();
+        write(editor_only.path(), r#"{"mode": "editor-only"}"#);
+        assert!(
+            !extension_bound(editor_only.path()),
+            "editor-only does not sync files"
+        );
+
+        let garbled = tempfile::TempDir::new().unwrap();
+        write(garbled.path(), "not json");
+        assert!(
+            extension_bound(garbled.path()),
+            "an unreadable marker still means the folder is bound"
+        );
+    }
 
     /// bd-yq3awhmw: `--project` takes a bare id, an `automerge:` URL, or a
     /// hub share URL, and always yields the bare id.
