@@ -392,6 +392,14 @@ jobs:
         shell: bash
         run: npm test -w ts-packages/quarto-share-url
 
+      - name: Typecheck, build, and test the VS Code extension
+        shell: bash
+        run: |
+          npm run build --if-present -w ts-packages/quarto-sync-client -w ts-packages/quarto-automerge-schema -w ts-packages/quarto-git-epochs -w ts-packages/quarto-share-url
+          npm run typecheck -w quarto-hub-vscode
+          npm run build -w quarto-hub-vscode
+          npm run test -w quarto-hub-vscode
+
       - name: Run annotated-qmd tests
         shell: bash
         run: npm test -w ts-packages/annotated-qmd

@@ -22,7 +22,7 @@
 //! 11. Run shared workspace-package tests (@quarto/preview-renderer +
 //!     @quarto/preview-runtime, both unit and integration)
 //! 12. Run hub MCP package tests (quarto-automerge-schema, quarto-git-epochs,
-//!     quarto-share-url,
+//!     quarto-share-url, the quarto-hub-vscode extension (typecheck, build, tests),
 //!     quarto-sync-client + quarto-hub-mcp, including the q2-mcp bundle smoke test)
 //! 13. Build q2-preview-spa placeholder
 //! 14. q2-preview-spa Playwright E2E (only when --e2e is set)
@@ -850,6 +850,29 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
             None,
             "quarto-hub-mcp tests failed",
         )?;
+        // The VS Code extension (git-epochs GE-8) is not under ts-packages/*,
+        // so step 6 does not build it; mirror its ts-test-suite.yml step here.
+        if project_root
+            .join("vscode-sync-experiment/package.json")
+            .is_file()
+        {
+            for (args, what) in [
+                (
+                    ["run", "typecheck", "-w", "quarto-hub-vscode"],
+                    "quarto-hub-vscode typecheck failed",
+                ),
+                (
+                    ["run", "build", "-w", "quarto-hub-vscode"],
+                    "quarto-hub-vscode build failed",
+                ),
+                (
+                    ["run", "test", "-w", "quarto-hub-vscode"],
+                    "quarto-hub-vscode tests failed",
+                ),
+            ] {
+                run_command("npm", &args, &project_root, None, what)?;
+            }
+        }
         println!("✓ hub MCP package tests complete");
     } else if !have_hub_mcp {
         println!(

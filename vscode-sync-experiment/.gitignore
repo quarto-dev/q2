@@ -2,3 +2,6 @@
 # hub-client/.gitignore hides .vscode/* ; these are the extension's launch config.
 !.vscode/launch.json
 !.vscode/tasks.json
+dist/
+.vscode-test/
+test-results/
