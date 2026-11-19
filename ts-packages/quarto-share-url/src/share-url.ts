@@ -100,7 +100,7 @@ export function parseProjectRef(input: string): ProjectRef {
   const queryPart = queryStart === -1 ? '' : fragment.slice(queryStart + 1);
 
   const idMatch = pathPart.match(DOC_LINK_ROUTE);
-  const project = idMatch ? decodeURIComponent(idMatch[1]) : raw;
+  const project = idMatch ? decodeURIComponent(idMatch[1]!) : raw;
 
   // URLSearchParams handles percent-decoding and `+`→space for us.
   const params = new URLSearchParams(queryPart);
