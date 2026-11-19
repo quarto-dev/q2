@@ -5,3 +5,6 @@
 dist/
 .vscode-test/
 test-results/
+# Playwright e2e output and the cached VS Code download (GE-8 harness)
+.vscode-test/
+test-results/
