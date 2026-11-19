@@ -95,7 +95,7 @@ the run as ran, read, or not done. **Stop rule:** if any check except 12 fails, 
 GE-5, GE-6, or GE-8, and bring it to Gordon (D21). Do not degrade silently. Items 3, 11, and 13 are the exceptions that
 record an answer instead of passing or failing (see part two).
 
-- [x] **6.** In Automerge (JS and Rust, two actors), with the flat registry: concurrent creation of one key, and of
+- [ ] **6.** In Automerge (JS and Rust, two actors), with the flat registry: concurrent creation of one key, and of
   different keys under a new path, both survive (the nested form loses one side; the second review reproduced it, so
   write these tests first and watch a nested variant fail); a concurrent delete and put of one key leaves the put; a
   retired entry is never removed. A NUL byte in a key and an integer generation survive a save and load in both
