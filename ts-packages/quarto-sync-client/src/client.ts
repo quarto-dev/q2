@@ -1543,7 +1543,12 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         }
         callbacks.onFileReplaced?.(event);
       },
-      clock: { setTimeout, clearTimeout },
+      // Arrow wrappers, not the bare globals: the coordinator calls `clock.setTimeout(...)`, and in a browser
+      // `window.setTimeout` throws "Illegal invocation" when called as a method of another object.
+      clock: {
+        setTimeout: ((handler: () => void, ms?: number) => setTimeout(handler, ms)) as typeof setTimeout,
+        clearTimeout: ((id: Parameters<typeof clearTimeout>[0]) => clearTimeout(id)) as typeof clearTimeout,
+      },
     });
   }
 

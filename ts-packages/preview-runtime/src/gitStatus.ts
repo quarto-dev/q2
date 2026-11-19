@@ -8,8 +8,8 @@
  *
  * Polling rules: ask once at start; keep asking every 2 s only while the answer says `tracking` is true. A 404 (an
  * older preview, or one that does not track) or `tracking: false` ends polling for good, because those answers do not
- * change during a session. A network error or another HTTP status is treated as "not known yet": nothing is shown, and
- * the poller tries again on the next tick.
+ * change during a session; so does a 200 that is not JSON (a server answering every path with its page). A network error
+ * or another HTTP status is treated as "not known yet": nothing is shown, and the poller tries again on the next tick.
  */
 
 export interface GitStatusSnapshot {
@@ -36,9 +36,16 @@ export interface GitStatusPollerOptions {
 
 const DEFAULT_INTERVAL_MS = 2000;
 
+// Arrow wrappers, not the bare globals: calling `clock.setTimeout(...)` makes the clock object `this`, and in a browser
+// `window.setTimeout` throws "Illegal invocation" then.
+const BROWSER_SAFE_CLOCK: { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout } = {
+  setTimeout: ((handler: () => void, ms?: number) => setTimeout(handler, ms)) as typeof setTimeout,
+  clearTimeout: ((id: Parameters<typeof clearTimeout>[0]) => clearTimeout(id)) as typeof clearTimeout,
+};
+
 export function createGitStatusPoller(opts: GitStatusPollerOptions): GitStatusPoller {
   const intervalMs = opts.intervalMs ?? DEFAULT_INTERVAL_MS;
-  const clock = opts.clock ?? { setTimeout, clearTimeout };
+  const clock = opts.clock ?? BROWSER_SAFE_CLOCK;
   const doFetch = opts.fetch ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
 
   let snapshot: GitStatusSnapshot = { tracking: false, paused: false };
@@ -73,7 +80,15 @@ export function createGitStatusPoller(opts: GitStatusPollerOptions): GitStatusPo
         schedule();
         return;
       }
-      const body = (await res.json()) as { tracking?: unknown; paused?: unknown };
+      let body: { tracking?: unknown; paused?: unknown };
+      try {
+        body = (await res.json()) as { tracking?: unknown; paused?: unknown };
+      } catch {
+        // A 200 that is not JSON is a server that answers every path with its page (the SPA fallback): no such route.
+        running = false;
+        set({ tracking: false, paused: false });
+        return;
+      }
       if (!running) return;
       if (body.tracking !== true) {
         running = false;

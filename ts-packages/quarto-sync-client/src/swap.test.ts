@@ -5,7 +5,7 @@
  * the index entry, which is what the preview does when it flips a pointer. The guest is a real SyncClient with the
  * swap coordinator wired in.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   generateAutomergeUrl,
   parseAutomergeUrl,
@@ -247,4 +247,30 @@ describe('write routing by baseDocId', () => {
     guest.applyEditorOperations('index.qmd', [{ rangeOffset: 0, rangeLength: 0, text: '!' }]);
     expect(guest.getFileHandle('index.qmd')!.doc()!.text).toBe('!changed\n');
   }, 20000);
+});
+
+describe('in a browser-like environment', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('works when the global timers refuse to run with any `this` but the global (browser "Illegal invocation")', async () => {
+    // window.setTimeout throws when called as a method of another object. The coordinator receives its clock as an
+    // object, so a host that hands over the bare globals breaks in a browser while passing in Node (found by the
+    // end-to-end run of GE-7 against a real preview).
+    const realSet = globalThis.setTimeout;
+    const realClear = globalThis.clearTimeout;
+    const strict = (name: string, impl: (...a: never[]) => unknown) =>
+      function (this: unknown, ...args: never[]) {
+        if (this !== undefined && this !== globalThis) throw new TypeError(`Illegal invocation (${name})`);
+        return impl(...args);
+      };
+    vi.stubGlobal('setTimeout', strict('setTimeout', ((...a: Parameters<typeof setTimeout>) => realSet(...a)) as never));
+    vi.stubGlobal('clearTimeout', strict('clearTimeout', ((...a: Parameters<typeof clearTimeout>) => realClear(...a)) as never));
+
+    const { indexDocId, seen } = await projectWithGuest('A\n');
+    await flip(indexDocId, 'index.qmd', makeDocOnHub('B\n'));
+    await until(() => phases(seen).includes('done'), 10000, 'done');
+    expect(phases(seen)).toEqual(['pending', 'done']);
+  }, 30000);
 });

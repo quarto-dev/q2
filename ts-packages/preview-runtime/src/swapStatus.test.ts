@@ -2,7 +2,7 @@
  * GE-7 test specification 4 (the runtime part): the swap status store turns the sync client's replaced events into
  * the two things a UI needs: which paths are frozen (pending), and one aggregate notice per batch.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { ReplacedEvent } from '@quarto/quarto-git-epochs';
 
 import { createSwapStatusStore } from './swapStatus';
@@ -140,5 +140,24 @@ describe('swap status store', () => {
     store.reset();
     f.advance(10);
     expect(store.getSnapshot()).toMatchObject({ pending: [], notice: null });
+  });
+});
+
+describe('default timers in a browser', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('does not call the global timers as methods of another object (browser "Illegal invocation")', async () => {
+    const realSet = globalThis.setTimeout;
+    vi.stubGlobal('setTimeout', function (this: unknown, ...args: Parameters<typeof setTimeout>) {
+      if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+      return realSet(...args);
+    });
+    const store = createSwapStatusStore({ quietMs: 5 });
+    store.handle({ path: 'a.qmd', phase: 'done', oldDocId: 'x', newDocId: 'y' });
+    await new Promise((r) => realSet(r, 30));
+    expect(store.getSnapshot().notice).not.toBeNull();
   });
 });

@@ -43,9 +43,16 @@ export interface SwapStatusOptions {
 
 const DEFAULT_QUIET_MS = 150;
 
+// Arrow wrappers, not the bare globals: calling `clock.setTimeout(...)` makes the clock object `this`, and in a browser
+// `window.setTimeout` throws "Illegal invocation" then.
+const BROWSER_SAFE_CLOCK: { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout } = {
+  setTimeout: ((handler: () => void, ms?: number) => setTimeout(handler, ms)) as typeof setTimeout,
+  clearTimeout: ((id: Parameters<typeof clearTimeout>[0]) => clearTimeout(id)) as typeof clearTimeout,
+};
+
 export function createSwapStatusStore(opts: SwapStatusOptions = {}): SwapStatusStore {
   const quietMs = opts.quietMs ?? DEFAULT_QUIET_MS;
-  const clock = opts.clock ?? { setTimeout, clearTimeout };
+  const clock = opts.clock ?? BROWSER_SAFE_CLOCK;
 
   let aggregator = new NoticeAggregator();
   let extraLines: string[] = [];
