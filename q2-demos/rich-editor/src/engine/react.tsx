@@ -763,6 +763,19 @@ export function useFieldEditor(
         selection.setBaseAndExtent(from.node, from.offset, to.node, to.offset)
         return true
       }
+      if (granularity === 'paragraph') {
+        // The start or the end of the field, or, from there, of the field
+        // before or after. (The browser's own, with Shift, can stop partway
+        // into the next field.)
+        const there = key.forward
+          ? atEnd(origin, saved.focus.node, saved.focus.offset)
+          : atStart(origin, saved.focus.node, saved.focus.offset)
+        const field = (there && fields[fields.indexOf(origin) + (key.forward ? 1 : -1)]) || origin
+        const to = edge(field, key.forward ? 'end' : 'start')
+        const from = e.shiftKey ? saved.anchor : to
+        selection.setBaseAndExtent(from.node, from.offset, to.node, to.offset)
+        return true
+      }
       if (granularity === 'character' && !e.shiftKey && !selection.isCollapsed) {
         // Left and Right put the caret at that end of a selection.
         // (Firefox's `modify` would move it a character from the focus.)
@@ -788,6 +801,19 @@ export function useFieldEditor(
         return 'left'
       }
       selection.modify(e.shiftKey ? 'extend' : 'move', key.direction, granularity)
+      if (
+        e.shiftKey &&
+        granularity === 'line' &&
+        fieldOf(root, selection.focusNode) !== origin &&
+        !(key.forward ? atEnd : atStart)(origin, saved.focus.node, saved.focus.offset)
+      ) {
+        // Shift+Down on a field's last line selects to the end of its text
+        // before going on to the next field, and Shift+Up on its first line
+        // to the start.
+        const to = edge(origin, key.forward ? 'end' : 'start')
+        selection.setBaseAndExtent(saved.anchor.node, saved.anchor.offset, to.node, to.offset)
+        return true
+      }
       if (fieldOf(root, selection.focusNode)) return true
 
       const target = fields[fields.indexOf(origin) + (key.forward ? 1 : -1)]
@@ -984,7 +1010,8 @@ function arrowGranularity(e: KeyboardEvent, vertical: boolean): string | null {
   const word = IS_MAC ? e.altKey && !e.metaKey && !e.ctrlKey : e.ctrlKey && !e.altKey && !e.metaKey
   const boundary = IS_MAC && e.metaKey && !e.altKey && !e.ctrlKey
   const plain = !e.altKey && !e.metaKey && !e.ctrlKey
-  if (vertical) return plain ? 'line' : boundary ? 'documentboundary' : null
+  // Option+Up / Option+Down on a Mac move by paragraph: here, by field.
+  if (vertical) return plain ? 'line' : boundary ? 'documentboundary' : IS_MAC && word ? 'paragraph' : null
   return plain ? 'character' : word ? 'word' : boundary ? 'lineboundary' : null
 }
 
@@ -993,6 +1020,14 @@ function atStart(field: HTMLElement, node: Node, offset: number): boolean {
   const range = field.ownerDocument.createRange()
   range.selectNodeContents(field)
   range.setEnd(node, offset)
+  return range.toString().replaceAll(HOLDER, '') === ''
+}
+
+/** Whether a DOM point is at the very end of `field`'s text. */
+function atEnd(field: HTMLElement, node: Node, offset: number): boolean {
+  const range = field.ownerDocument.createRange()
+  range.selectNodeContents(field)
+  range.setStart(node, offset)
   return range.toString().replaceAll(HOLDER, '') === ''
 }
 

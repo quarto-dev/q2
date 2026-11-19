@@ -315,6 +315,8 @@ test.describe('the numbered list button', () => {
   }) => {
     const editor = await openEditor(page, 'numbered')
     await editor.placeCaretInLine(4, 2)
+    // To the end of the line's text, then on to the next line.
+    await page.keyboard.press('Shift+ArrowDown')
     await page.keyboard.press('Shift+ArrowDown')
 
     await editor.numberedListButton().click()

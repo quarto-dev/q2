@@ -162,6 +162,8 @@ test.describe('the style box', () => {
   test('a selection over several lines changes each of them', async ({ page }) => {
     const editor = await openEditor(page, 'toolbar')
     await editor.placeCaretInLine(0, 2)
+    // To the end of the line's text, then on to the next line.
+    await page.keyboard.press('Shift+ArrowDown')
     await page.keyboard.press('Shift+ArrowDown')
 
     await editor.chooseStyle('Heading 3')
