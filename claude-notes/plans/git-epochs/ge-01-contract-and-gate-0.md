@@ -2,7 +2,7 @@
 title: 'GE-1: Contract and Gate 0'
 date: 2026-11-18
 description: 'Runs the Gate 0 checks that the contract depends on, writes the normative registry and index contract, adds the version 4 index schema in TypeScript and Rust, creates the shared fixtures and the quarto-git-epochs package skeleton, and runs the remaining Gate 0 checks that decide how the epic proceeds.'
-status: approved
+status: done
 depends-on: []
 lane: A
 epic: ../2026-11-18-git-epochs-epic.md
@@ -221,40 +221,40 @@ record an answer instead of passing or failing (see part two).
 
 ### Gate 0, part two
 
-- [ ] **1.** A Node script using the extension\'s own adapter (`BrowserWebSocketClientAdapter`) connects to a
+- [x] **1.** A Node script using the extension\'s own adapter (`BrowserWebSocketClientAdapter`) connects to a
   `q2 preview` hub\'s `/ws`, directly and through `q2 preview --join <ticket> --port N --no-browser`, and exchanges
   docs both ways under the announce-off policy: a doc created while connected reaches the hub and a second client
   can find it by id; a hub-created doc is fetchable by id; a sidecar-shaped doc travels both ways. The script uses a
   raw `Repo`, as the extension does, and also records whether the client sees the hub\'s heads for its own docs
   (`getSyncInfo` and the `remote-heads` event), because GE-12\'s heads confirmation is built on that.
-- [ ] **2.** The negative case: a doc created while disconnected cannot be found by a second client within 5 s (the
+- [x] **2.** The negative case: a doc created while disconnected cannot be found by a second client within 5 s (the
   hub cannot pull it); and the adapter reconnects and resumes after the `--join` proxy is killed and restarted.
-- [ ] **3.** `GET /health` through the preview returns `index_document_id` and `project_root` and needs no credential.
+- [x] **3.** `GET /health` through the preview returns `index_document_id` and `project_root` and needs no credential.
   This one has a pass criterion: if it needs a credential, GE-11 changes and the epic stops for Gordon.
-- [ ] **4.** Publish a throwaway project to `wss://sync.automerge.org` with a JS client, run
+- [x] **4.** Publish a throwaway project to `wss://sync.automerge.org` with a JS client, run
   `q2 preview --hub-url wss://sync.automerge.org --project <id>` (this covers TLS), confirm it loads, then create a doc
   later and re-point a file at it from the JS client and confirm a client of the mirror follows. Record also whether a
   raw `Repo` client sees remote heads from the public server (as in item 1).
 - [x] **5.** The Rust unknown-keys test passes (see Test specifications) and a read of `index.rs` finds no accessor that
   rebuilds the document.
-- [ ] **10.** `git` is on `PATH` where the extension runs, from a real extension host (a scratch extension launched with
+- [x] **10.** `git` is on `PATH` where the extension runs, from a real extension host (a scratch extension launched with
   `@vscode/test-electron`, since GE-8\'s harness does not exist yet; item 12 uses the same one); the
   remote-development case is noted as not done unless a remote is available.
-- [ ] **11.** Whether `q2 preview` without `--allow-edit` renders a doc edit made by a JS client in the browser (the
+- [x] **11.** Whether `q2 preview` without `--allow-edit` renders a doc edit made by a JS client in the browser (the
   preview may render from docs or from disk). This item records an answer; either answer proceeds, and GE-13 S11 and the
   docs follow it.
-- [ ] **12.** Editor-only timing: in a real VS Code with the scratch extension from item 10 (it logs
+- [x] **12.** Editor-only timing: in a real VS Code with the scratch extension from item 10 (it logs
   `onDidChangeTextDocument` times), run `git switch` on a tree of a few thousand files in the open folder and measure
   the time from `index.lock` release to the last buffer reload event, on this host. This item has its own outcome: a
   reload later than the 1 s quiet window does not stop the epic; record it, and editor-only ships as experimental
   (G20). GE-17\'s `c2` runs GE-9\'s timing test on Windows.
-- [ ] **13.** Whether a new `q2 preview` run on the same directory gets a new index doc id (the basis of G19): start
+- [x] **13.** Whether a new `q2 preview` run on the same directory gets a new index doc id (the basis of G19): start
   it twice and compare `/health`. This item records an answer; if the id is the same, G19\'s reset-on-rebind still
   applies and the join prompt wording changes.
 
 ### Wrap-up
 
-- [ ] Commit in logical pieces (Gate 0 part one notes; contract; package and CI; schema; fixtures). The commit message
+- [x] Commit in logical pieces (Gate 0 part one notes; contract; package and CI; schema; fixtures). The commit message
   of the fixtures commit lists the fixture files added. `cargo xtask lint` is green.
 
 ## Gates
@@ -289,7 +289,7 @@ The logic itself (GE-2, GE-5), the swap module and the notice texts (GE-6), adop
   the only conflict-marker lines in the tree are quoted text in
   `claude-notes/research/2026-05-19-attribution-merge-briefing.md`, identical to `origin/main`). `cargo build
   --workspace` passed on the branch in workspace-7 (exit 0).
-- Gate 0 item 7, partly done (git 2.55.0, temp repo): reflog subjects are `commit (amend): <msg>`,
+- Gate 0 item 7, done (git 2.55.0, temp repo; a stopped `revert` and `pull` ordering excepted, see below): reflog subjects are `commit (amend): <msg>`,
   `revert: Revert "<subject>"`, `cherry-pick: <subject>`, `checkout: moving from X to Y` (for `switch`), and
   `reset: moving to HEAD` for both `git stash` and a plain `git reset --hard`, so the two are indistinguishable by
   subject, as the second review found. A repo with `core.logAllRefUpdates=false` has no `.git/logs`. In a linked
@@ -370,4 +370,15 @@ The logic itself (GE-2, GE-5), the swap module and the notice texts (GE-6), adop
   scenarios have no remote; `stash pop` has verdict `none` (it writes no reflog entry). `git stash` and `reset
   --hard` expect `checkout`. One generator bug found on the way: saving an earlier doc state after later
   `A.change` calls on it returned the later state, so the "before" golden is saved from a clone.
-- Not started: Gate 0 part two; the contract, package, schemas, fixtures. No repository code changed yet.
+
+**Wrap-up (reconciled).** Every checkbox was re-checked against the commits on the branch (contract, package and CI,
+schema in both languages, fixtures, all thirteen Gate 0 items). No Gate 0 check failed; items 3, 11, and 13 recorded
+answers as designed, and item 12 recorded 151 ms (no stop). Gates run at the end: `npm test` for
+`quarto-automerge-schema` (110) and `quarto-git-epochs` (25), typecheck for both (clean), `quarto-sync-client` tests
+(202, a downstream check), `cargo clippy -p quarto-hub --all-targets -- -D warnings` (clean), `cargo nextest run -p
+quarto-hub` (506 passed), `cargo xtask lint` (clean). Root `npm run typecheck` passes. Root `npm run build` fails in
+the `q2-demos/*` apps (Vite cannot resolve `/src/wasm-js-bridge/cache.js` from the unbuilt WASM `pkg/`): that
+needs `npm run build:wasm` and is unrelated to this plan. The end-to-end invocations are the Gate 0 runs above; no
+user-visible product behavior changed. Not run: the Windows cross-clippy (the `aws-lc-sys` C build cannot cross-compile
+from macOS), the remote-development case of item 10, and a clean `npm ci` against the lockfile I edited by hand to
+add two workspace entries.

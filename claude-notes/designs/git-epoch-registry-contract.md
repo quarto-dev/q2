@@ -90,7 +90,7 @@ caller\'s.
   history. Item 8 found no need for the fallback (G12).
 - **Case collision.** Two registry keys whose lowercased path part is equal fall back to ordinary sync for that file
   (compare the lowercased path part of the key) (G12).
-- **Unavailable canonical doc.** Wait 5 s, treat the doc as absent for this arrival, and create one (G11).
+- **Unavailable canonical doc.** Wait 5 s, treat the doc as absent for this arrival, and create one (G11). A `find` of a doc that another peer created or re-pointed to a moment ago can reject at once as `unavailable`, because the server has not pulled it yet (Gate 0 items 1 and 4: a retry after about 1.5 s succeeds). Treat an early `unavailable` as "retry within the 5 s window", not as absent; only the end of the window means absent.
 
 ## Arrival
 
