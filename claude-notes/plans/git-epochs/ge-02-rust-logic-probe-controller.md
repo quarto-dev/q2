@@ -2,7 +2,7 @@
 title: 'GE-2: Rust crate: pure logic, git probe, gate and quiescence controller'
 date: 2026-11-18
 description: 'Creates the quarto-git-epochs Rust crate holding the classifier, arrival rule, startup rule, registry operations, a subprocess git probe, and a tick-driven gate controller, all tested against the shared fixtures and real temporary repositories.'
-status: approved
+status: done
 depends-on: [ge-1]
 lane: B
 epic: ../2026-11-18-git-epochs-epic.md
@@ -92,23 +92,23 @@ All written first and seen failing for the right reason.
 
 ### Crate and pure modules
 
-- [ ] Create `crates/quarto-git-epochs` (edition and workspace fields as its siblings), depending only on `automerge`,
+- [x] Create `crates/quarto-git-epochs` (edition and workspace fields as its siblings), depending only on `automerge`,
   `serde`/`serde_json`, `thiserror`, `tracing`, and `quarto-util`. Add its line to the crate list in `AGENTS.md`.
-- [ ] Tests first: `tests/integration/main.rs` with one module per area (`classify`, `arrival`, `startup`, `registry`,
+- [x] Tests first: `tests/integration/main.rs` with one module per area (`classify`, `arrival`, `startup`, `registry`,
   `golden`, `controller`, `probe_real_repo`, `scenarios`), each including its fixture with `include_str!` or
   `include_bytes!` by the relative path above. Run the audit grep from `integration-tests.md` on the new files.
-- [ ] Implement `classify` (G2).
-- [ ] Implement `arrival` (G9): an input struct with the disk content, the doc content, the blob content, the attached
+- [x] Implement `classify` (G2).
+- [x] Implement `arrival` (G9): an input struct with the disk content, the doc content, the blob content, the attached
   state, the policy, and the content kind; an action enum with create, attach silently, re-baseline, join with notice,
   detach, and seed from disk.
-- [ ] Implement `startup` (G10).
-- [ ] Implement `registry`: the plain-data operations (canonical, register as put-if-absent, move forward, retire, repair, fork-needed,
+- [x] Implement `startup` (G10).
+- [x] Implement `registry`: the plain-data operations (canonical, register as put-if-absent, move forward, retire, repair, fork-needed,
   case collision, unavailable rule) and, in a `doc` submodule, reading and writing the sidecar schema over
   `automerge::AutoCommit` exactly as the contract says (G7, G8, G11, G12).
 
 ### Probe
 
-- [ ] Define `trait GitProbe` (HEAD, markers, reflog since a recorded HEAD, blob map for a prefix, blob content) and
+- [x] Define `trait GitProbe` (HEAD, markers, reflog since a recorded HEAD, blob map for a prefix, blob content) and
   implement `SubprocessProbe`: `GIT_OPTIONAL_LOCKS=0`, `rev-parse --verify -q HEAD`, markers (`index.lock`,
   `rebase-merge`, `rebase-apply`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `sequencer`, `BISECT_LOG`, and jj\'s
   `.jj/working_copy/working_copy.lock`) resolved once with `rev-parse --git-path`, `ls-tree -r -z HEAD` limited to the
@@ -119,27 +119,27 @@ All written first and seen failing for the right reason.
   with no subprocess, for the controller\'s synchronous `check()`; a missing reflog file (no `.git/logs` directory when
   `core.logAllRefUpdates=false`) means "no reflog", not an error, and a test pins that. Real-repo tests: a repo with two root commits, and a `--depth 1` clone made
   through a `file://` URL (a plain local path ignores `--depth`).
-- [ ] A timeout per call (use a helper the workspace already depends on; check `Cargo.lock` before adding one)
+- [x] A timeout per call (use a helper the workspace already depends on; check `Cargo.lock` before adding one)
   (detail chosen by the plan author; confirm). A missing git or a refused repository turns the probe off with one log
   line and the controller reports "off".
-- [ ] Convert paths with `quarto_util::to_forward_slashes` at the boundary; registry keys are always `/` separated.
+- [x] Convert paths with `quarto_util::to_forward_slashes` at the boundary; registry keys are always `/` separated.
 
 ### Controller
 
-- [ ] Implement the tick-driven state machine (gate, pending, hold, quiescence, cap, stale lock, indefinite marker
+- [x] Implement the tick-driven state machine (gate, pending, hold, quiescence, cap, stale lock, indefinite marker
   pause, unresolvable HEAD, resume) returning actions: hold these paths, release these paths, decide with this verdict
   and these blob maps (under colocated jj, the step 5 fallback verdict), report paused or off. Add `check()`, the
   synchronous entry that every sync path calls first: it reads `cheap_state()`, compares the reflog tail with the
   last seen value, and returns open, closed (with the marker names), or pending. The controller takes an
   `is_own_write(path)` callback for the quiet window.
-- [ ] Constants for the numbers in G32 live in one module (including the 250 ms controller tick while a decision is
+- [x] Constants for the numbers in G32 live in one module (including the 250 ms controller tick while a decision is
   pending) and are asserted by a test, so GE-3 and the status route read them from one place.
 
 ### Verification
 
-- [ ] All fake-probe tests pass with no sleeps; the real-repo and scenario tests pass; the no-repository-programs test
+- [x] All fake-probe tests pass with no sleeps; the real-repo and scenario tests pass; the no-repository-programs test
   passes; jj scenarios pass or skip.
-- [ ] `cargo clippy -p quarto-git-epochs --all-targets --target x86_64-pc-windows-msvc -- -D warnings` is clean, and
+- [x] `cargo clippy -p quarto-git-epochs --all-targets --target x86_64-pc-windows-msvc -- -D warnings` is clean, and
   any helper used only by unix-gated tests follows the pairing rule in `cross-platform.md`. Symlink tests need
   `core.symlinks`; gate that one setup helper with `#[cfg(unix)]` and a `#[cfg(not(unix))]` variant that skips
   (detail chosen by the plan author; confirm).
@@ -170,4 +170,72 @@ Any use of Automerge docs beyond the registry schema, samod, the hub, the CLI fl
 
 ## Notes from the run
 
-Not started.
+**What ran.** Tests first: the eleven test modules (`vocabulary`, `classify`, `startup`, `arrival`, `registry`,
+`golden`, `controller`, `probe_real_repo`, `scenarios`, plus `support`) were written before any source, and the first
+build failed because the crate had no modules (the expected red). Two tests then failed at runtime for the right
+reason and drove a fix each: `golden` (no `from-rust-registry-ops.bin` yet; written with `UPDATE_GOLDEN=1`, and its
+manifest entry added with `jq`) and the timeout test (a stand-in `git` that sleeps; the first version of `run()`
+joined its reader threads after the kill, and a grandchild `sleep` held the pipe open for the full 10 s, so the
+kill path no longer joins them).
+
+Gates, all green on this host (git 2.55.0, macOS): `cargo clippy -p quarto-git-epochs --all-targets -- -D
+warnings`; `cargo nextest run -p quarto-git-epochs` (81 passed, 0 skipped); `cargo clippy -p quarto-git-epochs
+--all-targets --target x86_64-pc-windows-msvc -- -D warnings` (clean, no `aws-lc` in this crate's closure);
+`cargo xtask lint` ("All checks passed! (1757 files checked)"); the audit grep from `integration-tests.md` finds
+only the `CARGO_MANIFEST_DIR`-relative fixture path in `support.rs`. `npm test -w @quarto/quarto-git-epochs`
+passes (205 tests), including the TypeScript reading of the Rust-written golden file (GE-14 still owns the formal
+cross-check). The crate has no dependents, so no wider run.
+
+**Shape of the API** (GE-3 should read this):
+
+- `probe`: `ControllerProbe` (`head_sha`, `reflog_since`, `cheap_state`, `ls_tree`, `is_colocated_jj`) and
+  `GitProbe: ControllerProbe` (`show_prefix`, `root_commits`, `is_shallow`, `cat_blobs`). Everything is
+  synchronous; the hub calls it from `spawn_blocking`. `SubprocessProbe::new(ProbeOptions)` is infallible and
+  resolves the `--git-path` paths on first use, caching a failure as `ProbeError::Unavailable`; `ready()` forces
+  it. Every call passes `-c core.fsmonitor=false`, `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`.
+- `controller`: `Controller::new(probe, ControllerOptions)`, `init()`, `check(now_ms)`, `note_activity(path,
+  now_ms)`, `tick(now_ms)`. Time is the caller's `now_ms` (epoch milliseconds, comparable to marker mtimes), so
+  tests need no sleeps. The plan said the controller returns hold, release, decide, and report actions. I followed
+  the TypeScript twin instead: the held paths and the paused or off state are reported through `GateState`
+  (`check()`), and the one action is `Action::Decision`. The decision carries `head`, the reflog subjects, `held`,
+  `capped`, the `tracked` files at HEAD, and `jj`. The verdict is **not** computed in the controller, because it
+  needs disk and doc contents; the caller runs `classify` and applies the step 5 fallback when `jj` is set. A
+  failed `reflog_since` or `ls_tree` at decision time keeps the gate pending and retries in 250 ms.
+- `registry`: pure plan functions (`plan_register`, `plan_move_forward`, `plan_retire`, `plan_repair`) return
+  `Vec<RegistryOp>`; `registry::doc` reads views and applies ops in one Automerge change, and has
+  `create_sidecar`, `register`, `move_forward`, `retire`, `repair`, and `read_index_fields` (both string forms).
+  `Entry::generation` serializes as `gen` to match the fixtures.
+- `numbers`: all of G32, including the idle tick (5000 ms), asserted by a test.
+
+**Details chosen while implementing** (the plan left them open; confirm): the classifier, arrival, startup, and
+registry rules follow GE-5's "Details chosen while implementing" exactly (plain `commit`, `commit (amend)`, and
+`commit (initial)` only; `discarded` is 1 at step 2b; `ReadOnly` wins over jj for the action name; retire copies the
+entry's generation). The per-call timeout uses `wait-timeout` (already in `Cargo.lock`; the crate had no other
+timeout helper). Plan item "an off-switch": the off state is the controller's `GateMode::Off` after
+`ProbeError::Unavailable`; no separate flag was added. Binary content in the scenario runner compares full bytes
+(hex) instead of a hash, to avoid a hashing dependency in tests.
+
+**Not run / exceptions.** The real colocated-jj test skips with a message when `jj` is not on `PATH` (it is not
+installed on this host, so only the hand-made `.jj/working_copy` case ran); the arrival fixtures cover the jj
+fallback verdicts. The timeout test uses a shell-script stand-in and skips on non-unix platforms (a
+`#[cfg(unix)]`/`#[cfg(not(unix))]` helper pair, per `cross-platform.md`). No Windows runtime run (GE-15 to GE-17).
+The `from-rust-registry-ops.bin` fixture and its manifest entry are new and committed.
+
+**End to end.** The crate has no binary, so the scenario runner is the end to end: it builds a real repository for
+each of the 11 scenario files and drives the real probe, reflog parse, tree listing, `cat-file`, and classifier
+together. Invocation and an excerpt of the output I read:
+
+```bash
+SCENARIO_TRACE=1 cargo nextest run -p quarto-git-epochs every_scenario_file --no-capture
+```
+
+```text
+switch-and-back: ["switch","main"] -> checkout changed=["a.qmd"]
+save-then-commit: ["commit","-am","saved"] -> commit changed=["a.qmd"]
+reset-hard: ["reset","--hard"] -> checkout changed=["a.qmd"]
+stash-and-pop: ["stash"] -> checkout changed=["a.qmd"]
+stash-and-pop: ["stash","pop"] -> none
+rebase-stopped: ["rebase","main"] -> none
+```
+
+These verdicts equal the TypeScript package's (GE-5 notes), step for step.
