@@ -53,7 +53,9 @@ powershell -ExecutionPolicy Bypass -File scripts\git-epochs-windows\run.ps1 -Wit
 ```
 
 `-WithTools` downloads pandoc and typst (the versions CI pins) as zips under `scripts\git-epochs-windows\results\tools`
-and puts them on `PATH` for the run; without them, tests that need those tools fail in item `a6`. `-Publish` commits and
+and puts them on `PATH` for the run; without them, tests that need those tools fail in item `a6`. The script now fetches them
+on its own for the `a` items and the `d` diagnostics whenever the pandoc on `PATH` is missing or is not the pinned version
+(a pandoc 3.12.1 against the pin 3.13 once made 99 tests fail); `-NoTools` turns that off. `-Publish` commits and
 pushes the results at the end. Other switches: `-Only a1,a5` runs just those items, `-SkipBuild` skips the up-front
 build.
 

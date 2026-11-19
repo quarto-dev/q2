@@ -19,7 +19,10 @@
 .PARAMETER WithTools
   Download pandoc and typst (the versions CI pins in .github/workflows/test-suite.yml) as portable zips into
   results/tools and put them on PATH for this run. Without them, tests that need pandoc or typst fail, which says
-  nothing about Windows (this matters for a6).
+  nothing about Windows (this matters for a6). Automatic for a-items and diagnostics (d1, d2) when the pandoc on PATH
+  is missing or is not the pinned version (a pandoc 3.12.1 against the pin 3.13 made 99 tests fail in run 152805).
+.PARAMETER NoTools
+  Never download pandoc and typst, even when the installed pandoc is not the pinned version.
 .PARAMETER Publish
   After the run, commit results/*.json and results/*.md and push the current branch to origin as windows/git-epochs.
   Without it the script prints the commands.
@@ -33,6 +36,7 @@
 param(
     [string[]]$Only,
     [switch]$WithTools,
+    [switch]$NoTools,
     [switch]$Publish,
     [switch]$SkipBuild,
     [switch]$BuildEmbed
@@ -261,12 +265,21 @@ if ($missing.Count -gt 0) {
     exit 3
 }
 
+$wf = Get-Content -Raw (Join-Path $repo '.github/workflows/test-suite.yml')
+$pv = '3.13'; $tv = '0.15.1'
+if ($wf -match 'PANDOC_VERSION:\s*"?([0-9.]+)') { $pv = $Matches[1] }
+if ($wf -match 'TYPST_VERSION:\s*"?([0-9.]+)') { $tv = $Matches[1] }
+if (-not $WithTools -and -not $NoTools -and ($wantA -or $wantD)) {
+    # The a-items run the whole q2 test suite, which needs the pinned pandoc: fetch it unless the installed one matches.
+    $have = $null
+    try { $have = ((& pandoc --version 2>$null) | Select-Object -First 1) } catch { }
+    if (-not $have -or $have -notmatch ('pandoc\s+' + [regex]::Escape($pv) + '(\s|$)')) {
+        Write-Host ('pandoc on PATH: ' + $(if ($have) { $have } else { 'none' }) + '; the pin is ' + $pv + ': fetching the pinned pandoc and typst (-NoTools to skip).') -ForegroundColor Yellow
+        $WithTools = $true
+    }
+}
 if ($WithTools) {
     Write-Host '== pandoc and typst (portable zips, versions from CI) =='
-    $wf = Get-Content -Raw (Join-Path $repo '.github/workflows/test-suite.yml')
-    $pv = '3.12.1'; $tv = '0.15.1'
-    if ($wf -match 'PANDOC_VERSION:\s*"?([0-9.]+)') { $pv = $Matches[1] }
-    if ($wf -match 'TYPST_VERSION:\s*"?([0-9.]+)') { $tv = $Matches[1] }
     $toolsDir = Join-Path $resultsDir 'tools'
     New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
     $ProgressPreference = 'SilentlyContinue'
@@ -288,6 +301,9 @@ if ($WithTools) {
         Write-Host ('  ' + $t.Name + ': ' + (& $exe.FullName --version | Select-Object -First 1))
     }
 }
+$pandocUsed = ''
+try { $pandocUsed = ((& pandoc --version 2>$null) | Select-Object -First 1) } catch { }
+if ($pandocUsed) { Write-Host ('pandoc for this run: ' + $pandocUsed + ' (pin ' + $pv + ')') }
 
 # --------------------------------------------------------------------------------------------
 # a0: build everything the items need, once
@@ -340,7 +356,7 @@ if (Test-Selected 'a6') {
         Add-Result 'a6' 'clippy then nextest for the four crates' 'SKIP' 'the up-front build (a0) failed; see its log' '' '' '' '' $false '' 'W10'
     } else {
         $a6Proves = 'The epic''s own gate is green on the Windows host target.'
-        $a6Not = 'Tests that need pandoc or typst unless -WithTools was given. Failures that also appear in the macOS baseline are listed as known unrelated in the plan notes.'
+        $a6Not = ('pandoc for this run: ' + $(if ($pandocUsed) { $pandocUsed } else { 'none' }) + '. Tests that need pandoc or typst unless -WithTools was given. Failures that also appear in the macOS baseline are listed as known unrelated in the plan notes.')
         Write-Host '== a6: clippy (-D warnings) =='
         $rc = Invoke-Logged 'a6-clippy' ('cargo clippy ' + $pkgs + ' --all-targets -- -D warnings')
         if ($rc.Exit -eq 0) {
