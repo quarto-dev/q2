@@ -1,0 +1,134 @@
+﻿{
+    "run_id":  "20261119-171347-GWWIN",
+    "branch":  "windows/git-epochs",
+    "commit":  "b5b9a4cb0b2255872b5eb6a88b00618cf6974250",
+    "base":  "current tip of origin/windows/git-epochs",
+    "host_triple":  "x86_64-pc-windows-msvc",
+    "os":  "Microsoft Windows 11 Pro",
+    "git":  "git version 2.47.1.windows.1",
+    "node":  "v24.21.0",
+    "autocrlf":  "true",
+    "longpaths":  "(unset)",
+    "tools":  [
+                  {
+                      "tool":  "git",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Git.Git   (Git for Windows; the probe is tested against it)"
+                  },
+                  {
+                      "tool":  "rustc",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Rustlang.Rustup   (then: rustup default stable-x86_64-pc-windows-msvc)"
+                  },
+                  {
+                      "tool":  "cargo",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "comes with rustup"
+                  },
+                  {
+                      "tool":  "cargo-nextest",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "cargo install cargo-nextest --locked"
+                  },
+                  {
+                      "tool":  "uv",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install astral-sh.uv   (runs make_large_tree.py and extract_failures.py)"
+                  },
+                  {
+                      "tool":  "nasm",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install NASM.NASM   (the aws-lc-sys crates in quarto-hub need it)"
+                  },
+                  {
+                      "tool":  "cmake",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Kitware.CMake   (the aws-lc-sys crates in quarto-hub need it)"
+                  },
+                  {
+                      "tool":  "link",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "Visual Studio Build Tools, \"Desktop development with C++\" (cargo finds link.exe itself, so absent from PATH is normal; install only if the build says \"linker not found\")"
+                  },
+                  {
+                      "tool":  "node",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "fnm/nvm; Node major per .nvmrc (items b1 to b7)"
+                  },
+                  {
+                      "tool":  "npm",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "comes with Node"
+                  },
+                  {
+                      "tool":  "jj",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "optional: winget install jj-vcs.jj (the jj scenarios of b1 skip without it)"
+                  }
+              ],
+    "items":  [
+                  {
+                      "id":  "a0",
+                      "catalog":  "",
+                      "title":  "build the test binaries for the four crates",
+                      "status":  "PASS",
+                      "reason":  "built",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "",
+                      "does_not_prove":  "",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-171347-GWWIN\\a0-build.log"
+                  },
+                  {
+                      "id":  "a6-clippy",
+                      "catalog":  "W10",
+                      "title":  "clippy -D warnings, four crates",
+                      "status":  "PASS",
+                      "reason":  "clean",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The epic\u0027s own gate is green on the Windows host target.",
+                      "does_not_prove":  "pandoc for this run: pandoc 3.13. Tests that need pandoc or typst unless -WithTools was given. Failures that also appear in the macOS baseline are listed as known unrelated in the plan notes.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-171347-GWWIN\\a6-clippy.log"
+                  },
+                  {
+                      "id":  "a6-nextest",
+                      "catalog":  "W10",
+                      "title":  "nextest, four crates",
+                      "status":  "FAIL",
+                      "reason":  "21 failing: quarto::bin/q2 commands::render_dry_run::tests::would_render_lines_are_project_relative, quarto::integration convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes, quarto::integration lmd_snapshots::lmd_blog_project_renders_as_snapshotted, quarto::integration lmd_snapshots::lmd_fixtures_render_as_snapshotted, quarto::integration lmd_snapshots::lmd_html_fixtures_render_as_snapshotted, quarto::integration lmd_snapshots::lmd_project_renders_as_snapshotted, quarto::integration preview_static_e2e::cli_flags_override_project_preview_keys, quarto::integration preview_static_e2e::project_preview_keys_set_the_defaults_and_unsupported_keys_warn, quarto::integration render_record_sources_cli::the_key_in_front_matter_works_like_dash_m, quarto::integration render_scripts_cli::explicit_interpreter_command_line_with_args, quarto::integration render_scripts_cli::list_form_runs_scripts_in_order, quarto::integration smoke_all::smoke_all, quarto-hub storage::tests::test_storage_manager_prevents_double_lock, quarto-hub storage::tests::test_storage_manager_standalone_prevents_double_lock, quarto-hub::integration git_epochs::unreachable_canonical_docs_wait_one_cap_not_one_per_doc, quarto-preview import_route::tests::every_fixture_reads_to_the_recorded_json_and_status, quarto-preview route_tests::a_book_request_reaches_the_book_seam_with_every_capture, quarto-preview route_tests::pdf_is_inline_with_stats_and_the_typst_pdf_target, quarto-preview::integration book_downloads::a_chapters_recorded_plot_reaches_the_book, quarto-preview::integration live_reexecute::the_cache_does_not_answer_a_re_execute_under_engine_only_sources, quarto-preview::integration render_scripts_boot::pre_render_scripts_run_once_at_boot; not on the known-unrelated list: 19 (quarto::bin/q2 commands::render_dry_run::tests::would_render_lines_are_project_relative, quarto::integration convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes, quarto::integration lmd_snapshots::lmd_blog_project_renders_as_snapshotted, quarto::integration lmd_snapshots::lmd_fixtures_render_as_snapshotted, quarto::integration lmd_snapshots::lmd_html_fixtures_render_as_snapshotted, quarto::integration lmd_snapshots::lmd_project_renders_as_snapshotted, quarto::integration preview_static_e2e::cli_flags_override_project_preview_keys, quarto::integration preview_static_e2e::project_preview_keys_set_the_defaults_and_unsupported_keys_warn, quarto::integration render_record_sources_cli::the_key_in_front_matter_works_like_dash_m, quarto::integration render_scripts_cli::explicit_interpreter_command_line_with_args, quarto::integration render_scripts_cli::list_form_runs_scripts_in_order, quarto::integration smoke_all::smoke_all, quarto-hub::integration git_epochs::unreachable_canonical_docs_wait_one_cap_not_one_per_doc, quarto-preview import_route::tests::every_fixture_reads_to_the_recorded_json_and_status, quarto-preview route_tests::a_book_request_reaches_the_book_seam_with_every_capture, quarto-preview route_tests::pdf_is_inline_with_stats_and_the_typst_pdf_target, quarto-preview::integration book_downloads::a_chapters_recorded_plot_reaches_the_book, quarto-preview::integration live_reexecute::the_cache_does_not_answer_a_re_execute_under_engine_only_sources, quarto-preview::integration render_scripts_boot::pre_render_scripts_run_once_at_boot)",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The epic\u0027s own gate is green on the Windows host target.",
+                      "does_not_prove":  "pandoc for this run: pandoc 3.13. Tests that need pandoc or typst unless -WithTools was given. Failures that also appear in the macOS baseline are listed as known unrelated in the plan notes.",
+                      "output_tail":  "\n      typst\\margin-layout\\margin-table-great-tables-shift.qmd:\n        typst [render]: Error: Execution failed in jupyter: code cell at C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\margin-layout\\margin-table-great-tables-shift.qmd:39:17 raised ModuleNotFoundError: No module named \u0027great_tables\u0027\n    Use `#| error: true` on the cell (or `execute: error: true` in the document metadata) to show the error in the output instead.\n\n\n      typst\\margin-layout\\margin-table-great-tables.qmd:\n        typst [render]: Error: Execution failed in jupyter: code cell at C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\margin-layout\\margin-table-great-tables.qmd:44:17 raised ModuleNotFoundError: No module named \u0027great_tables\u0027\n    Use `#| error: true` on the cell (or `execute: error: true` in the document metadata) to show the error in the output instead.\n\n\n      typst\\syntax-highlighting\\brand-monospace-block\\brand-monospace-block.qmd:\n        typst [ensureTypstFileRegexMatches]: 3 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-block\\brand-monospace-block.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 400, size: 10pt, fill: rgb\\(\"#cdd6f4\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set block\\(fill: rgb\\(\"#1e1e2e\"\\)\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.85em\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-block-no-bg\\brand-monospace-block-no-bg.qmd:\n        typst [ensureTypstFileRegexMatches]: 2 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-block-no-bg\\brand-monospace-block-no-bg.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 500, size: 10pt, fill: rgb\\(\"#2d3748\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.75em\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-idiomatic\\brand-monospace-idiomatic.qmd:\n        typst [ensureTypstFileRegexMatches]: 5 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-idiomatic\\brand-monospace-idiomatic.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 400, size: 11pt, fill: rgb\\(\"#1a365d\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set block\\(fill: rgb\\(\"#f0f4f8\"\\)\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.75em\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): set text\\(weight: 600, size: 0\\.9em, fill: rgb\\(\"#9b2c2c\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): content =\u003e highlight\\(fill: rgb\\(\"#fed7d7\"\\), content\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-inheritance\\brand-monospace-inheritance.qmd:\n        typst [ensureTypstFileRegexMatches]: 6 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-inheritance\\brand-monospace-inheritance.typ:\n      - Required pattern not found: codefont: \\(\"Fira Code\",\\),$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 400, size: 0\\.85em, fill: rgb\\(\"#2d3748\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set block\\(fill: rgb\\(\"#edf2f7\"\\)\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.75em\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): set text\\(weight: 700, size: 0\\.85em, fill: rgb\\(\"#2d3748\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): content =\u003e highlight\\(fill: rgb\\(\"#fefcbf\"\\), content\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-inline\\brand-monospace-inline.qmd:\n        typst [ensureTypstFileRegexMatches]: 2 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-inline\\brand-monospace-inline.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): set text\\(weight: 600, size: 0\\.85em, fill: rgb\\(\"#664d03\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): content =\u003e highlight\\(fill: rgb\\(\"#fff3cd\"\\), content\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-with-theme\\brand-monospace-with-theme.qmd:\n        typst [ensureTypstFileRegexMatches]: 5 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-with-theme\\brand-monospace-with-theme.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 400, size: 9pt, fill: rgb\\(\"#f8f8f2\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set block\\(fill: rgb\\(\"#282a36\"\\)\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.65em\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): set text\\(weight: 500, fill: rgb\\(\"#6c3483\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): content =\u003e highlight\\(fill: rgb\\(\"#e8e0f0\"\\), content\\)$\n\n    thread \u0027smoke_all::smoke_all\u0027 (9292) panicked at crates\\quarto\\tests\\integration\\smoke_all.rs:141:9:\n    14 smoke-all test(s) failed (see output above)\n    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n────────────\n     Summary [ 569.651s] 1906 tests run: 1885 passed (4 slow, 1 leaky), 21 failed, 1 skipped\n        FAIL [   3.438s] ( 141/1906) quarto::integration convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes\n        FAIL [   7.547s] ( 263/1906) quarto::integration lmd_snapshots::lmd_blog_project_renders_as_snapshotted\n        FAIL [   8.521s] ( 266/1906) quarto::integration lmd_snapshots::lmd_fixtures_render_as_snapshotted\n        FAIL [   8.221s] ( 268/1906) quarto::integration lmd_snapshots::lmd_html_fixtures_render_as_snapshotted\n        FAIL [   8.667s] ( 271/1906) quarto::integration lmd_snapshots::lmd_project_renders_as_snapshotted\n        FAIL [   0.518s] ( 437/1906) quarto::integration render_record_sources_cli::the_key_in_front_matter_works_like_dash_m\n        FAIL [   9.309s] ( 460/1906) quarto::integration render_scripts_cli::explicit_interpreter_command_line_with_args\n        FAIL [   9.319s] ( 471/1906) quarto::integration render_scripts_cli::list_form_runs_scripts_in_order\n        FAIL [   0.085s] ( 822/1906) quarto::bin/q2 commands::render_dry_run::tests::would_render_lines_are_project_relative\n        FAIL [   0.325s] (1266/1906) quarto-hub storage::tests::test_storage_manager_prevents_double_lock\n        FAIL [   0.321s] (1271/1906) quarto-hub storage::tests::test_storage_manager_standalone_prevents_double_lock\n        FAIL [  10.474s] (1465/1906) quarto-hub::integration git_epochs::unreachable_canonical_docs_wait_one_cap_not_one_per_doc\n        FAIL [   0.645s] (1659/1906) quarto-preview import_route::tests::every_fixture_reads_to_the_recorded_json_and_status\n        FAIL [   2.317s] (1672/1906) quarto-preview route_tests::a_book_request_reaches_the_book_seam_with_every_capture\n        FAIL [   1.985s] (1692/1906) quarto-preview route_tests::pdf_is_inline_with_stats_and_the_typst_pdf_target\n        FAIL [  22.232s] (1785/1906) quarto-preview::integration book_downloads::a_chapters_recorded_plot_reaches_the_book\n        FAIL [   4.317s] (1870/1906) quarto-preview::integration render_scripts_boot::pre_render_scripts_run_once_at_boot\n        FAIL [  13.752s] (1873/1906) quarto::integration preview_static_e2e::cli_flags_override_project_preview_keys\n        FAIL [   1.058s] (1892/1906) quarto::integration preview_static_e2e::project_preview_keys_set_the_defaults_and_unsupported_keys_warn\n        FAIL [  20.549s] (1905/1906) quarto-preview::integration live_reexecute::the_cache_does_not_answer_a_re_execute_under_engine_only_sources\n        FAIL [ 433.243s] (1906/1906) quarto::integration smoke_all::smoke_all\nerror: test run failed",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-171347-GWWIN\\a6-nextest.log"
+                  },
+                  {
+                      "id":  "d2",
+                      "catalog":  "",
+                      "title":  "a6 failures that also fail on the merge base",
+                      "status":  "FAIL",
+                      "reason":  "merge base f9936b08d; current failures from this run: 21; also failing on the base: 20; NOT failing on the base: 1 (quarto-hub::integration git_epochs::unreachable_canonical_docs_wait_one_cap_not_one_per_doc)",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "",
+                      "does_not_prove":  "",
+                      "output_tail":  "      - Required pattern not found: ^#show raw\\.where\\(block: false\\): content =\u003e highlight\\(fill: rgb\\(\"#fff3cd\"\\), content\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-with-theme\\brand-monospace-with-theme.qmd:\n        typst [ensureTypstFileRegexMatches]: 5 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\fuck\\q2-baseline-20261119-171347-GWWIN\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-with-theme\\brand-monospace-with-theme.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 400, size: 9pt, fill: rgb\\(\"#f8f8f2\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set block\\(fill: rgb\\(\"#282a36\"\\)\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.65em\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): set text\\(weight: 500, fill: rgb\\(\"#6c3483\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): content =\u003e highlight\\(fill: rgb\\(\"#e8e0f0\"\\), content\\)$\n\n    thread \u0027smoke_all::smoke_all\u0027 (21712) panicked at crates\\quarto\\tests\\integration\\smoke_all.rs:141:9:\n    14 smoke-all test(s) failed (see output above)\n    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n────────────\n     Summary [ 635.100s] 1751 tests run: 1728 passed (1 leaky), 23 failed, 1 skipped\n        FAIL [   0.172s] (  31/1751) quarto::integration build_ts_extension_e2e::build_ts_extension_is_byte_stable\n        FAIL [   0.156s] (  32/1751) quarto::integration build_ts_extension_e2e::build_ts_extension_produces_bundle\n        FAIL [   0.169s] (  33/1751) quarto::integration build_ts_extension_e2e::deno_only_import_fails_with_a_node_hint\n        FAIL [   3.088s] ( 141/1751) quarto::integration convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes\n        FAIL [   9.464s] ( 265/1751) quarto::integration lmd_snapshots::lmd_blog_project_renders_as_snapshotted\n        FAIL [   9.858s] ( 266/1751) quarto::integration lmd_snapshots::lmd_fixtures_render_as_snapshotted\n        FAIL [   9.364s] ( 267/1751) quarto::integration lmd_snapshots::lmd_html_fixtures_render_as_snapshotted\n        FAIL [   9.748s] ( 270/1751) quarto::integration lmd_snapshots::lmd_project_renders_as_snapshotted\n        FAIL [   0.538s] ( 434/1751) quarto::integration render_record_sources_cli::the_key_in_front_matter_works_like_dash_m\n        FAIL [  12.269s] ( 458/1751) quarto::integration render_scripts_cli::explicit_interpreter_command_line_with_args\n        FAIL [  12.160s] ( 466/1751) quarto::integration render_scripts_cli::list_form_runs_scripts_in_order\n        FAIL [   0.088s] ( 807/1751) quarto::bin/q2 commands::render_dry_run::tests::would_render_lines_are_project_relative\n        FAIL [   0.297s] (1154/1751) quarto-hub storage::tests::test_storage_manager_prevents_double_lock\n        FAIL [   0.303s] (1159/1751) quarto-hub storage::tests::test_storage_manager_standalone_prevents_double_lock\n        FAIL [   0.800s] (1506/1751) quarto-preview import_route::tests::every_fixture_reads_to_the_recorded_json_and_status\n        FAIL [   2.158s] (1519/1751) quarto-preview route_tests::a_book_request_reaches_the_book_seam_with_every_capture\n        FAIL [   2.359s] (1540/1751) quarto-preview route_tests::pdf_is_inline_with_stats_and_the_typst_pdf_target\n        FAIL [  23.743s] (1649/1751) quarto-preview::integration book_downloads::a_chapters_recorded_plot_reaches_the_book\n        FAIL [   3.615s] (1713/1751) quarto-preview::integration render_scripts_boot::pre_render_scripts_run_once_at_boot\n        FAIL [   1.473s] (1728/1751) quarto::integration preview_static_e2e::cli_flags_override_project_preview_keys\n        FAIL [   0.925s] (1737/1751) quarto::integration preview_static_e2e::project_preview_keys_set_the_defaults_and_unsupported_keys_warn\n        FAIL [  20.555s] (1750/1751) quarto-preview::integration live_reexecute::the_cache_does_not_answer_a_re_execute_under_engine_only_sources\n        FAIL [ 472.514s] (1751/1751) quarto::integration smoke_all::smoke_all\nerror: test run failed",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-171347-GWWIN\\d2-baseline-nextest.log"
+                  }
+              ]
+}
