@@ -7280,6 +7280,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarto-git-epochs"
+version = "0.47.0"
+dependencies = [
+ "automerge",
+ "quarto-util",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+ "wait-timeout",
+]
+
+[[package]]
 name = "quarto-highlight"
 version = "0.47.0"
 dependencies = [

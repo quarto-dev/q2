@@ -273,6 +273,7 @@ Step 5 is a recommendation, not a gate. This is a monorepo, so changes in one cr
 - `quarto-util`: shared utilities for Quarto crates
 - `quarto-error-catalog`: Quarto's `Q-*` error-code catalog data + the `CatalogProvider` it installs into `quarto-error-reporting`
 - `quarto-wasm-embed`: embeds the `wasm-quarto-hub-client` render WASM exactly once into the `q2` binary (zstd-compressed, lazily decoded); `q2 preview` serves it over HTTP and `q2 mcp`'s launcher extracts it next to `wasm-host.mjs`. See `claude-notes/plans/2026-10-13-wasm-embed-dedupe.md`.
+- `quarto-git-epochs`: git epochs, Rust half: classifier, arrival and startup rules, flat sidecar registry (plain-data ops plus an Automerge `doc` submodule), a plumbing-only subprocess git probe, and the tick-driven gate controller. No samod and no hub dependency; the TypeScript twin is `ts-packages/quarto-git-epochs`, and both read the shared fixtures. See `claude-notes/plans/2026-11-18-git-epochs-epic.md`.
 
 **Externalized foundation crates** (published to crates.io from their own `posit-dev/` repos; consumed here as version deps, no longer in `crates/`):
 - `quarto-error-reporting`: uniform, helpful, beautiful error messages — now **catalog-agnostic** (the `Q-*` data lives in the in-tree `quarto-error-catalog`). Repo: `posit-dev/quarto-error-reporting`. The `json` wire shape is behind a default-off `json` feature; q2's wire-shape consumers enable it.
