@@ -96,9 +96,11 @@ elsewhere).
 The rest of the body (paragraphs, headings, quotes and lists with math,
 a citation, a note, an image or a span of another kind in their text,
 quotes of more than one paragraph, lists with blank lines
-between items or lists in items, example lists (`(@)`), code) is shown by
+between items or lists in items, example lists (`(@)`), code, figures) is shown by
 `src/ReadOnlyBlock.tsx` and can't be edited yet; no edit removes it or
-changes its source. The document is one
+changes its source. A figure of one image is shown as `q2 render` shows it,
+with its caption under it (a `#fig-` label's number isn't shown yet); the
+rest of the figure widget in `mockups/figure.html` is still to come. The document is one
 `contenteditable` surface run by a small editing engine in `src/engine/`:
 the browser moves the caret and selection (so selections can span fields),
 and the engine intercepts every edit, applies it to a model of text

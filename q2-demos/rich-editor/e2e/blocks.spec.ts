@@ -4,7 +4,8 @@
  * can be edited (`headings.spec.ts`), a quote of one such paragraph a
  * quote that can be edited (`quotes.spec.ts`), and a bullet or numbered
  * list of items of one line of plain text a list that can be edited
- * (`lists.spec.ts`, `numbered-lists.spec.ts`). Every other block the
+ * (`lists.spec.ts`, `numbered-lists.spec.ts`). A figure is its image
+ * with its caption under it, and can't be edited yet. Every other block the
  * editor knows is shown as `q2 render` would show it, roughly (no syntax
  * highlighting, no rendered math), and can't be edited. A block it doesn't know is a box
  * with the name of its kind.
@@ -130,10 +131,33 @@ test.describe('other blocks', () => {
     await expect(shown(editor, 'hr')).toHaveCount(1)
   })
 
-  test('a block the editor doesn\'t know (a table, a figure) is a box with the name of its kind', async ({ page }) => {
+  test('a figure is its image, with its caption under it', async ({ page }) => {
+    const editor = await openEditor(page, 'figures')
+
+    const figures = shown(editor, 'div.quarto-figure > figure')
+    expect(await figures.locator('img').evaluateAll((imgs) => imgs.map((img) => img.getAttribute('src')))).toEqual([
+      'site.png', 'tray.png', 'sketch.png',
+    ])
+    await expect(figures.locator('figcaption')).toHaveText(['A wide view of the site', 'The sample tray', 'A sketch'])
+    await expect(figures.first().locator('figcaption em')).toHaveText('wide')
+    // Its alt text is its caption's, or its own (`fig-alt`).
+    expect(await figures.locator('img').evaluateAll((imgs) => imgs.map((img) => img.getAttribute('alt')))).toEqual([
+      'A wide view of the site', 'The sample tray', 'A pencil sketch of the trench',
+    ])
+    // (That it's the HTML `q2 render` writes is in `render-parity.spec.ts`.)
+  })
+
+  test("a figure can't be edited yet", async ({ page }) => {
+    const editor = await openEditor(page, 'figures')
+
+    expect(await editor.paragraphs()).toEqual(['Before the figures.', 'After the figures.'])
+    await expect(shown(editor, 'div.quarto-figure .qe-field')).toHaveCount(0)
+  })
+
+  test('a block the editor doesn\'t know (a table) is a box with the name of its kind', async ({ page }) => {
     const editor = await openEditor(page, 'blocks')
 
-    await expect(shown(editor, '.qe-unknown')).toHaveText(['Table', 'Figure'])
+    await expect(shown(editor, '.qe-unknown')).toHaveText(['Table'])
   })
 
   test('the blocks are in the order of the source', async ({ page }) => {

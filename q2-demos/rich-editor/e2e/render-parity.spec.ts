@@ -8,8 +8,8 @@
  * The reference is rendered in the same browser by the WASM module's full
  * render pipeline (`render_qmd_content`), whose `<main>` is the same as
  * `q2 render`'s for these fixtures. Only what the editor can edit is
- * compared (the title block, and paragraphs, quotes and lists of text, formatted or not); the read-only
- * blocks are rendered roughly and are left out.
+ * compared (the title block, and paragraphs, quotes and lists of text, formatted or not), and
+ * figures; the other read-only blocks are rendered roughly and are left out.
  *
  * The fixtures open in `/fixture.html`, with no hub.
  */
@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 
 /** Fixtures whose rendering should match `q2 render`'s. */
-const MATCHING = ['title-block', 'paragraphs', 'long-title', 'no-subtitle', 'wrapped', 'quote', 'rules', 'list', 'numbered-list', 'inlines']
+const MATCHING = ['title-block', 'paragraphs', 'long-title', 'no-subtitle', 'wrapped', 'quote', 'rules', 'list', 'numbered-list', 'inlines', 'figures']
 
 test.describe('the HTML', () => {
   // The comparison is of HTML, which doesn't depend on the browser engine.
@@ -33,6 +33,11 @@ test.describe('the HTML', () => {
   test('a date is shown formatted, as `q2 render` does', async ({ page }) => {
     test.fixme(true, 'The title block shows the date as written (2026-11-12, not November 12, 2026)')
     await expectRenderParity(page, 'date')
+  })
+
+  test('a figure with a `#fig-` label is numbered, as `q2 render` does', async ({ page }) => {
+    test.fixme(true, 'A labelled figure is shown as an unlabelled one: no number before its caption, and no link to it')
+    await expectRenderParity(page, 'figure-numbered')
   })
 
   test("an abstract's paragraphs are shown as paragraphs", async ({ page }) => {
@@ -189,8 +194,9 @@ async function expectRenderParity(page: Page, name: string) {
  * The page's wrapper elements and its `<main>` as comparable HTML: without
  * the editor's markup (`data-*` attributes, the `qe-field` class, the
  * element a field renders in place of its text, the `<br>` that keeps an
- * empty field a line tall, `contenteditable`, inline styles), and with
- * whitespace collapsed as the browser displays it.
+ * empty field a line tall, `contenteditable`, inline styles), with each element's
+ * attributes in alphabetical order, and with whitespace collapsed as the
+ * browser displays it.
  *
  * Runs in the page; it must not refer to anything outside itself.
  */
@@ -206,6 +212,10 @@ function snapshot(body: HTMLElement) {
     }
     el.classList.remove('qe-field')
     if (el.getAttribute('class') === '') el.removeAttribute('class')
+    // In one order: React sets an image's `src` after its other attributes.
+    const attributes = [...el.attributes].map(({ name, value }) => [name, value]).sort(([a], [b]) => (a < b ? -1 : 1))
+    for (const [name] of attributes) el.removeAttribute(name)
+    for (const [name, value] of attributes) el.setAttribute(name, value)
   }
   const content = body.querySelector('#quarto-content')
   return {

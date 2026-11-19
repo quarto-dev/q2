@@ -1,0 +1,13 @@
+---
+title: Field notes
+---
+
+Before the figures.
+
+![A *wide* view of the site](site.png)
+
+![The sample tray](tray.png){#tray .bordered width=50%}
+
+![A sketch](sketch.png){fig-alt="A pencil sketch of the trench"}
+
+After the figures.

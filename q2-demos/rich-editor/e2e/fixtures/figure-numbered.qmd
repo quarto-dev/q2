@@ -1,0 +1,7 @@
+---
+title: Field notes
+---
+
+![The site](site.png){#fig-site}
+
+See @fig-site.

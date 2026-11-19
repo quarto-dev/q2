@@ -55,9 +55,81 @@ function renderBlock(block: Node): ReactNode {
     }
     case 'HorizontalRule':
       return <hr />
+    case 'Figure': {
+      const figure = renderFigure(c)
+      if (figure) return figure
+      return <div className="qe-unknown">{block.t}</div>
+    }
     default:
       return <div className="qe-unknown">{block.t}</div>
   }
+}
+
+/**
+ * A figure of one image, as `q2 render` writes one without a `#fig-`
+ * label: the image, with its caption under it. The caption is the image's
+ * alt text too, unless it has its own (`fig-alt`), and is then hidden
+ * from screen readers, which have read it already. A labelled figure is
+ * shown the same way, without its number. Anything else in a figure
+ * isn't shown (null).
+ */
+function renderFigure([[id, classes], [, caption], content]: [Attr, [unknown, Node[]], Node[]]): ReactNode {
+  const image = content.length === 1 && content[0].t === 'Plain' ? (content[0].c as Node[]) : []
+  if (image.length !== 1 || image[0].t !== 'Image') return null
+  const [[, imageClasses, keyvals], alt, [src]] = image[0].c as [Attr, Node[], [string, string]]
+  const figAlt = keyvals.find(([key]) => key === 'fig-alt')?.[1]
+  // The rest are the image's attributes (`width=50%`). Not `style`, which
+  // React takes only as an object.
+  const attributes = Object.fromEntries(keyvals.filter(([key]) => key !== 'fig-alt' && key !== 'style'))
+  return (
+    <div
+      id={id || undefined}
+      className={['quarto-figure', 'quarto-figure-center', ...classes, ...(id ? ['anchored'] : [])].join(' ')}
+    >
+      <figure>
+        <img
+          src={src}
+          alt={figAlt ?? plainText(alt)}
+          className={[...imageClasses, 'img-fluid'].join(' ')}
+          {...attributes}
+        />
+        {/* With the line breaks `q2 render` writes around a caption. */}
+        <figcaption aria-hidden={figAlt === undefined ? 'true' : undefined}>
+          {'\n'}
+          {renderBlocks(caption)}
+          {'\n'}
+        </figcaption>
+      </figure>
+    </div>
+  )
+}
+
+/** Inlines as plain text, as an image's alt text has them. */
+function plainText(inlines: Node[]): string {
+  return inlines
+    .map((inline) => {
+      switch (inline.t) {
+        case 'Str':
+          return inline.c as string
+        case 'Space':
+        case 'SoftBreak':
+        case 'LineBreak':
+          return ' '
+        case 'Code':
+        case 'Math':
+          return (inline.c as [unknown, string])[1]
+        case 'Link':
+        case 'Image':
+        case 'Span':
+        case 'Quoted':
+        case 'Cite':
+          return plainText((inline.c as [unknown, Node[]])[1])
+        default:
+          // Formatting (Emph, Strong, …) holds its inlines; a note is left out.
+          return inline.t in WRAPPERS || inline.t === 'SmallCaps' ? plainText(inline.c as Node[]) : ''
+      }
+    })
+    .join('')
 }
 
 function renderInlines(inlines: Node[]): ReactNode {
