@@ -95,7 +95,7 @@ the run as ran, read, or not done. **Stop rule:** if any check except 12 fails, 
 GE-5, GE-6, or GE-8, and bring it to Gordon (D21). Do not degrade silently. Items 3, 11, and 13 are the exceptions that
 record an answer instead of passing or failing (see part two).
 
-- [ ] **6.** In Automerge (JS and Rust, two actors), with the flat registry: concurrent creation of one key, and of
+- [x] **6.** In Automerge (JS and Rust, two actors), with the flat registry: concurrent creation of one key, and of
   different keys under a new path, both survive (the nested form loses one side; the second review reproduced it, so
   write these tests first and watch a nested variant fail); a concurrent delete and put of one key leaves the put; a
   retired entry is never removed. A NUL byte in a key and an integer generation survive a save and load in both
@@ -357,4 +357,8 @@ The logic itself (GE-2, GE-5), the swap module and the notice texts (GE-6), adop
   **Windows cross-clippy not possible:** `cargo clippy -p quarto-hub --all-targets --target
   x86_64-pc-windows-msvc` fails in the `aws-lc-sys` C build on this macOS host; the new code uses no platform API.
   The Rust half of Gate 0 item 6 (permanent concurrency tests with two actors) is still to write.
+- Gate 0 item 6 completed: permanent two-actor tests in Rust (`quarto-hub` `index::tests`, 4 tests, 23 pass in the
+  module) and TypeScript (`src/registry-concurrency.test.ts`, 5 tests). Both pass on the first run because they
+  characterize library behavior rather than code I changed; the nested-form tests demonstrate the loss the flat
+  form avoids, and the NUL-key and `int` round trips pass in both languages.
 - Not started: Gate 0 part two; the contract, package, schemas, fixtures. No repository code changed yet.

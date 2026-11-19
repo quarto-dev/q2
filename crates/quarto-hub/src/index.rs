@@ -1070,4 +1070,137 @@ mod tests {
         assert_eq!(index.owner(), None);
         assert_eq!(index.repo_identity(), None);
     }
+
+    // ---- Flat registry concurrency (Gate 0 item 6, Rust side) ---------------
+    //
+    // The sidecar's `entries` and `retired` maps are flat (key = path NUL blob
+    // NUL docId). These are the same checks the TypeScript package runs, here
+    // against the Rust automerge crate with two actors.
+
+    fn key(path: &str, blob: &str, doc: &str) -> String {
+        format!("{path}\0{blob}\0{doc}")
+    }
+
+    fn sidecar() -> Automerge {
+        let mut d = Automerge::new();
+        d.transact::<_, _, automerge::AutomergeError>(|tx| {
+            tx.put(ROOT, "version", 1_i64)?;
+            tx.put_object(ROOT, "entries", ObjType::Map)?;
+            tx.put_object(ROOT, "retired", ObjType::Map)?;
+            Ok(())
+        })
+        .unwrap();
+        d
+    }
+
+    fn map_of(d: &Automerge, name: &str) -> automerge::ObjId {
+        d.get(ROOT, name).unwrap().unwrap().1
+    }
+
+    fn put_entry(d: &mut Automerge, map: &str, k: &str, generation: i64) {
+        d.transact::<_, _, automerge::AutomergeError>(|tx| {
+            let m = tx.get(ROOT, map)?.unwrap().1;
+            tx.put(&m, k, generation)?;
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    fn two_actors(base: &Automerge) -> (Automerge, Automerge) {
+        let mut a = base.fork();
+        let mut b = base.fork();
+        a.set_actor(automerge::ActorId::from(vec![0xaa; 16]));
+        b.set_actor(automerge::ActorId::from(vec![0xbb; 16]));
+        (a, b)
+    }
+
+    fn keys_of(d: &Automerge, name: &str) -> Vec<String> {
+        let m = map_of(d, name);
+        let mut k: Vec<String> = d.keys(&m).collect();
+        k.sort();
+        k
+    }
+
+    #[test]
+    fn flat_registry_creation_races_keep_both_sides() {
+        let base = sidecar();
+        let (mut a, mut b) = two_actors(&base);
+        // Two docs for one path and blob.
+        put_entry(&mut a, "entries", &key("a.qmd", "b1", "docX"), 0);
+        put_entry(&mut b, "entries", &key("a.qmd", "b1", "docY"), 0);
+        // Different keys under a path new to both.
+        put_entry(&mut a, "entries", &key("new/p.qmd", "b1", "d1"), 0);
+        put_entry(&mut b, "entries", &key("new/p.qmd", "b2", "d2"), 0);
+        a.merge(&mut b).unwrap();
+        assert_eq!(keys_of(&a, "entries").len(), 4, "all four entries survive");
+    }
+
+    #[test]
+    fn nested_registry_loses_one_side_of_a_new_path() {
+        // Demonstrates why the registry is flat (contract, "Sidecar doc").
+        let base = sidecar();
+        let (mut a, mut b) = two_actors(&base);
+        for (d, k) in [(&mut a, "k1"), (&mut b, "k2")] {
+            d.transact::<_, _, automerge::AutomergeError>(|tx| {
+                let m = tx.get(ROOT, "entries")?.unwrap().1;
+                let n = tx.put_object(&m, "new/p.qmd", ObjType::Map)?;
+                tx.put(&n, k, 0_i64)?;
+                Ok(())
+            })
+            .unwrap();
+        }
+        a.merge(&mut b).unwrap();
+        let entries = map_of(&a, "entries");
+        let (_, nested) = a.get(&entries, "new/p.qmd").unwrap().unwrap();
+        assert_eq!(a.keys(&nested).count(), 1, "the nested form loses one side");
+    }
+
+    #[test]
+    fn concurrent_delete_and_put_of_one_key_leaves_the_put() {
+        let mut base = sidecar();
+        let k = key("p", "b", "d");
+        put_entry(&mut base, "entries", &k, 0);
+        for order in [true, false] {
+            let (mut a, mut b) = two_actors(&base);
+            a.transact::<_, _, automerge::AutomergeError>(|tx| {
+                let m = tx.get(ROOT, "entries")?.unwrap().1;
+                tx.delete(&m, &k)?;
+                Ok(())
+            })
+            .unwrap();
+            put_entry(&mut b, "entries", &k, 2);
+            if order {
+                a.merge(&mut b).unwrap();
+                assert_eq!(keys_of(&a, "entries"), vec![k.clone()]);
+            } else {
+                b.merge(&mut a).unwrap();
+                assert_eq!(keys_of(&b, "entries"), vec![k.clone()]);
+            }
+        }
+    }
+
+    #[test]
+    fn retired_entry_survives_a_concurrent_delete_and_nul_keys_and_ints_round_trip() {
+        let mut base = sidecar();
+        let k = key("p", "b", "d");
+        put_entry(&mut base, "entries", &k, 0);
+        let (mut a, mut b) = two_actors(&base);
+        put_entry(&mut a, "retired", &k, 5);
+        b.transact::<_, _, automerge::AutomergeError>(|tx| {
+            let m = tx.get(ROOT, "entries")?.unwrap().1;
+            tx.delete(&m, &k)?;
+            Ok(())
+        })
+        .unwrap();
+        a.merge(&mut b).unwrap();
+        // Save and load: the NUL byte in the key and the integer both survive.
+        let loaded = Automerge::load(&a.save()).unwrap();
+        assert_eq!(keys_of(&loaded, "retired"), vec![k.clone()]);
+        let retired = map_of(&loaded, "retired");
+        let (v, _) = loaded.get(&retired, &k).unwrap().unwrap();
+        assert!(matches!(
+            v,
+            automerge::Value::Scalar(ref s) if matches!(s.as_ref(), automerge::ScalarValue::Int(5))
+        ));
+    }
 }
