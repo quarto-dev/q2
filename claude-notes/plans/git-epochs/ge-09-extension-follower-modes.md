@@ -2,7 +2,7 @@
 title: 'GE-9: Extension follower modes: mirror and editor only'
 date: 2026-11-18
 description: Gives the extension an explicit per-folder mode and implements the two follower modes, mirror and editor only, which follow the project owner through the shared swap module instead of overwriting the working tree unconditionally.
-status: approved
+status: done
 depends-on: [ge-5, ge-6, ge-8]
 lane: A
 epic: ../2026-11-18-git-epochs-epic.md
@@ -94,31 +94,31 @@ Written first and seen failing.
 
 ## Checklist
 
-- [ ] `git switch -c ge/09-extension-follower-modes feature/git-epochs`; confirm GE-5, GE-6, and GE-8 are on the
+- [x] `git switch -c ge/09-extension-follower-modes feature/git-epochs`; confirm GE-5, GE-6, and GE-8 are on the
   integration line and their gates pass.
-- [ ] Write test specs 1 and 2 and see them fail. Add `mode` to `ProjectMeta` (`project.ts:44-48` in GE-8\'s core
+- [x] Write test specs 1 and 2 and see them fail. Add `mode` to `ProjectMeta` (`project.ts:44-48` in GE-8\'s core
   `meta.ts`), default `mirror` when absent, and write `mode: 'mirror'` in `createProjectFolder` (today at
   `project.ts:123`). Implement the Binding mirror check in `core/text-binding.ts`; the pre-edit comparison uses the
   Binding\'s own mirror of the doc text, updated after every remote apply and every accepted local edit.
-- [ ] **Headless owner.** Extend `src/headless/peer.ts` with the owner operations, `flipPath(path, newDocId)`,
+- [x] **Headless owner.** Extend `src/headless/peer.ts` with the owner operations, `flipPath(path, newDocId)`,
   `removePath(path)`, `relistPath(path, docId)`, and `createDocFor(path, text)` (each one index change, so a batch
   `applyBatch({ flips, removals, relists, additions })` is also one change), built with a plain Automerge change on the
   index and the GE-5 registry operations (register, move forward, retire). Test it against the test hub before spec 3
   uses it (a flip written by the owner reaches a second client). The owner is test code; GE-12 builds the real one.
-- [ ] Write test specs 3 and 4 against a headless owner. Implement the **follower** in `src/core/follower.ts`
+- [x] Write test specs 3 and 4 against a headless owner. Implement the **follower** in `src/core/follower.ts`
   with `createSwapCoordinator` from the GE-6 package:
   `currentDocId(path)` from the tracked handles; `loadDoc` through the engine\'s `findDoc` with the abort signal;
   `rebind` untracks the old handle, tracks the new one, rebinds any open buffer, and (mirror only) writes the new
   doc to disk with `writeFileDoc`; `onReplaced` feeds a `NoticeAggregator` that the `Notifier` flushes once per batch.
   Replace the unconditional branch in `syncIndex` (`:322-330`) with `coordinator.indexChanged(path, docId)`; keep the
   creation of a first-time entry (no existing handle) as today.
-- [ ] Stranded-edit counting: the open Binding keeps its old handle during `pending`, so the typed characters land in
+- [x] Stranded-edit counting: the open Binding keeps its old handle during `pending`, so the typed characters land in
   the old doc; each local edit batch calls `coordinator.resolveWriteTarget(path, binding.handle.documentId)` and the
   Binding\'s `onStranded` callback increments the counter when it answers `retired`. Do not change where the edit
   goes; only count it.
-- [ ] Entry removal: a mirror deletes the disk file (as today, `project.ts:315-320`); editor only untracks and
+- [x] Entry removal: a mirror deletes the disk file (as today, `project.ts:315-320`); editor only untracks and
   disposes the Binding without touching disk. Entry addition: a mirror writes the file; editor only does not.
-- [ ] Write test specs 5 and 6. Implement **editor-only** in `src/core/project-sync.ts` as a start-up branch on
+- [x] Write test specs 5 and 6. Implement **editor-only** in `src/core/project-sync.ts` as a start-up branch on
   `meta.mode`: no `FileWatcher`, no `reconcileDisk`, no `createFromDisk`, no `onDocChange` disk writes, no
   `onDisk*` handlers. Wire the gate from the GE-5 package: its marker probe, resolved once with
   `git rev-parse --git-path` for the workspace repository; when the workspace is not inside a git repo the gate
@@ -126,24 +126,24 @@ Written first and seen failing.
   suspended (its `onLocalEdit` drops edits; `applyRemote` still runs only for remote flips after resume). In a git repo it also adds `.quarto-hub/` to
   `.git/info/exclude` once (found with `git rev-parse --git-path info/exclude`; detail chosen by the second reviewer;
   confirm).
-- [ ] Resume rule: after the markers clear and the 1 s quiet window passes, compare each bound buffer with its
+- [x] Resume rule: after the markers clear and the 1 s quiet window passes, compare each bound buffer with its
   current doc text; if all are equal, resume; otherwise wait up to 10 s for `indexChanged` to rebind (the swap
   coordinator\'s `done` ends the wait); on timeout show `Notifier.warn` with the actions "Keep waiting" (re-arm
   10 s) and "Dismiss" (the `EDITOR_ONLY_NO_FLIP` constant from GE-6), and stay suspended. A buffer that still differs from the new doc after the rebind is replaced
   by the doc text, as `Binding` already does at bind time; keystrokes typed while the gate was closed are dropped
   (detail chosen by the plan author; confirm), and when a bound buffer was dirty at the moment the gate closed one
   `Notifier.warn` per gate episode says "Edits made during a git operation were not kept." (G20). Timeouts are options of the core so tests can shorten them.
-- [ ] Write test spec 7. Add the moved message: in the follower\'s `rebind`, call `oldHandle.broadcast(moved)` before
+- [x] Write test spec 7. Add the moved message: in the follower\'s `rebind`, call `oldHandle.broadcast(moved)` before
   the old Binding is disposed; extend `Presence.receive` to accept the `moved` type and surface it through
   `Notifier.status` for about 3 s ("NAME switched versions"; text chosen by the plan author; confirm).
-- [ ] Event log: `logEvent` (`project.ts:247`) writes the append-only `.quarto-hub/events.jsonl` with a closed set of
+- [x] Event log: `logEvent` (`project.ts:247`) writes the append-only `.quarto-hub/events.jsonl` with a closed set of
   event names (`created`, `deleted`, `edited-offline`). Widen the type and add `flipped` for a follower swap (path, old
   and new docId), with a test (detail chosen by the epic reviewer; confirm).
-- [ ] Status bar: a persistent item showing the mode ("Quarto Hub: mirror" or "Quarto Hub: editor only") through
+- [x] Status bar: a persistent item showing the mode ("Quarto Hub: mirror" or "Quarto Hub: editor only") through
   `Notifier.status`; GE-10 adds the clone mode and the detached count.
-- [ ] Write test spec 8 and check a pre-change folder (copy a fixture created by GE-8\'s smoke test B) opens as a
+- [x] Write test spec 8 and check a pre-change folder (copy a fixture created by GE-8\'s smoke test B) opens as a
   mirror.
-- [ ] **Playwright tests** in `vscode-sync-experiment/e2e/` (the GE-8 harness, a local hub, a headless owner):
+- [x] **Playwright tests** in `vscode-sync-experiment/e2e/` (the GE-8 harness, a local hub, a headless owner):
   a mirror folder with an open dirty buffer receives a flip (assert the notice text, the stranded count in it, the
   disk and editor content after `done`); an editor-only folder inside a temp git repo: create `.git/index.lock`,
   rewrite the open file on disk the way git would, assert that no splice reached the hub doc, remove the lock, then
@@ -152,11 +152,11 @@ Written first and seen failing.
   form of Gate 0 item 12: on a checkout of a few thousand files, the last buffer reload event arrives within the
   quiet window after `index.lock` is released (the test records the measured gap and fails above the window, which
   triggers the experimental fallback in G20).
-- [ ] Mark which of these Playwright tests are candidates for the permanent subset (no network, deterministic) in a
+- [x] Mark which of these Playwright tests are candidates for the permanent subset (no network, deterministic) in a
   comment at the top of each file; GE-14 decides. The timing test is not a candidate (it fails by design when the
   machine is slow); give it its own script, `test:e2e:timing`, run locally and by GE-17\'s `c2` on Windows, where its
   measured gap is recorded.
-- [ ] Reconcile this checklist with what landed, update "Notes from the run", and commit.
+- [x] Reconcile this checklist with what landed, update "Notes from the run", and commit.
 
 ## Gates
 
@@ -198,4 +198,116 @@ GE-14, not here.
 
 ## Notes from the run
 
-Not started.
+**Session 1 (lane A, 2026-11-18 to 2026-11-19).** Branch `ge/09-extension-follower-modes` off `feature/git-epochs` at
+`3c6c7fb87` (GE-1, GE-5, GE-6, GE-8 landed). The gates for the three dependencies passed at the start: the extension's
+92 tests and the package's tests.
+
+**Results.** `npm test -w quarto-hub-vscode`: 12 files, 131 tests (92 before this plan, 39 new), all passing.
+`npm test -w @quarto/quarto-git-epochs`: 12 files, 205 tests, unchanged. Root `npm run typecheck`: exit 0 (every
+workspace, the extension and its `e2e/` project included). `npm run build -w quarto-hub-vscode`: green.
+`cargo xtask lint`: "All checks passed! (1736 files checked)". The root `npm run build` was not run in full (it builds the
+hub-client, which needs the WASM build); the extension and package builds were. `cargo xtask verify` is Gordon\'s call.
+
+**Test-first record.** Specs 1 and 2 (`meta.test.ts`, `text-binding.test.ts`) ran red on the missing
+`InvalidProjectMetaError` and the missing mirror check before the code. The follower tests (specs 3, 4, 7, 8 in
+`follower.test.ts`, `presence.test.ts`) and the editor-only tests (specs 5, 6 in `editor-only.test.ts`) were written
+before `follower.ts` and `editor-gate.ts`. As a mutation check I made `EditorGate.isClosed()` return false: 3 of the 8
+editor-only tests failed, then the code was restored.
+
+**What landed.**
+
+- `meta.ts`: `ProjectMode`, `mode` defaults to `mirror` on read, an unknown value throws `InvalidProjectMetaError`
+  naming the value and the choices (the extension reports it as a sync failure). `createProjectFolder` writes
+  `mode: 'mirror'`. `ProjectSync` refuses `clone` for now (GE-10).
+- `text-binding.ts`: the Binding mirror (G27). **Formulation:** a VS Code change event arrives after the buffer has
+  changed, so "the pre-edit buffer equals the mirror" is checked as "the mirror with the event\'s changes applied equals
+  the buffer now". An edit that fails is not spliced and the buffer is reconciled to the doc by content. The old
+  `splices local edits` test did not update its fake buffer, so it was changed to do what an editor does.
+- `follower.ts` wraps `createSwapCoordinator` and `NoticeAggregator`. A batch is the run of `done` events with no swap
+  still outstanding; one `Notifier.info` follows. `unavailable` is a `warn` with `NOTICE_UNAVAILABLE`.
+- `ProjectSync.syncIndex` calls `follower.indexChanged` for every entry that already has a handle; a new entry is
+  created as before. `rebind` sends the moved message on the old Binding, untracks, tracks, and (mirror) writes the disk.
+- **Unavailable docs.** The test hub (and a real server) answers "unavailable" at once for a doc it has not received, so
+  the follower\'s `loadDoc` keeps asking every 150 ms until the swap\'s signal aborts; the 5 s timeout then decides
+  `unavailable`. A later index change that lists the doc starts a fresh load, as GE-6 specifies.
+- `editor-gate.ts` (the editor-only gate) on the GE-5 `createController`. Details chosen (all "confirm" items took the
+  plan\'s choice): the gate stays open outside a git repository (the controller goes `off`); `.quarto-hub/` is added to
+  `.git/info/exclude` once (`git-exclude.ts`, tested against a real repo, a repo below its root, and a non-repo). The
+  gate also polls the cheap marker state every 250 ms so the start of an episode is seen before the next keystroke.
+  **"Dirty when the gate closed"** is `BufferHost.isDirty` (VS Code\'s `TextDocument.isDirty`) at that moment; the one
+  `GIT_OP_EDITS_DROPPED` warning is shown when the episode ends (resume), not when it starts. A buffer whose doc was
+  swapped during the episode counts as settled and takes the new doc\'s text on resume; a buffer that differs from a doc
+  that did not swap keeps waiting, so the old doc\'s text is never written into a buffer.
+- Interface changes (GE-10 and GE-12 build on them): `BufferHost.isDirty`; `BufferHost.bind` takes `BindHooks`
+  (`onLocalEdit`, `suspended`, `onMoved`); `BufferBinding` gains `sendMoved` and `reconcile`; `Presence` takes an
+  `onMoved` callback and sends/receives the `moved` type of GE-6\'s `MovedMessage`; `TextBindingCore` gains
+  `suspended` and `onLocalEditBatch`; `findDoc` takes an optional signal; `RecordingNotifier` records actions and
+  answers warnings from a `choices` queue; test support gains `ManualClock` and `FakeGitProbe`.
+- The status bar shows the mode as a persistent item (`VscodeNotifier.status(text)` without a timeout now owns one
+  `StatusBarItem`; before, each call leaked a message).
+- The event log has `flipped` with `from` and `to` doc ids.
+- **Headless owner** (`src/headless/owner.ts`): `create`, `open`, `createDocFor`, `flipPath`, `removePath`,
+  `relistPath`, `applyBatch` (one index change), `editText`, `broadcast`, `flush`, plus `createDocOffline` and
+  `publishOffline` (a doc the hub has not seen, to hold a swap `pending`). **It has no registry operations**: the
+  projects here are plain, there is no sidecar to write, so the GE-5 register/move-forward/retire calls are GE-12\'s.
+  Its flips reach a second client (`owner.test.ts`).
+
+**Things GE-10, GE-12, and GE-14 need to know.**
+
+1. **Bundle and automerge.** `@quarto/quarto-git-epochs` imports the full `@automerge/automerge`. In the extension
+   bundle that made activation fail with `ENOENT … dist/automerge_wasm_bg.wasm` (found by the Playwright smoke test
+   A going red). `esbuild.mjs` now resolves the bare specifier to `@automerge/automerge/slim` and `vitest.config.ts`
+   aliases it the same way, so the bundle and the tests share one wasm instance with the slim entry `ensureWasm`
+   initializes. A registry function can therefore take a doc from the repo.
+2. **`noUncheckedIndexedAccess`.** The extension compiles the package from source with that flag; `paths.ts`,
+   `registry.ts`, `swap.ts`, and `probe.ts` needed `!` and `?? ''` in 14 places. No behavior change; 205 package tests
+   pass.
+3. The extension\'s `package.json` now depends on `@quarto/quarto-git-epochs`; the matching two lines in
+   `package-lock.json` were added by hand (a plain `npm install` prunes platform packages, as GE-1 and GE-8 found).
+   `npm ci --dry-run` accepts the lockfile.
+4. `engines.vscode` is still `^1.90.0` although sync needs Node 22 (GE-8\'s finding); not changed here. GE-11 should
+   decide.
+
+**Checkout-reload timing (the permanent Gate 0 item 12, G20).** `npm run test:e2e:timing -w quarto-hub-vscode`, VS Code
+1.101.2, macOS arm64, a 3000-file checkout (`git switch` between two branches that differ in every file), the last open
+buffer being the last file git rewrites. Four runs measured the gap from `index.lock` release to the last reload at
+**1211, 1143, 975, and 727 ms** (the slowest editor query was 22 to 27 ms, so the numbers are real). GE-1 measured 151 ms
+on a small checkout. Two of four runs exceed the 1 s quiet window, so by the plan\'s own rule the test fails and the G20
+fallback applies: editor-only ships as experimental with a longer window and a stated warning. **I did not change the
+window**: it is a G32 number in the shared package and the contract, and the content guard (drop an edit that replaces
+most of a file with its disk text) is "added only if the measurement shows a problem", which is Gordon\'s call. What the
+gate does today at a late reload: if the buffers still equal their docs when the window ends, it resumes, and a reload
+that arrives after that is an ordinary-looking edit; the mirror check passes it when the buffer was the old text. See the
+handoff.
+
+**End to end (real VS Code 1.101.2, macOS arm64, the in-process test hub, a headless owner; nobody watched the window).**
+The VS Code build was copied from lane C\'s `.vscode-test` (same pinned version); no download. Invocation, from the
+repo root after building the ts-packages and `npm run build -w quarto-hub-vscode`: `npm run test:e2e -w quarto-hub-vscode`.
+Result: 7 tests (5 here and GE-8\'s two smoke tests), all passing; the moved-message test was re-run alone after a fix.
+Observed output I read:
+
+```text
+mirror notice: "Quarto Hub: This file was replaced because the project owner's checked-out version changed. 3 of your recent edits stayed with the previous version."
+editor-only: new doc text after resume: "A2\ntyped"
+editor-only warning: "… Quarto Hub: The project owner has not switched versions yet. Keep waiting? … Keep waiting / Dismiss"
+```
+
+The mirror test typed `abc` while the swap was pending (3 edits, counted), then published the new doc: the editor shows
+`A2`, the disk holds `A2\n`, the old doc keeps `abc`. The editor-only test took `.git/index.lock`, rewrote `a.qmd` the
+way git does, saw the buffer reload to `A2`, asserted the hub\'s old doc heads did not move (no splice), removed the
+lock, had the owner flip, and saw the buffer on the new doc with editing resumed (`A2\ntyped`, not duplicated). The
+no-flip test saw the warning with its two actions and the buffer still on the git text. The legacy test opens a folder
+whose `project.json` has no `mode` and sees `Quarto Hub: mirror` in the status bar, then a flip on disk.
+
+**Deviations and what did not run.**
+
+- The Playwright moved-message test sends `moved` from the test peer (after a `presence` message so the name is
+  known) instead of from a second VS Code window: with two real mirrors the receiver may swap first and miss the message
+  on the old doc, so it would be flaky. The sending side (before the Binding is disposed) is a unit test; the
+  wire shape is a unit test with two repos; the display is the Playwright test.
+- The 10 s wait and the 5 s swap timeout have test-only environment variables in the VS Code layer
+  (`QUARTO_HUB_TEST_FLIP_WAIT_MS`, `QUARTO_HUB_TEST_SWAP_TIMEOUT_MS`), as GE-8 did for the sync server.
+- Not run: the Playwright tests on Linux or Windows (Windows is GE-17; the workflow is still manual); a Windows
+  cross-clippy (no Rust changed); the root `npm run build`; `cargo xtask verify`.
+- Permanent-subset candidates: every test in `follower-modes.e2e.ts` (marked in its header comment). The timing test is
+  not one.
