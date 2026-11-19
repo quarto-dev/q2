@@ -32,6 +32,8 @@ export interface DemoOptions {
   dwellMs: number;
   /** Headless, no pacing, no captions: the rot check. */
   fast: boolean;
+  /** No visible windows and no placement (default: the value of `fast`). Captions and narration still work. */
+  headless?: boolean;
   /** Start the hub with `--git <value>` (E8 uses `ignore`). */
   hubGit: 'track' | 'ignore';
   /** The hub is started by typing in the host terminal (the scripted story) instead of by the launcher. */
@@ -248,8 +250,19 @@ export class Demo {
 
   async stopHub(): Promise<void> {
     if (this.hubProc) {
-      this.hubProc.kill('SIGTERM');
+      const p = this.hubProc;
       this.hubProc = undefined;
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(() => {
+          p.kill('SIGKILL');
+          resolve();
+        }, 8000);
+        p.once('exit', () => {
+          clearTimeout(t);
+          resolve();
+        });
+        p.kill('SIGTERM');
+      });
     } else {
       try {
         execFileSync('pkill', ['-f', `${Q2_BINARY} preview .*${path.join(this.root, 'data')}`], { stdio: 'ignore' });
@@ -262,14 +275,18 @@ export class Demo {
 
   // ---- windows -------------------------------------------------------------------------------------------------
 
+  get headless(): boolean {
+    return this.o.headless ?? this.o.fast;
+  }
+
   private async window(): Promise<{ context: BrowserContext; page: Page }> {
-    this.browser ??= await chromium.launch({ headless: this.o.fast, args: this.o.fast ? [] : ['--window-size=960,600'] });
-    const context = await this.browser.newContext({ viewport: this.o.fast ? { width: 960, height: 938 } : null });
+    this.browser ??= await chromium.launch({ headless: this.headless, args: this.headless ? [] : ['--window-size=960,600'] });
+    const context = await this.browser.newContext({ viewport: this.headless ? { width: 960, height: 938 } : null });
     return { context, page: await context.newPage() };
   }
 
   private async place(w: { context: BrowserContext; page: Page }, r: Rect | undefined): Promise<void> {
-    if (this.o.fast || !r) return;
+    if (this.headless || !r) return;
     const cdp = await w.context.newCDPSession(w.page);
     const { windowId } = (await cdp.send('Browser.getWindowForTarget')) as { windowId: number };
     await cdp.send('Browser.setWindowBounds', { windowId, bounds: { left: r.left, top: r.top, width: r.width, height: r.height, windowState: 'normal' } });
@@ -285,7 +302,21 @@ export class Demo {
   async openHostTerminal(): Promise<void> {
     this.computeLayout();
     const w = await this.window();
-    await w.page.goto(this.hostTerminal.pageUrl);
+    if (this.headless) {
+      await w.page.goto(this.hostTerminal.pageUrl);
+    } else {
+      // A popup window has no tab strip or toolbar, so it can be as short as the layout asks (a normal window cannot
+      // be shorter than about 375 points).
+      const opener = w.page;
+      await opener.goto('about:blank');
+      const [popup] = await Promise.all([
+        opener.waitForEvent('popup'),
+        opener.evaluate((u) => void window.open(u, 'terminal', 'popup=yes,width=900,height=200'), this.hostTerminal.pageUrl),
+      ]);
+      await popup.waitForLoadState();
+      await opener.close();
+      w.page = popup;
+    }
     await this.place(w, this.layout.hostTerminal);
     this.terminalPages.push(w);
   }
@@ -421,6 +452,9 @@ export class Demo {
           await this.hostTerminal.type('cd ~ && cd ' + JSON.stringify(this.journal), { charDelayMs: 0 });
           await this.waitPrompt();
           this.writeJournal();
+          // A fresh hub needs fresh state: the data directory keys the project id (G19).
+          rmSync(path.join(this.root, 'data'), { recursive: true, force: true });
+          mkdirSync(path.join(this.root, 'data'), { recursive: true });
         },
         rebuildGuestClone: async () => {},
         startHub: async () => {
@@ -457,6 +491,7 @@ export class Demo {
 
   /** Remove the runtime directory (tests; a person keeps theirs). */
   removeRoot(): void {
-    if (existsSync(this.root) && statSync(this.root).isDirectory()) rmSync(this.root, { recursive: true, force: true });
+    if (process.env.DEMO_KEEP) return;
+    if (existsSync(this.root) && statSync(this.root).isDirectory()) rmSync(this.root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 }

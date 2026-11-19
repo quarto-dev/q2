@@ -231,25 +231,27 @@ rules of `.claude/rules/hub-client-tests.md` apply to every end-to-end test; no 
 
 - [x] Add the dependencies (xterm.js and its fit addon, node-pty, ws if needed) to `quarto-hub-vscode`; regenerate
   `package-lock.json` with `npm install` from the repository root.
-- [ ] Write the unit tests of the table above (done) and the end-to-end tests E1 to E8 (not yet); see them fail (missing
-  modules, then wrong behavior).
+- [x] Write the unit tests of the table above and the end-to-end tests E1 to E8. (E1 and E2 cover `hub-browser` only so
+  far; the other presets' cases are added with the presets. The e2e tests were written after the launcher, not before:
+  see the notes.)
 
 **Phase 2: the environment**
 
 - [x] The journal builder and content: the papers (prose, numbers, R and Python code with fixed seeds), the
   micrograph on both branches (generated once by an R script kept in `demo/journal/`, committed as PNG), the
   branches, `_quarto.yml`, the rv and uv project files and locks.
-- [ ] Setup (decisions and advice done in `setup.ts`; the runner is not): `rv sync`, `uv sync`, the kernelspec, the checks and advice.
-- [ ] The terminal server and page, captions and the strip.
-- [ ] The layout (`layout.ts` done) and window placement (not yet).
-- [ ] The launcher and preset `hub-browser`, free play only.
-- [ ] The observer, the log, the invariant checker.
-- [ ] `demo reset`.
+- [x] Setup: `rv sync`, `rv library`, `uv sync`, the engine environment (`Demo.env()`), the checks and advice.
+- [x] The terminal server and page, captions and the strip.
+- [x] The layout and window placement for browser windows (VS Code placement waits for the VS Code presets).
+- [x] The launcher and preset `hub-browser`, free play.
+- [x] The observer, the log, the invariant checker (live: conflict markers on the hub's disk; the other invariants are
+  unit-tested but not yet fed by the observer, see the notes).
+- [x] `demo reset` for `hub-browser` (`rejoinVscode` and `rebuildGuestClone` are no-ops until the VS Code presets).
 
 **Phase 3: scripted playback**
 
-- [ ] The driver: captions, typing, checks, pacing, `--fast`, stop on failure.
-- [ ] The `hub-browser` story (DM7).
+- [x] The driver: captions, typing, checks, pacing, `--fast`, stop on failure.
+- [x] The `hub-browser` story (DM7).
 - [ ] Presets `hub-vscode-host` and `hub-vscode-clone` and their stories.
 - [ ] Preset `hubless` and its story (DM6), adjusted by research item 7.
 
@@ -343,3 +345,54 @@ ggplot2, knitr, and jsonlite. The terminal server, driver, reset, and observer u
 in all; the terminal server's tests and module were written in one pass, so that one test file was not run red first). The
 unit-test table of this plan is complete. Not started: the end-to-end tests E1 to E8, the xterm.js page, the launcher and
 its presets, the observer polling loop, the stories, and the README.
+
+### Phase 2 and 3 for `hub-browser` (2026-11-19, second session)
+
+**Landed on the branch:** `demo/src/demo.ts` (the `Demo` environment: runtime directory, engine setup, hub, terminals,
+windows, observer, reset), `terminal-page.ts` (xterm.js page and strip), `cli.ts` and `launch.mjs` (`npm run demo --
+[--play] [--fast] [--pace] [--captions] [--narration] [--screen] [--root]`), `stories/hub-browser.ts` (DM7 as nine steps),
+`demo/tests/e2e/` (E1 to E8) with `npm run test:demo`, and `tsx` as a devDependency of `quarto-hub-vscode`.
+
+**Gates run:** `npm run typecheck -w quarto-hub-vscode` clean; `npx vitest run` in the package, 39 files, 385 passed, 1
+skipped; `npm run test:demo`, 11 passed (E1, E2, E3, E4, E5, E6 for each of four values, E7, E8), 3.7 minutes. E1 passed
+once in this last run and in two earlier runs while the story was developed, for `hub-browser` only; "three times in a
+row on every preset" is not yet met.
+
+**End-to-end record.** `npm run demo -w quarto-hub-vscode -- --play --dwell 3000` (headed, scripted), screenshot by
+`screencapture -x` (kept at `/tmp/ge19-shots/later.png`, which a reboot clears). I looked at it: the host editor upper
+left, the host terminal lower left, the guest editor on the right, the captions in dim italics in the terminal, the
+swap notice in both editors, the rebase's resolution visible. Gordon looked at the live windows and said the placement
+was right. The event log (`logs/events.jsonl` in the demo root) holds one `pass` line per story step
+(`start-hub` through `resolve`) with the observer's narration between them (for example `decision:flipped` "The hub
+switched branches: 5 files followed (...)"). I did not take the screenshots after the switch beat and after reset that
+the plan asks for; the mid-run capture is after the rebase.
+
+**Findings.**
+
+1. A normal Chromium window cannot be shorter than about 375 points, so the 312-point terminal window of DM5 came back
+   at 375 and ran off the screen. The terminal is therefore opened as a **popup window** (`window.open` with
+   `popup=yes`), which has no tab strip; E7 checks all three bounds.
+2. Monaco on macOS ends the document with Cmd+Down; the GE-13 helper's `ControlOrMeta+End` put Maurice's text into the
+   middle of the paper (the heading "Methods"). The story has its own `typeAtEnd`; the shared helper is not edited.
+3. Monaco renders only the visible lines, so a check on code below the fold cannot read the editor. The story checks
+   the abstract (top of the file) in the editor and the code on the hub's disk.
+4. Engines write files into the served directory (`*.rmarkdown`, `*_files/`); the observer ignores them so they are
+   not narrated as files joining or leaving the project.
+5. The hub's `--data-dir` keys the project id, so `demo reset` removes it as well as rebuilding the journal; without
+   that the "fresh hub" kept the old id.
+6. node-pty's missing execute bit (phase 0) and zsh startup files: the terminal runs `zsh -f -i` with `PS1='$ '`.
+7. Research item 6 holds in the demo: after `git switch feature` the R paper's chart image changes (E2 asserts it).
+8. E8 needed the commit beat to skip its "moved forward" decision wait when the hub is started with `--git ignore`
+   (an untracked hub records no decisions); the control then fails at the switch beat as the plan says.
+
+**Deviations and details chosen.** The e2e tests came after the launcher (the unit tests were first); E4 writes the
+conflict markers to the hub's disk, not through a raw `Repo`, because the live observer reads the disk; the other
+three live invariants (disk differs from pointer, clone rewritten, follower stale) need the raw-`Repo` reader and the
+clone and VS Code peers and are not wired yet. `typedHub` is set only for the scripted run; free play starts the hub
+from the launcher.
+
+**Not started (resume here):** the VS Code presets `hub-vscode-host`, `hub-vscode-clone` and `hubless` and their
+stories (including VS Code window placement through `app.evaluate`, the guest terminal, `rebuildGuestClone`,
+`rejoinVscode`, and research item 7), the raw-`Repo` reader for the remaining invariants, the story's use of the
+clone terminal (H4), E1 for the other presets, E1 three times in a row per preset, `demo/README.md`, the
+screenshots after the switch and after reset, and the landing steps.

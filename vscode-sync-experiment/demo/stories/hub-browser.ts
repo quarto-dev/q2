@@ -2,13 +2,20 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect } from '@playwright/test';
-import { editorText, noticeLocator, pausedIndicator, typeInEditor } from '../../../q2-preview-spa/e2e/helpers/editor';
+import { editorText, noticeLocator, pausedIndicator } from '../../../q2-preview-spa/e2e/helpers/editor';
 import { gitStatus } from '../../../q2-preview-spa/e2e/helpers/editor';
 import type { Step } from '../src/driver';
 import { Demo, PY_PAPER, R_PAPER } from '../src/demo';
 
 const disk = (d: Demo, rel: string) => readFileSync(path.join(d.journal, rel), 'utf8');
 const T = 30_000;
+
+/** Type at the end of the document. (Monaco on macOS ends the document with Cmd+Down; Ctrl+End does nothing there.) */
+async function typeAtEnd(page: import('@playwright/test').Page, text: string): Promise<void> {
+  await page.locator('.monaco-editor .view-lines').first().click();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
+  await page.keyboard.type(text);
+}
 
 async function until(what: string, f: () => boolean | Promise<boolean>, timeout = 30_000): Promise<void> {
   await expect.poll(async () => f(), { timeout, message: what }).toBe(true);
@@ -36,14 +43,14 @@ export function hubBrowserStory(d: Demo): Step[] {
       check: async () => {
         await expect(editorText(host())).toContainText('Tip extension', { timeout: T });
         await expect(editorText(guest())).toContainText('Fusion spectra', { timeout: T });
-        expect((await gitStatus(d.hubHttp)).tracking).toBe(true);
+        expect((await gitStatus(d.hubHttp)).tracking).toBe(d.o.hubGit === 'track');
       },
     },
     {
       id: 'maurice-types',
       caption: 'Maurice, the guest, types into his paper.',
       action: async () => {
-        await typeInEditor(guest(), 'Maurice adds a sentence. ');
+        await typeAtEnd(guest(), 'Maurice adds a sentence. ');
         await mark();
       },
       check: async () => {
@@ -55,7 +62,8 @@ export function hubBrowserStory(d: Demo): Step[] {
       caption: 'Myra commits. Nothing swaps and no notice appears.',
       command: "git add -A && git commit -qm 'Spectra: a sentence from Maurice'",
       check: async () => {
-        await until('the hub moved forward', () => newDecision(['moved-forward']));
+        // An untracked hub (the E8 control) records no decisions.
+        if (d.o.hubGit === 'track') await until('the hub moved forward', () => newDecision(['moved-forward']));
         for (const p of [host(), guest()]) await expect(noticeLocator(p)).toHaveCount(0);
         await expect(editorText(guest())).toContainText('Maurice adds a sentence.');
       },
@@ -89,7 +97,7 @@ export function hubBrowserStory(d: Demo): Step[] {
       id: 'guest-edit',
       caption: 'Maurice has an unsaved idea...',
       action: async () => {
-        await typeInEditor(guest(), 'UNSAVED-IDEA ');
+        await typeAtEnd(guest(), 'UNSAVED-IDEA ');
         await until('the hub wrote the idea', () => disk(d, PY_PAPER).includes('UNSAVED-IDEA'));
         await mark();
       },
