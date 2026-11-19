@@ -1,0 +1,38 @@
+{
+  "name": "@quarto/quarto-git-epochs",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Git-aware registry, arrival, and swap logic shared by the preview clients and the VS Code extension",
+  "license": "MIT",
+  "author": {
+    "name": "Posit PBC"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "source": "./src/index.ts",
+      "import": "./dist/index.js"
+    },
+    "./probe": {
+      "types": "./src/probe.ts",
+      "source": "./src/probe.ts",
+      "import": "./dist/probe.js"
+    }
+  },
+  "files": ["dist", "fixtures"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.17"
+  }
+}

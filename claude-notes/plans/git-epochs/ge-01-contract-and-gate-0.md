@@ -159,19 +159,19 @@ record an answer instead of passing or failing (see part two).
 
 ### Package skeleton and CI
 
-- [ ] Create `ts-packages/quarto-git-epochs` modeled on `quarto-automerge-schema`: `package.json` named
+- [x] Create `ts-packages/quarto-git-epochs` modeled on `quarto-automerge-schema`: `package.json` named
   `@quarto/quarto-git-epochs` (private, `type: module`, scripts `build`, `typecheck`, `test`), `tsconfig.json`,
   `vitest.config.ts`, `src/index.ts` exporting only a version constant, an `exports` map with a browser-safe entry (`.`: the pure logic and
   the swap module) and a node-only `./probe` entry (the probe uses `node:child_process`; hub-client and the browser
   clients import only `.`), and the `fixtures.test.ts` above (red until the fixtures item).
-- [ ] Add a step `npm test -w ts-packages/quarto-git-epochs` to `.github/workflows/ts-test-suite.yml` next to the
+- [x] Add a step `npm test -w ts-packages/quarto-git-epochs` to `.github/workflows/ts-test-suite.yml` next to the
   schema step, in the same commit as the package, and add the package to the build step at
   `.github/workflows/ts-test-suite.yml:272` (it builds only the sync client and the schema, and GE-7 makes the sync
   client depend on this package). In the same commit add the counterpart to `cargo xtask verify` (`AGENTS.md`: verify
   mirrors CI): extend step 12 in `crates/xtask/src/verify.rs` so it also runs the tests of
   `quarto-automerge-schema` (CI-only today) and `quarto-git-epochs`. Run `cargo xtask lint` to see
   `ci-test-suite-unwired` pass.
-- [ ] Run `npm install` from the repository root (never from the package) and confirm the root `npm run typecheck`
+- [x] Run `npm install` from the repository root (never from the package) and confirm the root `npm run typecheck`
   and `npm run build` still pass.
 
 ### Schema, TypeScript
@@ -330,4 +330,12 @@ The logic itself (GE-2, GE-5), the swap module and the notice texts (GE-6), adop
   item 9 soft limit. The notice constant names in it (`NOTICE_SWITCHED_VERSIONS` and five others) are my proposal
   (detail chosen by the plan author; confirm); GE-6 owns the texts and may add more. The "What became of D1 to D36"
   table was checked against the contract: no row needed a change.
+- Package skeleton, CI step and build entry, and the `verify` step 12 extension (it now also builds and tests
+  `quarto-automerge-schema` and `quarto-git-epochs`) are in; `cargo xtask lint` passes. `fixtures.test.ts` is red
+  for the right reason (the fixtures directory has no files yet). **Surprise:** `npm install` rewrote
+  `package-lock.json` and pruned about 700 lines (the `@esbuild/*` and `lightningcss-*` optional platform
+  entries, the lockfile incident class in `coding.md`), both with `npm install` and `npm install
+  --package-lock-only` on this host. I did not commit that: I kept the original lockfile and added only the two
+  new workspace entries (14 insertions), in npm\'s key order. Someone should check that a plain `npm ci` still
+  resolves from that file; I did not run one.
 - Not started: Gate 0 part two; the contract, package, schemas, fixtures. No repository code changed yet.
