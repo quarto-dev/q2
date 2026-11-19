@@ -377,8 +377,8 @@ export function VisualEditor({ file, devTools }: VisualEditorProps) {
           attrs: hasOwnAlt(image.attr) ? undefined : { 'aria-hidden': 'true' },
           // A figure with no caption is its image alone, with no line to type in.
           textless: caption === '',
-          wrap: (line: ReactNode) => (
-            <FigureFrame id={id} classes={[]} src={image.src} imageAttr={['', classes, image.attr[2]]} caption={caption}>
+          wrap: (line: ReactNode, attrs: Record<string, string>) => (
+            <FigureFrame id={id} classes={[]} src={image.src} imageAttr={['', classes, image.attr[2]]} caption={caption} attrs={attrs}>
               {line}
             </FigureFrame>
           ),

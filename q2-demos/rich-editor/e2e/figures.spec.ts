@@ -2,7 +2,8 @@
  * A figure is edited as in Google Docs: its image is one unit in the
  * text, and its caption is a line of text under it. The caption is typed
  * in place, and a selection takes the image whole and as much of the
- * caption as it covers. Deleting the image (with Backspace at the start
+ * caption as it covers (a drag that ends on an image takes it in).
+ * Deleting the image (with Backspace at the start
  * of its caption, or a selection that takes it in) leaves the caption's
  * text as a paragraph, joined to the line the selection started in, and
  * undo brings the figure back. Enter at the end of a caption starts a
@@ -253,6 +254,54 @@ test.describe('deleting an image', () => {
 
     await document.expectSource(figures)
     await expect(editor.frame.locator('figure > img')).toHaveCount(3)
+  })
+
+  test('a selection dragged from a paragraph onto an image takes it in, and deleting it removes the image', async ({ page }) => {
+    const document = await createDocument(figures)
+    const editor = await document.open(page)
+    const paragraph = (await editor.frame.locator('#quarto-document-content p').first().boundingBox())!
+    const image = (await editor.frame.locator('figure > img').first().boundingBox())!
+    await page.mouse.move(paragraph.x + 1, paragraph.y + paragraph.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(image.x + image.width / 2, image.y + image.height / 2, { steps: 8 })
+    await page.mouse.up()
+
+    await page.keyboard.press('Backspace')
+
+    await document.expectSource(figures.replace(`Before the figures.\n\n${wide}`, 'A *wide* view of the site'))
+    await expect(editor.frame.locator('figure > img')).toHaveCount(2)
+
+    await page.keyboard.press(`${mod}+z`)
+
+    await document.expectSource(figures)
+    await expect(editor.frame.locator('figure > img')).toHaveCount(3)
+    // The selection is as it was: deleting it again removes the image again.
+    await page.keyboard.press('Backspace')
+    await document.expectSource(figures.replace(`Before the figures.\n\n${wide}`, 'A *wide* view of the site'))
+  })
+
+  test("a selection dragged from a caption up onto its image takes the image in", async ({ page }) => {
+    const document = await createDocument(figures)
+    const editor = await document.open(page)
+    const image = (await editor.frame.locator('figure > img').nth(1).boundingBox())!
+    const frame = (await page.locator('iframe.visual-frame').boundingBox())!
+    // Just after "The sample", in the page.
+    const at = await editor.frame.evaluate(() => {
+      const text = document.querySelectorAll('figcaption')[1].firstChild!
+      const range = document.createRange()
+      range.setStart(text, 'The sample'.length)
+      const rect = range.getClientRects()[0]
+      return { x: rect.left, y: rect.top + rect.height / 2 }
+    })
+    await page.mouse.move(frame.x + at.x, frame.y + at.y)
+    await page.mouse.down()
+    await page.mouse.move(image.x + image.width / 2, image.y + image.height / 2, { steps: 8 })
+    await page.mouse.up()
+
+    await page.keyboard.press('Backspace')
+
+    await document.expectSource(figures.replace(`${wide}\n\n${tray}`, '![A *wide* view of the site tray](site.png)'))
+    await expect(editor.frame.locator('figure > img')).toHaveCount(2)
   })
 
   test('copying a selection from a paragraph into a caption copies the text, without the image', async ({ page }) => {
