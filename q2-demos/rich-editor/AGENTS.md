@@ -2,6 +2,51 @@
 
 Read `README.md` first: it describes the editor, how to run it, and the tests.
 
+## Work in a worktree of your own
+
+The `rich-editor-prototype` worktree (`~/code/q2.worktrees/rich-editor-prototype`)
+holds the prototype's main branch for now. Several agents work on the
+prototype at once, so:
+
+- **A piece of work (a feature, a fix) gets a branch and a worktree of its
+  own**, off `rich-editor-prototype`, e.g.
+  `wt switch --create rich-editor-<name> -b rich-editor-prototype --no-cd`.
+  Set it up as `README.md` (§ Running) says, with `npm install` at the repo
+  root first. In a shared checkout, other sessions' uncommitted edits end up
+  in your test runs, and a full suite there doesn't tell you whether your
+  change is green.
+- **Only small edits the user asks for on `rich-editor-prototype` itself
+  are made in that worktree.** The user also runs the app from there to try
+  it out.
+
+### Merging
+
+1. Commit everything on your branch, and merge `rich-editor-prototype` into
+   it, so that what you test is what will land.
+2. Run the whole suite in every browser on your branch (in the background,
+   see below). A failure that also fails on `rich-editor-prototype` isn't
+   yours, but say so in your report.
+3. Ask the other agents working in the `rich-editor-prototype` worktree
+   (list the running sessions, and message each one whose working directory
+   is in it) whether you can merge now. Someone may be in the middle of
+   editing files your merge changes; wait for them, or agree on an order.
+4. Merge in that worktree with `git merge --no-ff rich-editor-<name>`.
+   Leave other sessions' uncommitted changes as they are: don't stash or
+   reset them. If git refuses because of them, ask their session to commit
+   first.
+5. Tell the agents you asked that the merge is in, with its hash. Don't push
+   unless the user asks.
+
+### Removing your worktree
+
+Once it's merged, remove your worktree and branch when that's safe: the
+branch is in `rich-editor-prototype` (`git branch --merged
+rich-editor-prototype` lists it), the worktree has nothing uncommitted, and
+none of your background runs or subagents are still using it. Use
+`git worktree remove <path>` and `git branch -d rich-editor-<name>`, never
+with `--force`: they refuse when work would be lost, and if they do, find
+out why instead.
+
 ## The e2e specs are the specification
 
 The specs in `e2e/` are the most valuable part of this prototype. They
