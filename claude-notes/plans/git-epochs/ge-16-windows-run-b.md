@@ -92,7 +92,7 @@ Items marked (agent) run on macOS; items marked (Gordon) need the Windows machin
   and the table above.
 - [x] (agent) Gate the tooling before handoff: syntax-check the script with `pwsh` if installed (parse only, run
   nothing); `uv run scripts/git-epochs-windows/extract_failures.py --help`; `q2 render --strict` the instructions page.
-- [ ] (agent) Ask Gordon to say go. Then push the tooling branch with the explicit refspec, unsilenced:
+- [x] (agent) Ask Gordon to say go. Then push the tooling branch with the explicit refspec, unsilenced:
   `git push origin windows/git-epochs:windows/git-epochs`, and check that `git ls-remote origin windows/git-epochs`
   prints the output of `git rev-parse HEAD`.
 - [ ] (Gordon) On the Windows machine: `git fetch origin windows/git-epochs`, switch to it, and run
@@ -191,3 +191,5 @@ script ran first time, but this change is large). The macOS counts above come fr
 `git push origin windows/git-epochs:windows/git-epochs` from the tooling worktree and check `git ls-remote origin
 windows/git-epochs` against `git rev-parse HEAD`. The plan is **not landed**; it stays on `ge/16-windows-run-b`.
 Checklist items still open: the push, the Windows run, recording the results, classifying failures, and the final landing.
+
+**Session 2 (push).** Gordon said go. The first push was rejected as non-fast-forward: the remote held `f83a4ec66` (GE-15\'s Windows results, committed from the Windows machine). I merged it into the tooling branch (no rebase), and the conflict-marker grep found only quoted text in an old research note. Pushed `windows/git-epochs` at `e82260135`; `git ls-remote` matches `git rev-parse HEAD`. Waiting for the Windows run.
