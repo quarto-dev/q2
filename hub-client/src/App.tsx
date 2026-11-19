@@ -26,7 +26,6 @@ function DevHarnessLazy({ page }: { page: string }) {
   );
 }
 import Editor from './components/Editor';
-import DemoGallery from './components/demo/DemoGallery';
 import { notifications, signInStatus as signInStatusStrings } from './strings';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import LoadingIndicator from './components/Loading';
@@ -1063,11 +1062,6 @@ function App() {
         <LoadingIndicator />
       </div>
     );
-  }
-
-  // Gallery of standalone example pages (#/component-playground, #/component-playground/<id>).
-  if (route.type === 'demo') {
-    return <DemoGallery page={route.page} />;
   }
 
   if (AUTH_ENABLED && !auth) {

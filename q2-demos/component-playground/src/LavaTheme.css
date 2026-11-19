@@ -1,0 +1,126 @@
+/* ==========================================================================
+   Lava theme for embed2.html: a host restyling hub-client's parts.
+
+   The only lever used is hub-client's custom properties (theme.css). No
+   rule here targets a hub-client class. Three things make that work:
+
+   - Overrides sit on `:root`, where hub-client declares its tokens. An
+     alias such as `--dialog-bg: var(--bg-modal)` resolves on the element
+     that declares it, so an override on a wrapper would not reach it.
+   - Dark mode has its own block. hub-client's `:root.dark` outranks a
+     plain `:root` rule, so light-only overrides would be lost there.
+   - This file loads after hub-client's stylesheets (see pages/embed2.tsx).
+
+   Out of reach from here: Monaco's own background and syntax colors
+   (white in light mode, #1e1e1e in dark), and the preview iframe, which is
+   styled by the document's Quarto theme.
+   ========================================================================== */
+
+/* ---- Light: ash and ember ---- */
+:root {
+  /* hub-client's brand ramps. Most semantic tokens alias these, so
+     remapping them recolors text, borders, links and accents at once. */
+  --posit-blue: #a23b1c;
+  --posit-blue-light-1: #f3ddd0;
+  --posit-blue-light-2: #e0b39c;
+  --posit-blue-light-3: #c98468;
+  --posit-blue-dark-1: #7a2a12;
+  --posit-blue-dark-2: #4a1a0c;
+  --posit-blue-dark-3: #24100a;
+  --posit-teal: #e25822;
+  --posit-teal-dark-1: #b23c0e;
+  --posit-teal-light-1: #ffa15c;
+
+  /* Tokens hub-client sets to fixed values rather than ramp aliases. */
+  --bg-modal: #fffaf5;
+  --bg-overlay: rgba(243, 221, 208, 0.95);
+  --backdrop-bg: rgba(74, 26, 12, 0.55);
+  --input-bg-alpha: #f8e6da;
+  --input-bg-alpha-hover: #f1d3c1;
+  --page-bg: #fffaf5;
+  --page-text: #24100a;
+  --toast-bg: #4a1a0c;
+
+  --editor-bg: #fbf3ec;
+  --editor-text-dim: #5c4037;
+  --editor-text-muted: #7a5548;
+
+  --sidebar-bg: #f6e7dc;
+  --sidebar-section-bg: #edd3c2;
+  --sidebar-section-text: #5c3324;
+  --sidebar-drag-bg: #f5c9a8;
+  --context-menu-hover: color-mix(in srgb, #e25822 16%, var(--bg-modal));
+
+  /* With both ramps now warm, the three outline symbol classes would all
+     land on the same rust; spread them across the lava range. */
+  --outline-header-icon: #a3200d;
+  --outline-code-icon: #9a5b00;
+  --outline-function-icon: #5c3324;
+}
+
+/* ---- Dark: basalt and magma ---- */
+:root.dark {
+  --bg-modal: #1f1614;
+  --bg-overlay: rgba(20, 12, 10, 0.9);
+  --bg-card: #33201a;
+  --bg-card-hover: #452a20;
+  --bg-input: #140c0a;
+  --text-primary: #fff3ea;
+  --text-secondary: #e3b9a3;
+  --text-muted: #c08d76;
+  --border-color: #4d2a1e;
+  --border-focus: #ff9d5c;
+  --accent-secondary: #ffa66b;
+  --accent-action-text: #ff9d5c;
+  --input-bg-alpha: #2e1d18;
+  --input-bg-alpha-hover: #3b251e;
+  --page-bg: #140c0a;
+  --page-text: #fff3ea;
+  --toast-bg: #45200f;
+  --link-hover: #ffc9a3;
+
+  --editor-bg: #1f1614;
+  --editor-text-dim: #dcc5ba;
+  --editor-text-muted: #a8928a;
+
+  --sidebar-bg: #1a110f;
+  --sidebar-section-bg: #120b09;
+  --sidebar-drag-bg: #5a230f;
+  --context-menu-hover: color-mix(in srgb, #ff6a2b 22%, var(--bg-modal));
+
+  --outline-header-icon: #ffd166;
+  --outline-code-icon: #ff8a4c;
+  --outline-function-icon: #ff6b6b;
+
+  --view-toggle-hover-text: #ffc9a3;
+  --view-toggle-active-text: #ffe0c7;
+}
+
+/* ---- The host's own chrome (EmbedDemo.css), following the same tokens ---- */
+.ed-page {
+  background: var(--page-bg);
+  color: var(--page-text);
+}
+
+.ed-header {
+  background: linear-gradient(90deg, #2a0a04, #8f1d0a 55%, #c93d12);
+  border-bottom: 2px solid #ff8a3d;
+  color: #fff3ea;
+}
+
+.ed-header a {
+  color: #ffd9b8;
+}
+
+.ed-header .ed-path,
+.ed-header .ed-people {
+  color: #ffd9b8;
+}
+
+.ed-side-outline {
+  border-top-color: var(--border-color);
+}
+
+.ed-footer {
+  background: var(--sidebar-section-bg);
+}
