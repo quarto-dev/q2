@@ -177,8 +177,9 @@ interface Q2PreviewIframeProps {
  *     (no `allow-same-origin`) the iframe ends up with
  *     a different opaque origin from this component.
  *
- *  2. Asset manifest. Image bytes are still read here and handed over
- *     as parent-minted blob URLs; see `buildAssetManifest`.
+ *  2. Asset manifest. Image bytes are read here and posted as `Blob`s
+ *     with the AST; the iframe mints their blob URLs, for the same
+ *     reason. See `buildAssetManifest`.
  */
 export function Q2PreviewIframe({
   astJson,
@@ -282,39 +283,18 @@ export function Q2PreviewIframe({
   );
 
   // Asset-manifest cache. Owned by this component for the iframe's
-  // lifetime; entries are revoked individually as image content
-  // changes (per `buildAssetManifest`'s eviction logic), and the whole
-  // cache is drained on unmount.
+  // lifetime, so unchanged image content keeps its key (and the iframe
+  // keeps its blob URL) across renders.
   const assetCacheRef = useRef<Map<string, ManifestCacheEntry>>(new Map());
-
-  // Bumped every time the cleanup effect below (re)mounts. That effect
-  // revokes and clears the asset cache on cleanup, but a `useMemo` result
-  // survives StrictMode's simulated unmount/remount, so without this the
-  // manifest would keep pointing at revoked blob URLs. Depending on it
-  // re-runs the walker against the now-empty cache.
-  const [assetCacheEpoch, setAssetCacheEpoch] = useState(0);
-
-  // Cleanup any outstanding blob URLs on unmount by draining the asset
-  // cache.
-  useEffect(() => {
-    const assetCache = assetCacheRef.current;
-    setAssetCacheEpoch((n) => n + 1);
-    return () => {
-      for (const entry of assetCache.values()) {
-        URL.revokeObjectURL(entry.url);
-      }
-      assetCache.clear();
-    };
-  }, []);
 
   // Build the asset manifest once per (astJson, currentFilePath) pair.
   // Memoization keeps the walker from re-running on unrelated re-renders
   // (e.g. theme changes don't disturb the manifest). The walker mutates
-  // `assetCacheRef.current` in place, evicting / minting blob URLs as
+  // `assetCacheRef.current` in place, adding and evicting entries as
   // image content changes between renders.
   const assetManifest = useMemo(
     () => buildAssetManifest(astJson, currentFilePath, assetCacheRef.current).manifest,
-    [astJson, currentFilePath, assetCacheEpoch],
+    [astJson, currentFilePath],
   );
 
   // Handle messages from the iframe

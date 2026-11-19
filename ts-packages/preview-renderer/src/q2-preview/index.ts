@@ -10,4 +10,4 @@ export { useBlockEditHover } from './useBlockEditHover';
 // callers that imported it via the q2-preview barrel.
 export { Q2PreviewIframe } from '../iframe/Q2PreviewIframe';
 export { AssetManifestContext } from './AssetManifestContext';
-export { buildAssetManifest, type ManifestCacheEntry } from './assetWalker';
+export { buildAssetManifest, type AssetManifestEntry, type ManifestCacheEntry } from './assetWalker';

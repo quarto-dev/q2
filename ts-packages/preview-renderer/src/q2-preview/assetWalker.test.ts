@@ -5,8 +5,10 @@
  * external-skipping / VFS-failure / N=100 stress cases the plan calls
  * out in §"Asset walker tests".
  *
- * Mocks `vfsReadBinaryFile` and `URL.createObjectURL` / `URL.revokeObjectURL`
- * — these aren't available in node, and we want deterministic URLs.
+ * Mocks `vfsReadBinaryFile`, and spies on `URL.createObjectURL` /
+ * `URL.revokeObjectURL` to check the parent mints no blob URLs: the iframe
+ * does (`iframeAssets.ts`), since a `blob:` URL only loads in the origin
+ * that minted it.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -16,7 +18,14 @@ vi.mock('@quarto/preview-runtime', () => ({
     vfsReadBinaryFile: (path: string) => vfsMock(path),
 }));
 
-import { buildAssetManifest, type ManifestCacheEntry } from './assetWalker';
+import { buildAssetManifest, type AssetManifestEntry, type ManifestCacheEntry } from './assetWalker';
+
+/** The key of a manifest entry the walker produced (always an object). */
+function keyOf(manifest: Record<string, AssetManifestEntry>, path: string): string {
+    const entry = manifest[path];
+    if (!entry || typeof entry === 'string') throw new Error(`no blob entry for ${path}`);
+    return entry.key;
+}
 
 let urlCounter = 0;
 const minted: string[] = [];
@@ -86,51 +95,50 @@ describe('buildAssetManifest', () => {
         );
 
         expect(vfsMock).toHaveBeenCalledWith('project/basic-docx 2_media/image1.png');
-        expect(manifest).toEqual({ [target]: 'blob:test-0' });
+        expect(Object.keys(manifest)).toEqual([target]);
     });
 
-    it('mints a blob URL for a single Image and adds it to the manifest', () => {
+    it("posts a single Image's bytes as a Blob with a key, and mints no URL", async () => {
         vfsMock.mockReturnValue({ success: true, content: PNG_BYTES_B64 });
         const cache = new Map<string, ManifestCacheEntry>();
         const json = ast([paraOf(imageNode('hero.png'))]);
 
-        const { manifest, revoked: rev } = buildAssetManifest(json, '/project/index.qmd', cache);
+        const { manifest } = buildAssetManifest(json, '/project/index.qmd', cache);
 
-        expect(manifest).toEqual({ 'hero.png': 'blob:test-0' });
-        expect(minted).toEqual(['blob:test-0']);
-        expect(rev).toEqual([]);
+        const entry = manifest['hero.png'] as { key: string; blob: Blob };
+        expect(entry.key).toMatch(/^asset-/);
+        expect(entry.blob.type).toBe('image/png');
+        expect(Buffer.from(await entry.blob.arrayBuffer()).toString('base64')).toBe(PNG_BYTES_B64);
+        expect(minted).toEqual([]);
         expect(cache.size).toBe(1);
     });
 
-    it('cache hit: same content on second run does not mint a new URL', () => {
+    it('cache hit: same content on second run keeps the same key and Blob', () => {
         vfsMock.mockReturnValue({ success: true, content: PNG_BYTES_B64 });
         const cache = new Map<string, ManifestCacheEntry>();
         const json = ast([paraOf(imageNode('hero.png'))]);
 
-        buildAssetManifest(json, '/project/index.qmd', cache);
-        const result = buildAssetManifest(json, '/project/index.qmd', cache);
+        const first = buildAssetManifest(json, '/project/index.qmd', cache);
+        const second = buildAssetManifest(json, '/project/index.qmd', cache);
 
-        expect(minted).toEqual(['blob:test-0']); // exactly one mint across both runs
-        expect(revoked).toEqual([]);
-        expect(result.manifest['hero.png']).toBe('blob:test-0');
+        expect(second.manifest['hero.png']).toEqual(first.manifest['hero.png']);
+        expect(cache.size).toBe(1);
     });
 
-    it('content change: evicts the old URL and mints a new one', () => {
+    it('content change: evicts the old entry and gives the new content a new key', () => {
         const cache = new Map<string, ManifestCacheEntry>();
         const json = ast([paraOf(imageNode('hero.png'))]);
 
         vfsMock.mockReturnValue({ success: true, content: PNG_BYTES_B64 });
-        buildAssetManifest(json, '/project/index.qmd', cache);
+        const first = buildAssetManifest(json, '/project/index.qmd', cache);
         vfsMock.mockReturnValue({ success: true, content: ALT_PNG_B64 });
-        const result = buildAssetManifest(json, '/project/index.qmd', cache);
+        const second = buildAssetManifest(json, '/project/index.qmd', cache);
 
-        expect(minted).toEqual(['blob:test-0', 'blob:test-1']);
-        expect(revoked).toEqual(['blob:test-0']);
-        expect(result.manifest['hero.png']).toBe('blob:test-1');
-        expect(result.revoked).toEqual(['blob:test-0']);
+        expect(keyOf(second.manifest, 'hero.png')).not.toBe(keyOf(first.manifest, 'hero.png'));
+        expect(cache.size).toBe(1);
     });
 
-    it('image removed from AST: revokes its blob URL', () => {
+    it('image removed from AST: evicts its entry', () => {
         vfsMock.mockReturnValue({ success: true, content: PNG_BYTES_B64 });
         const cache = new Map<string, ManifestCacheEntry>();
 
@@ -141,7 +149,6 @@ describe('buildAssetManifest', () => {
             cache,
         );
 
-        expect(revoked).toEqual(['blob:test-0']);
         expect(result.manifest).toEqual({});
         expect(cache.size).toBe(0);
     });
@@ -176,7 +183,7 @@ describe('buildAssetManifest', () => {
         expect(minted).toEqual([]);
     });
 
-    it('N=100 stress: exactly N mints on first run, 0 on second run with same content', () => {
+    it('N=100 stress: N entries on first run, the same keys on a second run with same content', () => {
         vfsMock.mockReturnValue({ success: true, content: PNG_BYTES_B64 });
         const cache = new Map<string, ManifestCacheEntry>();
 
@@ -186,12 +193,12 @@ describe('buildAssetManifest', () => {
         }
         const json = ast(blocks);
 
-        buildAssetManifest(json, '/project/index.qmd', cache);
-        expect(minted).toHaveLength(100);
+        const first = buildAssetManifest(json, '/project/index.qmd', cache);
+        expect(cache.size).toBe(100);
 
-        const beforeSecond = minted.length;
-        buildAssetManifest(json, '/project/index.qmd', cache);
-        expect(minted).toHaveLength(beforeSecond);
+        const second = buildAssetManifest(json, '/project/index.qmd', cache);
+        expect(second.manifest).toEqual(first.manifest);
+        expect(minted).toEqual([]);
         expect(revoked).toEqual([]);
     });
 
@@ -215,7 +222,6 @@ describe('buildAssetManifest', () => {
         const cache = new Map<string, ManifestCacheEntry>();
         const result = buildAssetManifest('{ not json', '/project/index.qmd', cache);
         expect(result.manifest).toEqual({});
-        expect(result.revoked).toEqual([]);
     });
 
     it('finds Images nested inside Figure / BulletList / Div', () => {
