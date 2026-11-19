@@ -1,0 +1,207 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.8 [39m[90mC:/Users/GordonWoodhull/src/fuck/q2/vscode-sync-experiment[39m
+
+ [32m✓[39m src/package-manifest.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/core/no-vscode.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m src/core/clone/record.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 48[2mms[22m[39m
+ [32m✓[39m src/core/meta.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 79[2mms[22m[39m
+ [32m✓[39m src/core/clone/registry-client.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 603[2mms[22m[39m
+     [33m[2m✓[22m[39m creates the sidecar lazily, writes the index key once, and reads entries back [33m 577[2mms[22m[39m
+ [32m✓[39m src/core/text-binding.test.ts [2m([22m[2m21 tests[22m[2m)[22m[33m 852[2mms[22m[39m
+ [32m✓[39m src/headless/peer.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 965[2mms[22m[39m
+     [33m[2m✓[22m[39m publishes three files, a second peer joins and sees them, and an edit reaches it [33m 750[2mms[22m[39m
+ [32m✓[39m src/core/presence.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 1211[2mms[22m[39m
+     [33m[2m✓[22m[39m names the sender when its presence is known, and is anonymous otherwise [33m 670[2mms[22m[39m
+     [33m[2m✓[22m[39m ignores a missing or malformed message [33m 489[2mms[22m[39m
+ [32m✓[39m src/core/git-exclude.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 1364[2mms[22m[39m
+     [33m[2m✓[22m[39m adds .quarto-hub/ to .git/info/exclude once, so git status ignores it [33m 874[2mms[22m[39m
+     [33m[2m✓[22m[39m works for a project below the repository root [33m 330[2mms[22m[39m
+ [31m❯[39m src/core/editor-only.test.ts [2m([22m[2m9 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 4617[2mms[22m[39m
+     [33m[2m✓[22m[39m never writes a project file, even when a flip changes a bound file or the owner adds and removes entries [33m 832[2mms[22m[39m
+     [33m[2m✓[22m[39m does not watch the disk or reconcile it with the index [33m 630[2mms[22m[39m
+     [32m✓[39m shows the mode in a persistent status item[32m 219[2mms[22m[39m
+     [33m[2m✓[22m[39m rebinds an open buffer to the new doc on a flip [33m 437[2mms[22m[39m
+     [33m[2m✓[22m[39m sends no outbound edit while a marker exists [33m 540[2mms[22m[39m
+     [33m[2m✓[22m[39m after the markers clear the quiet window must pass; with every buffer equal to its doc, editing then resumes (a plain commit) [33m 557[2mms[22m[39m
+[31m     [31m×[31m after a checkout it waits for the hub flip, rebinds, never writes the old text into the buffer, and then edits reach the new doc[39m[32m 264[2mms[22m[39m
+     [33m[2m✓[22m[39m without a flip it warns after 10 s, stays suspended, and offers Keep waiting and Dismiss [33m 621[2mms[22m[39m
+     [33m[2m✓[22m[39m shows one "edits not kept" warning per episode when a bound buffer was dirty as the gate closed, and none otherwise [33m 473[2mms[22m[39m
+ [31m❯[39m src/core/follower.test.ts [2m([22m[2m11 tests[22m[2m | [22m[31m3 failed[39m[2m)[22m[33m 5456[2mms[22m[39m
+     [33m[2m✓[22m[39m a flip with no buffer open writes the new text to disk and drops the retired doc from the listing [33m 582[2mms[22m[39m
+     [33m[2m✓[22m[39m a flip while a dirty buffer is open keeps the typed characters in the old doc, counts them, and converges after done [33m 812[2mms[22m[39m
+     [33m[2m✓[22m[39m two flips before the first swap finishes skip to the final state [33m 825[2mms[22m[39m
+     [33m[2m✓[22m[39m an unavailable new doc fires unavailable after the timeout, keeps the old doc, and a retry swaps once the doc arrives [33m 796[2mms[22m[39m
+     [33m[2m✓[22m[39m the owner removing an entry deletes the mirror file, and adding an entry creates it [33m 398[2mms[22m[39m
+[31m     [31m×[31m one aggregate message per batch, without the stranded sentence when nothing was stranded[39m[32m 275[2mms[22m[39m
+     [33m[2m✓[22m[39m sends the moved message on the old binding before disposing it (G25) [33m 402[2mms[22m[39m
+     [33m[2m✓[22m[39m logs a flipped event with the old and new doc ids [33m 398[2mms[22m[39m
+[31m     [31m×[31m a folder created before the mode existed starts as a mirror and follows a flip[39m[32m 278[2mms[22m[39m
+[31m     [31m×[31m shows the mode in a persistent status item[39m[32m 278[2mms[22m[39m
+     [33m[2m✓[22m[39m createProjectFolder writes mode: mirror [33m 358[2mms[22m[39m
+ [31m❯[39m src/core/project-sync.test.ts [2m([22m[2m19 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 10398[2mms[22m[39m
+     [33m[2m✓[22m[39m writes the project, project.json, folders, and .vscode settings [33m 407[2mms[22m[39m
+     [32m✓[39m falls back to a name made of the id, and never reuses an existing folder name[32m 280[2mms[22m[39m
+     [32m✓[39m skips a hostile index key, logs it, and still writes the other keys (G36)[32m 234[2mms[22m[39m
+     [33m[2m✓[22m[39m folds offline disk edits into the docs, removes entries for missing files, adds new files [33m 371[2mms[22m[39m
+     [33m[2m✓[22m[39m does not treat a subfolder with its own .quarto-hub/project.json as part of the project [33m 617[2mms[22m[39m
+     [33m[2m✓[22m[39m binds an already-open buffer to its doc, and the two stay in sync [33m 434[2mms[22m[39m
+     [33m[2m✓[22m[39m turns a created text file and a created binary file into docs and index entries [33m 410[2mms[22m[39m
+     [33m[2m✓[22m[39m prefers the open buffer text over the disk text for a created file [33m 408[2mms[22m[39m
+     [33m[2m✓[22m[39m writes a changed (unbound) file into its doc, and ignores the echo of its own write [33m 422[2mms[22m[39m
+     [33m[2m✓[22m[39m removes the entries of a deleted file, and of every file below a deleted folder [33m 589[2mms[22m[39m
+     [33m[2m✓[22m[39m records an empty folder in the index, and logs it [33m 504[2mms[22m[39m
+     [33m[2m✓[22m[39m ignores events for ignored paths [33m 778[2mms[22m[39m
+[31m     [31m×[31m writes a file whose index entry appears, and removes a file whose entry is deleted[39m[33m 533[2mms[22m[39m
+     [33m[2m✓[22m[39m overwrites the disk file when an index entry changes its doc id (unconditional untrack, retrack, write) [33m 634[2mms[22m[39m
+     [33m[2m✓[22m[39m rewrites a file that is missing on disk when its doc changes [33m 607[2mms[22m[39m
+     [33m[2m✓[22m[39m creates explicit folders from the index and removes them when they leave it [33m 810[2mms[22m[39m
+     [33m[2m✓[22m[39m skips a hostile key, logs it as a rejected event, and still applies the other keys (G36) [33m 756[2mms[22m[39m
+     [33m[2m✓[22m[39m reports status through the notifier and logs a running line [33m 463[2mms[22m[39m
+     [33m[2m✓[22m[39m stops reacting to the hub after dispose [33m 1089[2mms[22m[39m
+ [32m✓[39m src/core/clone/attach.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 17864[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses when the share has no repo entry [33m 1321[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses when the folder already has .quarto-hub/project.json [33m 1062[2mms[22m[39m
+     [33m[2m✓[22m[39m passes for a clone of the project repository [33m 2217[2mms[22m[39m
+     [33m[2m✓[22m[39m fails for an unrelated repository that also has an index.qmd, and offers a mirror [33m 2549[2mms[22m[39m
+     [33m[2m✓[22m[39m passes on any intersection of root commits [33m 3010[2mms[22m[39m
+     [33m[2m✓[22m[39m a shallow clone fails the root check and passes the blob overlap fallback at half the files [33m 3450[2mms[22m[39m
+     [33m[2m✓[22m[39m the project in a subdirectory gives the same project root whether opened at the repo root or the subdirectory [33m 1646[2mms[22m[39m
+     [33m[2m✓[22m[39m a different subdirectory is refused with a message [33m 900[2mms[22m[39m
+     [33m[2m✓[22m[39m is written once and idempotently, also in a linked worktree [33m 1548[2mms[22m[39m
+ [32m✓[39m src/core/clone/arrival.test.ts [2m([22m[2m14 tests[22m[2m)[22m[33m 80050[2mms[22m[39m
+     [33m[2m✓[22m[39m attaches every participating file silently to the registry doc and never merges disk into it [33m 4683[2mms[22m[39m
+     [33m[2m✓[22m[39m step 1: a file no doc stands for gets a doc from disk, registered at generation 0 [33m 6655[2mms[22m[39m
+     [33m[2m✓[22m[39m step 2: attached, S equals B and T differs (after the clone's own reset --hard): retire, create from disk, generation max+1 [33m 4875[2mms[22m[39m
+     [33m[2m✓[22m[39m step 2: attached and not (S equals B and T differs): the disk is not merged into the doc [33m 4655[2mms[22m[39m
+     [33m[2m✓[22m[39m step 3: equal text attaches silently, including CRLF on disk against LF in the doc [33m 5953[2mms[22m[39m
+     [33m[2m✓[22m[39m step 4: clean disk, differing doc: joins the live edits with one notice, and "use my checkout instead" restores the blob and detaches [33m 4917[2mms[22m[39m
+     [33m[2m✓[22m[39m step 5: dirty and different: nothing is overwritten and the file is detached with one aggregate notice [33m 5181[2mms[22m[39m
+     [33m[2m✓[22m[39m binary files compare by byte hash: equal bytes attach silently, different bytes detach [33m 7429[2mms[22m[39m
+     [33m[2m✓[22m[39m a plain commit registers the same doc under the new blob and removes the old entry, keeping the generation [33m 4892[2mms[22m[39m
+     [33m[2m✓[22m[39m an amend does the same [33m 9984[2mms[22m[39m
+     [33m[2m✓[22m[39m a tracked file git removes keeps its registry entry, and the doc is never written back over the absent path [33m 5231[2mms[22m[39m
+     [33m[2m✓[22m[39m the pointer never creates an untracked file that is absent, and an untracked file on disk follows it [33m 4377[2mms[22m[39m
+     [33m[2m✓[22m[39m under colocated jj every changed file takes step 5: nothing is attached or registered [33m 5461[2mms[22m[39m
+     [33m[2m✓[22m[39m is called once per decision with the flips, removals, and additions, and never writes the pointer itself [33m 5700[2mms[22m[39m
+ [31m❯[39m src/core/clone/clone-modes.test.ts [2m([22m[2m21 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 119977[2mms[22m[39m
+     [33m[2m✓[22m[39m a detached Binding sends no edits and applies no remote changes; the status bar shows the count [33m 6964[2mms[22m[39m
+     [33m[2m✓[22m[39m adopt asks first when the file differs from its blob, then takes the shared doc; declining changes nothing [33m 6686[2mms[22m[39m
+     [33m[2m✓[22m[39m re-attaches automatically when the contents become equal [33m 5438[2mms[22m[39m
+     [33m[2m✓[22m[39m a detached file that is later committed gets a doc under the new blob and is shareable from then on [33m 8104[2mms[22m[39m
+     [33m[2m✓[22m[39m HEAD unchanged merges offline edits as today [33m 3915[2mms[22m[39m
+     [33m[2m✓[22m[39m HEAD changed by an offline git switch runs arrival and merges nothing from disk into a doc [33m 4656[2mms[22m[39m
+     [33m[2m✓[22m[39m the documented gap: an offline reset --hard with an unchanged HEAD merges the reset content as an edit [33m 4370[2mms[22m[39m
+     [33m[2m✓[22m[39m a detached file stays detached across a restart [33m 5842[2mms[22m[39m
+     [33m[2m✓[22m[39m after a confirm deletes the store and the record and rewrites project.json; a declined confirm deletes nothing [33m 5815[2mms[22m[39m
+     [33m[2m✓[22m[39m a clone refuses to rebind to a project of another repository [33m 5054[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses to start sync when the repository no longer matches the recorded identity [33m 3896[2mms[22m[39m
+     [33m[2m✓[22m[39m a clean peer whose doc loses canonical selection re-attaches to the winner [33m 3530[2mms[22m[39m
+     [33m[2m✓[22m[39m a loser whose disk differs from the canonical doc detaches [33m 3889[2mms[22m[39m
+     [33m[2m✓[22m[39m two peers creating the sidecar at once end on one sidecar and one doc per file [33m 4796[2mms[22m[39m
+     [33m[2m✓[22m[39m a file attached to a doc another peer retired stays attached and live, and is listed as superseded [33m 3984[2mms[22m[39m
+     [33m[2m✓[22m[39m the repair rule re-registers a doc that vanished from the registry, and never a retired one [33m 4777[2mms[22m[39m
+     [33m[2m✓[22m[39m while the gate is closed a whole-file rewrite of an open buffer is not spliced into the doc [33m 3561[2mms[22m[39m
+     [33m[2m✓[22m[39m moved goes out on the old doc before the old Binding is disposed [33m 5097[2mms[22m[39m
+[31m     [31m×[31m each decision writes its event to events.jsonl[39m[33m 19856[2mms[22m[39m
+     [33m[2m✓[22m[39m an index key naming ../x or .vscode/tasks.json is skipped and writes nothing [33m 4155[2mms[22m[39m
+     [33m[2m✓[22m[39m a canonical doc that is also registered under another path is forked, not shared [33m 5530[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 6 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/core/editor-only.test.ts[2m > [22meditor-only gate (spec 6)[2m > [22mafter a checkout it waits for the hub flip, rebinds, never writes the old text into the buffer, and then edits reach the new doc
+[31m[1mError[22m: EPERM: operation not permitted, rename 'C:\Users\GordonWoodhull\AppData\Local\Temp\ge9-eo-IkVHWu\.quarto-hub-tmp-8wY8uV' -> 'C:\Users\GordonWoodhull\AppData\Local\Temp\ge9-eo-IkVHWu\quarto-hub-tJWMjmMe'[39m
+[36m [2m❯[22m createProjectFolder src/core/create-folder.ts:[2m117:3[22m[39m
+    [90m115|[39m     [35mawait[39m repo[33m.[39m[34mshutdown[39m()[33m.[39m[35mcatch[39m(() [33m=>[39m {})[33m;[39m
+    [90m116|[39m   }
+    [90m117|[39m   [35mawait[39m fs[33m.[39m[34mrename[39m(tmpRoot[33m,[39m root)[33m;[39m
+    [90m   |[39m   [31m^[39m
+    [90m118|[39m   [35mreturn[39m root[33m;[39m
+    [90m119|[39m }
+[90m [2m❯[22m editorOnly src/core/editor-only.test.ts:[2m58:16[22m[39m
+[90m [2m❯[22m src/core/editor-only.test.ts:[2m168:21[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/core/follower.test.ts[2m > [22mnotices (G26)[2m > [22mone aggregate message per batch, without the stranded sentence when nothing was stranded
+[31m[1mError[22m: EPERM: operation not permitted, rename 'C:\Users\GordonWoodhull\AppData\Local\Temp\ge9-follow-Fnnw22\.quarto-hub-tmp-UEcSGe' -> 'C:\Users\GordonWoodhull\AppData\Local\Temp\ge9-follow-Fnnw22\quarto-hub-3xUPRV5r'[39m
+[36m [2m❯[22m createProjectFolder src/core/create-folder.ts:[2m117:3[22m[39m
+    [90m115|[39m     [35mawait[39m repo[33m.[39m[34mshutdown[39m()[33m.[39m[35mcatch[39m(() [33m=>[39m {})[33m;[39m
+    [90m116|[39m   }
+    [90m117|[39m   [35mawait[39m fs[33m.[39m[34mrename[39m(tmpRoot[33m,[39m root)[33m;[39m
+    [90m   |[39m   [31m^[39m
+    [90m118|[39m   [35mreturn[39m root[33m;[39m
+    [90m119|[39m }
+[90m [2m❯[22m mirrorOf src/core/follower.test.ts:[2m50:16[22m[39m
+[90m [2m❯[22m src/core/follower.test.ts:[2m147:22[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/core/follower.test.ts[2m > [22mmoved message, event log, and legacy folders[2m > [22ma folder created before the mode existed starts as a mirror and follows a flip
+[31m[1mError[22m: EPERM: operation not permitted, rename 'C:\Users\GordonWoodhull\AppData\Local\Temp\ge9-follow-zjVugg\.quarto-hub-tmp-OGfSYA' -> 'C:\Users\GordonWoodhull\AppData\Local\Temp\ge9-follow-zjVugg\quarto-hub-3rU6CpJf'[39m
+[36m [2m❯[22m createProjectFolder src/core/create-folder.ts:[2m117:3[22m[39m
+    [90m115|[39m     [35mawait[39m repo[33m.[39m[34mshutdown[39m()[33m.[39m[35mcatch[39m(() [33m=>[39m {})[33m;[39m
+    [90m116|[39m   }
+    [90m117|[39m   [35mawait[39m fs[33m.[39m[34mrename[39m(tmpRoot[33m,[39m root)[33m;[39m
+    [90m   |[39m   [31m^[39m
+    [90m118|[39m   [35mreturn[39m root[33m;[39m
+    [90m119|[39m }
+[90m [2m❯[22m src/core/follower.test.ts:[2m189:18[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/core/follower.test.ts[2m > [22mmoved message, event log, and legacy folders[2m > [22mshows the mode in a persistent status item
+[31m[1mError[22m: EPERM: operation not permitted, rename 'C:\Users\GordonWoodhull\AppData\Local\Temp\ge9-follow-74iC1k\.quarto-hub-tmp-GcQUYq' -> 'C:\Users\GordonWoodhull\AppData\Local\Temp\ge9-follow-74iC1k\quarto-hub-4BSmvKdJ'[39m
+[36m [2m❯[22m createProjectFolder src/core/create-folder.ts:[2m117:3[22m[39m
+    [90m115|[39m     [35mawait[39m repo[33m.[39m[34mshutdown[39m()[33m.[39m[35mcatch[39m(() [33m=>[39m {})[33m;[39m
+    [90m116|[39m   }
+    [90m117|[39m   [35mawait[39m fs[33m.[39m[34mrename[39m(tmpRoot[33m,[39m root)[33m;[39m
+    [90m   |[39m   [31m^[39m
+    [90m118|[39m   [35mreturn[39m root[33m;[39m
+    [90m119|[39m }
+[90m [2m❯[22m mirrorOf src/core/follower.test.ts:[2m50:16[22m[39m
+[90m [2m❯[22m src/core/follower.test.ts:[2m207:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/core/project-sync.test.ts[2m > [22mProjectSync: hub to disk (syncIndex)[2m > [22mwrites a file whose index entry appears, and removes a file whose entry is deleted
+[31m[1mAssertionError[22m: expected [] to deep equally contain ObjectContaining{…}[39m
+
+[32m- Expected:[39m
+ObjectContaining {
+  "event": "created",
+  "path": "docs/new.qmd",
+  "source": "hub",
+}
+
+[31m+ Received:[39m
+[]
+
+[36m [2m❯[22m src/core/project-sync.test.ts:[2m272:32[22m[39m
+    [90m270|[39m     [35mawait[39m seeder[33m.[39m[34mputFile[39m([32m'docs/new.qmd'[39m[33m,[39m [32m'from the hub\n'[39m)[33m;[39m
+    [90m271|[39m     await waitFor(async () => (await readText(path.join(root, 'docs/ne…
+    [90m272|[39m     expect(await events(root)).toContainEqual(expect.objectContaining(…
+    [90m   |[39m                                [31m^[39m
+    [90m273|[39m     [35mawait[39m seeder[33m.[39m[34mremoveFile[39m([32m'docs/new.qmd'[39m)[33m;[39m
+    [90m274|[39m     await waitFor(async () => (await readText(path.join(root, 'docs/ne…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/core/clone/clone-modes.test.ts[2m > [22mthe moved message and the event log (specs 14, events)[2m > [22meach decision writes its event to events.jsonl
+[31m[1mError[22m: timed out waiting for edit reaching the doc[39m
+[36m [2m❯[22m waitFor src/core/test-support.ts:[2m140:38[22m[39m
+    [90m138|[39m     [35mconst[39m v [33m=[39m [35mawait[39m [34mcheck[39m()[33m;[39m
+    [90m139|[39m     [35mif[39m (v) [35mreturn[39m v [35mas[39m [33mNonNullable[39m[33m<[39m[33mT[39m[33m>[39m[33m;[39m
+    [90m140|[39m     if (Date.now() > deadline) throw new Error(`timed out waiting for …
+    [90m   |[39m                                      [31m^[39m
+    [90m141|[39m     [35mawait[39m [34msleep[39m([34m50[39m)[33m;[39m
+    [90m142|[39m   }
+[90m [2m❯[22m src/core/clone/clone-modes.test.ts:[2m323:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m11 passed[39m[22m[90m (15)[39m
+[2m      Tests [22m [1m[31m6 failed[39m[22m[2m | [22m[1m[32m121 passed[39m[22m[90m (127)[39m
+[2m   Start at [22m 05:41:56
+[2m   Duration [22m 121.08s[2m (transform 2.36s, setup 0ms, import 6.75s, tests 243.52s, environment 2ms)[22m
+
