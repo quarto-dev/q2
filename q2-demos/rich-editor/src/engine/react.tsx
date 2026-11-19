@@ -62,6 +62,7 @@ import {
   fieldOf,
   HOLDER,
   markIslands,
+  WRAP_ATTR,
   pointOnLine,
   positionAt,
   readMouseSelection,
@@ -204,8 +205,11 @@ export interface LineElement {
   /**
    * What the line's element is shown in, with whatever else goes around it
    * (a figure's caption under its image). What it adds can't be edited.
+   * `attrs` go on the outermost element it gives: they mark what it adds
+   * as the line's, so a mouse selection that ends in it takes it in (see
+   * `readMouseSelection`).
    */
-  wrap?: (line: ReactNode) => ReactNode
+  wrap?: (line: ReactNode, attrs: Record<string, string>) => ReactNode
   /**
    * The line has no text to edit, and is only what `wrap` puts around
    * nothing (a figure with no caption, which is its image alone): it has
@@ -256,7 +260,9 @@ export function Lines({ name, text, className, as = 'p', lineElement, renderAtom
     const prefix = linePrefix(line, 0)
     const element = prefix === '' ? undefined : lineElement?.(prefix, i)
     if (element?.textless) {
-      put(<Fragment key={i}>{element.wrap?.(null)}</Fragment>, [], i)
+      // Not marked as the line's: the line has no caret position to take
+      // it in by, so a selection ends before it or after it.
+      put(<Fragment key={i}>{element.wrap?.(null, {})}</Fragment>, [], i)
       return
     }
     const textStart = at + prefix.length
@@ -277,7 +283,7 @@ export function Lines({ name, text, className, as = 'p', lineElement, renderAtom
       />
     )
     if (element?.wrap) {
-      put(<Fragment key={i}>{element.wrap(field)}</Fragment>, [], i)
+      put(<Fragment key={i}>{element.wrap(field, { [WRAP_ATTR]: '' })}</Fragment>, [], i)
       return
     }
     put(field, element?.parents ?? (element?.parent ? [element.parent] : []), i)
