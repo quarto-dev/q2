@@ -99,7 +99,7 @@ export function createGitProbe(opts: ProbeOptions): NodeGitProbe {
     const r = await run(args, input);
     if (r.code !== 0) {
       if (/not a git repository|dubious ownership|safe\.directory/i.test(r.stderr)) {
-        throw new GitUnavailableError(r.stderr.trim().split('\n')[0]);
+        throw new GitUnavailableError(r.stderr.trim().split('\n')[0] ?? 'git unavailable');
       }
       throw new Error(`git ${args[0]} failed (${r.code}): ${r.stderr.trim()}`);
     }
@@ -126,8 +126,8 @@ export function createGitProbe(opts: ProbeOptions): NodeGitProbe {
       const [toplevel, prefix, ...paths] = lines;
       if (!toplevel) throw new GitUnavailableError('not inside a work tree');
       const markers = [
-        ...LOCK_MARKERS.map((name, i) => ({ name, kind: 'lock' as const, path: paths[i] })),
-        ...STATE_MARKERS.map((name, i) => ({ name, kind: 'state' as const, path: paths[LOCK_MARKERS.length + i] })),
+        ...LOCK_MARKERS.map((name, i) => ({ name, kind: 'lock' as const, path: paths[i]! })),
+        ...STATE_MARKERS.map((name, i) => ({ name, kind: 'state' as const, path: paths[LOCK_MARKERS.length + i]! })),
       ];
       let jj = false;
       try {
@@ -137,9 +137,9 @@ export function createGitProbe(opts: ProbeOptions): NodeGitProbe {
       }
       const r: Resolved = {
         toplevel,
-        prefix: prefix.replace(/\/$/, ''),
+        prefix: (prefix ?? '').replace(/\/$/, ''),
         markers,
-        reflogPath: paths[names.length - 1],
+        reflogPath: paths[names.length - 1]!,
         jj,
       };
       resolvedSync = r;
@@ -215,7 +215,7 @@ export function createGitProbe(opts: ProbeOptions): NodeGitProbe {
         const tab = rec.indexOf('\t');
         const [mode, type, blob] = rec.slice(0, tab).split(' ');
         if (type !== 'blob' || (mode !== '100644' && mode !== '100755')) continue;
-        files.push({ path: toForwardSlashes(rec.slice(tab + 1)), blob, mode });
+        files.push({ path: toForwardSlashes(rec.slice(tab + 1)), blob: blob!, mode });
       }
       return files;
     },
@@ -235,7 +235,7 @@ export function createGitProbe(opts: ProbeOptions): NodeGitProbe {
           pos = nl + 1;
           if (header[1] === 'missing') continue;
           const size = Number(header[2]);
-          result.set(header[0], new Uint8Array(buf.subarray(pos, pos + size)));
+          result.set(header[0]!, new Uint8Array(buf.subarray(pos, pos + size)));
           pos += size + 1; // the content is followed by a newline
         }
       }
@@ -246,14 +246,14 @@ export function createGitProbe(opts: ProbeOptions): NodeGitProbe {
       const { reflogPath } = await resolve();
       const entries = parseReflog(reflogPath);
       if (!entries) return null;
-      const tail = entries.length > 0 ? { sha: entries[entries.length - 1].sha, lines: entries.length } : null;
+      const tail = entries.length > 0 ? { sha: entries[entries.length - 1]!.sha, lines: entries.length } : null;
       const subjects = (from: number) => entries.slice(from).map((e) => e.subject);
       if (!mark) return { subjects: subjects(0), tail, markFound: true };
       if (mark.lines !== undefined && mark.lines <= entries.length && entries[mark.lines - 1]?.sha === mark.sha) {
         return { subjects: subjects(mark.lines), tail, markFound: true };
       }
       for (let i = entries.length - 1; i >= 0; i--) {
-        if (entries[i].sha === mark.sha) return { subjects: subjects(i + 1), tail, markFound: true };
+        if (entries[i]!.sha === mark.sha) return { subjects: subjects(i + 1), tail, markFound: true };
       }
       return { subjects: subjects(0), tail, markFound: false };
     },
