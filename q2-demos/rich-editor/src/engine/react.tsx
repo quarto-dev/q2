@@ -881,11 +881,29 @@ export function useFieldEditor(
       // mouse selection there is the user's, and is left alone.
       if (selection && !byMouse && selectionOutside(root) !== 'none') writeSelection(root, selection)
     }
-    const onMouseDown = () => {
+    // Whether this drag's selection is extended here rather than by the
+    // browser (see `onMouseDown`).
+    let extending = false
+    const onMouseDown = (e: MouseEvent) => {
       dragging = true
       byMouse = true
+      // A double click past the end of a line's text: Firefox selects the
+      // whole line, and a drag from there extends nothing. Put the caret at
+      // the end of the text, as Chromium and WebKit do, and extend the
+      // selection from there as the mouse moves.
+      const end = e.detail === 2 ? pastLineEnd(root, e.clientX, e.clientY) : null
+      extending = end !== null
+      if (!end) return
+      e.preventDefault()
+      doc.getSelection()?.setBaseAndExtent(end.node, end.offset, end.node, end.offset)
+    }
+    const onMouseMove = (e: MouseEvent) => {
+      if (!extending || !(e.buttons & 1)) return
+      const at = doc.caretPositionFromPoint?.(e.clientX, e.clientY)
+      if (at && root.contains(at.offsetNode)) doc.getSelection()?.extend(at.offsetNode, at.offset)
     }
     const onMouseUp = () => {
+      extending = false
       if (!dragging) return
       dragging = false
       syncSelection()
@@ -911,6 +929,7 @@ export function useFieldEditor(
     root.addEventListener('focus', onFocus)
     root.addEventListener('keyup', syncSelection)
     root.addEventListener('mousedown', onMouseDown)
+    doc.addEventListener('mousemove', onMouseMove)
     doc.addEventListener('mouseup', onMouseUp)
     doc.addEventListener('keydown', onKeyDown)
     doc.addEventListener('selectionchange', syncSelection)
@@ -926,6 +945,7 @@ export function useFieldEditor(
       root.removeEventListener('focus', onFocus)
       root.removeEventListener('keyup', syncSelection)
       root.removeEventListener('mousedown', onMouseDown)
+      doc.removeEventListener('mousemove', onMouseMove)
       doc.removeEventListener('mouseup', onMouseUp)
       doc.removeEventListener('keydown', onKeyDown)
       doc.removeEventListener('selectionchange', syncSelection)
@@ -1021,6 +1041,22 @@ function atStart(field: HTMLElement, node: Node, offset: number): boolean {
   range.selectNodeContents(field)
   range.setEnd(node, offset)
   return range.toString().replaceAll(HOLDER, '') === ''
+}
+
+/**
+ * The DOM point at the end of a field's text when (`x`, `y`) is past it,
+ * to the right of the text's last line; otherwise null.
+ */
+function pastLineEnd(root: HTMLElement, x: number, y: number): { node: Node; offset: number } | null {
+  const doc = root.ownerDocument
+  const at = doc.caretPositionFromPoint?.(x, y)
+  const field = at ? fieldOf(root, at.offsetNode) : null
+  if (!at || !field || !atEnd(field, at.offsetNode, at.offset)) return null
+  const end = edge(field, 'end')
+  const range = doc.createRange()
+  range.setStart(end.node, end.offset)
+  const caret = range.getClientRects()[0] ?? range.getBoundingClientRect()
+  return x > caret.right + 1 ? end : null
 }
 
 /** Whether a DOM point is at the very end of `field`'s text. */
