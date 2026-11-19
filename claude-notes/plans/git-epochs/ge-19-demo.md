@@ -229,14 +229,14 @@ rules of `.claude/rules/hub-client-tests.md` apply to every end-to-end test; no 
 
 **Phase 1: tests first**
 
-- [ ] Add the dependencies (xterm.js and its fit addon, node-pty, ws if needed) to `quarto-hub-vscode`; regenerate
+- [x] Add the dependencies (xterm.js and its fit addon, node-pty, ws if needed) to `quarto-hub-vscode`; regenerate
   `package-lock.json` with `npm install` from the repository root.
 - [ ] Write the unit tests of the table above and the end-to-end tests E1 to E8; see them fail (missing modules, then
   wrong behavior).
 
 **Phase 2: the environment**
 
-- [ ] The journal builder and content: the papers (prose, numbers, R and Python code with fixed seeds), the
+- [x] The journal builder and content: the papers (prose, numbers, R and Python code with fixed seeds), the
   micrograph on both branches (generated once by an R script kept in `demo/journal/`, committed as PNG), the
   branches, `_quarto.yml`, the rv and uv project files and locks.
 - [ ] Setup: `rv sync`, `uv sync`, the kernelspec, the checks and advice.
@@ -330,3 +330,14 @@ Setup gotchas: macOS `sed -i` needs a suffix argument, so scripts use `perl -pi 
 the WASM chain took about 10 minutes in this worktree.
 
 Phase 1 and later: not started.
+
+### Phase 1 and 2, first slice (2026-11-19)
+
+Landed on the branch: the dependencies (`@xterm/xterm` 6.0.0, `@xterm/addon-fit` 0.11.0, `node-pty` 1.1.0, `ws` 8.23.0,
+`@types/ws`), the `demo` and `test:demo` scripts, `demo/tsconfig.json` (added to `typecheck`), and the vitest include for
+`demo/tests/unit/`. Unit tests written first (seen failing on missing modules) and passing: layout, captions and strip,
+invariants, setup, and the journal builder (30 tests). The journal content is in `demo/src/journal-content.ts`; the
+micrograph PNGs, `micrograph.R`, `pyproject.toml`, `uv.lock`, `rproject.toml`, and `rv.lock` are under `demo/journal/`.
+The R paper uses only `ggplot2` and base `stats` (`lm`), not lme4, because the rv project installs only
+ggplot2, knitr, and jsonlite. Still unwritten from the Phase 1 test list: terminal server, observer, driver, reset
+unit tests, and the end-to-end tests E1 to E8.

@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'demo/tests/unit/**/*.test.ts'],
     // Tests that start an in-process hub and several repos need room.
     testTimeout: 30_000,
   },

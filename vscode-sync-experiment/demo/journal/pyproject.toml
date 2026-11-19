@@ -1,0 +1,6 @@
+[project]
+name = "journal-mycodynamics"
+version = "0.1.0"
+description = "Python environment for the Journal of Theoretical Mycodynamics demo"
+requires-python = ">=3.11"
+dependencies = ["plotnine>=0.14", "numpy", "pandas", "ipykernel"]

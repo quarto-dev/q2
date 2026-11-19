@@ -1,0 +1,7 @@
+[project]
+name = "mycodynamics-r"
+r_version = "4.3"
+repositories = [
+    { alias = "PPM", url = "https://packagemanager.posit.co/cran/latest" },
+]
+dependencies = ["ggplot2", "knitr", "jsonlite"]

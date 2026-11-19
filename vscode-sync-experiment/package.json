@@ -89,14 +89,16 @@
   "scripts": {
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e && tsc --noEmit -p demo",
     "package": "npx @vscode/vsce package --no-dependencies",
     "clean": "rm -rf dist *.vsix",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node e2e/run.mjs",
     "test:e2e:cross": "node e2e/run.mjs --cross",
-    "test:e2e:timing": "node e2e/run.mjs --timing"
+    "test:e2e:timing": "node e2e/run.mjs --timing",
+    "demo": "node demo/launch.mjs",
+    "test:demo": "node demo/run-tests.mjs"
   },
   "dependencies": {
     "@automerge/automerge": "^3.5.0",
@@ -105,7 +107,11 @@
     "@automerge/automerge-repo-storage-nodefs": "2.6.0-alpha.5",
     "@quarto/quarto-automerge-schema": "*",
     "@quarto/quarto-git-epochs": "*",
-    "@quarto/share-url": "*"
+    "@quarto/share-url": "*",
+    "@xterm/xterm": "6.0.0",
+    "@xterm/addon-fit": "0.11.0",
+    "node-pty": "1.1.0",
+    "ws": "8.23.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
@@ -114,6 +120,7 @@
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.28.0",
     "typescript": "~5.9.3",
-    "vitest": "^4.0.17"
+    "vitest": "^4.0.17",
+    "@types/ws": "^8.18.1"
   }
 }
