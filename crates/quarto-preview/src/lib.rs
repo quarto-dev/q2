@@ -755,6 +755,7 @@ fn build_hub_config(config: &PreviewConfig) -> HubConfig {
         socket_group: None,
         socket_allow_uid: Vec::new(),
         upstream: config.upstream.clone(),
+        git_tracking: quarto_hub::git_epochs::GitTracking::Ignore,
     }
 }
 

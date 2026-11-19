@@ -2057,6 +2057,12 @@ where
     let ctx_for_sync = ctx.clone();
     let ctx_for_watch = ctx.clone();
     let ctx_for_shutdown = ctx.clone();
+    let ctx_for_git = ctx.clone();
+    if let Some(cb) = on_file_changed.as_ref() {
+        // A git switch that flips a file fires the same post-sync callback
+        // the watcher fires (GE-3).
+        ctx.set_git_callback(cb.clone());
+    }
 
     // Build the hub router *before* state binding so extensions can
     // register routes that consume `State<SharedContext>`. After
@@ -2125,6 +2131,27 @@ where
         }
         let _ = shutdown_tx.send(true);
     });
+
+    // Git controller driver (GE-3): ticks every 250 ms while a decision is
+    // pending or the gate is closed, every 5 s otherwise. It never syncs.
+    let git_handle = if has_project && ctx_for_git.git_tracking() {
+        let mut shutdown_rx = shutdown_rx.clone();
+        Some(tokio::spawn(async move {
+            loop {
+                let next = ctx_for_git.git_tick().await;
+                tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_millis(next)) => {}
+                    _ = shutdown_rx.changed() => {
+                        if *shutdown_rx.borrow() {
+                            break;
+                        }
+                    }
+                }
+            }
+        }))
+    } else {
+        None
+    };
 
     // Spawn periodic sync task if interval is configured and we have a project
     let periodic_sync_handle = if has_project {
@@ -2240,11 +2267,24 @@ where
         debug!("Waiting for file watcher task to finish...");
         let _ = handle.await;
     }
+    if let Some(handle) = git_handle {
+        let _ = handle.await;
+    }
 
     // Perform final sync on shutdown (no-op in standalone mode)
     if has_project {
         info!("Performing final filesystem sync before shutdown...");
         let sync_result = ctx_for_shutdown.sync_all().await;
+        if ctx_for_shutdown.git_tracking()
+            && sync_result.skipped > 0
+            && sync_result.total_synced() == 0
+        {
+            let unwritten = ctx_for_shutdown.git_unwritten_docs().await;
+            tracing::warn!(
+                unwritten,
+                "git operation in progress: the shutdown flush was skipped; {unwritten} document(s) hold edits that did not reach disk"
+            );
+        }
         info!(
             synced = sync_result.total_synced(),
             errors = sync_result.errors.len(),
@@ -2318,6 +2358,7 @@ async fn run_file_watcher(
             event = watcher.recv() => {
                 match event {
                     Some(WatchEvent::Modified(path)) => {
+                        ctx.git_note_activity(&path).await;
                         debug!(path = %path.display(), "File change detected, syncing...");
                         match ctx.sync_file(&path).await {
                             Ok(Some(result)) => {

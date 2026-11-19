@@ -211,6 +211,7 @@ async fn run_hub(args: HubArgs) -> Result<()> {
         socket_group: args.socket_group.clone(),
         socket_allow_uid: args.socket_allow_uid.clone(),
         upstream: None,
+        git_tracking: quarto_hub::git_epochs::GitTracking::Ignore,
     };
 
     server::run_server(storage, config).await?;

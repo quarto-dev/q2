@@ -11,6 +11,7 @@ pub mod admin_doc_id_recovery;
 pub mod admin_record_documents;
 pub mod admin_scan_real_store;
 pub mod auth_bearer;
+pub mod git_epochs;
 pub mod login_nonce;
 pub mod session_auth;
 pub mod support;

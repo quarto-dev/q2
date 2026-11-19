@@ -9,6 +9,7 @@ use quarto_git_epochs::probe::{
 };
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 const T0: u64 = 1_000_000;
 
@@ -112,7 +113,7 @@ fn state_marker(now: u64, name: &str) -> MarkerState {
 struct Rig {
     probe: FakeProbe,
     c: Controller<FakeProbe>,
-    logs: Rc<RefCell<Vec<String>>>,
+    logs: Arc<Mutex<Vec<String>>>,
     now: u64,
 }
 
@@ -122,10 +123,10 @@ impl Rig {
     }
     fn with(f: impl FnOnce(&mut ControllerOptions)) -> Self {
         let probe = FakeProbe::new();
-        let logs = Rc::new(RefCell::new(Vec::new()));
+        let logs = Arc::new(Mutex::new(Vec::new()));
         let l = logs.clone();
         let mut opts = ControllerOptions {
-            log: Some(Box::new(move |m| l.borrow_mut().push(m.to_string()))),
+            log: Some(Box::new(move |m| l.lock().unwrap().push(m.to_string()))),
             ..Default::default()
         };
         f(&mut opts);
@@ -149,7 +150,8 @@ impl Rig {
     }
     fn stale_logs(&self) -> usize {
         self.logs
-            .borrow()
+            .lock()
+            .unwrap()
             .iter()
             .filter(|l| l.to_lowercase().contains("stale"))
             .count()
@@ -229,13 +231,14 @@ fn a_head_change_seen_by_a_tick_makes_the_gate_pending() {
 
 #[test]
 fn holds_files_whose_disk_differs_frozen_at_pending_entry() {
-    let differing = Rc::new(RefCell::new(vec!["a.qmd".to_string(), "b.qmd".to_string()]));
+    let differing = Arc::new(Mutex::new(vec!["a.qmd".to_string(), "b.qmd".to_string()]));
     let d = differing.clone();
-    let mut r =
-        Rig::with(|o| o.disk_differs_from_synced = Some(Box::new(move || d.borrow().clone())));
+    let mut r = Rig::with(|o| {
+        o.disk_differs_from_synced = Some(Box::new(move || d.lock().unwrap().clone()))
+    });
     r.probe.set_markers(vec![lock(r.now, 0)]);
     assert_eq!(r.check().held, vec!["a.qmd", "b.qmd"]);
-    differing.borrow_mut().push("c.qmd".into()); // git rewrote another file meanwhile
+    differing.lock().unwrap().push("c.qmd".into()); // git rewrote another file meanwhile
     assert_eq!(r.check().held, vec!["a.qmd", "b.qmd"]);
 }
 
@@ -402,12 +405,12 @@ fn the_decision_carries_the_tracked_files_at_head() {
 fn goes_off_with_one_message_when_git_is_missing_or_refused() {
     let probe = FakeProbe::new();
     probe.0.borrow_mut().head = Err(ProbeError::Unavailable("git: command not found".into()));
-    let logs = Rc::new(RefCell::new(Vec::new()));
+    let logs = Arc::new(Mutex::new(Vec::new()));
     let l = logs.clone();
     let mut c = Controller::new(
         probe,
         ControllerOptions {
-            log: Some(Box::new(move |m| l.borrow_mut().push(m.to_string()))),
+            log: Some(Box::new(move |m| l.lock().unwrap().push(m.to_string()))),
             ..Default::default()
         },
     );
@@ -417,7 +420,7 @@ fn goes_off_with_one_message_when_git_is_missing_or_refused() {
     assert_eq!(g.reason, Some(GateReason::GitMissing));
     c.tick(T0);
     c.tick(T0);
-    assert_eq!(logs.borrow().len(), 1);
+    assert_eq!(logs.lock().unwrap().len(), 1);
 }
 
 #[test]

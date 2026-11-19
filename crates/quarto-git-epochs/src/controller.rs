@@ -18,11 +18,11 @@ use std::collections::BTreeSet;
 #[derive(Default)]
 pub struct ControllerOptions {
     /// Paths whose disk content differs from their last synced content. Read once, when the gate goes pending.
-    pub disk_differs_from_synced: Option<Box<dyn Fn() -> Vec<String>>>,
+    pub disk_differs_from_synced: Option<Box<dyn Fn() -> Vec<String> + Send>>,
     /// True for a path the peer itself just wrote; such events do not restart the quiet window.
-    pub is_own_write: Option<Box<dyn Fn(&str) -> bool>>,
+    pub is_own_write: Option<Box<dyn Fn(&str) -> bool + Send>>,
     /// One-line diagnostics (stale lock, git off). Default: `tracing::warn!`.
-    pub log: Option<Box<dyn Fn(&str)>>,
+    pub log: Option<Box<dyn Fn(&str) + Send>>,
     /// Tick interval while nothing is pending. Default [`IDLE_TICK_MS`].
     pub idle_tick_ms: Option<u64>,
 }

@@ -16,6 +16,7 @@ use tracing::{debug, info, warn};
 use crate::auth::{self, AuthConfig, AuthState, OidcClaims};
 use crate::discovery::ProjectFiles;
 use crate::error::Result;
+use crate::git_epochs::{GitEpochs, GitStatus, GitTracking, now_ms};
 use crate::index::{IndexDocument, load_or_create_index};
 use crate::peer::spawn_peer_connection;
 use crate::resource::{create_binary_document, detect_mime_type};
@@ -23,7 +24,8 @@ use crate::revocation::{RevocationLedger, RevocationStatus};
 use crate::session::{SessionKeys, SessionLifetimes, VerifiedSession};
 use crate::storage::StorageManager;
 use crate::sync::{
-    DiskWritePolicy, SyncAllResult, SyncResult, sync_all_documents, sync_file_by_path,
+    DiskWritePolicy, NoGate, SyncAllResult, SyncGate, SyncResult, sync_all_documents_gated,
+    sync_file_by_path_gated,
 };
 use crate::sync_state::SyncState;
 use crate::upstream::{HubSharePolicy, UpstreamConfig};
@@ -178,6 +180,13 @@ pub struct HubConfig {
     ///
     /// Default: `None`.
     pub upstream: Option<UpstreamConfig>,
+
+    /// Whether the hub follows git: pauses sync behind the git gate, registers
+    /// docs under their blobs, and flips the index pointer when a checkout
+    /// changes a file (GE-3). The CLI flag is `--git` (GE-4).
+    ///
+    /// Default: [`GitTracking::Ignore`].
+    pub git_tracking: GitTracking,
 }
 
 impl Default for HubConfig {
@@ -203,6 +212,7 @@ impl Default for HubConfig {
             socket_group: None,
             socket_allow_uid: Vec::new(),
             upstream: None,
+            git_tracking: GitTracking::Ignore,
         }
     }
 }
@@ -279,6 +289,10 @@ pub struct HubContext {
     /// See [`HubConfig::disk_write_policy`]. Applied to every filesystem
     /// sync this context performs (initial, periodic, watcher-triggered).
     disk_write_policy: DiskWritePolicy,
+
+    /// Git-aware sync (GE-3); `None` unless [`HubConfig::git_tracking`] is
+    /// `Track` in project mode and git accepted the directory.
+    git: Option<Arc<GitEpochs>>,
 }
 
 impl HubContext {
@@ -403,26 +417,52 @@ impl HubContext {
             index
         };
 
+        // Git-aware sync (GE-3): only in project mode, and only when git
+        // accepts the directory (otherwise one log line and ordinary sync).
+        let git = match (&project_root, config.git_tracking) {
+            (Some(root), GitTracking::Track) if config.single_file.is_none() => {
+                let g = GitEpochs::new(root);
+                if g.is_active() {
+                    Some(g)
+                } else {
+                    warn!("git tracking requested but git cannot be used here; syncing as usual");
+                    None
+                }
+            }
+            _ => None,
+        };
+
         // Reconcile discovered files with the index and perform initial sync
-        // (only in project mode)
-        let sync_state =
-            if let (Some(project_root), Some(project_files)) = (&project_root, &project_files) {
+        // (only in project mode). While a git marker is set both are skipped
+        // and retried on the first open tick (G5).
+        let sync_state = if let (Some(project_root), Some(project_files)) =
+            (&project_root, &project_files)
+        {
+            let gate: &dyn SyncGate = match &git {
+                Some(g) => g.as_ref(),
+                None => &NoGate,
+            };
+            let mut sync_state = SyncState::load(storage.hub_dir())?;
+            if gate.closed() {
+                info!("git operation in progress: startup sync deferred");
+                if let Some(g) = &git {
+                    g.mark_startup_pending();
+                }
+            } else {
                 let reconciled =
                     reconcile_files_with_index(&repo, &index, project_files, project_root).await?;
                 if reconciled > 0 {
                     info!(count = reconciled, "Reconciled new files with index");
                 }
 
-                // Initialize sync state from hub directory
-                let mut sync_state = SyncState::load(storage.hub_dir())?;
-
                 // Perform initial sync on startup
-                let sync_result = sync_all_documents(
+                let sync_result = sync_all_documents_gated(
                     &repo,
                     &index,
                     project_root,
                     &mut sync_state,
                     config.disk_write_policy,
+                    gate,
                 )
                 .await;
 
@@ -431,12 +471,13 @@ impl HubContext {
                     errors = sync_result.errors.len(),
                     "Initial filesystem sync complete"
                 );
+            }
 
-                Some(Mutex::new(sync_state))
-            } else {
-                info!("Standalone mode: skipping file reconciliation and initial sync");
-                None
-            };
+            Some(Mutex::new(sync_state))
+        } else {
+            info!("Standalone mode: skipping file reconciliation and initial sync");
+            None
+        };
 
         // Spawn background tasks to connect to configured peers
         for peer_url in &config.peers {
@@ -470,7 +511,7 @@ impl HubContext {
             crate::session::unix_now(),
         )?;
 
-        Ok(Self {
+        let ctx = Self {
             storage,
             project_files,
             repo,
@@ -485,7 +526,177 @@ impl HubContext {
             revocations,
             register_root_ws,
             disk_write_policy,
-        })
+            git,
+        };
+        ctx.git_run_startup().await;
+        Ok(ctx)
+    }
+
+    // ---- git-aware sync (GE-3) ----
+
+    /// The gate every filesystem sync passes through: the git controller when
+    /// tracking, otherwise one that never closes.
+    fn sync_gate(&self) -> &dyn SyncGate {
+        match &self.git {
+            Some(g) => g.as_ref(),
+            None => &NoGate,
+        }
+    }
+
+    /// Whether this hub follows git.
+    pub fn git_tracking(&self) -> bool {
+        self.git.is_some()
+    }
+
+    /// The git state, for tests and the status route (GE-4). `None` unless tracking.
+    pub fn git_epochs(&self) -> Option<&Arc<GitEpochs>> {
+        self.git.as_ref()
+    }
+
+    /// Tracking, paused, pending, the markers holding the gate, and the last
+    /// 20 decisions (G33).
+    pub fn git_status(&self) -> GitStatus {
+        match &self.git {
+            Some(g) => g.status(),
+            None => GitStatus {
+                tracking: false,
+                paused: false,
+                pending: false,
+                markers: Vec::new(),
+                decisions: Vec::new(),
+            },
+        }
+    }
+
+    /// Register a callback fired for each file a git switch flips (the same
+    /// callback the file watcher fires after a sync).
+    pub fn set_git_callback(&self, cb: crate::server::OnFileChangedCallback) {
+        if let Some(g) = &self.git {
+            g.set_callback(cb);
+        }
+    }
+
+    /// One controller tick at `now_ms`; returns the delay before the next one.
+    pub async fn git_tick_at(self: &Arc<Self>, now_ms: u64) -> u64 {
+        match &self.git {
+            Some(g) => g.tick(self, now_ms).await,
+            None => 5_000,
+        }
+    }
+
+    /// One controller tick now; returns the delay before the next one.
+    pub async fn git_tick(self: &Arc<Self>) -> u64 {
+        self.git_tick_at(now_ms()).await
+    }
+
+    /// A watcher event for `path` (absolute). A write the hub made itself
+    /// (disk hash equal to the checkpoint hash) does not restart the quiet
+    /// window (G1).
+    pub async fn git_note_activity(&self, path: &Path) {
+        self.git_note_activity_at(path, now_ms()).await;
+    }
+
+    /// [`Self::git_note_activity`] with an explicit clock, for tests.
+    pub async fn git_note_activity_at(&self, path: &Path, at_ms: u64) {
+        let (Some(g), Some(root)) = (&self.git, self.storage.project_root()) else {
+            return;
+        };
+        let Ok(rel) = path.strip_prefix(root) else {
+            return;
+        };
+        let rel = quarto_util::to_forward_slashes(rel);
+        let own = self.is_own_write(&rel, path).await;
+        g.note_activity(&rel, own, at_ms);
+    }
+
+    async fn is_own_write(&self, rel: &str, abs: &Path) -> bool {
+        let Some(doc_id) = self.index.get_file(rel) else {
+            return false;
+        };
+        let Some(ss) = &self.sync_state else {
+            return false;
+        };
+        let Ok(ss) = ss.try_lock() else {
+            return false;
+        };
+        let Some(hash) = ss.get_content_hash(&doc_id) else {
+            return false;
+        };
+        let Ok(bytes) = std::fs::read(abs) else {
+            return false;
+        };
+        hash == crate::sync_state::sha256_hash(&String::from_utf8_lossy(&bytes))
+            || hash == crate::resource::compute_hash(&bytes)
+    }
+
+    /// How many documents hold edits that have not reached disk (a skipped
+    /// shutdown flush logs this).
+    pub async fn git_unwritten_docs(&self) -> usize {
+        let Some(ss) = &self.sync_state else {
+            return 0;
+        };
+        let ss = ss.lock().await;
+        let mut n = 0;
+        for doc_id in self.index.get_all_files().values() {
+            let Ok(id) =
+                std::str::FromStr::from_str(doc_id.strip_prefix("automerge:").unwrap_or(doc_id))
+            else {
+                continue;
+            };
+            if let Ok(Some(h)) = self.repo.find(id).await {
+                let heads = h.with_document(|d| d.get_heads());
+                if ss.get_heads(doc_id).is_some_and(|c| c != heads) {
+                    n += 1;
+                }
+            }
+        }
+        n
+    }
+
+    /// Reconcile, initial sync (if it was deferred), sidecar, and registry
+    /// registration. A no-op unless tracking; retried on a tick while a git
+    /// marker holds the gate.
+    pub(crate) async fn git_run_startup(&self) {
+        let Some(g) = &self.git else {
+            return;
+        };
+        if g.gate_closed() {
+            g.mark_startup_pending();
+            return;
+        }
+        if let (Some(root), Some(files), Some(ss)) = (
+            self.storage.project_root(),
+            &self.project_files,
+            &self.sync_state,
+        ) && g.is_startup_pending()
+        {
+            match reconcile_files_with_index(&self.repo, &self.index, files, root).await {
+                Ok(n) if n > 0 => info!(count = n, "Reconciled new files with index"),
+                Ok(_) => {}
+                Err(e) => warn!(error = %e, "deferred reconcile failed"),
+            }
+            let mut ss = ss.lock().await;
+            let r = sync_all_documents_gated(
+                &self.repo,
+                &self.index,
+                root,
+                &mut ss,
+                self.disk_write_policy,
+                g.as_ref(),
+            )
+            .await;
+            info!(synced = r.total_synced(), "Deferred initial sync complete");
+        }
+        g.clear_startup_pending();
+        g.startup(&self.repo, &self.index).await;
+    }
+
+    pub(crate) fn sync_state_mutex(&self) -> Option<&Mutex<SyncState>> {
+        self.sync_state.as_ref()
+    }
+
+    pub(crate) fn disk_write_policy(&self) -> DiskWritePolicy {
+        self.disk_write_policy
     }
 
     /// Stop the samod repo, waiting for every pending storage write to finish.
@@ -543,13 +754,23 @@ impl HubContext {
         let Some(ref sync_state_mutex) = self.sync_state else {
             return SyncAllResult::default();
         };
+        // The gate is asked before the lock so a pending decision never
+        // queues syncs behind it (G5).
+        if self.sync_gate().closed() {
+            debug!("Git gate closed: full sync skipped");
+            return SyncAllResult {
+                skipped: self.index.get_all_files().len(),
+                ..SyncAllResult::default()
+            };
+        }
         let mut sync_state = sync_state_mutex.lock().await;
-        sync_all_documents(
+        sync_all_documents_gated(
             &self.repo,
             &self.index,
             project_root,
             &mut sync_state,
             self.disk_write_policy,
+            self.sync_gate(),
         )
         .await
     }
@@ -573,14 +794,19 @@ impl HubContext {
         let Some(ref sync_state_mutex) = self.sync_state else {
             return Ok(None);
         };
+        if self.sync_gate().closed() {
+            debug!(path = %file_path.display(), "Git gate closed: file sync skipped");
+            return Ok(Some(SyncResult::Skipped));
+        }
         let mut sync_state = sync_state_mutex.lock().await;
-        sync_file_by_path(
+        sync_file_by_path_gated(
             &self.repo,
             &self.index,
             file_path,
             &project_root,
             &mut sync_state,
             self.disk_write_policy,
+            self.sync_gate(),
         )
         .await
     }

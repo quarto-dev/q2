@@ -76,6 +76,10 @@ quarto-util = { workspace = true }
 quarto-system-runtime = { workspace = true }
 dirs = "6"
 
+# Git epochs (GE-3): classifier, arrival rules, sidecar registry, git probe, gate controller
+quarto-git-epochs = { path = "../quarto-git-epochs" }
+sha1 = "0.11"
+
 # Project file classification shared with the language server (bd-n0uth2zt)
 quarto-project-files.workspace = true
 

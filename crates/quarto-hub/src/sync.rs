@@ -51,6 +51,44 @@ pub enum DiskWritePolicy {
     ReadOnly,
 }
 
+/// Hooks the git gate (GE-3, G5) and the tests thread through a sync pass.
+///
+/// A sync reads the file, then asks [`SyncGate::closed_after_read`] before it
+/// merges anything or writes the disk, so a git marker that appears between the
+/// read and the write wins. The reads sit behind this seam so a test can inject
+/// the sharing violation Windows reports for a file git holds open.
+pub trait SyncGate: Sync {
+    /// Whether the gate is closed right now (markers set or a decision pending).
+    fn closed(&self) -> bool {
+        false
+    }
+
+    /// Called after `path` was read and before anything merges or is written.
+    /// Returning `true` skips the file with no change to the doc or the disk.
+    fn closed_after_read(&self, _path: &Path) -> bool {
+        false
+    }
+
+    /// Whether the periodic pass leaves `path` for the next tick (recently
+    /// modified right after a git operation, G1).
+    fn skip_file(&self, _path: &Path) -> bool {
+        false
+    }
+
+    fn read_text(&self, path: &Path) -> std::io::Result<String> {
+        std::fs::read_to_string(path)
+    }
+
+    fn read_bytes(&self, path: &Path) -> std::io::Result<Vec<u8>> {
+        std::fs::read(path)
+    }
+}
+
+/// The gate for a hub that does not track git: always open, plain reads.
+pub struct NoGate;
+
+impl SyncGate for NoGate {}
+
 /// Synchronize a single document with its corresponding filesystem file.
 ///
 /// This implements the unified sync algorithm:
@@ -83,16 +121,30 @@ pub fn sync_document(
     sync_state: &mut SyncState,
     policy: DiskWritePolicy,
 ) -> Result<SyncResult> {
+    sync_document_gated(doc_handle, file_path, sync_state, policy, &NoGate)
+}
+
+/// [`sync_document`] behind a [`SyncGate`].
+pub fn sync_document_gated(
+    doc_handle: &DocHandle,
+    file_path: &Path,
+    sync_state: &mut SyncState,
+    policy: DiskWritePolicy,
+    gate: &dyn SyncGate,
+) -> Result<SyncResult> {
     let doc_id = doc_handle.document_id().to_string();
 
     // Read filesystem content first (outside of with_document to avoid holding lock while doing IO)
-    let fs_content = std::fs::read_to_string(file_path).map_err(|e| {
+    let fs_content = gate.read_text(file_path).map_err(|e| {
         Error::Sync(format!(
             "failed to read file {}: {}",
             file_path.display(),
             e
         ))
     })?;
+    if gate.closed_after_read(file_path) {
+        return Ok(SyncResult::Skipped);
+    }
 
     let result = doc_handle.with_document(|doc| {
         // 1. Get sync checkpoint (use current heads if none exists or invalid)
@@ -242,6 +294,7 @@ pub fn sync_document(
     });
 
     match &result {
+        Ok(SyncResult::Skipped) => {}
         Ok(SyncResult::NoChanges) => {
             debug!(doc_id = %doc_id, path = %file_path.display(), "Sync complete: no changes");
         }
@@ -303,16 +356,30 @@ pub fn sync_binary_document(
     sync_state: &mut SyncState,
     policy: DiskWritePolicy,
 ) -> Result<SyncResult> {
+    sync_binary_document_gated(doc_handle, file_path, sync_state, policy, &NoGate)
+}
+
+/// [`sync_binary_document`] behind a [`SyncGate`].
+pub fn sync_binary_document_gated(
+    doc_handle: &DocHandle,
+    file_path: &Path,
+    sync_state: &mut SyncState,
+    policy: DiskWritePolicy,
+    gate: &dyn SyncGate,
+) -> Result<SyncResult> {
     let doc_id = doc_handle.document_id().to_string();
 
     // Read filesystem content
-    let fs_content = std::fs::read(file_path).map_err(|e| {
+    let fs_content = gate.read_bytes(file_path).map_err(|e| {
         Error::Sync(format!(
             "failed to read binary file {}: {}",
             file_path.display(),
             e
         ))
     })?;
+    if gate.closed_after_read(file_path) {
+        return Ok(SyncResult::Skipped);
+    }
     let fs_hash = compute_hash(&fs_content);
 
     let result = doc_handle.with_document(|doc| {
@@ -411,6 +478,7 @@ pub fn sync_binary_document(
     });
 
     match &result {
+        Ok(SyncResult::Skipped) => {}
         Ok(SyncResult::NoChanges) => {
             debug!(doc_id = %doc_id, path = %file_path.display(), "Binary sync: no changes");
         }
@@ -460,24 +528,32 @@ pub fn sync_document_auto(
     sync_state: &mut SyncState,
     policy: DiskWritePolicy,
 ) -> Result<SyncResult> {
+    sync_document_auto_gated(doc_handle, file_path, sync_state, policy, &NoGate)
+}
+
+/// [`sync_document_auto`] behind a [`SyncGate`].
+pub fn sync_document_auto_gated(
+    doc_handle: &DocHandle,
+    file_path: &Path,
+    sync_state: &mut SyncState,
+    policy: DiskWritePolicy,
+    gate: &dyn SyncGate,
+) -> Result<SyncResult> {
     let doc_type = doc_handle.with_document(|doc| detect_document_type(doc));
 
-    match doc_type {
-        DocumentType::Text => sync_document(doc_handle, file_path, sync_state, policy),
-        DocumentType::Binary => sync_binary_document(doc_handle, file_path, sync_state, policy),
-        DocumentType::Invalid => {
-            // Try to infer from file extension
-            let is_binary = file_path
-                .extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(resource::is_binary_extension);
-
-            if is_binary {
-                sync_binary_document(doc_handle, file_path, sync_state, policy)
-            } else {
-                sync_document(doc_handle, file_path, sync_state, policy)
-            }
-        }
+    let binary = match doc_type {
+        DocumentType::Text => false,
+        DocumentType::Binary => true,
+        // Try to infer from file extension
+        DocumentType::Invalid => file_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(resource::is_binary_extension),
+    };
+    if binary {
+        sync_binary_document_gated(doc_handle, file_path, sync_state, policy, gate)
+    } else {
+        sync_document_gated(doc_handle, file_path, sync_state, policy, gate)
     }
 }
 
@@ -505,6 +581,31 @@ pub async fn sync_file_by_path(
     sync_state: &mut SyncState,
     policy: DiskWritePolicy,
 ) -> Result<Option<SyncResult>> {
+    sync_file_by_path_gated(
+        repo,
+        index,
+        file_path,
+        project_root,
+        sync_state,
+        policy,
+        &NoGate,
+    )
+    .await
+}
+
+/// [`sync_file_by_path`] behind a [`SyncGate`].
+pub async fn sync_file_by_path_gated(
+    repo: &Repo,
+    index: &IndexDocument,
+    file_path: &Path,
+    project_root: &Path,
+    sync_state: &mut SyncState,
+    policy: DiskWritePolicy,
+    gate: &dyn SyncGate,
+) -> Result<Option<SyncResult>> {
+    if gate.closed() {
+        return Ok(Some(SyncResult::Skipped));
+    }
     // Convert absolute path to relative path for index lookup
     let relative_path = match file_path.strip_prefix(project_root) {
         Ok(rel) => rel.to_string_lossy().to_string(),
@@ -553,7 +654,7 @@ pub async fn sync_file_by_path(
     };
 
     // Sync the document (auto-detects text vs binary)
-    let result = sync_document_auto(&doc_handle, file_path, sync_state, policy)?;
+    let result = sync_document_auto_gated(&doc_handle, file_path, sync_state, policy, gate)?;
 
     // Save sync state
     sync_state.save()?;
@@ -669,7 +770,24 @@ pub async fn sync_all_documents(
     sync_state: &mut SyncState,
     policy: DiskWritePolicy,
 ) -> SyncAllResult {
+    sync_all_documents_gated(repo, index, project_root, sync_state, policy, &NoGate).await
+}
+
+/// [`sync_all_documents`] behind a [`SyncGate`]: nothing is read or written
+/// while the gate is closed, and the gate is asked again before each file.
+pub async fn sync_all_documents_gated(
+    repo: &Repo,
+    index: &IndexDocument,
+    project_root: &Path,
+    sync_state: &mut SyncState,
+    policy: DiskWritePolicy,
+    gate: &dyn SyncGate,
+) -> SyncAllResult {
     let mut result = SyncAllResult::default();
+    if gate.closed() {
+        result.skipped += index.get_all_files().len();
+        return result;
+    }
 
     // Get all file mappings from the index
     let files = index.get_all_files();
@@ -695,6 +813,10 @@ pub async fn sync_all_documents(
             result.rejected += 1;
             continue;
         };
+        if gate.closed() || gate.skip_file(&file_path) {
+            result.skipped += 1;
+            continue;
+        }
 
         // Check if file exists. A missing disk file under an index entry is
         // one of two things, distinguished by the sync checkpoint:
@@ -874,8 +996,9 @@ pub async fn sync_all_documents(
         }
 
         // Sync the document (auto-detects text vs binary)
-        match sync_document_auto(&doc_handle, &file_path, sync_state, policy) {
+        match sync_document_auto_gated(&doc_handle, &file_path, sync_state, policy, gate) {
             Ok(sync_result) => match sync_result {
+                SyncResult::Skipped => result.skipped += 1,
                 SyncResult::NoChanges => result.no_changes += 1,
                 SyncResult::AutomergeChanged { .. } => result.automerge_changed += 1,
                 SyncResult::FilesystemChanged { .. } => result.filesystem_changed += 1,
@@ -1094,6 +1217,10 @@ pub struct SyncError {
 /// Result of a sync operation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SyncResult {
+    /// The git gate was closed (or closed after the read): nothing merged,
+    /// nothing written.
+    Skipped,
+
     /// No changes detected - both automerge and filesystem unchanged since last sync.
     NoChanges,
 

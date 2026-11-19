@@ -15,6 +15,7 @@ pub mod discovery {
     pub use quarto_project_files::discovery::*;
 }
 pub mod error;
+pub mod git_epochs;
 pub mod index;
 pub mod login_state;
 pub mod peer;

@@ -2,7 +2,7 @@
 title: 'GE-3: Hub integration: gate, registry, arrival, flips, unlist and relist'
 date: 2026-11-18
 description: 'Wires the quarto-git-epochs crate into the hub so that sync pauses behind the git gate, the hub registers and attaches docs through the shared sidecar, flips the pointer on checkout, and unlists and relists files in one index change per switch.'
-status: approved
+status: done
 depends-on: [ge-2]
 lane: B
 epic: ../2026-11-18-git-epochs-epic.md
@@ -136,63 +136,63 @@ with real temp git repos, a real `HubContext`, and real Automerge docs, in both 
 
 ### Configuration and the gate
 
-- [ ] Add a config option for git tracking in `HubConfig` (an enum with `Ignore` and `Track`, default `Ignore`; the CLI
+- [x] Add a config option for git tracking in `HubConfig` (an enum with `Ignore` and `Track`, default `Ignore`; the CLI
   exposure is GE-4) and thread it to `HubContext`.
-- [ ] Tests first for the gate. Add a gate parameter (a small trait object) to `sync_file_by_path` and
+- [x] Tests first for the gate. Add a gate parameter (a small trait object) to `sync_file_by_path` and
   `sync_all_documents` so each re-checks the markers after reading a file and before any write, under the
   `sync_state` mutex; update the call sites at `context.rs:420`, `:547`, and `:580`, and gate `reconcile_files_with_index` (`:405-410`) the
   same way.
-- [ ] In `HubContext::sync_all` and `sync_file`, call the controller\'s synchronous `check()` from GE-2 first
+- [x] In `HubContext::sync_all` and `sync_file`, call the controller\'s synchronous `check()` from GE-2 first
   (markers and reflog tail, no subprocess): skip held paths, skip everything while the gate is closed. Skip the shutdown flush and the initial sync while a marker is set; the initial sync
   retries on the first open tick.
-- [ ] Drive the controller from the existing loops in `server.rs` (the periodic tick at `:2281` and each watcher batch);
+- [x] Drive the controller from the existing loops in `server.rs` (the periodic tick at `:2281` and each watcher batch);
   while the controller reports pending or paused, also tick it from a short internal timer (250 ms) that never syncs.
   The 5 s sync loop is unchanged. If Gate 0 item 7 shows that git releases `index.lock` before it writes the reflog,
   the periodic loop also skips any file modified in the last 500 ms.
 
 ### Registry and startup
 
-- [ ] A hub adapter module (`git_epochs.rs`) owns the controller, the sidecar handle, and the registry operations from
+- [x] A hub adapter module (`git_epochs.rs`) owns the controller, the sidecar handle, and the registry operations from
   the crate. Create the sidecar lazily, write its pointer key, and write `repo` (root commits and prefix from the
   probe) when tracking is on.
-- [ ] At startup register each participating file\'s doc under its blob at generation 0 with put-if-absent, text and
+- [x] At startup register each participating file\'s doc under its blob at generation 0 with put-if-absent, text and
   binary, only when the disk blob equals the HEAD blob (a dirty file stays unregistered until a commit-type
   decision registers it); skip files with no index entry.
 
 ### Arrival and the switch
 
-- [ ] Implement the order of a switch: create or attach the doc (attach waits up to 5 s, then treats the doc as absent),
+- [x] Implement the order of a switch: create or attach the doc (attach waits up to 5 s, then treats the doc as absent),
   write the checkpoint (heads and disk hash), apply one index change, mark the capture stale, fire the post-sync
   callback, register in the registry. Add `IndexDocument::apply_switch` that performs flips, removals, re-listings,
   and additions in a single transaction.
-- [ ] Commit-type decisions only move the registry forward in one change; no index write.
-- [ ] Unlist a tracked file git removed and relist it on return; never delete a doc.
-- [ ] Binary participation with byte hashes; blob ids of disk bytes computed directly, content from the probe.
-- [ ] The ReadOnly and WriteBack variants of arrival; the fork rule; the generation rule.
-- [ ] Failure injection hooks and the fallback to ordinary sync with a logged reason (D14).
-- [ ] The `reset --hard` retire step (G9 step 2 with S equal to B and T different): retire the entry in the sidecar\'s
+- [x] Commit-type decisions only move the registry forward in one change; no index write.
+- [x] Unlist a tracked file git removed and relist it on return; never delete a doc.
+- [x] Binary participation with byte hashes; blob ids of disk bytes computed directly, content from the probe.
+- [x] The ReadOnly and WriteBack variants of arrival; the fork rule; the generation rule.
+- [x] Failure injection hooks and the fallback to ordinary sync with a logged reason (D14).
+- [x] The `reset --hard` retire step (G9 step 2 with S equal to B and T different): retire the entry in the sidecar\'s
   `retired` map, create a doc from disk with generation max plus one, register it, flip the pointer, and keep the
   discarded edits in the retired doc. `git stash` push takes the same path.
-- [ ] The hub\'s step 4 and step 5 behavior and the colocated jj fallback (see the tests): join and warn at step 4;
+- [x] The hub\'s step 4 and step 5 behavior and the colocated jj fallback (see the tests): join and warn at step 4;
   new doc from disk, flip, unregistered at step 5 and under jj; move forward with an absent old entry gets
   generation max plus one.
-- [ ] After each sidecar sync, re-evaluate every attached file (G7) and run the narrow repair rule; a doc another
+- [x] After each sidecar sync, re-evaluate every attached file (G7) and run the narrow repair rule; a doc another
   peer retired stays attached.
-- [ ] Ignore watcher events whose disk hash equals the hash the hub last wrote (the checkpoint content hash) when
+- [x] Ignore watcher events whose disk hash equals the hash the hub last wrote (the checkpoint content hash) when
   waiting out the quiet window.
 - [x] `contained_join` (`sync.rs:571`) also rejects `.git`, `.quarto-hub`, and `.vscode` segments
   (case-insensitive), every backslash, and segments that contain `:` or end in a dot or a space; add a `symlink_metadata`
   walk so that an existing symlink or junction parent is rejected (the function is purely lexical today); a rejected key
   is skipped and logged.
-- [ ] Put the file reader behind a seam for the unreadable-file test, and keep the arrival waits outside the
+- [x] Put the file reader behind a seam for the unreadable-file test, and keep the arrival waits outside the
   `sync_state` mutex (see the tests).
-- [ ] Add `HubContext::git_status()` (tracking, paused, pending, marker names, the last 20 decisions with the shared
+- [x] Add `HubContext::git_status()` (tracking, paused, pending, marker names, the last 20 decisions with the shared
   event names and `discarded`) and a held-decision test hook; GE-4 and GE-13 consume both. Record both names in the notes.
 
 ### Verification
 
-- [ ] Every test above passes; the existing `quarto-hub` suite is unchanged with tracking off.
-- [ ] Run the Windows cross-clippy. If the crate cannot cross-check from unix (a build script compiling C), say so in
+- [x] Every test above passes; the existing `quarto-hub` suite is unchanged with tracking off.
+- [x] Run the Windows cross-clippy. If the crate cannot cross-check from unix (a build script compiling C), say so in
   Notes from the run so a Windows run can cover it (GE-15).
 
 ## Gates
@@ -225,16 +225,70 @@ behavior (GE-6, GE-7); anything in the extension.
 
 ## Notes from the run
 
-**Paused after the first slice (session 1).** Done and committed on `ge/03-hub-integration`: the G36 path hardening.
-`contained_join` now rejects every backslash, `.git`/`.quarto-hub`/`.vscode` segments (ASCII case-insensitive),
-segments with `:` or a trailing dot or space, and non-UTF-8 segments; the new `contained_join_checked` adds the
-`symlink_metadata` walk (an existing symlink or junction ancestor below the root is rejected; a missing ancestor is
-fine) and is what `sync_all_documents` calls. Tests were written first (the first build failed on the missing
-function; the lexical cases would have failed on the old code). Gates: `cargo clippy -p quarto-hub --all-targets -- -D
-warnings` clean; `cargo nextest run -p quarto-hub` 510 passed. Not yet run: Windows cross-clippy, `cargo xtask lint`.
-`sync_file_by_path` (the watcher path) does not use the key check; it only looks up keys already in the index, which
-the next `sync_all` vets. Revisit if the gate work touches it.
+**Session 1.** The G36 path hardening (`contained_join` rejects every backslash, `.git`/`.quarto-hub`/`.vscode`
+segments case-insensitively, segments with `:` or a trailing dot or space, and non-UTF-8 segments; the new
+`contained_join_checked` adds the `symlink_metadata` walk and is what `sync_all_documents` calls). Tests first.
 
-**Not started:** everything else in the checklist (config option, gate, adapter module and registry, arrival and
-switch, `apply_switch`, status accessor). Read the GE-2 notes first: the controller reports through `GateState` and
-`Action::Decision`, and the verdict is computed by the hub with `classify`.
+**Session 2 (the rest).** What landed, in the order I built it:
+
+- `crates/quarto-hub/src/git_epochs.rs` (new): `GitTracking`, `GitEpochs` (controller, sidecar handle, last tracked
+  blobs, the 20-decision ring, test hooks), the `SyncGate` implementation, startup registration, the decision
+  pipeline, G7 re-evaluation and repair. `HubConfig::git_tracking` (default `Ignore`; the three struct literals in
+  `quarto-hub/src/main.rs`, `quarto/src/commands/hub.rs`, and `quarto-preview/src/lib.rs` set it explicitly).
+- `sync.rs`: `SyncGate` (closed, `closed_after_read`, `skip_file`, `read_text`, `read_bytes`) and `NoGate`; every
+  sync function has a `_gated` form and the old name delegates with `NoGate`. A new `SyncResult::Skipped`. The gate is
+  asked after the read and before the doc merges or the disk is written, so a marker that appears in between wins.
+- `HubContext`: `sync_all` and `sync_file` ask the gate before they take the `sync_state` mutex; `new()` defers the
+  reconcile and the initial sync while a marker is set (`startup_pending`, retried on the first open tick).
+- `IndexDocument::apply_switch`: flips, unlists, relists, and new files, plus `staleness = true` on the capture
+  entries of flipped paths, in one transaction.
+- `server.rs`: a driver task ticks the controller (250 ms while pending, 5 s idle); the watcher calls
+  `git_note_activity` before it syncs; the git callback is the watcher's `OnFileChangedCallback`; a skipped shutdown
+  flush logs how many documents held unwritten edits.
+- `quarto-git-epochs` (GE-2 crate), two small changes the hub needed: the three `ControllerOptions` closures are now
+  `+ Send` (the hub keeps the controller in a shared context), and `registry::doc::apply_in` applies ops inside a
+  caller's transaction (samod hands out an `Automerge`, not an `AutoCommit`). Three controller tests that captured
+  `Rc<RefCell<..>>` use `Arc<Mutex<..>>`.
+
+**Names GE-4 and GE-13 consume.** `HubContext::git_status() -> GitStatus { tracking, paused, pending, markers,
+decisions }` (each `DecisionRecord { kind, time_ms, files, step, discarded }`, kinds from the shared vocabulary, serde
+`Serialize`); `HubContext::git_epochs()` returns the `Arc<GitEpochs>` whose public `hooks: GitTestHooks` carry the
+held-decision hook (`hold_decisions`), `after_read`, `fail_attach`, `fail_read`, `attach_timeout_ms`, and the
+ordering log `events`. `HubContext::git_tick_at(now_ms)`/`git_tick()` drive the controller; `git_note_activity[_at]`
+and `set_git_callback` are the other entry points. `GitEpochs::sidecar_doc()` exposes the registry doc.
+
+**Deviations and details chosen** (the plan left them open; confirm):
+
+- **Tests were written alongside the first implementation, not strictly before it.** I built the gate and the
+  adapter, then wrote the 26 hub tests; five of them failed on the first run for real reasons (listed next), so the
+  suite does discriminate, but this was not a pure red-first pass.
+- A decision with an empty reflog slice and no blob change (a lock or marker with no rewrite: `git add`, a fetch) is
+  ignored. The first version treated disk edits at such a decision as git's rewrite and re-baselined them away; the
+  marker test caught it. With no reflog at all, "no blob change" is the same test.
+- Step 1 (no registered doc) registers only when the disk equals the HEAD blob, and never under colocated jj, where
+  no blob matches the files. Step 5 and the jj fallback leave the doc unregistered; a later commit registers it at
+  max plus one through `plan_move_forward`.
+- The "held" set is recomputed at decision time from checkpoints (disk differs from the last synced content) and
+  unioned with the controller's list, because the controller's `disk_differs_from_synced` callback cannot await the
+  tokio `sync_state` mutex. While the gate is closed the hub syncs nothing, so held files need no separate skip.
+- The 500 ms mtime skip applies only to the periodic pass and only within 2 s of the gate having been closed, so an
+  ordinary save is never delayed. Tests that sync right after a switch sleep 700 ms or use the watcher path.
+- Registry writes (register, retire, move forward, repair) follow the index change in the order checkpoint, index,
+  registry. The ordering hook records `checkpoint:<path>`, `index`, `registry`.
+- The startup generation is `next_generation` (0 for a path with no entries), so restarting beside other peers'
+  entries never beats an established doc.
+- Where the plan says "fires the callback once", the callback fires once per flipped path.
+- `quarto-preview` and `quarto` set `git_tracking: Ignore`; GE-4 adds the flag.
+
+**Gates.** `cargo clippy -p quarto-hub -p quarto-preview -p quarto -p quarto-git-epochs --all-targets -- -D warnings`
+clean. `cargo nextest run -p quarto-hub`: 536 passed (510 before this plan, 26 new in `git_epochs::`; no skips).
+`cargo nextest run -p quarto-git-epochs`: 81 passed. `cargo xtask lint`: clean (1759 files). Windows cross-clippy:
+`quarto-git-epochs` is clean; `quarto-hub` **cannot cross-check from macOS** (the `aws-lc-sys` C build fails), so GE-15
+`a5` and the Windows run cover it. The only platform-specific code is the test helper `link_dir`, a
+`#[cfg(unix)]`/`#[cfg(not(unix))]` pair (the symlink-parent test case runs on unix only; the junction case is a
+Windows run). Not run: the dependents of `quarto-hub` (`quarto-preview`, `quarto`, `quarto-hub-lsp`,
+`quarto-hub-provider`); recommended before the push.
+
+**Not exercised.** The shutdown-flush log line (the skip itself is covered by the gate test). The 250 ms driver
+task and the watcher wiring in `server.rs`, which compile and are used by GE-4's binary test. No real-binary check:
+the plan has no CLI surface, as it says.

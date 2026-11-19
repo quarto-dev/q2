@@ -74,11 +74,10 @@ pub fn view_of<D: ReadDoc>(d: &D) -> RegistryView {
     }
 }
 
-/// Applies the ops in one Automerge change. Returns whether anything was written.
-pub fn apply(d: &mut AutoCommit, ops: &[RegistryOp]) -> bool {
-    if ops.is_empty() {
-        return false;
-    }
+/// Writes the ops into `d`, inside whatever change the caller has open (a `Transaction`, or an `AutoCommit`
+/// before its commit). The hub applies a sidecar change through a samod `DocHandle`, which hands out an
+/// `Automerge` and a transaction rather than an `AutoCommit`.
+pub fn apply_in<T: Transactable + ReadDoc>(d: &mut T, ops: &[RegistryOp]) {
     let entries = map_id(d, "entries").expect("sidecar has an entries map");
     let retired = map_id(d, "retired").expect("sidecar has a retired map");
     for op in ops {
@@ -96,6 +95,14 @@ pub fn apply(d: &mut AutoCommit, ops: &[RegistryOp]) -> bool {
             }
         }
     }
+}
+
+/// Applies the ops in one Automerge change. Returns whether anything was written.
+pub fn apply(d: &mut AutoCommit, ops: &[RegistryOp]) -> bool {
+    if ops.is_empty() {
+        return false;
+    }
+    apply_in(d, ops);
     d.commit();
     true
 }

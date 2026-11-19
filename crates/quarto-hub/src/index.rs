@@ -235,6 +235,48 @@ impl IndexDocument {
         })
     }
 
+    /// Apply every index change of one git switch in a single transaction
+    /// (G13): `puts` point a path at a doc (flips, re-listings, new files),
+    /// `removes` unlist a path, and each path in `stale` that has a capture
+    /// entry gets `staleness = true`. Nothing is written when all three are
+    /// empty.
+    pub fn apply_switch(
+        &self,
+        puts: &[(String, String)],
+        removes: &[String],
+        stale: &[String],
+    ) -> Result<()> {
+        if puts.is_empty() && removes.is_empty() && stale.is_empty() {
+            return Ok(());
+        }
+        self.handle.with_document(|doc| {
+            doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+                let files_obj = match tx.get(ROOT, FILES_KEY)? {
+                    Some((_, obj)) => obj,
+                    None => tx.put_object(ROOT, FILES_KEY, ObjType::Map)?,
+                };
+                for (path, doc_id) in puts {
+                    tx.put(&files_obj, path.as_str(), doc_id.as_str())?;
+                }
+                for path in removes {
+                    if tx.get(&files_obj, path.as_str())?.is_some() {
+                        tx.delete(&files_obj, path.as_str())?;
+                    }
+                }
+                if let Some((_, captures_obj)) = tx.get(ROOT, CAPTURES_KEY)? {
+                    for path in stale {
+                        if let Some((_, entry)) = tx.get(&captures_obj, path.as_str())? {
+                            tx.put(&entry, capture_field::STALENESS, true)?;
+                        }
+                    }
+                }
+                Ok(())
+            })
+            .map(|_| ())
+            .map_err(|e| Error::IndexDocument(format!("failed to apply switch: {:?}", e)))
+        })
+    }
+
     /// Check if a file path exists in the index.
     pub fn has_file(&self, path: &str) -> bool {
         self.handle.with_document(|doc| {
