@@ -36,6 +36,9 @@ param(
 $ErrorActionPreference = 'Continue'   # native stderr must not abort the script (PS 5.1)
 Set-StrictMode -Version 2
 
+# `powershell -File run.ps1 -Only b1,b2` delivers one string 'b1,b2' (Windows PowerShell 5.1), so split on commas.
+if ($Only) { $Only = @($Only | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+
 $wantA = (-not $Only) -or (@($Only | Where-Object { $_ -like 'a*' }).Count -gt 0)
 $wantB = (-not $Only) -or (@($Only | Where-Object { $_ -like 'b*' }).Count -gt 0)
 $ra = if ($wantA) { 'yes' } else { 'no' }
