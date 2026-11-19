@@ -51,7 +51,9 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc --noEmit",
     "package": "npx @vscode/vsce package --no-dependencies",
-    "clean": "rm -rf dist *.vsix"
+    "clean": "rm -rf dist *.vsix",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@automerge/automerge": "^3.5.0",
@@ -64,6 +66,7 @@
     "@types/node": "^24.10.1",
     "@types/vscode": "^1.90.0",
     "esbuild": "^0.28.0",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.17"
   }
 }

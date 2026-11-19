@@ -34,12 +34,11 @@ import {
 } from '@quarto/quarto-automerge-schema';
 import { Binding, bindings, type TextDoc } from './binding';
 import type { Identity } from './presence';
+import { META_DIR, isIgnoredPath } from './core/ignore';
 
-export const META_DIR = '.quarto-hub';
+export { META_DIR };
 const META_FILE = 'project.json';
 const SYNC_SERVER = 'wss://sync.automerge.org';
-/** Never synced in either direction (device-local state, render output, tooling). */
-const IGNORED_TOP_LEVEL = new Set([META_DIR, '.vscode', '.git', '.quarto', '_site', '_book', '_freeze', 'node_modules', '.DS_Store']);
 
 interface ProjectMeta {
   indexDocId: string;
@@ -62,11 +61,6 @@ function makeRepo(root: string, online: boolean): Repo {
     storage: new NodeFSStorageAdapter(path.join(root, META_DIR, 'automerge')),
     network: online ? [new BrowserWebSocketClientAdapter(SYNC_SERVER)] : [],
   });
-}
-
-function isIgnored(rel: string): boolean {
-  const top = rel.split('/')[0] ?? '';
-  return rel === '' || IGNORED_TOP_LEVEL.has(top) || top.startsWith(META_DIR) || rel.split('/').some((seg) => seg === '.DS_Store');
 }
 
 async function findDoc<T>(repo: Repo, docId: string): Promise<DocHandle<T>> {
@@ -212,7 +206,7 @@ export class ProjectSync {
   private relOf(uri: vscode.Uri): string | null {
     if (uri.scheme !== 'file') return null;
     const rel = path.relative(this.root, uri.fsPath).split(path.sep).join('/');
-    if (rel.startsWith('..') || path.isAbsolute(rel) || isIgnored(rel)) return null;
+    if (rel.startsWith('..') || path.isAbsolute(rel) || isIgnoredPath(rel)) return null;
     return rel;
   }
 
@@ -265,7 +259,7 @@ export class ProjectSync {
     for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
       const abs = path.join(dir, entry.name);
       const rel = path.relative(this.root, abs).split(path.sep).join('/');
-      if (isIgnored(rel)) continue;
+      if (isIgnoredPath(rel)) continue;
       if (entry.isDirectory()) await this.listDiskFiles(abs, out);
       else if (entry.isFile()) out.push(rel);
     }
