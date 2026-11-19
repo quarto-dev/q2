@@ -147,6 +147,21 @@ test.describe('other blocks', () => {
     // (That it's the HTML `q2 render` writes is in `render-parity.spec.ts`.)
   })
 
+  test('a figure is centred in the column, as Quarto 1 centres it', async ({ page }) => {
+    test.fixme(
+      true,
+      "`q2 render` doesn't centre figures: its stylesheet lost Quarto 1's rule for `.quarto-figure-center`, and the editor uses that stylesheet",
+    )
+    const editor = await openEditor(page, 'figure-centred')
+
+    const figure = shown(editor, 'div.quarto-figure')
+    await expect(figure.locator('img')).toHaveJSProperty('complete', true)
+    const column = (await figure.boundingBox())!
+    const image = (await figure.locator('img').boundingBox())!
+    expect(image.width).toBeLessThan(column.width / 2)
+    expect(Math.abs(image.x + image.width / 2 - (column.x + column.width / 2))).toBeLessThan(2)
+  })
+
   test("a figure can't be edited yet", async ({ page }) => {
     const editor = await openEditor(page, 'figures')
 
