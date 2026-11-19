@@ -4,6 +4,7 @@ date: 2026-11-18
 description: 'Runs only the new Rust and hub tests of the git epochs epic on a real Windows machine, from a temporary tooling branch that never lands, with specific items and a record of what each one proves.'
 status: approved
 depends-on: [ge-4]
+lane: B
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 

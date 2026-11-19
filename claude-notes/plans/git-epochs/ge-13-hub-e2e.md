@@ -4,6 +4,7 @@ date: 2026-11-18
 description: 'Adds git helpers to the q2-preview-spa e2e harness and writes the automated scenarios of the hub demo, with real git, a flagged preview hub, and two browser guests.'
 status: approved
 depends-on: [ge-4, ge-7]
+lane: B
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 

@@ -4,6 +4,7 @@ date: 2026-11-18
 description: Extends the temporary Windows tooling branch with the TypeScript and extension items, has Gordon run them once on a Windows machine, and records what Windows does and does not prove for the new TypeScript code.
 status: approved
 depends-on: [ge-11, ge-12, ge-15]
+lane: C
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 
@@ -79,7 +80,10 @@ Items marked (agent) run on macOS; items marked (Gordon) need the Windows machin
 - [ ] (agent) Add any missing test for `b2` or `b3` on `ge/16-windows-run-b` first (tests only, no product code; they
   also run on macOS), land it by rebase and fast-forward, and note the commit.
 - [ ] (agent) Bring the tooling branch up to the current tip by merging, never by rebasing a pushed branch:
-  `git switch windows/git-epochs` then `git merge feature/git-epochs`. Record the base commit hash in the notes.
+  `git merge feature/git-epochs` run inside the tooling worktree GE-15 created,
+  `/Users/gordon/src/q2/.worktrees/windows-git-epochs` (the branch is checked out there, so no lane worktree can switch
+  to it; do all tooling work in that worktree, and keep this plan\'s own notes on `ge/16-windows-run-b` in your lane
+  worktree). Record the base commit hash in the notes.
 - [ ] (agent) Extend `scripts/git-epochs-windows/run.ps1` with items `b1` to `b7`. Each uses `Invoke-Logged` and
   `Add-Result`, fills `proves` and `does_not_prove`, and runs alone with `-Only`.
 - [ ] (agent) Extend the instructions page on the tooling branch, `claude-notes/plans/git-epochs/windows-run-instructions.md`

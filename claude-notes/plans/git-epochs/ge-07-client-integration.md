@@ -4,6 +4,7 @@ date: 2026-11-18
 description: 'Wires the swap module into quarto-sync-client and every consumer that holds a file handle or writes by path, adds the replaced-file notice and the paused-for-git banner to the web surfaces, and covers the branch service and the MCP edit tool.'
 status: approved
 depends-on: [ge-6]
+lane: C
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 

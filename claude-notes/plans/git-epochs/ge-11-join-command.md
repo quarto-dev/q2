@@ -4,6 +4,7 @@ date: 2026-11-18
 description: One command turns a ticket, a URL, or a share link into a bound and syncing extension folder in the right mode, with a way to leave, and spawns a local join proxy for remote hubs.
 status: approved
 depends-on: [ge-10]
+lane: A
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 

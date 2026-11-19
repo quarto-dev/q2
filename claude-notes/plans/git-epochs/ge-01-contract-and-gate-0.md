@@ -4,6 +4,7 @@ date: 2026-11-18
 description: 'Runs the Gate 0 checks that the contract depends on, writes the normative registry and index contract, adds the version 4 index schema in TypeScript and Rust, creates the shared fixtures and the quarto-git-epochs package skeleton, and runs the remaining Gate 0 checks that decide how the epic proceeds.'
 status: approved
 depends-on: []
+lane: A
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 

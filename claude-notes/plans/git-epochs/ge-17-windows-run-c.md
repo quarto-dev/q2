@@ -4,6 +4,7 @@ date: 2026-11-18
 description: Runs the scripted end-to-end scenario and the permanent Playwright VS Code subset on a Windows machine, repeats every earlier Windows item on the final code, and records what Windows does and does not prove for the epic.
 status: approved
 depends-on: [ge-14, ge-15, ge-16]
+lane: A
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 
@@ -88,7 +89,9 @@ Items marked (agent) run on macOS; items marked (Gordon) need the Windows machin
 
 - [ ] (agent) Confirm GE-14, GE-15, and GE-16 are complete, and read the notes of all three, including every fix plan
   inserted after the earlier Windows runs.
-- [ ] (agent) Merge the final `feature/git-epochs` tip into `windows/git-epochs` (never rebase the pushed branch) and
+- [ ] (agent) In the tooling worktree `/Users/gordon/src/q2/.worktrees/windows-git-epochs` (GE-15 created it; the branch
+  is checked out there, so do all tooling work in it), merge the final `feature/git-epochs` tip into
+  `windows/git-epochs` (never rebase the pushed branch) and
   record the base commit hash.
 - [ ] (agent) Write the scenario script for `c1` on the tooling branch (a Node script that drives `q2.exe`, the headless
   peer, and `git.exe`, using GE-13\'s steps as the template). Dry-run its logic against the macOS `q2` binary to check

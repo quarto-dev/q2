@@ -249,11 +249,159 @@ GE-16 -> GE-17
 GE-17 -> GE-18
 ```
 
+## Running the lanes
+
+There is no orchestrator. Three workers run the plans, one per lane, each in its own session and worktree, and each
+decides from the integration branch alone what to do next. Everything a worker needs is in this section, the plan, and
+the rules the plan names.
+
+### Lanes
+
+| Lane | Worktree | Plans, in order |
+|---|---|---|
+| A | `/Users/gordon/src/q2/.worktrees/workspace-7` | GE-1, GE-5, GE-9, GE-10, GE-11, GE-14, GE-17, GE-18 |
+| B | `/Users/gordon/src/q2/.worktrees/workspace-8` | GE-6, GE-2, GE-3, GE-4, GE-15, GE-13 |
+| C | `/Users/gordon/src/q2/.worktrees/workspace-9` | GE-8, GE-7, GE-12, GE-16 |
+
+The integration branch `feature/git-epochs` is checked out in `/Users/gordon/src/q2/.worktrees/workspace-6`, the
+integration worktree. Nobody edits or commits there; it changes only when a worker lands a plan (below). Gordon does not
+work in it during a run.
+
+Lane A carries the critical path (GE-1, GE-5, GE-9, GE-10, GE-11, GE-14, GE-17, GE-18). Lane B starts with GE-6 so that
+GE-9 is not waiting on it, then runs the Rust chain. Lane C starts with GE-8 for the same reason. Lanes B and C wait for
+GE-1 and then run without waiting for each other until GE-15 (needs GE-4), GE-13 (needs GE-4 and GE-7), GE-12 (needs
+GE-10), and GE-16 (needs GE-11, GE-12, and GE-15). The assignment is static: a worker never takes a plan from another
+lane.
+
+A plan is **done** when its file on `feature/git-epochs` has `status: done` in its front matter. Every plan lists its
+lane in its front matter (`lane:`) and its dependencies in `depends-on:`.
+
+### The start prompt
+
+Gordon starts a session in a lane worktree and pastes the same text for every lane and every session:
+
+```text
+You are a lane worker for the git-epochs epic. Read
+/Users/gordon/src/q2/.worktrees/workspace-6/claude-notes/plans/2026-11-18-git-epochs-epic.md, section "Running the
+lanes", and follow it exactly: find your lane from this directory, resume or start your next plan, land it, and print the
+handoff. Do not write a handoff to disk and do not use subagents for development. Work unattended unless a stop
+condition in that section applies.
+```
+
+### A session, step by step
+
+1. **Lane.** The lane is the worktree: `pwd` ends in `workspace-7` (A), `workspace-8` (B), or `workspace-9` (C).
+   Anything else: stop. `git status --short` must be empty, or you must be on an unmerged `ge/*` plan branch of your own
+   that is resuming; otherwise stop (blocked: unknown work in the worktree).
+2. **Resume or start.** If the current branch is an unmerged plan branch `ge/NN-…`, resume that plan: read its
+   checklist and "Notes from the run", and `git log feature/git-epochs..HEAD`. Otherwise the next plan is the first
+   plan in your lane\'s list whose file on `feature/git-epochs` lacks `status: done`
+   (`git grep -m1 '^status:' feature/git-epochs -- claude-notes/plans/git-epochs/<file>`; use `git grep`, not
+   `git show REV:path`, which has mangled a path in this environment). If every plan in the lane
+   is done, print a "lane complete" handoff and end.
+3. **Dependencies.** Every plan in the next plan\'s `depends-on` must be done on `feature/git-epochs`. If one is not,
+   print a "waiting" handoff naming each missing plan and its lane, and end the session. Do not poll.
+4. **Step 0, GE-1 only.** If `git merge-base --is-ancestor origin/main feature/git-epochs` fails, bring the integration
+   branch up to date once: `git fetch origin main`, then
+   `git -C /Users/gordon/src/q2/.worktrees/workspace-6 rebase origin/main`. Resolve conflicts, grep the whole tree for
+   conflict markers, and run `cargo build --workspace`; fix nothing else. No other plan starts before GE-1 lands, so
+   nothing races this.
+5. **Branch.** `git switch -c <branch named in the plan\'s Branch line> feature/git-epochs`. Run `npm install` from the
+   repository root when `package-lock.json` or a `package.json` differs from what this worktree last installed, under
+   the Node in `.nvmrc`. Each worktree has its own `target/` and `node_modules/`; the first build is cold.
+6. **Read.** `AGENTS.md`, `.claude/rules/*.md`, `claude-notes/instructions/coding.md` and `testing.md` (and
+   `windows-dev.md`, `writing-notes.md` where the plan touches them), this epic (the decisions the plan lists, "Facts
+   checked", and "Details chosen while writing the plans"), the plan, and the "Notes from the run" of every plan in the
+   plan\'s dependency closure. Re-find the code the plan cites, against the current tip; the code is the source of truth.
+7. **Execute** the plan\'s checklist in order, test first, with the plan\'s gates. Commit at each clean phase boundary
+   without asking (`AGENTS.md`). Keep the checklist boxes and "Notes from the run" current in the plan file as you go,
+   and commit them with the work: they are the durable record, and the next session reads them. Capture long builds and
+   test runs to one log in the scratchpad and inspect it with `grep`, `awk`, and `tail`. A gate that exits 101 with no
+   failing test may be a full disk: check before debugging.
+8. **Land** (below) when the plan\'s exit criteria hold.
+9. **Hand off** (below). Then end the session.
+
+### Landing a plan
+
+Landing is a fast-forward of `feature/git-epochs` in the integration worktree, so the integration worktree\'s files
+always match its branch. Never move that branch with `git branch -f` or `git update-ref`, and never commit in the
+integration worktree.
+
+1. **Reconcile.** Re-read the plan; check every `- [ ]` and `- [x]` against what landed, correct wrong marks, fill
+   "Notes from the run" (what ran, what did not, surprises, the end-to-end invocation and output the plan requires), set
+   `status: done` in the front matter, run `q2 render --strict <the plan files you changed>` and fix everything except
+   the `Q-12-13` lines, and commit.
+2. **Rebase.** `git rebase feature/git-epochs` in the lane worktree. Linear history; no merge commits. Plans in other
+   lanes touch the same files (see "Plans that can run at the same time share files"), so conflicts are expected. After
+   any conflict stop: regenerate `package-lock.json` and `Cargo.lock` with `npm install` and `cargo` instead of merging
+   them by hand, grep the whole tree for conflict markers, and make the next commit conditional on that grep (`&&`).
+3. **Re-test.** If the rebase brought in changes to crates or packages this plan touches, rerun the plan\'s gates before
+   landing; otherwise rerun its fastest gate (clippy for a Rust plan, typecheck and the package tests for a TypeScript
+   one) and `cargo xtask lint`. GE-7 re-does its hub-client changelog commit last, after this rebase, because a rebase
+   changes the hash it records.
+4. **Fast-forward.** `git -C /Users/gordon/src/q2/.worktrees/workspace-6 merge --ff-only <plan branch>`. If it fails
+   because another lane landed first, go back to step 2 (at most five rounds, then stop as blocked). If the integration
+   worktree is not clean and on `feature/git-epochs`, stop as blocked.
+5. **Check** that `git log -1 feature/git-epochs` is your last commit, then `git branch -d <plan branch>`.
+
+Nothing is pushed. The only pushes in the epic are the Windows tooling branch (GE-15 to GE-17) and the final push
+(GE-18), each after Gordon says go.
+
+### Working unattended
+
+Work without asking. Where the plan marks a detail "(detail chosen by the plan author; confirm)" or "(added by the
+second reviewer; confirm)" or "(detail chosen by the third reviewer; confirm)", take the plan\'s choice, record that you
+did in "Notes from the run", and go on. Do not use `AskUserQuestion`. Do not use subagents for development; the one
+use of subagents in the epic is GE-18\'s read-only composition review. Do not open braid strands. Follow Gordon\'s
+standing rules: gate each task with clippy and nextest for the crate (or vitest and typecheck for the package), run no
+workspace-wide test run unprompted, American spelling.
+
+**Stop conditions.** Stop, and print a "blocked" handoff, only for one of these:
+
+- a Gate 0 check fails (GE-1), or the network, a download, or a credential a plan needs is unavailable;
+- a decision in this epic cannot be implemented as written, or implementing a plan would contradict another plan or
+  the contract;
+- code a finished plan landed is defective in a way that blocks yours (do not fix it quietly: record it, and stop);
+- a test cannot be written to fail for the right reason, or cannot be made to pass without weakening it;
+- a step needs Gordon: pushing, the Windows run (GE-15 to GE-17), agreement to run `cargo xtask verify`, the held items
+  and branch deletion (GE-18);
+- the same gate has failed three times with different fixes, or a rebase conflict you cannot resolve with confidence.
+
+On a stop, commit what is sound to the plan branch (a work-in-progress commit is fine), update the checklist and notes
+so the next session can resume, do not land, and print the blocked handoff with the question, the evidence, and your
+recommendation. A plan that stops at a Gordon step (GE-15 to GE-17 wait for the Windows machine) stays on its branch
+across sessions and lands only when its exit criteria hold.
+
+### The handoff
+
+At the end of every session, whether the plan landed, paused, blocked, or is waiting, print one handoff to the console
+and nothing else about the future. **Never write a handoff to a file** (not a note, not the scratchpad, not memory, not
+the plan); the plan\'s checklist and "Notes from the run" hold the durable record, and the handoff only points at it.
+When the context is getting long, stop at the next clean point (commit, update the plan file) and print the handoff
+at once; do not work past the warning.
+
+```text
+HANDOFF  lane <A|B|C> (workspace-N)  <LANDED | PAUSED | BLOCKED | WAITING | LANE COMPLETE>
+Plan:    GE-N <title>  branch <ge/…>  tip <short hash>  (landed as <short hash> on feature/git-epochs, if landed)
+Done:    <two or three lines: what is finished>
+Left:    <what remains in this plan, if anything: the next unchecked item>
+Next:    GE-M for this lane; ready: <yes | no, waiting for GE-X (lane Y)>
+Others:  <anything another lane\'s plan needs that is not obvious from the plan notes, or "none">
+Gordon:  <what you need from Gordon, with your recommendation, or "nothing">
+Resume:  paste the start prompt in workspace-N
+```
+
+### Running the lanes, the first day
+
+Before the first session, Gordon makes sure the three lane worktrees are clean (they are on `parking/workspace-*` now)
+and that workspace-6 is clean and on `feature/git-epochs`. He starts lane A. Lanes B and C can start at the same time:
+each prints a "waiting for GE-1" handoff and ends, and Gordon restarts them when lane A reports GE-1 landed.
+
 ## Running the epic
 
-- **Branches.** Work in a worktree. For a plan, `git switch -c ge/NN-slug feature/git-epochs`, where `NN` is the
-  two-digit plan number. There is no braid strand for plan work (see Held items). When a plan is done, rebase onto
-  `feature/git-epochs` and fast-forward it in. History on the integration line is linear: no merge commits.
+- **Branches.** Three lane workers run the plans in their own worktrees and land them on `feature/git-epochs`; the
+  procedure is [Running the lanes](#running-the-lanes). There is no braid strand for plan work (see Held items).
+  History on the integration line is linear: no merge commits.
 - **No pushes.** Nothing goes to the remote until the whole epic is done and Gordon agrees, except the temporary
   `windows/` branch the Windows plans push after Gordon says go. Never use a silent push; check the remote tip after.
 - **Test first.** Every plan starts with its test specifications and fixtures, runs them to see them fail for the
@@ -285,8 +433,10 @@ GE-17 -> GE-18
   shared files are not dependencies. Rebuild every embedded artifact (the MCP bundle, the preview SPA and WASM, the
   agents docs) at GE-18, because a plan that finished early may have left one stale.
 - **Base.** `feature/git-epochs` was cut from `origin/main` at `1d0042cb2`, and `main` has moved since (17 commits on
-  2026-11-18). Rebase onto `main` before GE-1 starts (linear history), and re-find the file and line numbers cited in
-  these plans: they are as of the base commit.
+  2026-11-18). GE-1\'s worker rebases the integration branch onto `origin/main` once, before any other plan starts (step 0
+  of [Running the lanes](#running-the-lanes)); after that the integration branch is not rebased onto `main` again until
+  GE-18 and Gordon. Every plan\'s worker re-finds the file and line numbers its plan cites against the current
+  integration tip: they are as of the base commit.
 - **Auditing the plans.** After editing plans, check that no plan relies on another that is not in its dependency
   closure: compute each plan\'s transitive `depends-on` and read every mention of a plan outside it (forward references
   in "Unblocks" and "Out of scope" are fine). The review that produced these plans found one hidden coupling this way,

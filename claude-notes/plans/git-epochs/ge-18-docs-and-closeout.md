@@ -4,6 +4,7 @@ date: 2026-11-18
 description: Writes the user docs for git-aware live share and the VS Code extension, reconciles every plan checklist with what landed, runs the final verification and composition review, and prepares the pull request for Gordon without pushing.
 status: approved
 depends-on: [ge-17]
+lane: A
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 
@@ -121,6 +122,7 @@ and the review. Each states what it proves:
 - [ ] **Windows tooling branch.** Confirm the results and the final statement are copied into the notes of GE-15 to
   GE-17, and that nothing from `scripts/git-epochs-windows/` is reachable from `feature/git-epochs`
   (`git log feature/git-epochs -- scripts/git-epochs-windows` prints nothing). Then, only after Gordon agrees, delete
+  the tooling worktree (`git worktree remove /Users/gordon/src/q2/.worktrees/windows-git-epochs`), delete
   the branch locally (`git branch -D windows/git-epochs`) and on the remote
   (`git push origin --delete windows/git-epochs`), and check with `git ls-remote origin windows/git-epochs`.
 - [ ] **Pull request summary.** Write a draft for Gordon (detail chosen by the plan author; confirm the path:

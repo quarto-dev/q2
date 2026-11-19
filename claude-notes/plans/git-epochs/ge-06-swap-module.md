@@ -4,6 +4,7 @@ date: 2026-11-18
 description: 'Builds the pure TypeScript swap coordinator that every follower uses when the project owner flips a path to a different doc, with the shared notice wording and the type of the moved presence message.'
 status: approved
 depends-on: [ge-1]
+lane: B
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 

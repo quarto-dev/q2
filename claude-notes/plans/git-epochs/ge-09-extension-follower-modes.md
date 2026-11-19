@@ -4,6 +4,7 @@ date: 2026-11-18
 description: Gives the extension an explicit per-folder mode and implements the two follower modes, mirror and editor only, which follow the project owner through the shared swap module instead of overwriting the working tree unconditionally.
 status: approved
 depends-on: [ge-5, ge-6, ge-8]
+lane: A
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 

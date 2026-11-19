@@ -4,6 +4,7 @@ date: 2026-11-18
 description: Prepares the VS Code extension for the rest of the epic with no change in behavior, by rejoining the npm workspaces, fixing the ignore rules, extracting a vscode-free core and a headless peer, and adding a Playwright harness that drives VS Code.
 status: approved
 depends-on: [ge-1]
+lane: C
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 

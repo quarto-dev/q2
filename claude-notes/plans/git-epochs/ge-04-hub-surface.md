@@ -4,6 +4,7 @@ date: 2026-11-18
 description: 'Adds the experimental git flag to q2 preview, the git-status route that reports tracking, paused, and pending, and a startup warning when an extension has bound the project directory.'
 status: approved
 depends-on: [ge-3]
+lane: B
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 

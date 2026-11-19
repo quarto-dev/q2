@@ -4,6 +4,7 @@ date: 2026-11-18
 description: 'Implements in the shared TypeScript package the same classifier, arrival rule, startup rule, registry operations, git probe, and gate controller that the Rust crate has, driven by the same fixtures and golden docs.'
 status: approved
 depends-on: [ge-1]
+lane: A
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 

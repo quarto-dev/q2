@@ -4,6 +4,7 @@ date: 2026-11-18
 description: Implements the extension as a git-aware clone peer that attaches an existing git clone to a project, verifies it is the same repository, and then follows its own checkout through the registry, with detach, startup, and rebind behavior.
 status: approved
 depends-on: [ge-9]
+lane: A
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 

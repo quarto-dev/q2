@@ -4,6 +4,7 @@ date: 2026-11-18
 description: Automates both demos with Playwright, VS Code, headless peers, and the real binaries, decides which tests are permanent, and wires those into CI and cargo xtask verify.
 status: approved
 depends-on: [ge-11, ge-12, ge-13]
+lane: A
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 

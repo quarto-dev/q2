@@ -4,6 +4,7 @@ date: 2026-11-18
 description: A VS Code folder can start a project on a sync server, becoming its owner and the writer of the pointer, with a confirm that says what is published and a share panel shown only after the server has the data.
 status: approved
 depends-on: [ge-10]
+lane: C
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 

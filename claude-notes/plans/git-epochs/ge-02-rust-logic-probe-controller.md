@@ -4,6 +4,7 @@ date: 2026-11-18
 description: 'Creates the quarto-git-epochs Rust crate holding the classifier, arrival rule, startup rule, registry operations, a subprocess git probe, and a tick-driven gate controller, all tested against the shared fixtures and real temporary repositories.'
 status: approved
 depends-on: [ge-1]
+lane: B
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 

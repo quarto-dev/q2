@@ -4,6 +4,7 @@ date: 2026-11-18
 description: 'Wires the quarto-git-epochs crate into the hub so that sync pauses behind the git gate, the hub registers and attaches docs through the shared sidecar, flips the pointer on checkout, and unlists and relists files in one index change per switch.'
 status: approved
 depends-on: [ge-2]
+lane: B
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 
