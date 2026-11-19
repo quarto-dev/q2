@@ -14,6 +14,7 @@ const USAGE = `usage: npm run demo -w quarto-hub-vscode -- [options]
   --narration inline|strip|both|off  (default strip)
   --fast                 headless, no pacing, every check (implies --play)
   --screen <n>           monitor to place windows on (default 0)
+  --seed <n>             seed of the typing tempo (default 1); one seed repeats a recorded run
   --root <dir>           demo root directory
 `;
 
@@ -46,6 +47,7 @@ async function main() {
       narration: { type: 'string' },
       fast: { type: 'boolean' },
       screen: { type: 'string' },
+      seed: { type: 'string' },
       root: { type: 'string' },
       help: { type: 'boolean' },
     },
@@ -63,6 +65,7 @@ async function main() {
       captions: (v.captions as Where) ?? 'inline',
       narration: (v.narration as Where) ?? 'strip',
       screen: v.screen ? Number(v.screen) : 0,
+      seed: v.seed ? Number(v.seed) : 1,
       root: v.root,
       typedHub: play,
     }),

@@ -40,6 +40,8 @@ export interface TerminalServerOptions {
   assets?: Record<string, { file: string; type: string }>;
 }
 
+import type { TypingPlan } from './typing';
+
 export interface TerminalServer {
   host: '127.0.0.1';
   port: number;
@@ -57,7 +59,7 @@ export interface TerminalServer {
   display(data: string): void;
   strip(lines: string[]): void;
   /** Write keystrokes into the PTY (as a person typing), `\r` appended. */
-  type(text: string, o?: { charDelayMs?: number; enter?: boolean }): Promise<void>;
+  type(text: string, o?: { charDelayMs?: number; timing?: TypingPlan; enter?: boolean }): Promise<void>;
   /** Write raw data into the PTY. */
   write(data: string): void;
   close(): Promise<void>;
@@ -170,11 +172,18 @@ export async function startTerminalServer(o: TerminalServerOptions): Promise<Ter
     },
     async type(text, opts = {}) {
       const delay = opts.charDelayMs ?? 35;
+      const wait = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+      if (opts.timing) await wait(opts.timing.lead);
+      let i = 0;
       for (const ch of text) {
+        // Jitter alters timing only: the same bytes reach the PTY and the same line is reported.
+        if (opts.timing) await wait(opts.timing.gaps[i] ?? 0);
         feed(ch);
         term.write(ch);
-        if (delay) await new Promise((r) => setTimeout(r, delay));
+        if (!opts.timing) await wait(delay);
+        i++;
       }
+      if (opts.timing && opts.enter !== false) await wait(opts.timing.beforeEnter);
       if (opts.enter !== false) {
         feed('\r');
         term.write('\r');

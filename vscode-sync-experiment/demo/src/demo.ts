@@ -21,6 +21,7 @@ import { HeadlessPeer, ensureWasm } from '../../e2e/helpers/hub';
 import { bindFolder, deriveWsUrl } from '../../src/core/join';
 import { activeEditorText, fillInputBox, openFile as openVscodeFile, runCommand } from '../../e2e/helpers/palette';
 import net from 'node:net';
+import { createTypist, type Typist } from './typing';
 import { connectDocReader, type DocReader } from './doc-reader';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -50,6 +51,8 @@ export interface DemoOptions {
   screen: number;
   /** Observer poll period. */
   pollMs: number;
+  /** Seed of the human typing tempo (default 1), so a recorded run repeats. */
+  seed: number;
 }
 
 export const defaultOptions = (over: Partial<DemoOptions> = {}): DemoOptions => ({
@@ -63,6 +66,7 @@ export const defaultOptions = (over: Partial<DemoOptions> = {}): DemoOptions => 
   typedHub: false,
   screen: 0,
   pollMs: 700,
+  seed: 1,
   ...over,
 });
 
@@ -117,6 +121,7 @@ export class Demo {
   private seen = new Map<string, number>();
   /** Test seam: replaces the raw-Repo reader of the pointed docs. */
   docReader?: DocReader;
+  private typist: Typist;
   private pointerSince = new Map<string, { text: string; since: number }>();
   private rLibrary = '';
   layout!: Layout;
@@ -126,6 +131,7 @@ export class Demo {
     this.journal = path.join(this.root, 'journal');
     this.logs = path.join(this.root, 'logs');
     this.guestDir = path.join(this.root, 'maurice');
+    this.typist = createTypist({ baseMs: o.fast ? 0 : 40, seed: o.seed });
   }
 
   /** Checks the tools, builds the runtime directory and the engine environments, starts the host terminal. */
@@ -627,7 +633,14 @@ export class Demo {
     const page = this.kinds[who] === 'vscode' ? this.vscode[who]!.page : (who === 'host' ? this.hostEditor : this.guestEditor)!.page;
     await page.locator(this.kinds[who] === 'vscode' ? '.editor-instance .view-lines' : '.monaco-editor .view-lines').first().click();
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
-    await page.keyboard.type(text);
+    const plan = this.typist.plan(text);
+    const wait = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+    await wait(plan.lead);
+    let i = 0;
+    for (const ch of text) {
+      await wait(plan.gaps[i++] ?? 0);
+      await page.keyboard.type(ch);
+    }
   }
 
   /** Scroll an editor to the top of its document (Monaco renders only the visible lines). */
@@ -801,7 +814,7 @@ export class Demo {
   }
 
   async type(command: string, who: 'host' | 'guest' = 'host'): Promise<void> {
-    await this.terminal(who).type(command, { charDelayMs: this.o.fast ? 0 : 40 });
+    await this.terminal(who).type(command, { timing: this.typist.plan(command) });
     await this.waitPrompt(60_000, who);
   }
 

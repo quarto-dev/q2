@@ -91,4 +91,20 @@ describe('terminal server (DM2)', () => {
     await until(() => c.out().includes('typed-by-driver'));
     c.ws.close();
   });
+
+  it('types with a given timing without changing the bytes or the reported line', async () => {
+    const { s } = await start();
+    const lines: string[] = [];
+    s.onCommand((l) => lines.push(l));
+    const c = await connect(s.url);
+    const text = 'echo ' + 'timed'.repeat(7); // 40 characters: the default pace would take 1.4 s
+    const started = Date.now();
+    await s.type(text, { timing: { lead: 150, gaps: new Array(text.length).fill(0), beforeEnter: 150 } });
+    const took = Date.now() - started;
+    expect(took).toBeGreaterThanOrEqual(295);
+    expect(took).toBeLessThan(900);
+    await until(() => c.out().includes('timedtimedtimed'));
+    await until(() => lines.includes(text));
+    c.ws.close();
+  });
 });
