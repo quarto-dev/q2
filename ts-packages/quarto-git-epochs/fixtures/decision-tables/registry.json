@@ -1,0 +1,482 @@
+[
+  {
+    "id": "creation-race-one-key",
+    "op": "union",
+    "entries": [],
+    "retired": [],
+    "args": {
+      "sides": [
+        [
+          {
+            "path": "a.qmd",
+            "blob": "b1",
+            "doc": "docX",
+            "gen": 0
+          }
+        ],
+        [
+          {
+            "path": "a.qmd",
+            "blob": "b1",
+            "doc": "docY",
+            "gen": 0
+          }
+        ]
+      ]
+    },
+    "expected": {
+      "keys": [
+        [
+          "a.qmd",
+          "b1",
+          "docX"
+        ],
+        [
+          "a.qmd",
+          "b1",
+          "docY"
+        ]
+      ]
+    }
+  },
+  {
+    "id": "creation-race-new-path",
+    "op": "union",
+    "entries": [],
+    "retired": [],
+    "args": {
+      "sides": [
+        [
+          {
+            "path": "new/p.qmd",
+            "blob": "b1",
+            "doc": "d1",
+            "gen": 0
+          }
+        ],
+        [
+          {
+            "path": "new/p.qmd",
+            "blob": "b2",
+            "doc": "d2",
+            "gen": 0
+          }
+        ]
+      ]
+    },
+    "expected": {
+      "keys": [
+        [
+          "new/p.qmd",
+          "b1",
+          "d1"
+        ],
+        [
+          "new/p.qmd",
+          "b2",
+          "d2"
+        ]
+      ]
+    }
+  },
+  {
+    "id": "equal-generations-break-by-docid",
+    "op": "canonical",
+    "entries": [
+      {
+        "path": "a.qmd",
+        "blob": "b1",
+        "doc": "docB",
+        "gen": 0
+      },
+      {
+        "path": "a.qmd",
+        "blob": "b1",
+        "doc": "docA",
+        "gen": 0
+      }
+    ],
+    "retired": [],
+    "args": {
+      "path": "a.qmd",
+      "blob": "b1"
+    },
+    "expected": {
+      "doc": "docA"
+    }
+  },
+  {
+    "id": "established-doc-beats-latecomer",
+    "op": "canonical",
+    "entries": [
+      {
+        "path": "a.qmd",
+        "blob": "b1",
+        "doc": "docZ",
+        "gen": 0
+      },
+      {
+        "path": "a.qmd",
+        "blob": "b1",
+        "doc": "docA",
+        "gen": 3
+      }
+    ],
+    "retired": [],
+    "args": {
+      "path": "a.qmd",
+      "blob": "b1"
+    },
+    "expected": {
+      "doc": "docZ"
+    }
+  },
+  {
+    "id": "canonical-skips-retired",
+    "op": "canonical",
+    "entries": [
+      {
+        "path": "a.qmd",
+        "blob": "b1",
+        "doc": "docA",
+        "gen": 0
+      },
+      {
+        "path": "a.qmd",
+        "blob": "b1",
+        "doc": "docB",
+        "gen": 1
+      }
+    ],
+    "retired": [
+      {
+        "path": "a.qmd",
+        "blob": "b1",
+        "doc": "docA",
+        "gen": 0
+      }
+    ],
+    "args": {
+      "path": "a.qmd",
+      "blob": "b1"
+    },
+    "expected": {
+      "doc": "docB"
+    }
+  },
+  {
+    "id": "canonical-none-when-all-retired",
+    "op": "canonical",
+    "entries": [
+      {
+        "path": "a.qmd",
+        "blob": "b1",
+        "doc": "docA",
+        "gen": 0
+      }
+    ],
+    "retired": [
+      {
+        "path": "a.qmd",
+        "blob": "b1",
+        "doc": "docA",
+        "gen": 0
+      }
+    ],
+    "args": {
+      "path": "a.qmd",
+      "blob": "b1"
+    },
+    "expected": {
+      "doc": null
+    }
+  },
+  {
+    "id": "first-doc-of-a-path-gets-generation-0",
+    "op": "create",
+    "entries": [],
+    "retired": [],
+    "args": {
+      "path": "a.qmd"
+    },
+    "expected": {
+      "gen": 0
+    }
+  },
+  {
+    "id": "next-doc-gets-max-plus-one-over-any-blob",
+    "op": "create",
+    "entries": [
+      {
+        "path": "a.qmd",
+        "blob": "b1",
+        "doc": "docA",
+        "gen": 0
+      },
+      {
+        "path": "a.qmd",
+        "blob": "b2",
+        "doc": "docB",
+        "gen": 4
+      }
+    ],
+    "retired": [],
+    "args": {
+      "path": "a.qmd"
+    },
+    "expected": {
+      "gen": 5
+    }
+  },
+  {
+    "id": "move-forward-carries-generation",
+    "op": "moveForward",
+    "entries": [
+      {
+        "path": "a.qmd",
+        "blob": "b1",
+        "doc": "docA",
+        "gen": 2
+      }
+    ],
+    "retired": [],
+    "args": {
+      "path": "a.qmd",
+      "oldBlob": "b1",
+      "newBlob": "b2",
+      "doc": "docA"
+    },
+    "expected": {
+      "entries": [
+        {
+          "path": "a.qmd",
+          "blob": "b2",
+          "doc": "docA",
+          "gen": 2
+        }
+      ]
+    }
+  },
+  {
+    "id": "move-forward-absent-old-entry-gets-max-plus-one",
+    "op": "moveForward",
+    "entries": [
+      {
+        "path": "a.qmd",
+        "blob": "b0",
+        "doc": "docOld",
+        "gen": 3
+      }
+    ],
+    "retired": [],
+    "args": {
+      "path": "a.qmd",
+      "oldBlob": "b1",
+      "newBlob": "b2",
+      "doc": "docA"
+    },
+    "expected": {
+      "entries": [
+        {
+          "path": "a.qmd",
+          "blob": "b0",
+          "doc": "docOld",
+          "gen": 3
+        },
+        {
+          "path": "a.qmd",
+          "blob": "b2",
+          "doc": "docA",
+          "gen": 4
+        }
+      ]
+    }
+  },
+  {
+    "id": "two-tips-after-git-add-p",
+    "op": "union",
+    "entries": [],
+    "retired": [],
+    "args": {
+      "sides": [
+        [
+          {
+            "path": "a.qmd",
+            "blob": "b2",
+            "doc": "docA",
+            "gen": 0
+          }
+        ],
+        [
+          {
+            "path": "a.qmd",
+            "blob": "b3",
+            "doc": "docA",
+            "gen": 0
+          }
+        ]
+      ],
+      "note": "two peers commit different subsets of one doc"
+    },
+    "expected": {
+      "keys": [
+        [
+          "a.qmd",
+          "b2",
+          "docA"
+        ],
+        [
+          "a.qmd",
+          "b3",
+          "docA"
+        ]
+      ]
+    }
+  },
+  {
+    "id": "concurrent-put-and-delete-keeps-put",
+    "op": "putDelete",
+    "entries": [
+      {
+        "path": "a.qmd",
+        "blob": "b1",
+        "doc": "docA",
+        "gen": 0
+      }
+    ],
+    "retired": [],
+    "args": {
+      "key": [
+        "a.qmd",
+        "b1",
+        "docA"
+      ],
+      "putGen": 2
+    },
+    "expected": {
+      "entries": [
+        {
+          "path": "a.qmd",
+          "blob": "b1",
+          "doc": "docA",
+          "gen": 2
+        }
+      ]
+    }
+  },
+  {
+    "id": "retire-keeps-entry-adds-retired",
+    "op": "retire",
+    "entries": [
+      {
+        "path": "a.qmd",
+        "blob": "b1",
+        "doc": "docA",
+        "gen": 0
+      }
+    ],
+    "retired": [],
+    "args": {
+      "path": "a.qmd",
+      "blob": "b1",
+      "doc": "docA"
+    },
+    "expected": {
+      "entries": [
+        {
+          "path": "a.qmd",
+          "blob": "b1",
+          "doc": "docA",
+          "gen": 0
+        }
+      ],
+      "retired": [
+        {
+          "path": "a.qmd",
+          "blob": "b1",
+          "doc": "docA",
+          "gen": 0
+        }
+      ]
+    }
+  },
+  {
+    "id": "repair-reregisters-doc-with-no-entry",
+    "op": "repair",
+    "entries": [],
+    "retired": [],
+    "args": {
+      "attached": {
+        "path": "a.qmd",
+        "doc": "docA",
+        "gen": 1
+      },
+      "headBlob": "b1"
+    },
+    "expected": {
+      "entries": [
+        {
+          "path": "a.qmd",
+          "blob": "b1",
+          "doc": "docA",
+          "gen": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "repair-never-revives-retired",
+    "op": "repair",
+    "entries": [],
+    "retired": [
+      {
+        "path": "a.qmd",
+        "blob": "b1",
+        "doc": "docA",
+        "gen": 1
+      }
+    ],
+    "args": {
+      "attached": {
+        "path": "a.qmd",
+        "doc": "docA",
+        "gen": 1
+      },
+      "headBlob": "b1"
+    },
+    "expected": {
+      "entries": []
+    }
+  },
+  {
+    "id": "repair-skips-doc-that-moved-forward",
+    "op": "repair",
+    "entries": [
+      {
+        "path": "a.qmd",
+        "blob": "b2",
+        "doc": "docA",
+        "gen": 1
+      }
+    ],
+    "retired": [],
+    "args": {
+      "attached": {
+        "path": "a.qmd",
+        "doc": "docA",
+        "gen": 1
+      },
+      "headBlob": "b1"
+    },
+    "expected": {
+      "entries": [
+        {
+          "path": "a.qmd",
+          "blob": "b2",
+          "doc": "docA",
+          "gen": 1
+        }
+      ]
+    }
+  }
+]

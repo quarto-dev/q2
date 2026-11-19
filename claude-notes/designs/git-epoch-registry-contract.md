@@ -240,7 +240,7 @@ All fixtures are JSON under `fixtures/`. Every row has a unique string `id`.
 
 **`decision-tables/classify.json`:** `{ "id", "peer", "reflog": [string], "changed": [{"path", "disk", "synced", "blob"}], "expected": "commit" | "checkout", "note"? }`. `reflog` may be `null` for a repo with no reflog.
 
-**`decision-tables/arrival.json`:** `{ "id", "peer": "hub" | "extension", "policy"?: "ReadOnly" | "WriteBack", "kind": "text" | "binary", "disk", "doc", "blob", "attached": "none" | "canonical" | "other", "retiredByOther"?: boolean, "jj"?: boolean, "expected": { "step", "action", "discarded"?: number, "event"? } }`. `policy` is required when `peer` is `hub`.
+**`decision-tables/arrival.json`:** `{ "id", "peer": "hub" | "extension", "policy"?: "ReadOnly" | "WriteBack", "kind": "text" | "binary", "disk", "doc", "blob", "attached": "none" | "canonical" | "other", "retiredByOther"?: boolean, "jj"?: boolean, "expected": { "step", "action", "discarded"?: number, "event"? } }`. `policy` is required when `peer` is `hub`. Optional input fields for the cases outside the five steps: `canonicalUnavailable` (the canonical doc cannot be fetched), `liveUnderOtherPath` with `forkSyncs` (the fork rule and its no-history fallback), and `caseCollision`. For a row outside the five steps, `expected.step` names the step the row would otherwise take, and `expected.action` carries the difference (`wait-5s-then-create`, `fork-then-attach`, `create-from-content-no-history`, `ordinary-sync`, `stay-live`). Rows may carry a free-text `note`.
 
 **`decision-tables/startup.json`:** `{ "id", "record": null | {"head", "blobs"}, "head", "expected": "reconcile" | "arrive-differing" | "arrive-all" }`.
 
@@ -250,4 +250,4 @@ All fixtures are JSON under `fixtures/`. Every row has a unique string `id`.
 
 **`vocabulary.json`:** `{ "events": [string], "swapEvents": [string] }`, equal to the lists above.
 
-**Golden documents** (`golden/*.bin`, one Automerge doc each, plus `golden/index-v4.json`): `golden/manifest.json` is `{ "<file>": { "entries": [ {"key","gen"} ], "retired": [ {"key","gen"} ] } }`, the decoded content a reader must produce. `index-v4.json` is the content of `createIndexDocumentContent()`.
+**Golden documents** (`golden/*.bin`, one Automerge doc each, plus `golden/index-v4.json`): `golden/manifest.json` is `{ "<file>": { "entries": [ {"key","gen"} ], "retired": [ {"key","gen"} ] } }`, the decoded content a reader must produce. A manifest entry for an index doc is `{ "index": { "epochs", "owner", "repo": {"roots","prefix"} } }` instead of `entries` and `retired`; `index-v4-text-form.bin` and `index-v4-scalar-form.bin` hold the same values as a Text object and as a scalar string (see [Scalar forms](#scalar-forms)). `index-v4.json` is the content of `createIndexDocumentContent()`. `scripts/make-golden.mjs` regenerates every `.bin` and the manifest. GE-2 and GE-5 each add one document written by their own implementation.

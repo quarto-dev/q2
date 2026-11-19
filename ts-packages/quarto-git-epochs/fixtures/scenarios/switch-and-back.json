@@ -1,0 +1,91 @@
+{
+  "id": "switch-and-back",
+  "title": "Switch to a branch and back is checkout-type both ways",
+  "steps": [
+    {
+      "git": [
+        "init",
+        "-b",
+        "main"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.email",
+        "t@example.com"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.name",
+        "T"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "core.autocrlf",
+        "false"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "one\n"
+      }
+    },
+    {
+      "git": [
+        "add",
+        "a.qmd"
+      ]
+    },
+    {
+      "git": [
+        "commit",
+        "-m",
+        "base"
+      ]
+    },
+    {
+      "git": [
+        "switch",
+        "-c",
+        "side"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "side\n"
+      }
+    },
+    {
+      "git": [
+        "commit",
+        "-am",
+        "side"
+      ]
+    },
+    {
+      "git": [
+        "switch",
+        "main"
+      ],
+      "expect": {
+        "verdict": "checkout"
+      }
+    },
+    {
+      "git": [
+        "switch",
+        "side"
+      ],
+      "expect": {
+        "verdict": "checkout"
+      }
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "id": "stash-and-pop",
+  "title": "stash looks like reset --hard (a reflog entry); pop writes no reflog entry, so it is not seen and looks like an author edit",
+  "steps": [
+    {
+      "git": [
+        "init",
+        "-b",
+        "main"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.email",
+        "t@example.com"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.name",
+        "T"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "core.autocrlf",
+        "false"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "one\n"
+      }
+    },
+    {
+      "git": [
+        "add",
+        "a.qmd"
+      ]
+    },
+    {
+      "git": [
+        "commit",
+        "-m",
+        "base"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "dirty\n"
+      }
+    },
+    {
+      "git": [
+        "stash"
+      ],
+      "expect": {
+        "verdict": "checkout"
+      }
+    },
+    {
+      "git": [
+        "stash",
+        "pop"
+      ],
+      "expect": {
+        "verdict": "none"
+      }
+    }
+  ]
+}

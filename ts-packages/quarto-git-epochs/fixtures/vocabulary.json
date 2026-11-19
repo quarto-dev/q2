@@ -1,0 +1,19 @@
+{
+  "events": [
+    "flipped",
+    "switched",
+    "detached",
+    "reattached",
+    "held",
+    "reset",
+    "retired",
+    "moved-forward",
+    "joined",
+    "seeded"
+  ],
+  "swapEvents": [
+    "pending",
+    "done",
+    "unavailable"
+  ]
+}

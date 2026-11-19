@@ -1,0 +1,97 @@
+{
+  "id": "file-added-and-removed-by-checkout",
+  "title": "A checkout adds and removes a tracked file",
+  "steps": [
+    {
+      "git": [
+        "init",
+        "-b",
+        "main"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.email",
+        "t@example.com"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.name",
+        "T"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "core.autocrlf",
+        "false"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "one\n"
+      }
+    },
+    {
+      "git": [
+        "add",
+        "a.qmd"
+      ]
+    },
+    {
+      "git": [
+        "commit",
+        "-m",
+        "base"
+      ]
+    },
+    {
+      "git": [
+        "switch",
+        "-c",
+        "side"
+      ]
+    },
+    {
+      "write": {
+        "path": "b.qmd",
+        "content": "b\n"
+      }
+    },
+    {
+      "git": [
+        "add",
+        "b.qmd"
+      ]
+    },
+    {
+      "git": [
+        "commit",
+        "-m",
+        "add b"
+      ]
+    },
+    {
+      "git": [
+        "switch",
+        "main"
+      ],
+      "expect": {
+        "verdict": "checkout"
+      }
+    },
+    {
+      "git": [
+        "switch",
+        "side"
+      ],
+      "expect": {
+        "verdict": "checkout"
+      }
+    }
+  ]
+}

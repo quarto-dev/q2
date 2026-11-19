@@ -1,0 +1,82 @@
+{
+  "id": "autocrlf-checkout",
+  "title": "core.autocrlf checkouts with CRLF content normalize before comparison",
+  "steps": [
+    {
+      "git": [
+        "init",
+        "-b",
+        "main"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.email",
+        "t@example.com"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.name",
+        "T"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "core.autocrlf",
+        "true"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "one\r\ntwo\r\n"
+      }
+    },
+    {
+      "git": [
+        "add",
+        "a.qmd"
+      ]
+    },
+    {
+      "git": [
+        "commit",
+        "-m",
+        "base"
+      ]
+    },
+    {
+      "git": [
+        "switch",
+        "-c",
+        "side"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "one\r\nside\r\n"
+      }
+    },
+    {
+      "git": [
+        "commit",
+        "-am",
+        "side"
+      ]
+    },
+    {
+      "git": [
+        "switch",
+        "main"
+      ],
+      "expect": {
+        "verdict": "checkout"
+      }
+    }
+  ]
+}

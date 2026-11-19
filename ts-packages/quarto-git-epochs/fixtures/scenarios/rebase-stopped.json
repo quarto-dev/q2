@@ -1,0 +1,108 @@
+{
+  "id": "rebase-stopped",
+  "title": "A rebase stopped for conflicts closes the gate",
+  "steps": [
+    {
+      "git": [
+        "init",
+        "-b",
+        "main"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.email",
+        "t@example.com"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.name",
+        "T"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "core.autocrlf",
+        "false"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "one\n"
+      }
+    },
+    {
+      "git": [
+        "add",
+        "a.qmd"
+      ]
+    },
+    {
+      "git": [
+        "commit",
+        "-m",
+        "base"
+      ]
+    },
+    {
+      "git": [
+        "switch",
+        "-c",
+        "side"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "side\n"
+      }
+    },
+    {
+      "git": [
+        "commit",
+        "-am",
+        "side"
+      ]
+    },
+    {
+      "git": [
+        "switch",
+        "main"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "main2\n"
+      }
+    },
+    {
+      "git": [
+        "commit",
+        "-am",
+        "main2"
+      ]
+    },
+    {
+      "git": [
+        "switch",
+        "side"
+      ]
+    },
+    {
+      "git": [
+        "rebase",
+        "main"
+      ],
+      "expectFail": true,
+      "expect": {
+        "verdict": "none"
+      }
+    }
+  ]
+}

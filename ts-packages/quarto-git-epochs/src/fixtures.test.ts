@@ -6,6 +6,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as A from '@automerge/automerge';
 import { describe, expect, it } from 'vitest';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
@@ -105,11 +106,42 @@ describe('vocabulary', () => {
   });
 });
 
+const plain = (v: any): any => {
+  if (A.isImmutableString(v)) return v.toString();
+  if (Array.isArray(v)) return v.map(plain);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, plain(x)]));
+  return v;
+};
+
 describe('golden documents', () => {
   it('each binary has a manifest entry', () => {
     const manifest = readJson('golden/manifest.json');
     const bins = readdirSync(join(FIXTURES, 'golden')).filter((f) => f.endsWith('.bin'));
     expect(bins.length).toBeGreaterThan(0);
     expect(Object.keys(manifest).sort()).toEqual(bins.sort());
+  });
+
+  it('every binary decodes to the entries in the manifest', () => {
+    const manifest = readJson('golden/manifest.json');
+    for (const [file, expected] of Object.entries<any>(manifest)) {
+      const doc: any = A.load(readFileSync(join(FIXTURES, 'golden', file)));
+      if (expected.index) {
+        expect(plain(doc.epochs), file).toBe(expected.index.epochs);
+        expect(plain(doc.owner), file).toBe(expected.index.owner);
+        expect(plain(doc.repo), file).toEqual(expected.index.repo);
+        expect(doc.version, file).toBe(4);
+      } else {
+        const dump = (m: string) =>
+          Object.keys(doc[m]).sort().map((key) => ({ key, gen: doc[m][key] }));
+        expect({ entries: dump('entries'), retired: dump('retired') }, file).toEqual(expected);
+      }
+    }
+  });
+
+  it('the two index forms differ in storage: Text object versus scalar string', () => {
+    const t: any = A.load(readFileSync(join(FIXTURES, 'golden', 'index-v4-text-form.bin')));
+    const s: any = A.load(readFileSync(join(FIXTURES, 'golden', 'index-v4-scalar-form.bin')));
+    expect(A.isImmutableString(t.epochs)).toBe(false); // Text object, read as a string
+    expect(A.isImmutableString(s.epochs)).toBe(true); // scalar string
   });
 });

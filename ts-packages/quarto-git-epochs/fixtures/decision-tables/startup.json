@@ -1,0 +1,49 @@
+[
+  {
+    "id": "head-unchanged",
+    "record": {
+      "head": "h1",
+      "blobs": {
+        "a.qmd": "b1"
+      }
+    },
+    "head": "h1",
+    "expected": "reconcile",
+    "note": "offline edits merge as today"
+  },
+  {
+    "id": "head-changed",
+    "record": {
+      "head": "h1",
+      "blobs": {
+        "a.qmd": "b1",
+        "b.qmd": "b2"
+      }
+    },
+    "head": "h2",
+    "expected": "arrive-differing",
+    "note": "arrival for each file whose blob differs; reconcile the rest"
+  },
+  {
+    "id": "no-record",
+    "record": null,
+    "head": "h1",
+    "expected": "arrive-all",
+    "note": "never merge disk into a doc"
+  },
+  {
+    "id": "head-changed-with-detached",
+    "record": {
+      "head": "h1",
+      "blobs": {
+        "a.qmd": "b1"
+      },
+      "detached": [
+        "a.qmd"
+      ]
+    },
+    "head": "h2",
+    "expected": "arrive-differing",
+    "note": "a detached file that was committed goes through arrival for its new blob"
+  }
+]

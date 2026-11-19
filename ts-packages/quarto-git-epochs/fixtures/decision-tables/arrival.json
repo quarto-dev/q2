@@ -1,0 +1,421 @@
+[
+  {
+    "id": "ext-step1-no-registered-doc",
+    "peer": "extension",
+    "kind": "text",
+    "disk": "S",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "1",
+      "action": "create-from-disk",
+      "event": "switched"
+    }
+  },
+  {
+    "id": "ext-step2a-attached-canonical-rebaseline",
+    "peer": "extension",
+    "kind": "text",
+    "disk": "T",
+    "doc": "T",
+    "blob": "B",
+    "attached": "canonical",
+    "expected": {
+      "step": "2a",
+      "action": "re-baseline"
+    }
+  },
+  {
+    "id": "ext-step2a-attached-canonical-dirty",
+    "peer": "extension",
+    "kind": "text",
+    "disk": "S",
+    "doc": "T",
+    "blob": "B",
+    "attached": "canonical",
+    "expected": {
+      "step": "2a",
+      "action": "re-baseline"
+    }
+  },
+  {
+    "id": "ext-step2b-reset-hard-retire",
+    "peer": "extension",
+    "kind": "text",
+    "disk": "B",
+    "doc": "T",
+    "blob": "B",
+    "attached": "canonical",
+    "expected": {
+      "step": "2b",
+      "action": "retire-create-flip",
+      "event": "retired",
+      "discarded": 1
+    }
+  },
+  {
+    "id": "ext-step3-equal-attach",
+    "peer": "extension",
+    "kind": "text",
+    "disk": "T",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "3",
+      "action": "attach-silently",
+      "event": "switched"
+    }
+  },
+  {
+    "id": "ext-step4-clean-join",
+    "peer": "extension",
+    "kind": "text",
+    "disk": "B",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "4",
+      "action": "join-with-notice",
+      "event": "switched"
+    }
+  },
+  {
+    "id": "ext-step5-dirty-detach",
+    "peer": "extension",
+    "kind": "text",
+    "disk": "S",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "5",
+      "action": "detach-and-ask",
+      "event": "detached"
+    }
+  },
+  {
+    "id": "bin-step1-no-registered-doc",
+    "peer": "extension",
+    "kind": "binary",
+    "disk": "S",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "1",
+      "action": "create-from-disk",
+      "event": "switched"
+    }
+  },
+  {
+    "id": "bin-step2a-attached-canonical",
+    "peer": "extension",
+    "kind": "binary",
+    "disk": "h1",
+    "doc": "h1",
+    "blob": "h2",
+    "attached": "canonical",
+    "expected": {
+      "step": "2a",
+      "action": "re-baseline"
+    }
+  },
+  {
+    "id": "bin-step2b-reset-hard-retire",
+    "peer": "extension",
+    "kind": "binary",
+    "disk": "h2",
+    "doc": "h1",
+    "blob": "h2",
+    "attached": "canonical",
+    "expected": {
+      "step": "2b",
+      "action": "retire-create-flip",
+      "event": "retired",
+      "discarded": 1
+    }
+  },
+  {
+    "id": "bin-step3-equal-attach",
+    "peer": "extension",
+    "kind": "binary",
+    "disk": "h1",
+    "doc": "h1",
+    "blob": "h2",
+    "attached": "none",
+    "expected": {
+      "step": "3",
+      "action": "attach-silently",
+      "event": "switched"
+    }
+  },
+  {
+    "id": "bin-step4-clean-adopt-bytes",
+    "peer": "extension",
+    "kind": "binary",
+    "disk": "h2",
+    "doc": "h1",
+    "blob": "h2",
+    "attached": "none",
+    "expected": {
+      "step": "4",
+      "action": "join-with-notice",
+      "event": "switched"
+    }
+  },
+  {
+    "id": "bin-step5-dirty-detach",
+    "peer": "extension",
+    "kind": "binary",
+    "disk": "h3",
+    "doc": "h1",
+    "blob": "h2",
+    "attached": "none",
+    "expected": {
+      "step": "5",
+      "action": "detach-and-ask",
+      "event": "detached"
+    }
+  },
+  {
+    "id": "hub-writeback-step1",
+    "peer": "hub",
+    "policy": "WriteBack",
+    "kind": "text",
+    "disk": "S",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "1",
+      "action": "create-from-disk",
+      "event": "flipped"
+    }
+  },
+  {
+    "id": "hub-writeback-step3",
+    "peer": "hub",
+    "policy": "WriteBack",
+    "kind": "text",
+    "disk": "T",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "3",
+      "action": "attach-silently",
+      "event": "flipped"
+    }
+  },
+  {
+    "id": "hub-writeback-step4-joins",
+    "peer": "hub",
+    "policy": "WriteBack",
+    "kind": "text",
+    "disk": "B",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "4",
+      "action": "join-and-warn",
+      "event": "joined"
+    }
+  },
+  {
+    "id": "hub-writeback-step5-seeds",
+    "peer": "hub",
+    "policy": "WriteBack",
+    "kind": "text",
+    "disk": "S",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "5",
+      "action": "create-from-disk-unregistered",
+      "event": "seeded"
+    }
+  },
+  {
+    "id": "hub-readonly-equal-attaches",
+    "peer": "hub",
+    "policy": "ReadOnly",
+    "kind": "text",
+    "disk": "T",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "3",
+      "action": "attach-silently",
+      "event": "flipped"
+    }
+  },
+  {
+    "id": "hub-readonly-differs-creates",
+    "peer": "hub",
+    "policy": "ReadOnly",
+    "kind": "text",
+    "disk": "B",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "4",
+      "action": "create-from-disk",
+      "event": "seeded"
+    },
+    "note": "the hub must not write its disk, so it never joins a doc that differs"
+  },
+  {
+    "id": "ext-readonly-attach-only-when-equal",
+    "peer": "extension",
+    "policy": "ReadOnly",
+    "kind": "text",
+    "disk": "T",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "3",
+      "action": "attach-silently",
+      "event": "switched"
+    }
+  },
+  {
+    "id": "ext-readonly-differs-seeds",
+    "peer": "extension",
+    "policy": "ReadOnly",
+    "kind": "text",
+    "disk": "B",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "4",
+      "action": "create-from-disk",
+      "event": "seeded"
+    }
+  },
+  {
+    "id": "ext-canonical-unavailable",
+    "peer": "extension",
+    "kind": "text",
+    "disk": "S",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "1",
+      "action": "wait-5s-then-create",
+      "event": "switched"
+    },
+    "canonicalUnavailable": true
+  },
+  {
+    "id": "ext-fork-doc-live-under-other-path",
+    "peer": "extension",
+    "kind": "text",
+    "disk": "T",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "3",
+      "action": "fork-then-attach",
+      "event": "switched"
+    },
+    "liveUnderOtherPath": true,
+    "forkSyncs": true
+  },
+  {
+    "id": "ext-fork-no-history-fallback",
+    "peer": "extension",
+    "kind": "text",
+    "disk": "T",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "3",
+      "action": "create-from-content-no-history",
+      "event": "switched"
+    },
+    "liveUnderOtherPath": true,
+    "forkSyncs": false
+  },
+  {
+    "id": "ext-case-insensitive-collision",
+    "peer": "extension",
+    "kind": "text",
+    "disk": "S",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "1",
+      "action": "ordinary-sync"
+    },
+    "caseCollision": true
+  },
+  {
+    "id": "ext-doc-retired-by-another-peer",
+    "peer": "extension",
+    "kind": "text",
+    "disk": "S",
+    "doc": "T",
+    "blob": "B",
+    "attached": "other",
+    "expected": {
+      "step": "2a",
+      "action": "stay-live"
+    },
+    "retiredByOther": true
+  },
+  {
+    "id": "hub-colocated-jj-seeds",
+    "peer": "hub",
+    "policy": "WriteBack",
+    "kind": "text",
+    "disk": "S",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "5",
+      "action": "create-from-disk-unregistered",
+      "event": "seeded"
+    },
+    "jj": true
+  },
+  {
+    "id": "hub-colocated-jj-seeds-even-when-clean",
+    "peer": "hub",
+    "policy": "WriteBack",
+    "kind": "text",
+    "disk": "T",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "5",
+      "action": "create-from-disk-unregistered",
+      "event": "seeded"
+    },
+    "jj": true
+  },
+  {
+    "id": "ext-colocated-jj-detaches",
+    "peer": "extension",
+    "kind": "text",
+    "disk": "S",
+    "doc": "T",
+    "blob": "B",
+    "attached": "none",
+    "expected": {
+      "step": "5",
+      "action": "detach-and-ask",
+      "event": "detached"
+    },
+    "jj": true
+  }
+]

@@ -1,0 +1,104 @@
+{
+  "index-v4-text-form.bin": {
+    "index": {
+      "epochs": "sidecar-doc",
+      "owner": "owner-1",
+      "repo": {
+        "roots": [
+          "abc123",
+          "def456"
+        ],
+        "prefix": "docs/site"
+      }
+    }
+  },
+  "index-v4-scalar-form.bin": {
+    "index": {
+      "epochs": "sidecar-doc",
+      "owner": "owner-1",
+      "repo": {
+        "roots": [
+          "abc123",
+          "def456"
+        ],
+        "prefix": "docs/site"
+      }
+    }
+  },
+  "move-forward-before.bin": {
+    "entries": [
+      {
+        "key": "a.qmd\u0000b1\u0000docA",
+        "gen": 2
+      }
+    ],
+    "retired": []
+  },
+  "move-forward-after.bin": {
+    "entries": [
+      {
+        "key": "a.qmd\u0000b2\u0000docA",
+        "gen": 2
+      }
+    ],
+    "retired": []
+  },
+  "creation-race-one-key.bin": {
+    "entries": [
+      {
+        "key": "a.qmd\u0000b1\u0000docX",
+        "gen": 0
+      },
+      {
+        "key": "a.qmd\u0000b1\u0000docY",
+        "gen": 0
+      }
+    ],
+    "retired": []
+  },
+  "creation-race-new-path.bin": {
+    "entries": [
+      {
+        "key": "new/p.qmd\u0000b1\u0000d1",
+        "gen": 0
+      },
+      {
+        "key": "new/p.qmd\u0000b2\u0000d2",
+        "gen": 0
+      }
+    ],
+    "retired": []
+  },
+  "concurrent-put-delete.bin": {
+    "entries": [
+      {
+        "key": "p.qmd\u0000b1\u0000docA",
+        "gen": 2
+      }
+    ],
+    "retired": []
+  },
+  "retire.bin": {
+    "entries": [
+      {
+        "key": "a.qmd\u0000b1\u0000docA",
+        "gen": 0
+      }
+    ],
+    "retired": [
+      {
+        "key": "a.qmd\u0000b1\u0000docA",
+        "gen": 0
+      }
+    ]
+  },
+  "repair.bin": {
+    "entries": [
+      {
+        "key": "a.qmd\u0000b1\u0000docA",
+        "gen": 1
+      }
+    ],
+    "retired": []
+  }
+}

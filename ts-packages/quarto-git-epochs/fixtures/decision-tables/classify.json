@@ -1,0 +1,261 @@
+[
+  {
+    "id": "commit-plain",
+    "peer": "extension",
+    "reflog": [
+      "commit: add intro"
+    ],
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "v2",
+        "synced": "v2",
+        "blob": "v2"
+      }
+    ],
+    "expected": "commit",
+    "note": "disk equals the last synced content"
+  },
+  {
+    "id": "commit-amend",
+    "peer": "extension",
+    "reflog": [
+      "commit (amend): add intro"
+    ],
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "v2",
+        "synced": "v2",
+        "blob": "v2b"
+      }
+    ],
+    "expected": "commit"
+  },
+  {
+    "id": "commit-hub",
+    "peer": "hub",
+    "reflog": [
+      "commit: add intro"
+    ],
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "v2",
+        "synced": "v2",
+        "blob": "v2"
+      }
+    ],
+    "expected": "commit"
+  },
+  {
+    "id": "switch-branch",
+    "peer": "extension",
+    "reflog": [
+      "checkout: moving from main to side"
+    ],
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "side",
+        "synced": "main",
+        "blob": "side"
+      }
+    ],
+    "expected": "checkout"
+  },
+  {
+    "id": "checkout-hub",
+    "peer": "hub",
+    "reflog": [
+      "checkout: moving from main to side"
+    ],
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "side",
+        "synced": "main",
+        "blob": "side"
+      }
+    ],
+    "expected": "checkout"
+  },
+  {
+    "id": "pull-ff",
+    "peer": "extension",
+    "reflog": [
+      "pull --ff-only: Fast-forward"
+    ],
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "upstream",
+        "synced": "local",
+        "blob": "upstream"
+      }
+    ],
+    "expected": "checkout"
+  },
+  {
+    "id": "reset-hard-unchanged-blob",
+    "peer": "extension",
+    "reflog": [
+      "reset: moving to HEAD"
+    ],
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "blob",
+        "synced": "blob+live-edits",
+        "blob": "blob"
+      }
+    ],
+    "expected": "checkout",
+    "note": "HEAD and blob unchanged; edits the doc holds were discarded"
+  },
+  {
+    "id": "merge-commit",
+    "peer": "extension",
+    "reflog": [
+      "commit (merge): Merge branch side"
+    ],
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "merged",
+        "synced": "mine",
+        "blob": "merged"
+      }
+    ],
+    "expected": "checkout",
+    "note": "git rewrote the file"
+  },
+  {
+    "id": "conflict-resolution-commit",
+    "peer": "extension",
+    "reflog": [
+      "commit (merge): Merge branch side"
+    ],
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "resolved",
+        "synced": "resolved",
+        "blob": "resolved"
+      }
+    ],
+    "expected": "commit",
+    "note": "author resolved in the editor; disk equals synced"
+  },
+  {
+    "id": "save-then-commit",
+    "peer": "extension",
+    "reflog": [
+      "commit: save and commit"
+    ],
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "edited",
+        "synced": "before",
+        "blob": "edited"
+      }
+    ],
+    "expected": "commit",
+    "note": "plain commit with a differing disk is the author's own edit"
+  },
+  {
+    "id": "colocated-jj-same",
+    "peer": "extension",
+    "reflog": null,
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "v1",
+        "synced": "v1",
+        "blob": "v1"
+      }
+    ],
+    "expected": "commit",
+    "note": "jj: content rule only"
+  },
+  {
+    "id": "colocated-jj-differs",
+    "peer": "extension",
+    "reflog": null,
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "other",
+        "synced": "v1",
+        "blob": "other"
+      }
+    ],
+    "expected": "checkout",
+    "note": "jj: content rule only"
+  },
+  {
+    "id": "switch-then-commit",
+    "peer": "extension",
+    "reflog": [
+      "checkout: moving from main to side",
+      "commit: work on side"
+    ],
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "side+work",
+        "synced": "main",
+        "blob": "side+work"
+      }
+    ],
+    "expected": "checkout",
+    "note": "any entry that is not a plain commit makes it checkout-type"
+  },
+  {
+    "id": "stash-push",
+    "peer": "extension",
+    "reflog": [
+      "reset: moving to HEAD"
+    ],
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "blob",
+        "synced": "blob+dirty",
+        "blob": "blob"
+      }
+    ],
+    "expected": "checkout",
+    "note": "same subject as reset --hard"
+  },
+  {
+    "id": "no-reflog-same",
+    "peer": "extension",
+    "reflog": null,
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "v1",
+        "synced": "v1",
+        "blob": "v1"
+      }
+    ],
+    "expected": "commit",
+    "note": "core.logAllRefUpdates=false: no logs directory"
+  },
+  {
+    "id": "no-reflog-differs",
+    "peer": "extension",
+    "reflog": null,
+    "changed": [
+      {
+        "path": "a.qmd",
+        "disk": "v2",
+        "synced": "v1",
+        "blob": "v2"
+      }
+    ],
+    "expected": "checkout"
+  }
+]

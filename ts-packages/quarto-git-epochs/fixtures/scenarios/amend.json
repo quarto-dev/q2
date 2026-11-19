@@ -1,0 +1,83 @@
+{
+  "id": "amend",
+  "title": "An amend is commit-type",
+  "steps": [
+    {
+      "git": [
+        "init",
+        "-b",
+        "main"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.email",
+        "t@example.com"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.name",
+        "T"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "core.autocrlf",
+        "false"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "one\n"
+      }
+    },
+    {
+      "git": [
+        "add",
+        "a.qmd"
+      ]
+    },
+    {
+      "git": [
+        "commit",
+        "-m",
+        "base"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "two\n"
+      }
+    },
+    {
+      "git": [
+        "add",
+        "a.qmd"
+      ]
+    },
+    {
+      "git": [
+        "commit",
+        "-m",
+        "two"
+      ]
+    },
+    {
+      "git": [
+        "commit",
+        "--amend",
+        "-m",
+        "two again"
+      ],
+      "expect": {
+        "verdict": "commit"
+      }
+    }
+  ]
+}

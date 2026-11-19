@@ -1,0 +1,69 @@
+{
+  "id": "save-then-commit",
+  "title": "A save followed by a commit is the author's own edit",
+  "steps": [
+    {
+      "git": [
+        "init",
+        "-b",
+        "main"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.email",
+        "t@example.com"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.name",
+        "T"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "core.autocrlf",
+        "false"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "one\n"
+      }
+    },
+    {
+      "git": [
+        "add",
+        "a.qmd"
+      ]
+    },
+    {
+      "git": [
+        "commit",
+        "-m",
+        "base"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "saved\n"
+      }
+    },
+    {
+      "git": [
+        "commit",
+        "-am",
+        "saved"
+      ],
+      "expect": {
+        "verdict": "commit"
+      }
+    }
+  ]
+}

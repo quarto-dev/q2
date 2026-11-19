@@ -1,0 +1,101 @@
+{
+  "id": "binary-changed-by-checkout",
+  "title": "A checkout changes a binary file",
+  "steps": [
+    {
+      "git": [
+        "init",
+        "-b",
+        "main"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.email",
+        "t@example.com"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "user.name",
+        "T"
+      ]
+    },
+    {
+      "git": [
+        "config",
+        "core.autocrlf",
+        "false"
+      ]
+    },
+    {
+      "write": {
+        "path": "a.qmd",
+        "content": "one\n"
+      }
+    },
+    {
+      "git": [
+        "add",
+        "a.qmd"
+      ]
+    },
+    {
+      "git": [
+        "commit",
+        "-m",
+        "base"
+      ]
+    },
+    {
+      "writeBinary": {
+        "path": "img.png",
+        "hex": "89504e470d0a1a0a00"
+      }
+    },
+    {
+      "git": [
+        "add",
+        "img.png"
+      ]
+    },
+    {
+      "git": [
+        "commit",
+        "-m",
+        "img"
+      ]
+    },
+    {
+      "git": [
+        "switch",
+        "-c",
+        "side"
+      ]
+    },
+    {
+      "writeBinary": {
+        "path": "img.png",
+        "hex": "89504e470d0a1a0aff"
+      }
+    },
+    {
+      "git": [
+        "commit",
+        "-am",
+        "img2"
+      ]
+    },
+    {
+      "git": [
+        "switch",
+        "main"
+      ],
+      "expect": {
+        "verdict": "checkout"
+      }
+    }
+  ]
+}
