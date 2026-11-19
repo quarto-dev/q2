@@ -122,7 +122,7 @@ export class EditorGate {
   private async runTick(): Promise<void> {
     this.tickTimer = null;
     if (this.disposed) return;
-    let next = NUMBERS.controllerTickPendingMs;
+    let next: number = NUMBERS.controllerTickPendingMs;
     try {
       const r = await this.controller.tick();
       next = r.nextTickMs;
