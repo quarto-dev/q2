@@ -388,7 +388,7 @@ describe('HepImage', () => {
         expect(pkg.dependencies['hephaestus-svg-wasm']).toBe(HEPHAESTUS_SVG_WASM_VERSION);
 
         const lock = readFileSync(resolve(here, '../../Cargo.lock'), 'utf-8');
-        const m = /name = "hephaestus"\nversion = "([^"]+)"/.exec(lock);
+        const m = /name = "hephaestus"\r?\nversion = "([^"]+)"/.exec(lock);
         expect(m, 'hephaestus in Cargo.lock').not.toBeNull();
         expect(m![1]).toBe(HEPHAESTUS_SVG_WASM_VERSION);
     });
