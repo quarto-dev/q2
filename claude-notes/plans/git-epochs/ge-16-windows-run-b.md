@@ -2,7 +2,7 @@
 title: 'GE-16: Windows run B: the TypeScript and extension items'
 date: 2026-11-18
 description: Extends the temporary Windows tooling branch with the TypeScript and extension items, has Gordon run them once on a Windows machine, and records what Windows does and does not prove for the new TypeScript code.
-status: approved
+status: done
 depends-on: [ge-11, ge-12, ge-15]
 lane: C
 epic: ../2026-11-18-git-epochs-epic.md
@@ -95,14 +95,14 @@ Items marked (agent) run on macOS; items marked (Gordon) need the Windows machin
 - [x] (agent) Ask Gordon to say go. Then push the tooling branch with the explicit refspec, unsilenced:
   `git push origin windows/git-epochs:windows/git-epochs`, and check that `git ls-remote origin windows/git-epochs`
   prints the output of `git rev-parse HEAD`.
-- [ ] (Gordon) On the Windows machine: `git fetch origin windows/git-epochs`, switch to it, and run
+- [x] (Gordon) On the Windows machine: `git fetch origin windows/git-epochs`, switch to it, and run
   `powershell -ExecutionPolicy Bypass -File scripts\git-epochs-windows\run.ps1 -Only b1,b2,b3,b4,b5,b6,b7 -Publish`.
   If a failure needs explaining, run the extractor once and push `failure-details`.
-- [ ] (agent) Fetch the branch, parse `results/*.json`, and record the run in the notes: run id, host, Windows version,
+- [x] (agent) Fetch the branch, parse `results/*.json`, and record the run in the notes: run id, host, Windows version,
   git, node, uv, the `core.autocrlf` value, the base commit, a table of item results, and every failure with its output.
-- [ ] (agent) For each failure decide whether it is a product defect, a test defect, or the machine, and write a
+- [x] (agent) For each failure decide whether it is a product defect, a test defect, or the machine, and write a
   proposed fix plan (title, cause, files, test) in the notes. Do not change product code in this plan.
-- [ ] (agent) Copy the summary into the notes on `ge/16-windows-run-b`; rebase onto `feature/git-epochs`,
+- [x] (agent) Copy the summary into the notes on `ge/16-windows-run-b`; rebase onto `feature/git-epochs`,
   fast-forward, and leave the tooling branch unmerged.
 
 ## Gates
@@ -232,19 +232,29 @@ long and the 8.3 form (`GORDON~1`), so the volume has short names.
    `trySymlink` helper in the extension's test support; the junction-based directory rows already work without
    privilege). Files: `src/core/join.test.ts`, `src/core/origination/select.test.ts`, the test support. The skipped
    symlink behavior then needs one run with Developer Mode on (add that to GE-17's checklist).
-3. `b4` has six failures; three are visible in the committed tail.
-   - `follower.test.ts` "shows the mode in a persistent status item": `EPERM` on `fs.rename` of the temp folder
-     to the final name in `createProjectFolder` (`src/core/create-folder.ts:117`), after `repo.shutdown()`.
-     **Probable product defect**: a directory rename on Windows fails while a handle is open inside it
-     (`cross-platform.md`), and the Automerge storage or a watcher may still hold one after `shutdown()` resolves.
-     Proposed fix plan: *GE-F3 `createProjectFolder` retries the final rename and closes every handle first.* Test: a
-     rename with a held handle, using the injected-error pattern from `record.test.ts`.
-   - `project-sync.test.ts` "writes a file whose index entry appears...": the event log has no `created` event
-     for `docs/new.qmd` although the file reached disk. **Unclassified**, a timing or ordering difference.
-   - `clone-modes.test.ts` "each decision writes its event to events.jsonl": "timed out waiting for edit reaching the
-     doc". **Unclassified**.
-   - The other three failures were cut off by the 60-line tail in the results file. The run did not commit the log
-     (`results/logs/20261119-053817-GWWIN/b4-core.log`).
+3. `b4` has six failures, from the full log (`b4-core.log`, pushed by Gordon as `0de84b49b`). They fall into two groups.
+   - **Four failures, one cause, probable product defect.** `editor-only.test.ts` "after a checkout it waits for the hub
+     flip...", and `follower.test.ts` "one aggregate message per batch...", "a folder created before the mode existed
+     starts as a mirror...", and "shows the mode in a persistent status item" all stop at the same line:
+     `EPERM: operation not permitted, rename '...\.quarto-hub-tmp-XXXX' -> '...\quarto-hub-YYYY'` in
+     `createProjectFolder` (`src/core/create-folder.ts:117`, `await fs.rename(tmpRoot, root)`), reached right after
+     `repo.shutdown()` in the `finally`. A directory rename on Windows fails while any handle is open inside it
+     (`cross-platform.md`); Automerge's storage adapter or the flush may still hold the folder's files after
+     `shutdown()` resolves, or a scanner holds them. Many other `b4` tests that create folders passed, so it is
+     intermittent. Proposed fix plan: *GE-F3 `createProjectFolder` renames safely on Windows.* Files:
+     `vscode-sync-experiment/src/core/create-folder.ts`. Fix: confirm that the storage adapter has closed every file
+     before the rename (await its close, not only `repo.shutdown()`), and retry the rename a few times on `EPERM` and
+     `EBUSY` with a short backoff, as `record.ts` does for `git-epochs.json`; if it still fails, fall back to a copy and
+     remove. Test: reuse the injected-error `vi.mock` pattern from `record.test.ts` for the retry, and a test that holds
+     a handle inside `tmpRoot` and releases it after a delay.
+   - **Two failures, probably one cause, unclassified.** `project-sync.test.ts` "writes a file whose index entry
+     appears..." (the file reached disk, but `.quarto-hub/events.jsonl` had no `created` event) and
+     `clone-modes.test.ts` "each decision writes its event to events.jsonl" (it timed out at line 323, "edit reaching
+     the doc", after the `reset` event had been seen) both concern the event log or the disk-to-doc edit path. The log
+     shows no error text for either, so I cannot say whether the event append fails, is delayed past the test's wait, or
+     the Windows file watcher misses the edit. Proposed fix plan: *GE-F4 diagnose the event log and the disk-edit path on
+     Windows*: first a test run with the event writer's errors surfaced and the watcher's received paths logged (for
+     example `QUARTO_HUB_DEBUG`), then fix. Do not guess a cause before that run.
 4. `b7`: the build of `@quarto/hub-mcp` (`ts-packages/quarto-hub-mcp/package.json`) runs `rm -rf dist && tsc && ...`, and
    `rm` does not exist in `cmd.exe`. **Pre-existing defect** (the package predates the epic; list, do not chase). Every
    other `ts-packages` workspace, including `@quarto/quarto-git-epochs`, built. `npm run build -w quarto-hub-vscode`
@@ -254,3 +264,9 @@ long and the 8.3 form (`GORDON~1`), so the volume has short names.
 **Not run or not proved.** The real `q2 preview --share` and `--join` pair, `jj` on Windows, a volume with short names
 disabled, and the symlink behavior (blocked by `EPERM`) were not exercised. The tool that ran this is temporary and
 never lands.
+
+**Landing.** Every item `b1` to `b7` has a result from the Windows machine (run `20261119-053817-GWWIN`). Failures are
+classified above with proposed fix plans GE-F1 to GE-F4 for the parent to insert after this plan. The two
+deviations from the plan: the first run was void (the `-Only` quoting), and the `b4` log needed a second push from
+Gordon. No product code changed. The tooling branch `windows/git-epochs` is unmerged and still on the remote at
+`0de84b49b` or later, for GE-17.
