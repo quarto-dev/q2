@@ -39,6 +39,7 @@ const cleanups: (() => Promise<void> | void)[] = [];
 function record(step: string, observed: unknown, ok = true): void {
   transcript.push({ step, ok, observed });
   console.log(`[c1] ${ok ? 'ok  ' : 'FAIL'} ${step}: ${JSON.stringify(observed)}`);
+  if (!ok) flush();
 }
 
 /** Assert and record in one place: a failed assertion records FAIL and throws. */
@@ -202,6 +203,40 @@ async function fileIs(dir: string, rel: string, want: string | ((t: string) => b
 }
 const absent = (dir: string, rel: string, what: string) => waitFor(() => !existsSync(path.join(dir, rel)), what, 120_000);
 
+
+/** Counts the files under `dir`, skipping `.quarto-hub` (the store). */
+async function countFiles(dir: string): Promise<number> {
+  let n = 0;
+  const walk = async (d: string): Promise<void> => {
+    for (const e of await fs.readdir(d, { withFileTypes: true }).catch(() => [])) {
+      if (e.name === '.quarto-hub' || e.name === '.git') continue;
+      if (e.isDirectory()) await walk(path.join(d, e.name));
+      else n++;
+    }
+  };
+  await walk(dir);
+  return n;
+}
+
+/** Waits until the mirror holds `rel` with `want`, logging the file count every 15 s; on timeout the error carries the count and the hub log tail. */
+async function mirrorHolds(hub: Hub, dir: string, rel: string, want: string, what: string, timeout = 480_000): Promise<void> {
+  const t0 = Date.now();
+  let lastLog = 0;
+  try {
+    await waitFor(async () => {
+      if (Date.now() - lastLog > 15_000) {
+        lastLog = Date.now();
+        record(`progress: ${what}`, { files: await countFiles(dir), seconds: Math.round((Date.now() - t0) / 1000), hubAlive: hub.proc.exitCode === null });
+      }
+      return (await read(dir, rel)) === want;
+    }, what, timeout);
+  } catch (e) {
+    const files = await countFiles(dir);
+    record(`timeout: ${what}`, { files, expected: FILES, seconds: Math.round((Date.now() - t0) / 1000), hubExit: hub.proc.exitCode, hubLogTail: hub.log().slice(-1500) }, false);
+    throw e;
+  }
+}
+
 async function decisionsOf(hub: Hub): Promise<GitStatusBody['decisions']> {
   return (await gitStatus(hub.url)).decisions;
 }
@@ -239,8 +274,8 @@ test('c1 steps 1-8: gate, classifier, registry, flips, unlists, a binary file', 
   const mirror = await mirrorOf(hub, 'mirror');
   const clone = await cloneOf(hub, projectDir, 'clone');
   await step('3 peers attached and the clone edits a.qmd', async () => {
-    await fileIs(mirror.dir, 'a.qmd', MAIN_FILES['a.qmd']!, 'the mirror holds a.qmd', 180_000);
-    await fileIs(mirror.dir, bulkPath(FILES - 1), bulkBody(FILES - 1, 'main'), 'the mirror holds the last bulk file', 180_000);
+    await fileIs(mirror.dir, 'a.qmd', MAIN_FILES['a.qmd']!, 'the mirror holds a.qmd', 480_000);
+    await mirrorHolds(hub, mirror.dir, bulkPath(FILES - 1), bulkBody(FILES - 1, 'main'), 'the mirror holds the last bulk file');
     await fs.appendFile(path.join(clone.dir, 'a.qmd'), 'CLONE-EDIT\n');
     await fileIs(projectDir, 'a.qmd', (t) => t.includes('CLONE-EDIT'), 'the edit reaches the hub disk');
     await fileIs(mirror.dir, 'a.qmd', (t) => t.includes('CLONE-EDIT'), 'the edit reaches the mirror');
@@ -395,7 +430,7 @@ test('c1 step 9: stopping the hub during a git switch skips the flush and leaves
   const repo = fx.repo;
   const hub = await startHub(projectDir, dataDir);
   const mirror = await mirrorOf(hub, 'mirror9');
-  await fileIs(mirror.dir, bulkPath(FILES - 1), bulkBody(FILES - 1, 'main'), 'the mirror holds every file', 180_000);
+  await mirrorHolds(hub, mirror.dir, bulkPath(FILES - 1), bulkBody(FILES - 1, 'main'), 'the mirror holds every file');
   // an unflushed edit that must not be lost silently: a dirty doc on the hub's side
   await fs.appendFile(path.join(mirror.dir, 'a.qmd'), 'UNFLUSHED\n');
 

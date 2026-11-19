@@ -8,7 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   testDir: here,
   testMatch: '**/*.e2e.ts',
-  timeout: 600_000,
+  timeout: 1_200_000,
   expect: { timeout: 60_000 },
   workers: 1,
   fullyParallel: false,

@@ -527,6 +527,8 @@ if ($wantC -and ((Test-Selected 'c1') -or (Test-Selected 'c2'))) {
             $env:Q2_BINARY = $q2Exe
             $r = Invoke-Logged 'c1-scenario' ('node "' + (Join-Path $PSScriptRoot 'c1\run.mjs') + '"')
             Remove-Item Env:\C1_OUT -ErrorAction SilentlyContinue
+            # Keep the full log with the results (the logs directory is not committed): the transcript is small, the log is not.
+            Copy-Item -Path $r.Log -Destination (Join-Path $resultsDir ('c1-scenario-' + $runId + '.log')) -ErrorAction SilentlyContinue
             Remove-Item Env:\Q2_BINARY -ErrorAction SilentlyContinue
             $cnt = Get-PlaywrightCounts (Get-LogText $r.Log)
             $text = (Get-LogText $r.Log) -replace '\x1b\[[0-9;]*m', ''
@@ -657,6 +659,7 @@ if ($nf -gt 0) {
 $pushCmd = 'git add scripts/git-epochs-windows/results/*.json scripts/git-epochs-windows/results/*.md; git commit -m "GE-15/GE-16: Windows results"; git push origin HEAD:windows/git-epochs'
 if ($Publish) {
     & git add $jsonPath $mdPath
+    Get-ChildItem -Path $resultsDir -Filter ('c1-*' + $runId + '*') -ErrorAction SilentlyContinue | ForEach-Object { & git add $_.FullName }
     & git commit -m ('GE-15/GE-16: Windows results ' + $runId)
     & git push origin 'HEAD:windows/git-epochs'
     Write-Host 'Pushed. Tell the macOS agent: results are pushed.'
