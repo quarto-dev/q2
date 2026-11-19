@@ -30,6 +30,7 @@ import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import {
   getFileContent,
+  getFileHandle,
   isWasmReady,
   setImmediateFileChangeCallback,
   vfsAddFile,
@@ -342,7 +343,8 @@ export function useAutomergeSync({
         // Write the VFS too — the preview's WASM render reads the file from
         // the VFS (the content prop is only its trigger); on main the sync
         // client does this in onFileChanged.
-        applyBranchEdits(currentFileRef.current.path, branchId, event.changes);
+        // Bound to the doc the editor shows (GE-7), so a swap cannot redirect the edit to another doc's branch.
+        applyBranchEdits(currentFileRef.current.path, branchId, event.changes, getFileHandle(currentFileRef.current.path)?.documentId);
         vfsAddFile(currentFileRef.current.path, value);
       } else if (sourceRef.current !== undefined) {
         sourceRef.current.applyChanges(event.changes);

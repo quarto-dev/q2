@@ -597,3 +597,19 @@ describe('am.unsafe', () => {
     expect(makeApi().unsafe.Automerge).toBe(AutomergeModule);
   });
 });
+
+describe('handle resolution across a swap (GE-7)', () => {
+  it('snapshot of a path resolves the handle at call time, so it reads the new doc after a swap', () => {
+    const makeFor = (docId: string, text: string) =>
+      fakeHandle({ docId, doc: { text }, heads: [`h-${docId}`] });
+    let current = makeFor('docA', 'old text');
+    previewRuntimeMocks.getFileHandle.mockImplementation((path: string) =>
+      path === 'index.qmd' ? current : null,
+    );
+    const api = makeApi();
+    expect(api.snapshot('index.qmd').docId).toBe('docA');
+
+    current = makeFor('docB', 'new text');
+    expect(api.snapshot('index.qmd').docId).toBe('docB');
+  });
+});

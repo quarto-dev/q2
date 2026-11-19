@@ -8,6 +8,7 @@
 import type { DocHandle, DocHandleEphemeralMessagePayload } from '@automerge/automerge-repo';
 import { next as A } from '@automerge/automerge';
 import { getFileHandle } from '@quarto/preview-runtime';
+import { movedNotice, type MovedMessage } from '@quarto/quarto-git-epochs';
 import { getUserIdentity } from './userSettings';
 import type { UserSettings } from './storage/types';
 
@@ -53,12 +54,22 @@ interface PresenceLeaveMessage {
   peerId: string;
 }
 
-type EphemeralMessage = PresenceMessage | PresenceLeaveMessage;
+type EphemeralMessage = PresenceMessage | PresenceLeaveMessage | MovedMessage;
 
 /**
  * Callback for presence changes.
  */
 type PresenceChangeCallback = (presences: PresenceState[]) => void;
+
+/**
+ * What subscribers hear when a peer leaves the doc because the project owner replaced it (G25): the peer's id and the
+ * short text to show ("Ada switched versions").
+ */
+export interface PeerMovedEvent {
+  peerId: string;
+  text: string;
+}
+type PeerMovedCallback = (event: PeerMovedEvent) => void;
 
 /**
  * Configuration options for the presence service.
@@ -106,6 +117,7 @@ interface PresenceServiceState {
 
   // Subscribers
   subscribers: Set<PresenceChangeCallback>;
+  movedSubscribers: Set<PeerMovedCallback>;
 
   // Event listener cleanup
   messageHandler: ((payload: DocHandleEphemeralMessagePayload<unknown>) => void) | null;
@@ -133,6 +145,7 @@ const state: PresenceServiceState = {
   pendingBroadcast: null,
   cleanupInterval: null,
   subscribers: new Set(),
+  movedSubscribers: new Set(),
   messageHandler: null,
   visibilityHandler: null,
   focusHandler: null,
@@ -245,6 +258,41 @@ export function setCurrentFile(filePath: string | null): void {
 
   // Notify subscribers
   notifySubscribers();
+}
+
+/**
+ * Rebind presence to the handle the current path now resolves to (GE-7). Call it when a swap of the open file
+ * completes. `setCurrentFile` returns early for an unchanged path, so without this the service would keep listening and
+ * broadcasting on the old handle. It tells the peers on the old doc that we moved (the shared `moved` message, not a
+ * `leave`), stops listening there, forgets the remote cursors (they point into a doc we no longer show), and listens on
+ * the new handle. Does nothing when no file is open or the handle did not change.
+ */
+export function rebindCurrentFile(): void {
+  const path = state.currentFilePath;
+  if (!path) return;
+  const next = getFileHandle(path) as DocHandle<unknown> | null;
+  if (next === state.currentHandle) return;
+
+  if (state.currentHandle) {
+    const moved: MovedMessage = { type: 'moved', peerId: state.peerId };
+    state.currentHandle.broadcast(moved);
+    stopListening();
+  }
+  state.remotePresences.clear();
+  state.currentHandle = next;
+  if (next) startListening();
+  notifySubscribers();
+}
+
+/**
+ * Subscribe to "this person switched versions" events from peers that left the doc because of a swap (G25).
+ * Returns an unsubscribe function.
+ */
+export function onPeerMoved(callback: PeerMovedCallback): () => void {
+  state.movedSubscribers.add(callback);
+  return () => {
+    state.movedSubscribers.delete(callback);
+  };
 }
 
 /**
@@ -409,6 +457,16 @@ function stopListening(): void {
 function handleEphemeralMessage(message: EphemeralMessage): void {
   // Ignore our own messages
   if (message.peerId === state.peerId) {
+    return;
+  }
+
+  if (message.type === 'moved') {
+    // The peer left this doc because the project owner replaced it: drop its cursor and say so briefly.
+    const name = state.remotePresences.get(message.peerId)?.userName;
+    state.remotePresences.delete(message.peerId);
+    notifySubscribers();
+    const event: PeerMovedEvent = { peerId: message.peerId, text: movedNotice(name) };
+    for (const cb of [...state.movedSubscribers]) cb(event);
     return;
   }
 
@@ -615,6 +673,7 @@ export function _resetForTesting(): void {
   state.pendingBroadcast = null;
   state.cleanupInterval = null;
   state.subscribers = new Set();
+  state.movedSubscribers = new Set();
   state.messageHandler = null;
   state.visibilityHandler = null;
   state.focusHandler = null;

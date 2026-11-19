@@ -112,6 +112,18 @@
   cursor: help;
 }
 
+/* Tier 3 as well: the "paused for git" banner (GE-7). It follows the preview's git state rather than the whole session,
+   but it is the same kind of thing: an in-flow, non-dismissible indicator above the content it describes. */
+.paused-for-git-banner {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border-bottom: 1px solid var(--warning-border);
+  padding: 4px 16px;
+  font-size: var(--text-sm);
+  text-align: center;
+  flex-shrink: 0;
+}
+
 /* Focusable for its tooltip — needs a visible indicator (WCAG 2.4.7). */
 .ephemeral-session-banner:focus-visible {
   outline: var(--focus-ring);

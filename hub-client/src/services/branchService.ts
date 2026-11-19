@@ -232,6 +232,17 @@ export function getBranchSnapshot(path: string): BranchSnapshot {
   return snapshot;
 }
 
+/**
+ * The project owner replaced `path`'s doc (GE-7, G34): go back to main, because the branch the editor showed belonged
+ * to the old doc. Branches are keyed by doc id, so the old doc's branches stay in storage, unreachable from the path
+ * (no orphan UI). Returns how many branches stayed with the old doc, for the "branches stay" notice line.
+ */
+export function handleDocSwapped(path: string, oldDocId: string): number {
+  const stayed = readIndex(oldDocId).length;
+  if (activeByPath.get(path) != null) setActiveBranch(path, null);
+  return stayed;
+}
+
 export function setActiveBranch(path: string, branchId: string | null): void {
   if (branchId !== null) {
     const docId = resolveDocId(path);
@@ -307,13 +318,28 @@ export function getBranchText(path: string, branchId: string): string | null {
 /**
  * Apply Monaco editor operations to a branch doc as automerge splices.
  * Mirrors the sync client's `applyEditorOperations` for main.
+ *
+ * `baseDocId` binds the edit to the doc the editor was showing (GE-7): if the project owner has replaced the file
+ * since, the edit still reaches the branch of that doc instead of being applied to, or lost against, the new one. A
+ * missing doc or branch warns; an edit never disappears silently.
  */
-export function applyBranchEdits(path: string, branchId: string, changes: EditorContentChange[]): void {
+export function applyBranchEdits(
+  path: string,
+  branchId: string,
+  changes: EditorContentChange[],
+  baseDocId?: string,
+): void {
   if (changes.length === 0) return;
-  const docId = resolveDocId(path);
-  if (!docId) return;
+  const docId = baseDocId ?? resolveDocId(path);
+  if (!docId) {
+    console.warn(`branchService: edit to ${path} dropped: no document is bound to the path`);
+    return;
+  }
   const doc = loadDoc(docId, branchId);
-  if (!doc) return;
+  if (!doc) {
+    console.warn(`branchService: edit to ${path} dropped: document ${docId} has no branch ${branchId}`);
+    return;
+  }
 
   const updated = A.change(doc, (d) => {
     for (const change of changes) {

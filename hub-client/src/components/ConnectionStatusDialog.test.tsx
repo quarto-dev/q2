@@ -13,6 +13,8 @@ import ConnectionStatusDialog from './ConnectionStatusDialog';
 
 const mocks = vi.hoisted(() => ({
   lastRemoteChangeAt: null as number | null,
+  fileDocId: 'doc-file',
+  queriedDocIds: [] as string[],
 }));
 
 vi.mock('@quarto/preview-runtime', () => ({
@@ -22,17 +24,20 @@ vi.mock('@quarto/preview-runtime', () => ({
     peers: [{ peerId: 'peer-1' }],
   }),
   getIndexHandle: () => ({ documentId: 'doc-index' }),
-  getFileHandle: () => ({ documentId: 'doc-file' }),
+  getFileHandle: () => ({ documentId: mocks.fileDocId }),
 }));
 
 vi.mock('@quarto/quarto-sync-client', () => ({
-  getDocSyncActivityWithPersisted: () => ({
-    lastSyncMessageAt: null,
-    lastEphemeralMessageAt: null,
-    lastRemoteChangeAt: mocks.lastRemoteChangeAt,
-    lastLocalChangeAt: null,
-    lastLocalDeliveredAt: null,
-  }),
+  getDocSyncActivityWithPersisted: (docId: string) => {
+    mocks.queriedDocIds.push(docId);
+    return {
+      lastSyncMessageAt: null,
+      lastEphemeralMessageAt: null,
+      lastRemoteChangeAt: mocks.lastRemoteChangeAt,
+      lastLocalChangeAt: null,
+      lastLocalDeliveredAt: null,
+    };
+  },
   getDocRemoteChange: () => null,
   getConnectionLog: () => [],
 }));
@@ -80,5 +85,19 @@ describe('ConnectionStatusDialog', () => {
       window.dispatchEvent(new Event('online'));
     });
     expect(screen.getByText('Online')).toBeDefined();
+  });
+
+  it('shows the new doc after the project owner replaces the file (GE-7)', () => {
+    mocks.fileDocId = 'doc-A';
+    mocks.queriedDocIds = [];
+    const { rerender } = render(<ConnectionStatusDialog currentFilePath="index.qmd" onClose={() => {}} />);
+    expect(mocks.queriedDocIds).toContain('doc-A');
+
+    mocks.fileDocId = 'doc-B';
+    mocks.queriedDocIds = [];
+    rerender(<ConnectionStatusDialog currentFilePath="index.qmd" onClose={() => {}} />);
+    expect(mocks.queriedDocIds).toContain('doc-B');
+    expect(mocks.queriedDocIds).not.toContain('doc-A');
+    mocks.fileDocId = 'doc-file';
   });
 });

@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   wsReadyState: 1 as number | null,
   peers: [{ peerId: 'peer-1' }] as Array<{ peerId: string }>,
   lastRemoteChangeAt: null as number | null,
+  fileDocId: 'doc-file',
+  queriedDocIds: [] as string[],
 }));
 
 vi.mock('@quarto/preview-runtime', () => ({
@@ -23,17 +25,20 @@ vi.mock('@quarto/preview-runtime', () => ({
     peers: mocks.peers,
   }),
   getIndexHandle: () => ({ documentId: 'doc-index' }),
-  getFileHandle: () => ({ documentId: 'doc-file' }),
+  getFileHandle: () => ({ documentId: mocks.fileDocId }),
 }));
 
 vi.mock('@quarto/quarto-sync-client', () => ({
-  getDocSyncActivity: () => ({
-    lastSyncMessageAt: null,
-    lastEphemeralMessageAt: null,
-    lastRemoteChangeAt: mocks.lastRemoteChangeAt,
-    lastLocalChangeAt: null,
-    lastLocalDeliveredAt: null,
-  }),
+  getDocSyncActivity: (docId: string) => {
+    mocks.queriedDocIds.push(docId);
+    return {
+      lastSyncMessageAt: null,
+      lastEphemeralMessageAt: null,
+      lastRemoteChangeAt: mocks.lastRemoteChangeAt,
+      lastLocalChangeAt: null,
+      lastLocalDeliveredAt: null,
+    };
+  },
 }));
 
 afterEach(() => {
@@ -84,5 +89,21 @@ describe('SyncStatusBadge', () => {
     expect(screen.getByText('not synced')).toBeDefined();
     expect(screen.queryByText(/Offline/)).toBeNull();
     expect(screen.getByRole('button').getAttribute('aria-label')).toMatch(/^Offline/);
+  });
+
+  it('watches the new doc after the project owner replaces the file (GE-7)', () => {
+    mocks.wsReadyState = 1;
+    mocks.peers = [{ peerId: 'peer-1' }];
+    mocks.fileDocId = 'doc-A';
+    mocks.queriedDocIds = [];
+    const { rerender } = render(<SyncStatusBadge scope="file" currentFilePath="index.qmd" />);
+    expect(mocks.queriedDocIds).toContain('doc-A');
+
+    mocks.fileDocId = 'doc-B';
+    mocks.queriedDocIds = [];
+    rerender(<SyncStatusBadge scope="file" currentFilePath="index.qmd" verbose />);
+    expect(mocks.queriedDocIds).toContain('doc-B');
+    expect(mocks.queriedDocIds).not.toContain('doc-A');
+    mocks.fileDocId = 'doc-file';
   });
 });

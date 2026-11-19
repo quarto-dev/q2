@@ -13,7 +13,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { next as A } from '@automerge/automerge';
 import {
   getBranches,
@@ -24,6 +24,7 @@ import {
   getBranchText,
   getBranchDoc,
   applyBranchEdits,
+  handleDocSwapped,
   mergeBranchToMain,
   deleteBranch,
   subscribe,
@@ -320,5 +321,92 @@ describe('branchService', () => {
       expect(getBranchSnapshot('other.qmd').branches).toEqual([]);
       expect(getBranchSnapshot('other.qmd').activeBranchId).toBeNull();
     });
+  });
+});
+
+describe('branchService across a doc swap (GE-7)', () => {
+  const OLD = 'doc-old';
+  const NEW = 'doc-new';
+  let current: ReturnType<typeof makeFakeHandle>;
+  let warn: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    localStorage.clear();
+    _resetForTesting();
+    current = makeFakeHandle('old text', OLD);
+    _setHandleGetterForTesting((path: string) => (path === PATH ? current : null));
+    warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  function swapToNewDoc() {
+    current = makeFakeHandle('new text', NEW);
+  }
+
+  it('handleDocSwapped resets the active branch to main and reports how many branches stay with the old doc', () => {
+    const b1 = createBranch(PATH, 'one')!;
+    createBranch(PATH, 'two');
+    expect(getActiveBranchId(PATH)).not.toBeNull();
+    swapToNewDoc();
+
+    const stayed = handleDocSwapped(PATH, OLD);
+
+    expect(stayed).toBe(2);
+    expect(getActiveBranchId(PATH)).toBeNull();
+    // The new doc has no branches of its own; the old doc's stay in storage, unreachable from the path.
+    expect(getBranches(PATH)).toEqual([]);
+    expect(getBranchText(PATH, b1.id)).toBeNull();
+  });
+
+  it('handleDocSwapped reports zero and changes nothing when the old doc had no branches', () => {
+    swapToNewDoc();
+    expect(handleDocSwapped(PATH, OLD)).toBe(0);
+    expect(getActiveBranchId(PATH)).toBeNull();
+  });
+
+  it('applyBranchEdits with a stale baseDocId reaches the branch doc of that doc id', () => {
+    const b = createBranch(PATH, 'one')!;
+    swapToNewDoc();
+    handleDocSwapped(PATH, OLD);
+
+    applyBranchEdits(PATH, b.id, [{ rangeOffset: 0, rangeLength: 0, text: '>> ' }], OLD);
+
+    // Read the old doc's branch back through a handle that resolves to it.
+    _setHandleGetterForTesting((path: string) => (path === PATH ? makeFakeHandle('old text', OLD) : null));
+    expect(getBranchText(PATH, b.id)).toBe('>> old text');
+  });
+
+  it('applyBranchEdits with no baseDocId uses the current doc, as before', () => {
+    const b = createBranch(PATH, 'one')!;
+    applyBranchEdits(PATH, b.id, [{ rangeOffset: 0, rangeLength: 0, text: '!' }]);
+    expect(getBranchText(PATH, b.id)).toBe('!old text');
+  });
+
+  it('warns instead of returning silently when the branch doc cannot be found', () => {
+    const b = createBranch(PATH, 'one')!;
+    swapToNewDoc();
+    handleDocSwapped(PATH, OLD);
+
+    // The branch id belongs to the old doc; the current doc has no such branch.
+    applyBranchEdits(PATH, b.id, [{ rangeOffset: 0, rangeLength: 0, text: 'x' }]);
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    // An unknown doc id warns too.
+    applyBranchEdits(PATH, b.id, [{ rangeOffset: 0, rangeLength: 0, text: 'x' }], 'doc-never-seen');
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('warns when the path has no handle', () => {
+    _setHandleGetterForTesting(() => null);
+    applyBranchEdits(PATH, 'whatever', [{ rangeOffset: 0, rangeLength: 0, text: 'x' }]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('an empty change list stays a quiet no-op', () => {
+    applyBranchEdits(PATH, 'whatever', []);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

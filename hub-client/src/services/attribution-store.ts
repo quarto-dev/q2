@@ -60,6 +60,11 @@ export class AttributionStore {
   private steps = new Map<string, RunListAttribution>();
   private generating = false;
   private listeners = new Set<() => void>();
+  /**
+   * The id of the doc `state` was built from. A different doc (the project owner replaced the file) has an unrelated
+   * history, so the cached state, replay index and step cache are dropped rather than extended (GE-7).
+   */
+  private builtFor: string | null = null;
 
   private readonly path: string;
   /** The local branch whose doc is read, or null for the synced doc. */
@@ -105,6 +110,36 @@ export class AttributionStore {
     }
   }
 
+  /**
+   * Forget everything built so far: the runs, the replay index and step cache, and any running build. The next read
+   * asks for a fresh build. Call it when the document the path resolves to has been replaced.
+   */
+  reset(): void {
+    this.abort();
+    this.state = null;
+    this.builtFor = null;
+    this.wanted = null;
+    this.failed.clear();
+    this.index.clear();
+    this.steps.clear();
+    this.generating = false;
+    this.notify();
+  }
+
+  /** Reset if `handle` is not the doc the cached state was built from. */
+  private dropStateIfDocChanged(handle: DocHandle<unknown> | null): void {
+    const id = handle ? (handle.documentId ?? null) : null;
+    if (this.builtFor !== null && id !== null && id !== this.builtFor) {
+      this.abort();
+      this.state = null;
+      this.builtFor = null;
+      this.failed.clear();
+      this.index.clear();
+      this.steps.clear();
+      this.generating = false;
+    }
+  }
+
   /** Stop any build. The store can be read and reconciled again afterwards. */
   dispose(): void {
     this.abort();
@@ -117,15 +152,16 @@ export class AttributionStore {
     if (this.steps.size > 0) this.steps.clear();
     for (const key of this.failed) if (key !== null) this.failed.delete(key);
 
-    if (!this.state) {
-      if (this.failed.has(null)) return ATTRIBUTION_NONE;
-      return ATTRIBUTION_PENDING;
-    }
     let handle: DocHandle<unknown> | null;
     try {
       handle = resolveHandle(this.path, this.branchId);
     } catch {
       handle = null;
+    }
+    this.dropStateIfDocChanged(handle);
+    if (!this.state) {
+      if (this.failed.has(null)) return ATTRIBUTION_NONE;
+      return ATTRIBUTION_PENDING;
     }
     if (!handle) return ATTRIBUTION_NONE;
     try {
@@ -154,7 +190,8 @@ export class AttributionStore {
     if (this.state) {
       try {
         const handle = getFileHandle(this.path);
-        if (handle) {
+        this.dropStateIfDocChanged(handle ?? null);
+        if (this.state && handle) {
           this.state = updateRunListAttribution(this.state, handle, 'text', this.target(key));
           this.remember(key, this.state);
           return this.state;
@@ -203,6 +240,7 @@ export class AttributionStore {
     }
 
     this.building = { key, controller };
+    this.builtFor = handle.documentId ?? null;
     this.setGenerating(true);
     buildRunListAttribution(
       handle,

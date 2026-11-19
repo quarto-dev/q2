@@ -23,6 +23,8 @@ import {
   onPresenceChange,
   getLocalIdentity,
   getLocalPeerId,
+  rebindCurrentFile,
+  onPeerMoved,
   _resetForTesting,
   _getStateForTesting,
 } from './presenceService';
@@ -835,5 +837,169 @@ describe('presenceService — visibility gating', () => {
       expect(notified).not.toBeNull();
       expect(getRemotePresences()).toBe(notified);
     });
+  });
+});
+
+// ===========================================================================
+// Swaps (GE-7, G25): rebind after the project owner replaces the file
+// ===========================================================================
+
+type EphemeralListener = (payload: { message: unknown }) => void;
+
+/** A handle that records listeners and broadcasts, and can deliver an ephemeral message to its listeners. */
+function createEmitterHandle(label: string) {
+  const listeners = new Set<EphemeralListener>();
+  return {
+    label,
+    broadcast: vi.fn(),
+    on: vi.fn((event: string, fn: EphemeralListener) => {
+      if (event === 'ephemeral-message') listeners.add(fn);
+    }),
+    off: vi.fn((event: string, fn: EphemeralListener) => {
+      if (event === 'ephemeral-message') listeners.delete(fn);
+    }),
+    deliver(message: unknown) {
+      for (const l of [...listeners]) l({ message });
+    },
+    listenerCount: () => listeners.size,
+    doc: () => A.from({ text: label }),
+  };
+}
+
+describe('presenceService — swaps (GE-7)', () => {
+  beforeEach(() => {
+    _resetForTesting();
+    vi.useFakeTimers();
+    mockGetFileHandle.mockReset();
+  });
+
+  afterEach(() => {
+    cleanupPresence();
+    vi.useRealTimers();
+  });
+
+  function remote(peerId: string, name = 'Ada') {
+    return {
+      type: 'presence',
+      peerId,
+      userId: `user-${peerId}`,
+      userName: name,
+      userColor: '#ff0000',
+      cursor: null,
+      selection: null,
+    };
+  }
+
+  it('setCurrentFile keeps listening on the old handle after a swap, which is the bug rebind fixes', async () => {
+    await initPresence();
+    const oldH = createEmitterHandle('old');
+    const newH = createEmitterHandle('new');
+    mockGetFileHandle.mockReturnValue(oldH as never);
+    setCurrentFile('index.qmd');
+    mockGetFileHandle.mockReturnValue(newH as never);
+    setCurrentFile('index.qmd'); // same path: returns early
+    expect(oldH.listenerCount()).toBe(1);
+    expect(newH.listenerCount()).toBe(0);
+  });
+
+  it('rebindCurrentFile moves the listener to the new handle and clears remote presences', async () => {
+    await initPresence();
+    const oldH = createEmitterHandle('old');
+    const newH = createEmitterHandle('new');
+    mockGetFileHandle.mockReturnValue(oldH as never);
+    setCurrentFile('index.qmd');
+    oldH.deliver(remote('peer-1'));
+    expect(getRemotePresences().map((p) => p.peerId)).toEqual(['peer-1']);
+
+    mockGetFileHandle.mockReturnValue(newH as never);
+    rebindCurrentFile();
+
+    expect(getRemotePresences()).toEqual([]);
+    expect(oldH.listenerCount()).toBe(0);
+    expect(newH.listenerCount()).toBe(1);
+    // Messages on the old doc are ignored now; on the new doc they are handled.
+    oldH.deliver(remote('peer-2'));
+    expect(getRemotePresences()).toEqual([]);
+    newH.deliver(remote('peer-3'));
+    expect(getRemotePresences().map((p) => p.peerId)).toEqual(['peer-3']);
+  });
+
+  it('rebindCurrentFile broadcasts the shared moved message on the old handle, and nothing else', async () => {
+    await initPresence();
+    const oldH = createEmitterHandle('old');
+    const newH = createEmitterHandle('new');
+    mockGetFileHandle.mockReturnValue(oldH as never);
+    setCurrentFile('index.qmd');
+    mockGetFileHandle.mockReturnValue(newH as never);
+    rebindCurrentFile();
+
+    expect(oldH.broadcast).toHaveBeenCalledTimes(1);
+    expect(oldH.broadcast).toHaveBeenCalledWith({ type: 'moved', peerId: getLocalPeerId() });
+    expect(newH.broadcast).not.toHaveBeenCalled();
+  });
+
+  it('rebindCurrentFile does nothing when the handle did not change or no file is open', async () => {
+    await initPresence();
+    rebindCurrentFile();
+    const h = createEmitterHandle('same');
+    mockGetFileHandle.mockReturnValue(h as never);
+    setCurrentFile('index.qmd');
+    rebindCurrentFile();
+    expect(h.broadcast).not.toHaveBeenCalled();
+    expect(h.listenerCount()).toBe(1);
+  });
+
+  it('a moved message removes that peer and tells subscribers "<name> switched versions"', async () => {
+    await initPresence();
+    const h = createEmitterHandle('doc');
+    mockGetFileHandle.mockReturnValue(h as never);
+    setCurrentFile('index.qmd');
+    h.deliver(remote('peer-1', 'Ada'));
+    const seen: Array<{ peerId: string; text: string }> = [];
+    onPeerMoved((e) => seen.push(e));
+
+    h.deliver({ type: 'moved', peerId: 'peer-1' });
+
+    expect(getRemotePresences()).toEqual([]);
+    expect(seen).toEqual([{ peerId: 'peer-1', text: 'Ada switched versions' }]);
+  });
+
+  it('a moved message from a peer with no known presence says "This person switched versions"', async () => {
+    await initPresence();
+    const h = createEmitterHandle('doc');
+    mockGetFileHandle.mockReturnValue(h as never);
+    setCurrentFile('index.qmd');
+    const seen: Array<{ peerId: string; text: string }> = [];
+    onPeerMoved((e) => seen.push(e));
+
+    h.deliver({ type: 'moved', peerId: 'peer-9' });
+
+    expect(seen).toEqual([{ peerId: 'peer-9', text: 'This person switched versions' }]);
+  });
+
+  it('ignores our own moved message and stops notifying after unsubscribe', async () => {
+    await initPresence();
+    const h = createEmitterHandle('doc');
+    mockGetFileHandle.mockReturnValue(h as never);
+    setCurrentFile('index.qmd');
+    const seen: unknown[] = [];
+    const off = onPeerMoved((e) => seen.push(e));
+    h.deliver({ type: 'moved', peerId: getLocalPeerId() });
+    expect(seen).toEqual([]);
+    off();
+    h.deliver({ type: 'moved', peerId: 'peer-1' });
+    expect(seen).toEqual([]);
+  });
+
+  it('a moved message clears only that peer\'s cursor, so each tab clears only its own remote cursors', async () => {
+    // A tab is one module instance with its own state; a peer in another tab is just another remote here.
+    await initPresence();
+    const h = createEmitterHandle('doc');
+    mockGetFileHandle.mockReturnValue(h as never);
+    setCurrentFile('index.qmd');
+    h.deliver(remote('tab-b-peer'));
+    h.deliver(remote('someone-else'));
+    h.deliver({ type: 'moved', peerId: 'tab-b-peer' });
+    expect(getRemotePresences().map((p) => p.peerId)).toEqual(['someone-else']);
   });
 });

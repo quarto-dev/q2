@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   getFileHandle,
   updateFileContent,
@@ -7,6 +7,7 @@ import {
   createReplaySession,
   type ReplaySession,
 } from '@quarto/quarto-sync-client';
+import { isCompletedSwap, subscribeFileReplaced } from '../services/swapEvents';
 
 export const PLAYBACK_SPEEDS = [1, 2, 4] as const;
 export type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];
@@ -320,6 +321,15 @@ export function useReplayMode(
   const exit = useCallback(() => {
     reset();
   }, [reset]);
+
+  // GE-7: a replay session holds the old doc's handle and writes through the path. When the project owner replaces
+  // the file, close it without applying anything: its history belongs to a doc that is no longer the file.
+  useEffect(() => {
+    if (!filePath) return;
+    return subscribeFileReplaced((event) => {
+      if (event.path === filePath && isCompletedSwap(event) && sessionRef.current) reset();
+    });
+  }, [filePath, reset]);
 
   const apply = useCallback(() => {
     const session = sessionRef.current;

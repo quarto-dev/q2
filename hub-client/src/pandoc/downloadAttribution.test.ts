@@ -88,3 +88,18 @@ describe('attributionJsonFor', () => {
     warn.mockRestore();
   });
 });
+
+describe('attributionJsonFor across a swap (GE-7)', () => {
+  it('resolves the handle on every call, so it reads the new doc after a swap', async () => {
+    const docA = vi.fn(() => ({ text: TEXT }));
+    const docB = vi.fn(() => ({ text: TEXT }));
+    getFileHandle.mockReturnValue({ doc: docA });
+    await attributionJsonFor('doc.qmd', 'docx');
+    expect(docA).toHaveBeenCalled();
+    expect(docB).not.toHaveBeenCalled();
+
+    getFileHandle.mockReturnValue({ doc: docB });
+    await attributionJsonFor('doc.qmd', 'docx');
+    expect(docB).toHaveBeenCalled();
+  });
+});

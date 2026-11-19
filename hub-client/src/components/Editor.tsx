@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import { initialsFor } from '../utils/facepile';
 import { DiffEditor } from '@monaco-editor/react';
@@ -17,7 +17,8 @@ import {
   exportProjectAsZip,
   type EditorContentChange,
 } from '@quarto/preview-runtime';
-import { vfsAddFile, isWasmReady, clearCapture, getFileContent } from '@quarto/preview-runtime';
+import { vfsAddFile, isWasmReady, clearCapture, getFileContent, swapStatus } from '@quarto/preview-runtime';
+import type { GitStatusPoller } from '@quarto/preview-runtime';
 import { PreviewStatusBar } from './render/PreviewStatusBar';
 import { hasExecutableCells } from '../services/executableCells';
 import type { Diagnostic, RenderComment } from '@quarto/preview-renderer/types/diagnostic';
@@ -40,6 +41,8 @@ import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import { perfNow, perfSegment, perfMark } from '../utils/perfCounters';
 import EphemeralSessionBanner from './EphemeralSessionBanner';
+import PausedForGitBanner from './PausedForGitBanner';
+import SwapNotices from './SwapNotices';
 import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
 import NewFolderDialog from './NewFolderDialog';
@@ -124,6 +127,11 @@ interface Props {
    */
   sessionEphemeral?: boolean;
   /**
+   * The "paused for git" status poller (GE-7). Present only when a `q2 preview` serves the editor; the banner shows
+   * while the preview holds edits back during a git operation.
+   */
+  pausedPoller?: GitStatusPoller;
+  /**
    * Host-provided bar rendered under the top bar (bd-fxdcxbpq): the
    * one-time invite welcome banner. Hidden in fullscreen preview.
    */
@@ -165,7 +173,7 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   return files[0];
 }
 
-export default function Editor({ project, files, folders, fileContents, binaryFileVersions, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral, banner, userName }: Props) {
+export default function Editor({ project, files, folders, fileContents, binaryFileVersions, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral, pausedPoller, banner, userName }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
 
@@ -292,6 +300,13 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   // isActiveRef is updated synchronously in enter()/exit() — before React
   // re-renders — so it can guard handleEditorChange against stale closures.
   const { state: replayState, controls: replayControls, isActiveRef: replayActiveRef } = useReplayMode(textFile?.path ?? null);
+
+  // The project owner is replacing the open file (GE-7): freeze the editor until the swap finishes.
+  const swapSnapshot = useSyncExternalStore(swapStatus.subscribe, swapStatus.getSnapshot);
+  const fileIsBeingReplaced = textFile !== null && swapSnapshot.pending.includes(textFile.path);
+  useEffect(() => {
+    swapStatus.setOpenFile(textFile?.path);
+  }, [textFile?.path]);
 
   // Current document text, mirrored synchronously from DocumentEditor's
   // Automerge sync (`onContentChange`) for the preview and summary.
@@ -1360,6 +1375,9 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
 
         {!isFullscreenPreview && sessionEphemeral && <EphemeralSessionBanner />}
 
+        {/* "Paused for git" (GE-7): an indicator only; editing stays possible. */}
+        {!isFullscreenPreview && pausedPoller && <PausedForGitBanner poller={pausedPoller} />}
+
         {/* Invite welcome banner (bd-fxdcxbpq) or other host-provided chrome. */}
         {!isFullscreenPreview && banner}
 
@@ -1448,7 +1466,9 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
                 onContentOperations={onContentOperations}
                 theme={effectiveTheme}
                 markers={diagnosticMarkers}
-                readOnly={replayState.isActive}
+                // Frozen while the project owner replaces this file (GE-7): typing now would write into a doc that is
+                // about to be retired. Same mechanism replay uses.
+                readOnly={replayState.isActive || fileIsBeingReplaced}
                 replayActiveRef={replayActiveRef}
                 replayIsActive={replayState.isActive}
                 activeBranchId={activeBranchId}
@@ -1669,6 +1689,9 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
           onUploadAsset={handleUploadAsset}
         />
       )}
+
+      {/* The replaced-file notice and the "switched versions" toast (GE-7). The editor is an editing surface. */}
+      <SwapNotices />
 
       {/* Share project dialog — mounted only while open (bd-cp9wzu6o) */}
       {showShareDialog && (

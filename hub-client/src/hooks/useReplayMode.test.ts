@@ -22,6 +22,7 @@ import {
   updateFileContent,
 } from '@quarto/preview-runtime';
 import { createReplaySession } from '@quarto/quarto-sync-client';
+import { emitFileReplaced } from '../services/swapEvents';
 
 const mockGetFileHandle = vi.mocked(getFileHandle);
 const mockUpdateFileContent = vi.mocked(updateFileContent);
@@ -473,6 +474,51 @@ describe('useReplayMode', () => {
       act(() => { result.current.controls.seekTo(1); });
 
       expect(result.current.state.actor).toBe('bbb222');
+    });
+  });
+
+  describe('when the project owner replaces the file (GE-7)', () => {
+    it('closes the replay session on the path when the swap completes, without applying it', () => {
+      const { session } = createMockSession(['a', 'ab', 'abc']);
+      const { result } = renderHook(() => useReplayMode('index.qmd'));
+      act(() => { result.current.controls.enter(); });
+      expect(result.current.state.isActive).toBe(true);
+
+      act(() => {
+        emitFileReplaced({ path: 'index.qmd', phase: 'done', oldDocId: 'a', newDocId: 'b' });
+      });
+
+      expect(result.current.state.isActive).toBe(false);
+      expect(result.current.isActiveRef.current).toBe(false);
+      expect(session.close).toHaveBeenCalledTimes(1);
+      expect(session.applyContentAt).not.toHaveBeenCalled();
+      expect(mockUpdateFileContent).not.toHaveBeenCalled();
+    });
+
+    it('leaves a session on a different path alone, and ignores pending and unavailable', () => {
+      const { session } = createMockSession(['a', 'ab']);
+      const { result } = renderHook(() => useReplayMode('index.qmd'));
+      act(() => { result.current.controls.enter(); });
+
+      act(() => {
+        emitFileReplaced({ path: 'other.qmd', phase: 'done', oldDocId: 'a', newDocId: 'b' });
+        emitFileReplaced({ path: 'index.qmd', phase: 'pending', oldDocId: 'a', newDocId: 'b' });
+        emitFileReplaced({ path: 'index.qmd', phase: 'unavailable', oldDocId: 'a', newDocId: 'b' });
+        emitFileReplaced({ path: 'index.qmd', phase: 'done', oldDocId: 'a', newDocId: 'a' });
+      });
+
+      expect(result.current.state.isActive).toBe(true);
+      expect(session.close).not.toHaveBeenCalled();
+    });
+
+    it('stops listening after unmount', () => {
+      const { session } = createMockSession(['a', 'ab']);
+      const { result, unmount } = renderHook(() => useReplayMode('index.qmd'));
+      act(() => { result.current.controls.enter(); });
+      unmount();
+      session.close.mockClear();
+      emitFileReplaced({ path: 'index.qmd', phase: 'done', oldDocId: 'a', newDocId: 'b' });
+      expect(session.close).not.toHaveBeenCalled();
     });
   });
 });

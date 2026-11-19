@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
 import ProjectSelector from './components/ProjectSelector';
 import ProjectsHome from './components/ProjectsHome';
@@ -42,7 +42,9 @@ import {
   disconnect,
   setSyncHandlers,
   getFileContent,
+  getFileHandle,
   applyEditorOperations,
+  createGitStatusPoller,
   createNewProject,
   getProjectChoices,
   createProject as wasmCreateProject,
@@ -72,6 +74,8 @@ import { isSyncAllowed, setSyncAllowed } from './services/syncGate';
 import { probeHealth, startEphemeralServerWatchdog } from './services/ephemeralServerWatchdog';
 import { disconnect as disconnectProjectSet } from './services/projectSetService';
 import { fetchPreviewSessionConfig } from './services/previewConfig';
+import { emitFileReplaced } from './services/swapEvents';
+import { installSwapConsumers } from './services/swapConsumers';
 import type { StorageKind } from '@quarto/quarto-sync-client';
 import './App.css';
 
@@ -914,8 +918,14 @@ function App() {
       onError: (error) => {
         setConnectionError(error.message);
       },
+      // GE-7: the project owner replaced a file. The runtime feeds the swap status store itself; the bus lets each
+      // part of the app that holds a handle rebind from the same event.
+      onFileReplaced: emitFileReplaced,
     });
   }, [project]);
+
+  // GE-7: presence rebinds, branches reset, and the "branches stay" line joins the notice when a swap completes.
+  useEffect(() => installSwapConsumers(), []);
 
   // The last project-open attempt, kept so the connection error banner
   // on the projects home can offer a "Try again" recovery action
@@ -961,8 +971,16 @@ function App() {
   }, [navigateToProjectSelector]);
 
   const handleContentOperations = useCallback((path: string, changes: EditorContentChange[]) => {
-    applyEditorOperations(path, changes);
+    // Bind the write to the doc the editor is showing (GE-7): if the project owner replaces the file first, the write
+    // stays with the old doc instead of landing in the new one at the wrong offsets.
+    applyEditorOperations(path, changes, getFileHandle(path)?.documentId);
   }, []);
+
+  // The "paused for git" poller (GE-7): only a preview session has the route, so it exists only then.
+  const pausedPoller = useMemo(
+    () => (previewSession ? createGitStatusPoller({ url: hubPath('/api/preview/git-status') }) : undefined),
+    [previewSession],
+  );
 
   const handleProjectCreated = useCallback(async (
     scaffoldFiles: ProjectFile[],
@@ -1324,6 +1342,7 @@ function App() {
               onRequestExecution={requestExecution}
               isOnline={isOnline}
               sessionEphemeral={previewSession?.allowEdit === false}
+              pausedPoller={pausedPoller}
               userName={screenName}
               banner={
                 welcomeInvite && screenName && welcomeMatchesProject(welcomeInvite, project) ? (

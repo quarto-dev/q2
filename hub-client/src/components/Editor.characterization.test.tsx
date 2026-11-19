@@ -38,6 +38,10 @@ const h = vi.hoisted(() => ({
   prefs: {} as Record<string, unknown>,
   /** Monaco marker write spy (the fake monaco instance forwards here). */
   setModelMarkers: vi.fn(),
+  /** Monaco `updateOptions` spy: the editor's read-only state arrives through it. */
+  updateOptions: vi.fn(),
+  /** Backing snapshot for the swap status mock (GE-7). */
+  swap: { pending: [] as string[], notice: null as string | null, noticeSeq: 0 },
 }));
 
 // ---- module mocks ----------------------------------------------------------
@@ -72,7 +76,7 @@ vi.mock('@monaco-editor/react', async () => {
     onKeyDown: () => undefined,
     onDidChangeCursorPosition: () => undefined,
     getDomNode: () => null,
-    updateOptions: () => undefined,
+    updateOptions: (...args: unknown[]) => h.updateOptions(...args),
   };
   const fakeMonaco = {
     KeyMod: { CtrlCmd: 1 },
@@ -105,7 +109,15 @@ vi.mock('@monaco-editor/react', async () => {
   };
 });
 
+// The swap status store the editor reads (GE-7). `h.swap` is replaced, never mutated, so getSnapshot keeps its identity
+// until a test changes it (useSyncExternalStore treats a new object per call as a change).
 vi.mock('@quarto/preview-runtime', () => ({
+  swapStatus: {
+    subscribe: () => () => {},
+    getSnapshot: () => h.swap,
+    setOpenFile: vi.fn(),
+    dismissNotice: vi.fn(),
+  },
   createFile: vi.fn(),
   createBinaryFile: vi.fn(),
   deleteFile: vi.fn(),
@@ -314,6 +326,8 @@ beforeEach(() => {
   h.branches.activeBranchId = null;
   h.prefs = {};
   h.setModelMarkers.mockClear();
+  h.updateOptions.mockClear();
+  h.swap = { pending: [], notice: null, noticeSeq: 0 };
 });
 
 afterEach(cleanup);
@@ -339,6 +353,58 @@ describe('Editor default file selection', () => {
 
     rerenderWith({ files: [otherQmd, indexQmd] });
     expect(screen.getByTestId('monaco-editor').textContent).toBe('content-for-other.qmd');
+  });
+});
+
+// ---- swaps (GE-7) -----------------------------------------------------------
+
+describe('Editor while the project owner replaces the open file (GE-7)', () => {
+  it('makes the editor read-only while the open file is pending, and writable again after', () => {
+    const { rerenderWith } = renderEditor({ files: [indexQmd] });
+    expect(h.updateOptions).not.toHaveBeenCalledWith(expect.objectContaining({ readOnly: true }));
+
+    h.swap = { pending: ['index.qmd'], notice: null, noticeSeq: 0 };
+    rerenderWith({});
+    expect(h.updateOptions).toHaveBeenCalledWith({ readOnly: true, domReadOnly: true });
+
+    h.updateOptions.mockClear();
+    h.swap = { pending: [], notice: null, noticeSeq: 0 };
+    rerenderWith({});
+    expect(h.updateOptions).toHaveBeenCalledWith({ readOnly: false, domReadOnly: false });
+  });
+
+  it('does not freeze the editor for a swap of some other file', () => {
+    const { rerenderWith } = renderEditor({ files: [indexQmd] });
+    h.swap = { pending: ['other.qmd'], notice: null, noticeSeq: 0 };
+    rerenderWith({});
+    expect(h.updateOptions).not.toHaveBeenCalledWith({ readOnly: true, domReadOnly: true });
+  });
+
+  it('shows the replaced-file notice in a status region', () => {
+    const { rerenderWith } = renderEditor({ files: [indexQmd] });
+    expect(screen.queryByTestId('swap-notice')).toBeNull();
+    expect(screen.getByTestId('swap-notice-region').getAttribute('aria-live')).toBe('polite');
+
+    h.swap = { pending: [], notice: 'This file was replaced.', noticeSeq: 1 };
+    rerenderWith({});
+    expect(screen.getByTestId('swap-notice').textContent).toContain('This file was replaced.');
+  });
+
+  it('shows the paused banner only when a preview poller is provided and it says paused', () => {
+    const snapshot = { tracking: true, paused: true };
+    const poller = {
+      start: vi.fn(),
+      stop: vi.fn(),
+      getSnapshot: () => snapshot,
+      subscribe: () => () => {},
+    };
+    const first = renderEditor({ files: [indexQmd] });
+    expect(screen.queryByText(/Paused for git/)).toBeNull();
+    first.unmount();
+
+    renderEditor({ files: [indexQmd], pausedPoller: poller });
+    expect(screen.getByText(/Paused for git/)).not.toBeNull();
+    expect(poller.start).toHaveBeenCalled();
   });
 });
 
