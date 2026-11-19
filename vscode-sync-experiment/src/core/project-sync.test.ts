@@ -269,10 +269,41 @@ describe('ProjectSync: hub to disk (syncIndex)', () => {
     await startSync(root);
     await seeder.putFile('docs/new.qmd', 'from the hub\n');
     await waitFor(async () => (await readText(path.join(root, 'docs/new.qmd'))) === 'from the hub\n', 'docs/new.qmd on disk');
-    expect(await events(root)).toContainEqual(expect.objectContaining({ event: 'created', path: 'docs/new.qmd', source: 'hub' }));
+    // The event is appended after the file is written, so it can trail the file by a moment (slower on Windows).
+    await waitFor(async () => (await events(root)).some((e) => e.event === 'created' && e.path === 'docs/new.qmd' && e.source === 'hub'), 'the created event');
     await seeder.removeFile('docs/new.qmd');
     await waitFor(async () => (await readText(path.join(root, 'docs/new.qmd'))) === null, 'docs/new.qmd gone from disk');
-    expect(await events(root)).toContainEqual(expect.objectContaining({ event: 'deleted', path: 'docs/new.qmd', source: 'hub' }));
+    await waitFor(async () => (await events(root)).some((e) => e.event === 'deleted' && e.path === 'docs/new.qmd' && e.source === 'hub'), 'the deleted event');
+  });
+
+  it('logs a failed event append instead of swallowing it, and still writes the file (GE-16a B4)', async () => {
+    const id = await seeder.create({ 'a.qmd': 'A\n' });
+    const root = await folderFrom(id);
+    await fs.mkdir(path.join(root, '.quarto-hub', 'events.jsonl')); // an append to a directory fails
+    await startSync(root);
+    await seeder.putFile('n.qmd', 'new\n');
+    await waitFor(async () => (await readText(path.join(root, 'n.qmd'))) === 'new\n', 'n.qmd on disk');
+    await waitFor(() => host.log.lines.some((l) => l.startsWith('event log append failed')), 'the append failure in the log');
+  });
+
+  it('with QUARTO_HUB_DEBUG set, logs the path form and gate state of each disk event (GE-16a B4)', async () => {
+    const id = await seeder.create({ 'a.qmd': 'A\n' });
+    const root = await folderFrom(id);
+    const prior = process.env.QUARTO_HUB_DEBUG;
+    process.env.QUARTO_HUB_DEBUG = '1';
+    try {
+      await startSync(root);
+      host.watcher.fire('change', path.join(root, 'a.qmd'));
+      host.watcher.fire('create', path.join(root, 'zz-new.qmd'));
+      await waitFor(
+        () => host.log.lines.some((l) => l.startsWith('debug: disk change ') && l.includes(path.join(root, 'a.qmd')) && l.includes('rel=a.qmd')),
+        'the debug line for the change',
+      );
+      expect(host.log.lines.some((l) => l.startsWith('debug: disk create ') && l.includes('rel=zz-new.qmd'))).toBe(true);
+    } finally {
+      if (prior === undefined) delete process.env.QUARTO_HUB_DEBUG;
+      else process.env.QUARTO_HUB_DEBUG = prior;
+    }
   });
 
   // PIN (GE-9 replaces this): when a path's doc id changes, today's code

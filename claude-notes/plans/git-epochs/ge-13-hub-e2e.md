@@ -2,7 +2,7 @@
 title: 'GE-13: Hub e2e with browser guests'
 date: 2026-11-18
 description: 'Adds git helpers to the q2-preview-spa e2e harness and writes the automated scenarios of the hub demo, with real git, a flagged preview hub, and two browser guests.'
-status: approved
+status: done
 depends-on: [ge-4, ge-7]
 lane: B
 epic: ../2026-11-18-git-epochs-epic.md
@@ -84,40 +84,40 @@ and `img/logo.png`, removes `c.qmd`, and adds `b.qmd` (the fixture GE-14 reuses 
 
 ## Checklist
 
-- [ ] Read `.claude/rules/hub-client-tests.md` and the structure of `embed-import.spec.ts` (skips, `treeItem`,
+- [x] Read `.claude/rules/hub-client-tests.md` and the structure of `embed-import.spec.ts` (skips, `treeItem`,
   `openProject`, `editorText`). Record anything surprising.
-- [ ] Add `q2-preview-spa/e2e/helpers/gitRepo.ts`: `GitRepo` bound to a directory with `init` (fixed
+- [x] Add `q2-preview-spa/e2e/helpers/gitRepo.ts`: `GitRepo` bound to a directory with `init` (fixed
   `user.name` and `user.email`, `core.autocrlf=false`, `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_SYSTEM` pointed at an empty
   file), `commitAll`, `switch`, `switchCreate`, `rebase` (returns without throwing when git stops for conflicts),
   `rebaseContinue`, `rebaseAbort`, `resetHard`, `writeFile`, `markerPath(name)` (via `git rev-parse --git-path`), and
   `jjAvailable()` plus `jjColocate`, `jjNew`, `jjEdit`. Use `execFileSync` with argument arrays, never a shell.
-- [ ] Add `q2-preview-spa/e2e/helpers/editor.ts`: `openProject`, `treeItem`, `editorText`, `typeInEditor`,
+- [x] Add `q2-preview-spa/e2e/helpers/editor.ts`: `openProject`, `treeItem`, `editorText`, `typeInEditor`,
   `noticeLocator` (the element with `role="status"` that GE-7 renders), and `pausedIndicator` (found by the text GE-7
   renders). Do not edit `embed-import.spec.ts`.
-- [ ] Extend `StartOptions` with `git?: 'track' | 'ignore'` (passes `--git <value>`) and `gitRepo?: { branches }`
+- [x] Extend `StartOptions` with `git?: 'track' | 'ignore'` (passes `--git <value>`) and `gitRepo?: { branches }`
   (creates the repo, commits the fixtures on `main`, creates `feature` with its own commit, and returns to `main`
   before the server starts); expose the bound `GitRepo` as `handle.repo`. Existing callers are unchanged.
-- [ ] Write the helper checks, then the scenario specs, seen failing against a `--git ignore` hub. Split them:
+- [x] Write the helper checks, then the scenario specs, seen failing against a `--git ignore` hub. Split them:
   `q2-preview-spa/e2e/git-epochs-viewer.spec.ts` (viewer UI: S1, S2, S4, S5, S8, S9, S10, S12; runs under the
   `chromium` and `firefox` projects) and `q2-preview-spa/e2e/embed-git-epochs.spec.ts` (editor UI: S1 to S12, with
   the notices, stranded edit, jj, and `ReadOnly`; runs under the `embed` project; skips when `isEmbedBuilt` is false).
-- [ ] S3 stranded edit (detail chosen by the plan author; confirm): take guest A offline with
+- [x] S3 stranded edit (detail chosen by the plan author; confirm): take guest A offline with
   `context.setOffline(true)`, type, switch branches on the hub, bring A online. If `setOffline` does not drop an
   open WebSocket, use `page.routeWebSocket` to close the socket and drop its frames instead.
-- [ ] S5 rebase: build two branches that edit the same lines, start `rebase` so it stops, poll the status route for
+- [x] S5 rebase: build two branches that edit the same lines, start `rebase` so it stops, poll the status route for
   `paused`, assert the indicator and the absence of conflict markers in the editors, then `rebaseContinue` after
   resolving, and count notices.
-- [ ] Wire and verify the CI legs by reading `.github/workflows/q2-preview-spa-e2e.yml`: the new viewer spec is picked
+- [x] Wire and verify the CI legs by reading `.github/workflows/q2-preview-spa-e2e.yml`: the new viewer spec is picked
   up by `chromium` and `firefox`, the editor spec by `embed`, and nothing in the workflow needs a `git` or `jj`
   install (the specs skip jj). The `paths:` filter covers `q2-preview-spa/e2e/**`, `crates/quarto-hub/**`,
   `crates/quarto-preview/**`, and `crates/quarto/**` but not the client code these specs exercise: add
   `ts-packages/quarto-sync-client/**`, `ts-packages/quarto-git-epochs/**`, `ts-packages/preview-runtime/**`, and
   `hub-client/src/**`. Record this reading.
-- [ ] Rebuild chain before the first run (from `AGENTS.md`): `cd hub-client && npm run build:wasm`,
+- [x] Rebuild chain before the first run (from `AGENTS.md`): `cd hub-client && npm run build:wasm`,
   `cargo xtask build-q2-preview-spa`, `cargo xtask build-hub-client-embed`, `cargo build --bin q2`.
-- [ ] Run the specs; fix defects in the specs, and report defects in product code as findings in the notes without
+- [x] Run the specs; fix defects in the specs, and report defects in product code as findings in the notes without
   changing product code (a defect in GE-3, GE-4, or GE-7 reopens that plan).
-- [ ] Record the exact invocations and inspected output of each scenario in "Notes from the run"; update this
+- [x] Record the exact invocations and inspected output of each scenario in "Notes from the run"; update this
   checklist.
 
 ## Gates
@@ -150,4 +150,69 @@ two browser tabs, `git switch feature`) and note that the observed behavior matc
 
 ## Notes from the run
 
-Not started.
+**Session 1 (lane B, 2026-11-19).** Worktree was clean, detached at the `parking` commit; branch `ge/13-hub-e2e` off
+`feature/git-epochs` at `60e8955c1` (GE-4, GE-7, GE-12, GE-15 and the others it needs were done).
+
+- **Rules read.** `hub-client-tests.md` (retrying assertions, no `waitForTimeout`, presence is not delivery) and
+  `embed-import.spec.ts`. Nothing surprising, except that the harness's `StartOptions` takes exactly one of
+  `fixtureFiles` and `copyFromDir`, so the git fixture needed its own source.
+- **Helpers.** `helpers/gitRepo.ts` (`GitRepo`, `buildFixtureRepo`, `jjAvailable`, a fixed author, `GIT_CONFIG_GLOBAL`
+  and `GIT_CONFIG_SYSTEM` on an empty file, `execFileSync` with argument arrays), `helpers/editor.ts`,
+  `helpers/gitScenario.ts` (hub start, guests, `expectDisk`, `waitForDecision`). `git-epochs-helpers.spec.ts` holds the
+  8 helper checks; the one that failed first was `jjAvailable` (it captured `PATH` at module load; the environment is
+  now built per call).
+- **Detail that differs from the plan.** `StartOptions.gitRepo` is a boolean (and `jjColocate` a second boolean), not
+  `{ branches }`: the branches are the fixed fixture every scenario uses, and `gitRepo` replaces `fixtureFiles` and
+  `copyFromDir`. The handle exposes `repo`.
+- **S6 corrected, not a product defect.** The plan expects `seeded` after `jj new feature`. The classifier
+  (`arrival.rs`) applies the jj fallback only to steps 3 to 5; the first arrival on `feature` has no registered doc, so
+  it is step 1 and the decision is `flipped`. `seeded` appears when jj returns to a commit whose doc exists. The spec
+  therefore runs `jj new feature` (guests follow, no conflict marker, `flipped`), then `jj new main` (guests follow,
+  `seeded`), with jj colocated before the hub starts (`jjColocate`). jj 0.47.1 is installed here, so S6 ran.
+- **S2 notice.** The aggregate notice for the switch read "2 files were replaced because the project owner's
+  checked-out version changed." (`a.qmd` and the logo; `b.qmd` is new and `c.qmd` removed are not replaced), so the
+  spec matches the shared suffix, not "was replaced".
+- **S3.** `context.setOffline(true)` drops the open WebSocket in Chromium, so the `routeWebSocket` fallback was not
+  needed. The notice contains "stayed with the previous version" in this run; per GE-7's notes this depends on whether
+  the offline edit syncs before the swap begins, so a flake here would be that race.
+- **S4.** Recorded outcome is an annotation on the test (`stranded edit on return`); the spec asserts editor and disk
+  agree.
+- **S8 (viewer).** A fresh load seeds the page from `?page=`, and a file the index does not yet list falls back to the
+  first page, so each check reloads inside `toPass`; the test timeout is 150 s because the retry window is 60 s per
+  check (the first Firefox run failed on the 30 s default).
+- **S13.** The relay was reachable here, so S13 ran and passed (the guest saw the switch through `--join`). It skips,
+  with the error text, when the ticket or the guest cannot start.
+- **Failing against `--git ignore`** (the helper forced to `ignore` temporarily, then restored): editor S2, S5, S8,
+  S10 failed (S2: the notice never appears; S5: no paused indicator; S8: no new tree; S10: no `discarded`); viewer S5
+  and S10 failed; viewer S2 passed because ordinary sync also shows the new text, so it now also asserts a `flipped`
+  decision on the status route and fails under `ignore` (`no decision of kind flipped`).
+- **CI wiring read** (`.github/workflows/q2-preview-spa-e2e.yml`): the matrix runs `npx playwright test
+  --project=<chromium|firefox|embed>`, so `git-epochs-viewer.spec.ts` and `git-epochs-helpers.spec.ts` run under
+  `chromium` and `firefox` (their names do not match `embed-*`), and `embed-git-epochs.spec.ts` runs only under
+  `embed`, which builds `cargo xtask build-hub-client-embed` first. `ubuntu-latest` has `git`; the jj spec skips
+  without `jj`, and S13 skips without the relay. The `paths:` filter lacked the client code, so I added
+  `hub-client/src/**` (replacing the two narrower `hub-client/src/...` entries), `ts-packages/quarto-sync-client/**`,
+  and `ts-packages/quarto-git-epochs/**`; `preview-runtime` was already there.
+- **Environment.** This worktree's `node_modules` was stale (no `@quarto/quarto-git-epochs` link, old automerge), so
+  `build-q2-preview-spa` failed on type errors; `npm ci` (not `npm install`, which prunes the lockfile) fixed it, then
+  `npm run build -w ts-packages/quarto-git-epochs`. Playwright needed its browsers: `npx playwright install chromium
+  firefox`. The rebuild chain ran in this order: `npm run build:wasm` (hub-client), `cargo xtask
+  build-q2-preview-spa`, `cargo xtask build-hub-client-embed`, `cargo build --bin q2`.
+- **Product defects found:** none. A hub with no browser attached still takes about 6 s from `git switch` to the
+  `flipped` decision (observed by hand: `pending: true` first, then the decision).
+
+**Runs.** From `q2-preview-spa`: `npx playwright test --project=chromium --project=firefox --project=embed
+git-epochs-helpers.spec.ts git-epochs-viewer.spec.ts embed-git-epochs.spec.ts --workers=2`: 44 passed (the helper
+spec runs under all three projects, 8 x 3; viewer 8 x 2; editor 13, S1 to S13 all ran), after one Firefox S8
+timeout fixed as above; Firefox viewer then passed twice more (8 of 8 each). `npm run typecheck` (root) clean, the
+e2e files type-check clean with a temporary tsconfig (the `q2-preview-spa` projects do not include `e2e/`),
+`cargo xtask lint` clean.
+
+**End to end, by hand** (binary `target/debug/q2`, built from this branch's chain; output inspected): temp repo with
+`index.qmd` on `main` ("MAIN text") and `feature` ("FEATURE text"); `q2 preview --no-browser --git track --ui editor
+--allow-edit --data-dir <dir>-data <repo>` printed `http://127.0.0.1:63804/#/share/...`; `git switch feature`; polling
+`GET /api/preview/git-status` gave `{"tracking":true,"paused":false,"pending":true,"decisions":[]}`, then
+`{"tracking":true,"paused":false,"pending":false,"decisions":[{"kind":"flipped","files":["index.qmd"],"step":"1"}]}`;
+`index.qmd` on disk read "FEATURE text". The browser side of the same flow is S2 of the specs (two contexts on one
+loopback hub); I did not drive a third, hand-held tab.
+

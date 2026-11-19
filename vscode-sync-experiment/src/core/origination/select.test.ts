@@ -1,8 +1,8 @@
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanupGitTempDirs, commitAll, git, initRepo, put, repoWith } from '../clone/git-fixtures';
-import { tempDir } from '../test-support';
+import { tempDir, trySymlink } from '../test-support';
 import { PUBLISH_CAP_BYTES, selectFiles } from './select';
 
 afterEach(() => cleanupGitTempDirs());
@@ -39,10 +39,12 @@ describe('selectFiles, a git clone', () => {
     expect(byPath['a.qmd']!.blob).toBe(git(dir, 'rev-parse', 'HEAD:a.qmd'));
   });
 
-  it('drops symlinks and submodule links', async () => {
+  it('drops symlinks and submodule links', async (ctx) => {
     const dir = initRepo();
     put(dir, 'real.qmd', 'r\n');
-    symlinkSync('real.qmd', path.join(dir, 'link.qmd'));
+    if (!trySymlink('real.qmd', path.join(dir, 'link.qmd'), 'file')) {
+      ctx.skip('creating a symlink needs Developer Mode or elevation on Windows');
+    }
     commitAll(dir);
     git(dir, 'update-index', '--add', '--cacheinfo', '160000', git(dir, 'rev-parse', 'HEAD'), 'vendored');
     git(dir, 'commit', '-q', '-m', 'sub');

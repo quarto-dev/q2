@@ -369,8 +369,28 @@ export class ProjectSync {
     extra: { from?: string; to?: string; reason?: string } = {},
   ): Promise<void> {
     const line = JSON.stringify({ at: new Date().toISOString(), event, path: rel, source, ...extra }) + '\n';
-    await fs.appendFile(path.join(this.root, META_DIR, 'events.jsonl'), line).catch(() => {});
+    // A failed append is reported, never thrown (an event is a record, not a step the sync depends on) and
+    // never silent: a missing event with no trace cost a Windows run its diagnosis (GE-16a B4).
+    await fs.appendFile(path.join(this.root, META_DIR, 'events.jsonl'), line).catch((err: unknown) => {
+      this.log.appendLine(`event log append failed (${event} ${rel}): ${(err as Error).message}`);
+    });
     this.log.appendLine(`${source}: ${event} ${rel}`);
+  }
+
+  /**
+   * Env-gated diagnostics (`QUARTO_HUB_DEBUG=1`): the path form each watcher event arrives in, the relative
+   * key it maps to, and the clone gate's state. Written to the log and to stderr, so a test run that fails
+   * on a platform we cannot observe (Windows) leaves the cause in its output.
+   */
+  private debugDisk(kind: 'change' | 'create', abs: string, rel: string | null): void {
+    if (!process.env.QUARTO_HUB_DEBUG) return;
+    const c = this.clone;
+    const gate = c
+      ? ` closed=${c.isClosed()} inert=${rel ? c.isInert(rel) : '-'} removed=${rel ? c.isRemoved(rel) : '-'} gate=${c.state().gate}`
+      : '';
+    const line = `debug: disk ${kind} ${abs} rel=${rel ?? 'null'} bound=${rel ? this.isBound(rel) : '-'} tracked=${rel ? this.handles.has(rel) : '-'}${gate}`;
+    this.log.appendLine(line);
+    process.stderr.write(line + '\n');
   }
 
   private bind(abs: string): void {
@@ -622,6 +642,7 @@ export class ProjectSync {
 
   private async onDiskChange(abs: string): Promise<void> {
     const rel = this.relOf(abs);
+    this.debugDisk('change', abs, rel);
     if (rel) void this.clone?.noteFsEvent(rel);
     if (!rel) return;
     if (this.clone) {
@@ -639,6 +660,7 @@ export class ProjectSync {
 
   private async onDiskCreate(abs: string): Promise<void> {
     const rel = this.relOf(abs);
+    this.debugDisk('create', abs, rel);
     if (rel) void this.clone?.noteFsEvent(rel);
     // A clone shares a new file when git adds it (arrival step 1), not when it appears on disk.
     if (!rel || this.handles.has(rel) || this.clone) return;

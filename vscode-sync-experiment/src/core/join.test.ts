@@ -19,7 +19,7 @@ import { createProjectFolder } from './create-folder';
 import { findDoc, makeRepo } from './repo';
 import type { IndexDocument } from '@quarto/quarto-automerge-schema';
 import { readProjectMeta } from './meta';
-import { MemoryLog, Seeder, startHub, tempDir } from './test-support';
+import { MemoryLog, Seeder, startHub, tempDir, trySymlink } from './test-support';
 import type { TestHub } from '@quarto/quarto-sync-client/testing';
 import http from 'node:http';
 import { execFileSync } from 'node:child_process';
@@ -94,9 +94,9 @@ describe('projectRootMatches (spec 3)', () => {
     expect(await projectRootMatches(dir, dir + path.sep)).toBe(true);
     expect(await projectRootMatches(dir + path.sep, dir)).toBe(true);
   });
-  it('matches through a symlink, by real path', async () => {
+  it('matches through a symlink, by real path', async (ctx) => {
     const link = path.join(os.tmpdir(), `ge11-link-${process.pid}-${Date.now()}`);
-    await fs.symlink(dir, link, 'dir');
+    if (!trySymlink(dir, link, 'dir')) ctx.skip('creating a symlink needs Developer Mode or elevation on Windows');
     try {
       expect(await projectRootMatches(link, dir)).toBe(true);
     } finally {

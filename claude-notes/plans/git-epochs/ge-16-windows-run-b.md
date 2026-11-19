@@ -2,7 +2,7 @@
 title: 'GE-16: Windows run B: the TypeScript and extension items'
 date: 2026-11-18
 description: Extends the temporary Windows tooling branch with the TypeScript and extension items, has Gordon run them once on a Windows machine, and records what Windows does and does not prove for the new TypeScript code.
-status: approved
+status: done
 depends-on: [ge-11, ge-12, ge-15]
 lane: C
 epic: ../2026-11-18-git-epochs-epic.md
@@ -76,33 +76,33 @@ Known failures to ignore: none at the start. Copy any from GE-15\'s notes that a
 
 Items marked (agent) run on macOS; items marked (Gordon) need the Windows machine.
 
-- [ ] (agent) Confirm GE-11, GE-12, and GE-15 are complete, and read GE-15\'s notes for the tooling file names.
-- [ ] (agent) Add any missing test for `b2` or `b3` on `ge/16-windows-run-b` first (tests only, no product code; they
+- [x] (agent) Confirm GE-11, GE-12, and GE-15 are complete, and read GE-15\'s notes for the tooling file names.
+- [x] (agent) Add any missing test for `b2` or `b3` on `ge/16-windows-run-b` first (tests only, no product code; they
   also run on macOS), land it by rebase and fast-forward, and note the commit.
-- [ ] (agent) Bring the tooling branch up to the current tip by merging, never by rebasing a pushed branch:
+- [x] (agent) Bring the tooling branch up to the current tip by merging, never by rebasing a pushed branch:
   `git merge feature/git-epochs` run inside the tooling worktree GE-15 created,
   `/Users/gordon/src/q2/.worktrees/windows-git-epochs` (the branch is checked out there, so no lane worktree can switch
   to it; do all tooling work in that worktree, and keep this plan\'s own notes on `ge/16-windows-run-b` in your lane
   worktree). Record the base commit hash in the notes.
-- [ ] (agent) Extend `scripts/git-epochs-windows/run.ps1` with items `b1` to `b7`. Each uses `Invoke-Logged` and
+- [x] (agent) Extend `scripts/git-epochs-windows/run.ps1` with items `b1` to `b7`. Each uses `Invoke-Logged` and
   `Add-Result`, fills `proves` and `does_not_prove`, and runs alone with `-Only`.
-- [ ] (agent) Extend the instructions page on the tooling branch, `claude-notes/plans/git-epochs/windows-run-instructions.md`
+- [x] (agent) Extend the instructions page on the tooling branch, `claude-notes/plans/git-epochs/windows-run-instructions.md`
   (detail chosen by the plan author; confirm it is the path GE-15 uses): Node at the `.nvmrc` major, a clean clone with
   `core.autocrlf=true` and `core.longpaths=true`, optional `jj`, `-SkipBuild` when GE-15\'s build is still in `target\`,
   and the table above.
-- [ ] (agent) Gate the tooling before handoff: syntax-check the script with `pwsh` if installed (parse only, run
+- [x] (agent) Gate the tooling before handoff: syntax-check the script with `pwsh` if installed (parse only, run
   nothing); `uv run scripts/git-epochs-windows/extract_failures.py --help`; `q2 render --strict` the instructions page.
-- [ ] (agent) Ask Gordon to say go. Then push the tooling branch with the explicit refspec, unsilenced:
+- [x] (agent) Ask Gordon to say go. Then push the tooling branch with the explicit refspec, unsilenced:
   `git push origin windows/git-epochs:windows/git-epochs`, and check that `git ls-remote origin windows/git-epochs`
   prints the output of `git rev-parse HEAD`.
-- [ ] (Gordon) On the Windows machine: `git fetch origin windows/git-epochs`, switch to it, and run
+- [x] (Gordon) On the Windows machine: `git fetch origin windows/git-epochs`, switch to it, and run
   `powershell -ExecutionPolicy Bypass -File scripts\git-epochs-windows\run.ps1 -Only b1,b2,b3,b4,b5,b6,b7 -Publish`.
   If a failure needs explaining, run the extractor once and push `failure-details`.
-- [ ] (agent) Fetch the branch, parse `results/*.json`, and record the run in the notes: run id, host, Windows version,
+- [x] (agent) Fetch the branch, parse `results/*.json`, and record the run in the notes: run id, host, Windows version,
   git, node, uv, the `core.autocrlf` value, the base commit, a table of item results, and every failure with its output.
-- [ ] (agent) For each failure decide whether it is a product defect, a test defect, or the machine, and write a
+- [x] (agent) For each failure decide whether it is a product defect, a test defect, or the machine, and write a
   proposed fix plan (title, cause, files, test) in the notes. Do not change product code in this plan.
-- [ ] (agent) Copy the summary into the notes on `ge/16-windows-run-b`; rebase onto `feature/git-epochs`,
+- [x] (agent) Copy the summary into the notes on `ge/16-windows-run-b`; rebase onto `feature/git-epochs`,
   fast-forward, and leave the tooling branch unmerged.
 
 ## Gates
@@ -133,4 +133,140 @@ which were not run.
 
 ## Notes from the run
 
-Not started.
+**Session 1 (paused at the first Gordon step: say go before the push).**
+
+**Preconditions.** GE-11, GE-12, and GE-15 were `status: done` on `feature/git-epochs` (tip `60e8955c1`) when the session
+started; GE-15\'s notes name the tooling files: `scripts/git-epochs-windows/{run.ps1,items.json,extract_failures.py,
+make_large_tree.py}`, `results/`, and the instructions page `claude-notes/plans/git-epochs/windows-run-instructions.md`
+(the path this plan guessed was right).
+
+**Deviation: the tooling worktree path.** The plan says `/Users/gordon/src/q2/.worktrees/windows-git-epochs`; GE-15
+created it inside lane B\'s worktree, at `/Users/gordon/src/q2/.worktrees/workspace-8/.worktrees/windows-git-epochs`
+(branch `windows/git-epochs`). It was clean, so I did the tooling work there and nowhere else in lane B\'s worktree.
+
+**Tests added on `ge/16-windows-run-b`** (tests only, no product code; commits `b16d26e56`, `2304805e1`, `58dd9cda0`).
+Everything the catalog names for `b2` and `b3` already had a macOS test except the rows below, so only these were added:
+
+- `safe-path.test.ts`: a key over 260 characters is accepted by `safeJoin` and a file can be written through the result
+  (it passes on macOS, by design: Node uses the extended-length form itself on Windows); and an 8.3 `GIT~1` row that
+  creates `.git`, asks the volume for the short name, and expects `safeJoin(root, 'GIT~1/hooks/pre-commit')` to be
+  rejected. **That row skips on macOS, so I never saw it fail or pass.** Reading `safeJoin`, I expect it to fail on a
+  volume with short names: the segment check does not know `GIT~1`, and the `realpath` check only asks whether the
+  resolved ancestor stays inside the root, which `.git` does. If the Windows run shows that failure, it is a product
+  defect (a proposed fix plan, not a fix here).
+- `record.test.ts`: the atomic write of `git-epochs.json` retries a rename refused with `EPERM` (two refusals, then
+  success, no temp file left) and gives up after repeated `EBUSY` leaving the old record and no temp file. These ran red
+  against a mutated `record.ts` (`attempt < 0`), then green. They inject the error through a `vi.mock` of
+  `node:fs/promises`, because a `vi.spyOn` on the namespace does not intercept the module\'s own import. The rebind
+  deletion (no `EBUSY`) already had `clone-modes.test.ts`.
+- Not added, because covered: case collisions (`registry.test.ts`), CRLF through the content rule and arrival
+  (`paths.test.ts`, `arrival.test.ts`, the `autocrlf-checkout` scenario, the clone `arrival.test.ts` step 3), junctions
+  and `.git.`, trailing space, and `::$INDEX_ALLOCATION` (`safe-path.test.ts`).
+- Gates: `npm run typecheck -w quarto-hub-vscode` clean (an early commit had a type error, `fs.promises.realpath` has no
+  `.native`; fixed in `2304805e1`), and the extension\'s vitest files I touched pass (29 passed, 1 skipped in
+  `safe-path`; 4 in `record`).
+
+**Tooling branch** (`windows/git-epochs`, still local only, nothing pushed). I merged `feature/git-epochs` (`60e8955c1`)
+into it, then `ge/16-windows-run-b`, so the base the Windows machine will run includes the new tests. Commit `12031c1db`
+("GE-16 tooling: Windows run B items b1 to b7 ...", temporary, never lands) is the tip.
+`run.ps1` gained items `b1` to `b7`, each through `Invoke-Logged` and `Add-Result` with `proves` and `does_not_prove`,
+runnable alone with `-Only`. `b7` runs first: a clean root `npm ci`, then the extension typecheck and esbuild bundle and
+the build of every `ts-packages` workspace; the other items skip if that install fails (they reuse `node_modules` when
+`b7` is not selected). A `b`-only run no longer requires Rust, NASM, or CMake. The script also records the Node version
+and warns when its major differs from `.nvmrc`. Each item has a `min_tests` guard set below the macOS count (guard,
+macOS count): `b1` 150 (205); `b2` 80 (94, one skipped on macOS); `b3` 70 (91); `b4` 100 (129); `b5` 45 (58); `b6` 50 (64).
+`b4` through `b6` run the extension\'s vitest files named in the instructions page.
+Differences from the plan\'s table, stated plainly: `b6` runs the existing headless owner, publish, and origination
+tests, which use an **in-process** hub, not a separate `q2 hub` process; `b5` does not script the optional real `--share`
+and `--join` pair (the instructions page lists it as a by-hand step); `b1` has no separate jj switch (the jj scenarios
+skip when `jj` is absent).
+
+**Gates run on this host.** `uv run scripts/git-epochs-windows/extract_failures.py --help` prints usage. `q2 render --strict`
+of the instructions page shows no error of its own; the one error is the pre-existing Q-2-7 in
+`2026-09-21-book-projects-P0-number-sections.md`. **`pwsh` is not installed on this host, so `run.ps1` was reviewed by
+reading only; it has never been parsed or run.** Expect a first-run syntax or logic fix from the Windows machine (GE-15\'s
+script ran first time, but this change is large). The macOS counts above come from running each item\'s vitest files here.
+
+**Where it stopped.** The next step is Gordon\'s: say go, then
+`git push origin windows/git-epochs:windows/git-epochs` from the tooling worktree and check `git ls-remote origin
+windows/git-epochs` against `git rev-parse HEAD`. The plan is **not landed**; it stays on `ge/16-windows-run-b`.
+Checklist items still open: the push, the Windows run, recording the results, classifying failures, and the final landing.
+
+**Session 2 (push).** Gordon said go. The first push was rejected as non-fast-forward: the remote held `f83a4ec66` (GE-15\'s Windows results, committed from the Windows machine). I merged it into the tooling branch (no rebase), and the conflict-marker grep found only quoted text in an old research note. Pushed `windows/git-epochs` at `e82260135`; `git ls-remote` matches `git rev-parse HEAD`. Waiting for the Windows run.
+
+**Session 3 (the Windows run).** Two runs came back from the Windows machine, both on branch `windows/git-epochs`.
+
+**Run 20261119-053347-GWWIN is void.** It ran no items: `powershell -File run.ps1 -Only b1,b2,...` delivers one string
+(`"b1,b2,..."`) under Windows PowerShell 5.1, so no item id matched. A tooling defect, fixed by splitting `-Only` on
+commas (tooling commit `e90975b6f`, pushed; never lands).
+
+**Run 20261119-053817-GWWIN** (base `e90975b6f`; host `x86_64-pc-windows-msvc`, Windows 11 Pro; git 2.47.1.windows.1;
+node v24.21.0; `core.autocrlf=true`; `core.longpaths` unset; no `jj`; uv, nasm, cmake present; `link.exe` not on PATH,
+irrelevant to run B). The checkout path was under `C:\Users\GordonWoodhull\src\...`, and `os.tmpdir()` returned both the
+long and the 8.3 form (`GORDON~1`), so the volume has short names.
+
+| Item | Result | Detail |
+|---|---|---|
+| `b1` (W6) | PASS | 204 passed, 1 skipped (the macOS count is 205). The probe, controller, and scenarios hold on Git for Windows. |
+| `b2` (W4) | FAIL | 94 passed, 1 failed: the `GIT~1` row. |
+| `b3` (W3) | PASS | 91 passed. The CRLF checkout does not look dirty. |
+| `b4` | FAIL | 121 passed, 6 failed (see below). |
+| `b5` (W7) | FAIL | 57 passed, 1 failed: a symlink test. The spawn, readiness, stdin close, tree kill, and ticket-hygiene tests all passed. |
+| `b6` | FAIL | 63 passed, 1 failed: a symlink test. |
+| `b7` | FAIL | `npm ci`, the extension typecheck, and the extension bundle passed; one ts-packages build failed. |
+
+**Failures and classification.**
+
+1. `b2`, `safe-path.test.ts` "an 8.3 short name of .git is rejected": `safeJoin(root, 'GIT~1/hooks/pre-commit')`
+   resolved to `...\root\GIT~1\hooks\pre-commit` instead of rejecting. **Product defect**, and the one the session 1 notes
+   predicted. Proposed fix plan: *GE-F1 safeJoin rejects NTFS 8.3 aliases of `.git`.* Cause: the segment check does not
+   know `GIT~1`, and the `realpath` check only asks whether the result stays inside the root. Files:
+   `vscode-sync-experiment/src/core/safe-path.ts` (and the same rule in `ts-packages/quarto-git-epochs` if `safeJoin`
+   is shared there). Fix: after the segment check, compare the `realpath.native` of the deepest existing ancestor to the
+   segment names, or reject any segment matching `/^[^.]{1,6}~\d+(\.[^.]*)?$/` (an 8.3 form) on win32. Test: the existing
+   row, which now fails for the right reason.
+2. `b5`, `join.test.ts` "matches through a symlink, by real path", and `b6`, `select.test.ts` "drops symlinks and
+   submodule links": `EPERM: operation not permitted, symlink`. **Machine plus test defect.** Creating a symlink on
+   Windows needs Developer Mode or an elevated token; the code under test is not implicated. Proposed fix plan: *GE-F2
+   tests that need a file symlink skip, with a stated reason, when `symlink` fails with `EPERM` on win32* (a shared
+   `trySymlink` helper in the extension's test support; the junction-based directory rows already work without
+   privilege). Files: `src/core/join.test.ts`, `src/core/origination/select.test.ts`, the test support. The skipped
+   symlink behavior then needs one run with Developer Mode on (add that to GE-17's checklist).
+3. `b4` has six failures, from the full log (`b4-core.log`, pushed by Gordon as `0de84b49b`). They fall into two groups.
+   - **Four failures, one cause, probable product defect.** `editor-only.test.ts` "after a checkout it waits for the hub
+     flip...", and `follower.test.ts` "one aggregate message per batch...", "a folder created before the mode existed
+     starts as a mirror...", and "shows the mode in a persistent status item" all stop at the same line:
+     `EPERM: operation not permitted, rename '...\.quarto-hub-tmp-XXXX' -> '...\quarto-hub-YYYY'` in
+     `createProjectFolder` (`src/core/create-folder.ts:117`, `await fs.rename(tmpRoot, root)`), reached right after
+     `repo.shutdown()` in the `finally`. A directory rename on Windows fails while any handle is open inside it
+     (`cross-platform.md`); Automerge's storage adapter or the flush may still hold the folder's files after
+     `shutdown()` resolves, or a scanner holds them. Many other `b4` tests that create folders passed, so it is
+     intermittent. Proposed fix plan: *GE-F3 `createProjectFolder` renames safely on Windows.* Files:
+     `vscode-sync-experiment/src/core/create-folder.ts`. Fix: confirm that the storage adapter has closed every file
+     before the rename (await its close, not only `repo.shutdown()`), and retry the rename a few times on `EPERM` and
+     `EBUSY` with a short backoff, as `record.ts` does for `git-epochs.json`; if it still fails, fall back to a copy and
+     remove. Test: reuse the injected-error `vi.mock` pattern from `record.test.ts` for the retry, and a test that holds
+     a handle inside `tmpRoot` and releases it after a delay.
+   - **Two failures, probably one cause, unclassified.** `project-sync.test.ts` "writes a file whose index entry
+     appears..." (the file reached disk, but `.quarto-hub/events.jsonl` had no `created` event) and
+     `clone-modes.test.ts` "each decision writes its event to events.jsonl" (it timed out at line 323, "edit reaching
+     the doc", after the `reset` event had been seen) both concern the event log or the disk-to-doc edit path. The log
+     shows no error text for either, so I cannot say whether the event append fails, is delayed past the test's wait, or
+     the Windows file watcher misses the edit. Proposed fix plan: *GE-F4 diagnose the event log and the disk-edit path on
+     Windows*: first a test run with the event writer's errors surfaced and the watcher's received paths logged (for
+     example `QUARTO_HUB_DEBUG`), then fix. Do not guess a cause before that run.
+4. `b7`: the build of `@quarto/hub-mcp` (`ts-packages/quarto-hub-mcp/package.json`) runs `rm -rf dist && tsc && ...`, and
+   `rm` does not exist in `cmd.exe`. **Pre-existing defect** (the package predates the epic; list, do not chase). Every
+   other `ts-packages` workspace, including `@quarto/quarto-git-epochs`, built. `npm run build -w quarto-hub-vscode`
+   passed, so the extension is fine. A fix is a one-line change (a node `fs.rmSync` script, or `rimraf`); it belongs to
+   the hub-mcp owner, not this epic.
+
+**Not run or not proved.** The real `q2 preview --share` and `--join` pair, `jj` on Windows, a volume with short names
+disabled, and the symlink behavior (blocked by `EPERM`) were not exercised. The tool that ran this is temporary and
+never lands.
+
+**Landing.** Every item `b1` to `b7` has a result from the Windows machine (run `20261119-053817-GWWIN`). Failures are
+classified above with proposed fix plans GE-F1 to GE-F4 for the parent to insert after this plan. The two
+deviations from the plan: the first run was void (the `-Only` quoting), and the `b4` log needed a second push from
+Gordon. No product code changed. The tooling branch `windows/git-epochs` is unmerged and still on the remote at
+`0de84b49b` or later, for GE-17.

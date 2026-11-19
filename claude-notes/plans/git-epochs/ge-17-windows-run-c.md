@@ -3,14 +3,14 @@ title: 'GE-17: Windows run C: the scripted scenario and the Playwright subset'
 date: 2026-11-18
 description: Runs the scripted end-to-end scenario and the permanent Playwright VS Code subset on a Windows machine, repeats every earlier Windows item on the final code, and records what Windows does and does not prove for the epic.
 status: approved
-depends-on: [ge-14, ge-15, ge-16]
+depends-on: [ge-14, ge-15, ge-16, ge-16a]
 lane: A
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 
 **Epic:** [git epochs](../2026-11-18-git-epochs-epic.md) ·
-**Waits for:** [GE-14](ge-14-cross-client-e2e.md), [GE-15](ge-15-windows-run-a.md), and
-[GE-16](ge-16-windows-run-b.md) · **Unblocks:** [GE-18](ge-18-docs-and-closeout.md) ·
+**Waits for:** [GE-14](ge-14-cross-client-e2e.md), [GE-15](ge-15-windows-run-a.md),
+[GE-16](ge-16-windows-run-b.md), and [GE-16a](ge-16a-windows-fixes.md) · **Unblocks:** [GE-18](ge-18-docs-and-closeout.md) ·
 **Branch:** `ge/17-windows-run-c` off `feature/git-epochs` for the notes, merged by rebase and fast-forward. The tooling
 stays on the temporary `windows/git-epochs` branch, which is extended here and never merged. The only push in this plan
 is that branch, after Gordon says go.
@@ -87,9 +87,14 @@ launched the same way the Linux harness launches it. The timing test\'s measured
 
 Items marked (agent) run on macOS; items marked (Gordon) need the Windows machine.
 
-- [ ] (agent) Confirm GE-14, GE-15, and GE-16 are complete, and read the notes of all three, including every fix plan
-  inserted after the earlier Windows runs.
-- [ ] (agent) In the tooling worktree `/Users/gordon/src/q2/.worktrees/windows-git-epochs` (GE-15 created it; the branch
+- [ ] (agent) Confirm GE-14, GE-15, GE-16, and GE-16a are complete, and read the notes of all four. GE-16a carries three
+  Windows steps to this plan: the baseline run of `main` at its merge base (`run.ps1 -Only a6`, GE-15 F3; each
+  pre-existing failure becomes a braid strand), one run on a machine with Developer Mode on so that the two skipped
+  symlink tests run (GE-16a `B2`), and the `B4` evidence: run the `b4` item with `QUARTO_HUB_DEBUG=1` in the environment
+  (GE-16a added it; it logs each watcher event\'s path form, its relative key, and the clone gate state to the log and
+  to stderr), and if `clone-modes.test.ts` "each decision writes its event to events.jsonl" still fails, read those
+  `debug: disk` lines first. A follow-up fix plan for it, if needed, is inserted at the end of this plan.
+- [ ] (agent) In the tooling worktree `/Users/gordon/src/q2/.worktrees/workspace-8/.worktrees/windows-git-epochs` (GE-15 created it inside lane B\'s worktree; the branch
   is checked out there, so do all tooling work in it), merge the final `feature/git-epochs` tip into
   `windows/git-epochs` (never rebase the pushed branch) and
   record the base commit hash.

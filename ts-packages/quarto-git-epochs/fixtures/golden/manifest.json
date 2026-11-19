@@ -144,5 +144,30 @@
         "gen": 0
       }
     ]
+  },
+  "from-hub-run.bin": {
+    "entries": [
+      {
+        "key": "_quarto.yml\u0000b8bae5830fa541dfbb4e6721a4b9065bc0b1921d\u00002sSoJ4Lir3YfZ3mxRFPKPAWaqHv4",
+        "gen": 0
+      },
+      {
+        "key": "a.qmd\u000054c8faa956c7e3c29f866a317ed4c1cd1b46296a\u000044zviNRuJ7zr3jKop1UdeMEoRoNw",
+        "gen": 0
+      },
+      {
+        "key": "c.qmd\u0000b5247c72fa588c829af62bb74b72e199e96e5788\u00002U9hAwUSsNeFNKSZMcRjjTtFVMVv",
+        "gen": 0
+      },
+      {
+        "key": "img/logo.png\u0000ffc880b5f4e07d465ae39a95386db2c1df8689fc\u00004AMbhKVfkkmgc8vxc8GZxFUNVdzs",
+        "gen": 0
+      },
+      {
+        "key": "index.qmd\u0000587c081df7197fca8e5f2826b1895637158505a4\u00002ijzXaueU9aJAwPjky4vhytCEhoR",
+        "gen": 0
+      }
+    ],
+    "retired": []
   }
 }

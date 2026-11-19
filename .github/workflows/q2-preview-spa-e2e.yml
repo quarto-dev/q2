@@ -27,8 +27,9 @@ on:
       - 'ts-packages/preview-runtime/**'
       - 'ts-packages/preview-renderer/**'
       - 'Cargo.lock'
-      - 'hub-client/src/pandoc/**'
-      - 'hub-client/src/components/render/**'
+      - 'hub-client/src/**'
+      - 'ts-packages/quarto-sync-client/**'
+      - 'ts-packages/quarto-git-epochs/**'
 
 # Pins copied from test-suite.yml (keep in step with it).
 env:

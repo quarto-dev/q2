@@ -29,6 +29,15 @@ describe('build hygiene (HY-3)', () => {
     const pkg = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8')) as {
       scripts: Record<string, string>;
     };
-    expect(pkg.scripts.build).toMatch(/^rm -rf dist && /);
+    expect(pkg.scripts.build).toMatch(/^node -e "[^"]*rmSync\('dist'[^"]*" && /);
+  });
+
+  it('no script calls the shell `rm`, which cmd.exe does not have (GE-16a B5)', () => {
+    const pkg = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    for (const [name, cmd] of Object.entries(pkg.scripts)) {
+      expect(cmd, `script ${name}`).not.toMatch(/(^|&&|\|\||;)\s*rm\s/);
+    }
   });
 });

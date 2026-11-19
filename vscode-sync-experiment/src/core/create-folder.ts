@@ -80,6 +80,29 @@ export interface CreateFolderOptions {
   syncServer?: string;
 }
 
+/**
+ * Moves the finished temp folder into place. Windows refuses a directory rename with `EPERM` (or `EBUSY`)
+ * while any handle is open inside it, and a scanner or indexer can hold one for a moment after our own
+ * writes settle, so the rename retries a few times with a growing pause (about a second in all). If it still
+ * fails, the temp folder stays where it is and the error is thrown: there is no copy fallback, because a
+ * copy that fails halfway would leave a plausible-looking project with missing files.
+ */
+export async function renameFolderIntoPlace(from: string, to: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await fs.rename(from, to);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if ((code === 'EPERM' || code === 'EBUSY') && attempt < 8) {
+        await new Promise((r) => setTimeout(r, 25 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 /** Create `<parentDir>/<project name>` from the project and return its path. */
 export async function createProjectFolder(
   indexDocId: string,
@@ -114,6 +137,8 @@ export async function createProjectFolder(
   } finally {
     await repo.shutdown().catch(() => {});
   }
-  await fs.rename(tmpRoot, root);
+  // `repo.shutdown()` has flushed and settled every storage write (the Node storage adapter keeps no file
+  // open between calls and has no close of its own), so what can still hold the folder is outside this process.
+  await renameFolderIntoPlace(tmpRoot, root);
   return root;
 }

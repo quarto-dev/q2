@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { UnsafePathError, safeJoin } from './safe-path';
+import { UnsafePathError, isReservedShortAlias, safeJoin } from './safe-path';
 
 let root: string;
 let outside: string;
@@ -106,5 +106,19 @@ describe('safeJoin rejects (G36)', () => {
     }
     if (path.basename(resolved) !== '.git') ctx.skip();
     await expect(safeJoin(root, 'GIT~1/hooks/pre-commit')).rejects.toBeInstanceOf(UnsafePathError);
+  });
+});
+
+describe('isReservedShortAlias (B1: NTFS 8.3 aliases of never-synced names)', () => {
+  it.each(['GIT~1', 'git~2', 'Git~10', 'GIT~1.bak', 'QUARTO~1', 'quarto~3', 'QUARTO~1.x'])('flags %s', (seg) => {
+    expect(isReservedShortAlias(seg)).toBe(true);
+  });
+
+  it.each(['git', '.git', 'gitx~1', 'notes~1.qmd', 'a~b', 'GITHUB~1', 'ab~1', '~1', 'quarto', 'x.git'])('leaves %s alone', (seg) => {
+    expect(isReservedShortAlias(seg)).toBe(false);
+  });
+
+  it.each(['GIT~1/hooks/pre-commit', 'sub/git~2/config', 'QUARTO~1/project.json'])('safeJoin rejects %s on every platform', async (rel) => {
+    await expect(safeJoin(root, rel)).rejects.toBeInstanceOf(UnsafePathError);
   });
 });

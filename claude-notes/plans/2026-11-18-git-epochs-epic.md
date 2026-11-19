@@ -205,11 +205,14 @@ top-level files only), so this table is the index.
 | [GE-14](git-epochs/ge-14-cross-client-e2e.md) | Cross-client e2e: both demos | GE-11, GE-12, GE-13 |
 | [GE-15](git-epochs/ge-15-windows-run-a.md) | Windows run A: the Rust and hub items | GE-4 |
 | [GE-16](git-epochs/ge-16-windows-run-b.md) | Windows run B: the TypeScript and extension items | GE-11, GE-12, GE-15 |
-| [GE-17](git-epochs/ge-17-windows-run-c.md) | Windows run C: the scripted scenario and the Playwright subset | GE-14, GE-15, GE-16 |
+| [GE-16a](git-epochs/ge-16a-windows-fixes.md) | Fixes for the defects the Windows runs found | GE-15, GE-16 |
+| [GE-17](git-epochs/ge-17-windows-run-c.md) | Windows run C: the scripted scenario and the Playwright subset | GE-14, GE-15, GE-16, GE-16a |
 | [GE-18](git-epochs/ge-18-docs-and-closeout.md) | Docs and closeout | GE-17 |
 
 GE-16 waits for GE-15 because it extends the tooling branch GE-15 creates. If a Windows run finds a defect, a fix
-plan is inserted after that run; the fix plans cannot be listed in advance.
+plan is inserted after that run; the fix plans cannot be listed in advance. GE-16a is the one fix plan for the defects
+runs A and B found (GE-15 F1 and F2, and GE-16\'s five). GE-17 waits for it so that its rerun of every `a` and `b` item
+runs on the fixed code. A defect run C finds gets its own plan, inserted after GE-17.
 
 **Waves** (plans in a wave can run in parallel):
 
@@ -221,8 +224,9 @@ plan is inserted after that run; the fix plans cannot be listed in advance.
 | 3 | GE-4, GE-10 |
 | 4 | GE-11, GE-12, GE-13, GE-15 |
 | 5 | GE-14, GE-16 |
-| 6 | GE-17 |
-| 7 | GE-18 |
+| 6 | GE-16a |
+| 7 | GE-17 |
+| 8 | GE-18 |
 
 The critical path is GE-1, GE-5, GE-9, GE-10, GE-11, GE-14, GE-17, GE-18. Four lanes open after GE-1: Rust (GE-2 to
 GE-4), TypeScript logic (GE-5), the swap and browser clients (GE-6, GE-7), and the extension foundation (GE-8).
@@ -245,7 +249,8 @@ GE-12 -> GE-14, GE-16
 GE-13 -> GE-14
 GE-14 -> GE-17
 GE-15 -> GE-16, GE-17
-GE-16 -> GE-17
+GE-16 -> GE-16a, GE-17
+GE-16a -> GE-17
 GE-17 -> GE-18
 ```
 
@@ -261,7 +266,7 @@ the rules the plan names.
 |---|---|---|
 | A | `/Users/gordon/src/q2/.worktrees/workspace-7` | GE-1, GE-5, GE-9, GE-10, GE-11, GE-14, GE-17, GE-18 |
 | B | `/Users/gordon/src/q2/.worktrees/workspace-8` | GE-6, GE-2, GE-3, GE-4, GE-15, GE-13 |
-| C | `/Users/gordon/src/q2/.worktrees/workspace-9` | GE-8, GE-7, GE-12, GE-16 |
+| C | `/Users/gordon/src/q2/.worktrees/workspace-9` | GE-8, GE-7, GE-12, GE-16, GE-16a |
 
 The integration branch `feature/git-epochs` is checked out in `/Users/gordon/src/q2/.worktrees/workspace-6`, the
 integration worktree. Nobody edits or commits there; it changes only when a worker lands a plan (below). Gordon does not
