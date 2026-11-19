@@ -171,6 +171,23 @@ async function startHub(dir: string, dataDir: string): Promise<Hub> {
   return hub;
 }
 
+/** Joins the hub's index doc, retrying a few times: a failure records the attempt and the hub log tail, so "unavailable" is diagnosable. */
+async function joinWithRetry<T>(hub: Hub, what: string, join: () => Promise<T>): Promise<T> {
+  let last: unknown;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      const r = await join();
+      if (attempt > 1) record(`${what}: joined on attempt ${attempt}`, { attempt });
+      return r;
+    } catch (e) {
+      last = e;
+      record(`${what}: join attempt ${attempt} failed`, { error: String(e instanceof Error ? e.message : e), hubExit: hub.proc.exitCode, hubLogTail: hub.log().slice(-2500) }, false);
+      await sleep(15_000);
+    }
+  }
+  throw last;
+}
+
 async function cloneOf(hub: Hub, hubDir: string, label: string): Promise<{ dir: string; peer: HeadlessPeer }> {
   const parent = await tempDir(`c1-${label}-`);
   cleanups.push(() => fs.rm(parent, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
@@ -179,7 +196,7 @@ async function cloneOf(hub: Hub, hubDir: string, label: string): Promise<{ dir: 
   for (const [k, v] of [['user.name', 'C1 Clone'], ['user.email', 'c1-clone@example.invalid'], ['commit.gpgsign', 'false']] as const) {
     execFileSync('git', ['config', k, v], { cwd: dir });
   }
-  const peer = await HeadlessPeer.joinAsClone(dir, hub.wsUrl, hub.indexDocId);
+  const peer = await joinWithRetry(hub, 'clone', () => HeadlessPeer.joinAsClone(dir, hub.wsUrl, hub.indexDocId));
   cleanups.push(() => peer.stop());
   return { dir, peer };
 }
@@ -187,7 +204,7 @@ async function cloneOf(hub: Hub, hubDir: string, label: string): Promise<{ dir: 
 async function mirrorOf(hub: Hub, label: string): Promise<{ dir: string; peer: HeadlessPeer }> {
   const dir = await tempDir(`c1-${label}-`);
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
-  const peer = await HeadlessPeer.joinAsMirror(dir, hub.wsUrl, hub.indexDocId);
+  const peer = await joinWithRetry(hub, 'mirror', () => HeadlessPeer.joinAsMirror(dir, hub.wsUrl, hub.indexDocId));
   cleanups.push(() => peer.stop());
   return { dir, peer };
 }
