@@ -79,9 +79,12 @@ describe('TextBindingCore', () => {
 
   it('splices local edits into the doc, several changes in descending offset order', () => {
     const handle = makeHandle('0123456789');
-    const binding = new TextBindingCore(handle, new FakeBuffer('0123456789'));
+    const buffer = new FakeBuffer('0123456789');
+    const binding = new TextBindingCore(handle, buffer);
     binding.start();
-    // One editor event, offsets against the pre-edit text, descending.
+    // One editor event, offsets against the pre-edit text, descending. The
+    // editor has already applied it to the buffer when the event fires.
+    buffer.text = '01ab234567X9';
     binding.onLocalEdit([
       { rangeOffset: 8, rangeLength: 1, text: 'X' },
       { rangeOffset: 2, rangeLength: 0, text: 'ab' },
@@ -140,5 +143,82 @@ describe('TextBindingCore', () => {
     });
     await settle();
     expect(buffer.text).toBe('abc');
+  });
+
+  describe('mirror check (G27)', () => {
+    it('accepts an edit when the pre-edit buffer equals the mirror of the doc', () => {
+      const handle = makeHandle('hello world');
+      const buffer = new FakeBuffer('hello world');
+      const binding = new TextBindingCore(handle, buffer);
+      binding.start();
+      buffer.text = 'hello brave world';
+      binding.onLocalEdit([{ rangeOffset: 6, rangeLength: 0, text: 'brave ' }]);
+      expect(handle.doc()!.text).toBe('hello brave world');
+    });
+
+    it('does not splice an edit whose pre-edit buffer differs, and reconciles the buffer by content', async () => {
+      const handle = makeHandle('hello world');
+      const buffer = new FakeBuffer('hello world');
+      const binding = new TextBindingCore(handle, buffer);
+      binding.start();
+      const before = handle.heads();
+      // A late reload: the buffer had already been rewritten to other text when
+      // this edit event (offsets against that other text) arrived.
+      buffer.text = 'something else entirely';
+      buffer.text = 'X' + buffer.text;
+      binding.onLocalEdit([{ rangeOffset: 0, rangeLength: 0, text: 'X' }]);
+      expect(handle.heads()).toEqual(before);
+      expect(handle.doc()!.text).toBe('hello world');
+      await settle();
+      expect(buffer.text).toBe('hello world');
+    });
+
+    it('updates the mirror after each remote apply, so the next local edit is accepted', async () => {
+      const handle = makeHandle('abc');
+      const buffer = new FakeBuffer('abc');
+      const binding = new TextBindingCore(handle, buffer);
+      binding.start();
+      handle.change((d) => {
+        d.text = 'abcdef';
+      });
+      await settle();
+      expect(buffer.text).toBe('abcdef');
+      buffer.text = 'abcdefg';
+      binding.onLocalEdit([{ rangeOffset: 6, rangeLength: 0, text: 'g' }]);
+      expect(handle.doc()!.text).toBe('abcdefg');
+    });
+
+    it('accepts consecutive local edits (the mirror follows each accepted edit)', () => {
+      const handle = makeHandle('a');
+      const buffer = new FakeBuffer('a');
+      const binding = new TextBindingCore(handle, buffer);
+      binding.start();
+      buffer.text = 'ab';
+      binding.onLocalEdit([{ rangeOffset: 1, rangeLength: 0, text: 'b' }]);
+      buffer.text = 'abc';
+      binding.onLocalEdit([{ rangeOffset: 2, rangeLength: 0, text: 'c' }]);
+      expect(handle.doc()!.text).toBe('abc');
+    });
+
+    it('still converges when a keystroke lands during an apply', async () => {
+      const handle = makeHandle('abc');
+      const buffer = new FakeBuffer('abc');
+      const binding = new TextBindingCore(handle, buffer);
+      binding.start();
+      buffer.duringApply = () => {
+        buffer.text = 'k' + buffer.text;
+        binding.onLocalEdit([{ rangeOffset: 0, rangeLength: 0, text: 'k' }]);
+      };
+      handle.change((d) => {
+        d.text = 'abcd';
+      });
+      await settle();
+      expect(buffer.text).toBe('abcd');
+      expect(handle.doc()!.text).toBe('abcd');
+      // and a later keystroke is accepted
+      buffer.text = 'abcde';
+      binding.onLocalEdit([{ rangeOffset: 4, rangeLength: 0, text: 'e' }]);
+      expect(handle.doc()!.text).toBe('abcde');
+    });
   });
 });

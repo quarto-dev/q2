@@ -6,18 +6,48 @@ import { META_DIR } from './ignore';
 export const META_FILE = 'project.json';
 export const DEFAULT_SYNC_SERVER = 'wss://sync.automerge.org';
 
+/**
+ * How the folder relates to the project (G19). `mirror`: a folder the
+ * extension created from a project; it follows the project owner and rewrites
+ * its own disk. `editor-only`: VS Code opened on a directory a hub serves; the
+ * hub owns the disk and the extension never writes a file. `clone`: a folder
+ * with a repository of its own (GE-10).
+ */
+export const PROJECT_MODES = ['mirror', 'editor-only', 'clone'] as const;
+export type ProjectMode = (typeof PROJECT_MODES)[number];
+
 export interface ProjectMeta {
   indexDocId: string;
   syncServer: string;
   createdAt: string;
+  /** Always set on a read: a file with no mode is a mirror. */
+  mode?: ProjectMode;
 }
 
-export async function readProjectMeta(root: string): Promise<ProjectMeta | null> {
+/** `project.json` parses but says something this version does not understand. */
+export class InvalidProjectMetaError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidProjectMetaError';
+  }
+}
+
+/** The metadata, or null when the file is missing or is not JSON. Throws {@link InvalidProjectMetaError} for an unknown mode. */
+export async function readProjectMeta(root: string): Promise<(ProjectMeta & { mode: ProjectMode }) | null> {
+  const file = path.join(root, META_DIR, META_FILE);
+  let meta: ProjectMeta;
   try {
-    return JSON.parse(await fs.readFile(path.join(root, META_DIR, META_FILE), 'utf8')) as ProjectMeta;
+    meta = JSON.parse(await fs.readFile(file, 'utf8')) as ProjectMeta;
   } catch {
     return null;
   }
+  const mode = meta.mode ?? 'mirror';
+  if (!(PROJECT_MODES as readonly string[]).includes(mode)) {
+    throw new InvalidProjectMetaError(
+      `${file} has an unknown mode ${JSON.stringify(mode)}; the modes are ${PROJECT_MODES.join(', ')}.`,
+    );
+  }
+  return { ...meta, mode };
 }
 
 export async function writeProjectMeta(root: string, meta: ProjectMeta): Promise<void> {
