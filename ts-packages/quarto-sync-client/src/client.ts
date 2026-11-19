@@ -6,10 +6,11 @@
  * them to provide their own storage/VFS implementation.
  */
 
-import { Repo, DocHandle, updateText, splice, generateAutomergeUrl, parseAutomergeUrl } from '@automerge/automerge-repo';
+import { Repo, DocHandle, updateText, splice, generateAutomergeUrl, parseAutomergeUrl, decodeHeads } from '@automerge/automerge-repo';
 import type {
   DocumentId,
   StorageId,
+  UrlHeads,
   DocHandleChangePayload,
 } from '@automerge/automerge-repo';
 import {
@@ -1502,7 +1503,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       const doc = handle.doc();
       for (const storageId of new Set(state.peerStorageIds.values())) {
         const info = handle.getSyncInfo(storageId as StorageId);
-        if (info) return automergeGetChangesSince(doc as never, [...info.lastHeads]).length;
+        if (info) return automergeGetChangesSince(doc as never, decodeHeads(info.lastHeads as UrlHeads)).length;
       }
       const activity = getDocSyncActivityWithPersisted(String(handle.documentId));
       return activity.lastLocalChangeAt &&
