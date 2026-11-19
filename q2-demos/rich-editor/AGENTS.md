@@ -11,8 +11,10 @@ prototype at once, so:
 - **A piece of work (a feature, a fix) gets a branch and a worktree of its
   own**, off `rich-editor-prototype`, e.g.
   `wt switch --create rich-editor-<name> -b rich-editor-prototype --no-cd`.
-  Set it up as `README.md` (§ Running) says, with `npm install` at the repo
-  root first. In a shared checkout, other sessions' uncommitted edits end up
+  `wt` copies the base worktree's builds (`node_modules`, the WASM module,
+  `target/`) into the new one in the background; run `wt-wait` in it to
+  wait for that to finish. Otherwise, set it up as `README.md` (§ Running)
+  says, with `npm install` at the repo root first. In a shared checkout, other sessions' uncommitted edits end up
   in your test runs, and a full suite there doesn't tell you whether your
   change is green.
 - **Only small edits the user asks for on `rich-editor-prototype` itself
