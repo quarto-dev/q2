@@ -11,7 +11,7 @@
 // ============================================================================
 
 /** Current schema version for IndexDocument. */
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 /**
  * MIME type stamped on a legacy engine-capture binary doc (the gzipped
@@ -78,7 +78,7 @@ export interface CaptureRef {
  */
 export interface IndexDocument {
   files: Record<string, string>; // path -> docId mapping
-  version?: number; // schema version (3 = current)
+  version?: number; // schema version (4 = current)
   // Attribution key -> identity (D4): authorId for post-transition changes;
   // legacy actorId keys remain readable — readers resolve
   // `change.author ?? getAuthorForActor(doc, change.actor) ?? change.actor`,
@@ -87,6 +87,28 @@ export interface IndexDocument {
   identities?: Record<string, ActorIdentity>;
   captures?: Record<string, CaptureRef>; // path -> capture sidecar entry (V2+)
   folders?: Record<string, true>; // explicitly created folders (V3+)
+  /** Sidecar registry docId (V4+, git-aware peers only). See claude-notes/designs/git-epoch-registry-contract.md. */
+  epochs?: string;
+  /** Originating folder's random ownerId (V4+); absent for hub-owned projects. */
+  owner?: string;
+  /** Git repository identity (V4+): root commit hashes and the project path inside the repo. */
+  repo?: RepoIdentity;
+}
+
+/** The `repo` entry of a V4 index: written only by a git-aware owner. */
+export interface RepoIdentity {
+  roots: string[];
+  prefix: string;
+}
+
+/**
+ * The content of a freshly created index document: exactly `files`,
+ * `version`, `identities`, and `folders`, and nothing else. The optional
+ * V4 keys (`epochs`, `owner`, `repo`) are written later by the peer that
+ * needs them.
+ */
+export function createIndexDocumentContent(): IndexDocument {
+  return { files: {}, version: CURRENT_SCHEMA_VERSION, identities: {}, folders: {} };
 }
 
 /**
@@ -98,6 +120,11 @@ export interface IndexDocument {
  *   V1 → V2: bump `version = 2`. No structural change — `captures` is
  *            absent until a capture is recorded.
  *   V2 → V3: initialize `folders`, set `version = 3`.
+ *   V3 → V4: bump `version = 4`. No structural change: `epochs`, `owner`,
+ *            and `repo` are optional and written later by git-aware peers.
+ *
+ * A doc at a version this code does not know (newer than current) is left
+ * untouched, and unknown keys are never removed.
  *
  * Any preexisting `captures` sidecar (e.g. on a doc mis-tagged as V1)
  * is preserved through the bump.
@@ -105,7 +132,7 @@ export interface IndexDocument {
  * @returns true if the document was modified (migration applied)
  */
 export function migrateIndexDocument(doc: IndexDocument): boolean {
-  if (doc.version === CURRENT_SCHEMA_VERSION) return false;
+  if (doc.version !== undefined && doc.version >= CURRENT_SCHEMA_VERSION) return false;
 
   let changed = false;
   if (doc.version === undefined) {
@@ -127,6 +154,11 @@ export function migrateIndexDocument(doc: IndexDocument): boolean {
       doc.folders = {};
     }
     doc.version = 3;
+    changed = true;
+  }
+  if (doc.version === 3) {
+    // V3 → V4 (optional git-epochs keys; no structural change)
+    doc.version = 4;
     changed = true;
   }
   return changed;

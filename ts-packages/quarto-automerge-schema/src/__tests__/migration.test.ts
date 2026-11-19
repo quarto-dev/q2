@@ -50,13 +50,13 @@ describe('migrateIndexDocument', () => {
   });
 });
 
-describe('migrateIndexDocument — v2 (capture sidecar) and v3 (folders)', () => {
+describe('migrateIndexDocument — v2 (capture sidecar), v3 (folders), and v4', () => {
   it('bumps a V0 doc straight to the current version', () => {
     const doc: IndexDocument = { files: { 'index.qmd': 'doc1' } };
     const changed = migrateIndexDocument(doc);
 
     expect(changed).toBe(true);
-    expect(doc.version).toBe(3);
+    expect(doc.version).toBe(4);
     expect(doc.version).toBe(CURRENT_SCHEMA_VERSION);
     // captures is optional and absent until a capture is recorded
     expect(doc.captures).toBeUndefined();
@@ -64,7 +64,7 @@ describe('migrateIndexDocument — v2 (capture sidecar) and v3 (folders)', () =>
     expect(doc.folders).toEqual({});
   });
 
-  it('migrates a V1 doc to V3 without touching files or identities', () => {
+  it('migrates a V1 doc to the current version without touching files or identities', () => {
     const doc: IndexDocument = {
       files: { 'index.qmd': 'doc1' },
       version: 1,
@@ -73,14 +73,14 @@ describe('migrateIndexDocument — v2 (capture sidecar) and v3 (folders)', () =>
     const changed = migrateIndexDocument(doc);
 
     expect(changed).toBe(true);
-    expect(doc.version).toBe(3);
+    expect(doc.version).toBe(4);
     expect(doc.files).toEqual({ 'index.qmd': 'doc1' });
     expect(doc.identities).toEqual({ actor1: { name: 'Alice', color: '#E91E63' } });
     expect(doc.captures).toBeUndefined();
     expect(doc.folders).toEqual({});
   });
 
-  it('migrates a V2 doc to V3, keeping captures and adding empty folders', () => {
+  it('migrates a V2 doc to the current version, keeping captures and adding empty folders', () => {
     const doc: IndexDocument = {
       files: { 'index.qmd': 'doc1' },
       version: 2,
@@ -95,24 +95,24 @@ describe('migrateIndexDocument — v2 (capture sidecar) and v3 (folders)', () =>
     const changed = migrateIndexDocument(doc);
 
     expect(changed).toBe(true);
-    expect(doc.version).toBe(3);
+    expect(doc.version).toBe(4);
     expect(doc.captures).toEqual({
       'index.qmd': { captureDocId: 'capture-doc-1', state: 'idle' },
     });
     expect(doc.folders).toEqual({});
   });
 
-  it('is a no-op on a V3 doc', () => {
+  it('is a no-op on a V4 doc', () => {
     const doc: IndexDocument = {
       files: { 'index.qmd': 'doc1' },
-      version: 3,
+      version: 4,
       identities: {},
       folders: { drafts: true },
     };
     const changed = migrateIndexDocument(doc);
 
     expect(changed).toBe(false);
-    expect(doc.version).toBe(3);
+    expect(doc.version).toBe(4);
     expect(doc.folders).toEqual({ drafts: true });
   });
 
@@ -146,7 +146,7 @@ describe('migrateIndexDocument — v2 (capture sidecar) and v3 (folders)', () =>
     const changed = migrateIndexDocument(doc);
 
     expect(changed).toBe(true);
-    expect(doc.version).toBe(3);
+    expect(doc.version).toBe(4);
     expect(doc.captures).toEqual({ 'index.qmd': { captureDocId: 'cap-1' } });
   });
 

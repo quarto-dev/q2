@@ -176,12 +176,12 @@ record an answer instead of passing or failing (see part two).
 
 ### Schema, TypeScript
 
-- [ ] Tests first (see Test specifications), then raise `CURRENT_SCHEMA_VERSION` to 4, add the V3 to V4 step to
+- [x] Tests first (see Test specifications), then raise `CURRENT_SCHEMA_VERSION` to 4, add the V3 to V4 step to
   `migrateIndexDocument` as a pure version bump, add the optional `epochs`, `owner`, and `repo` fields and their types
   to `IndexDocument`, and add `createIndexDocumentContent()`. Write `fixtures/golden/index-v4.json` from it.
-- [ ] Do not change `createNewProject` here: adopting the helper touches `quarto-sync-client` and so the MCP bundle;
+- [x] Do not change `createNewProject` here: adopting the helper touches `quarto-sync-client` and so the MCP bundle;
   GE-7 does it (detail chosen by the plan author; confirm).
-- [ ] `npm test -w ts-packages/quarto-automerge-schema` and `npm run typecheck -w ts-packages/quarto-automerge-schema`.
+- [x] `npm test -w ts-packages/quarto-automerge-schema` and `npm run typecheck -w ts-packages/quarto-automerge-schema`.
 
 ### Schema, Rust
 
@@ -338,4 +338,10 @@ The logic itself (GE-2, GE-5), the swap module and the notice texts (GE-6), adop
   --package-lock-only` on this host. I did not commit that: I kept the original lockfile and added only the two
   new workspace entries (14 insertions), in npm\'s key order. Someone should check that a plain `npm ci` still
   resolves from that file; I did not run one.
+- TypeScript schema done test-first: `v4.test.ts` failed for the right reasons (version 3, no
+  `createIndexDocumentContent`), then passed. Five assertions in `migration.test.ts` that hardcoded "current is 3"
+  were updated to 4 (the V3 no-op test became a V4 no-op test; V3 to V4 is covered in `v4.test.ts`). 102 schema
+  tests pass and typecheck is clean. `createNewProject` still builds its own literal but reads
+  `CURRENT_SCHEMA_VERSION`, so new projects are already version 4; GE-7 adopts the helper. Golden
+  `fixtures/golden/index-v4.json` written (hand-written to equal the helper\'s output; the test compares them).
 - Not started: Gate 0 part two; the contract, package, schemas, fixtures. No repository code changed yet.
