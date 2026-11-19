@@ -2,8 +2,15 @@ import { realpathSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UnsafePathError, isReservedShortAlias, safeJoin } from './safe-path';
+
+// A passthrough `realpath` that a test can make fail with a chosen error (the Windows run saw a transient failure under load).
+const injected = vi.hoisted(() => ({ err: undefined as (Error & { code?: string }) | undefined }));
+vi.mock('node:fs/promises', async (orig) => {
+  const actual = await orig<typeof import('node:fs/promises')>();
+  return { ...actual, realpath: (...a: Parameters<typeof actual.realpath>) => (injected.err ? Promise.reject(injected.err) : actual.realpath(...a)) };
+});
 
 let root: string;
 let outside: string;
@@ -17,6 +24,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  injected.err = undefined;
   await fs.rm(path.dirname(root), { recursive: true, force: true });
 });
 
@@ -120,5 +128,18 @@ describe('isReservedShortAlias (B1: NTFS 8.3 aliases of never-synced names)', ()
 
   it.each(['GIT~1/hooks/pre-commit', 'sub/git~2/config', 'QUARTO~1/project.json'])('safeJoin rejects %s on every platform', async (rel) => {
     await expect(safeJoin(root, rel)).rejects.toBeInstanceOf(UnsafePathError);
+  });
+});
+
+describe('safeJoin does not read a failing realpath as "the path is missing"', () => {
+  it('rethrows EMFILE instead of walking up to the drive root and calling the path unsafe', async () => {
+    injected.err = Object.assign(new Error('EMFILE: too many open files'), { code: 'EMFILE' });
+    const e = await safeJoin(root, 'd15/f1335.qmd').catch((x: unknown) => x);
+    expect(e).not.toBeInstanceOf(UnsafePathError);
+    expect(e).toMatchObject({ code: 'EMFILE' });
+  });
+
+  it('still joins a path whose ancestors do not exist yet (ENOENT is "missing")', async () => {
+    expect(await safeJoin(root, 'new/dir/a.qmd')).toBe(path.join(root, 'new', 'dir', 'a.qmd'));
   });
 });
