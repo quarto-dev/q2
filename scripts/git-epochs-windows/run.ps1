@@ -64,6 +64,9 @@ $rb = if ($wantB) { 'yes' } else { 'no' }
 $repo = (& git -C $PSScriptRoot rev-parse --show-toplevel).Trim()
 if (-not $repo) { Write-Host 'Run this from inside the q2 checkout.'; exit 2 }
 Set-Location $repo
+# Set-Location moves only PowerShell's location. Child processes (Invoke-Logged starts cmd.exe through Process.Start) inherit the .NET
+# current directory, which is wherever the shell was launched; run from outside the checkout, a0's cargo found no Cargo.toml (run 161637).
+[Environment]::CurrentDirectory = $repo
 
 $runId      = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + $env:COMPUTERNAME
 $resultsDir = Join-Path $PSScriptRoot 'results'

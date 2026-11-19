@@ -128,7 +128,7 @@ interface Hub {
 }
 
 /** `q2 preview --git track --allow-edit --ui editor --no-browser --port N <dir>`. */
-async function startHub(dir: string, dataDir: string): Promise<Hub> {
+async function startHub(dir: string, dataDir: string, extraEnv: Record<string, string> = {}): Promise<Hub> {
   const port = await freePort();
   const args = ['preview', '--no-browser', '--data-dir', dataDir, '--allow-edit', '--ui', 'editor', '--git', 'track', '--host', '127.0.0.1', '--port', String(port), dir];
   record('invoke', `${Q2_BINARY} ${args.join(' ')}`);
@@ -137,7 +137,7 @@ async function startHub(dir: string, dataDir: string): Promise<Hub> {
   // step 9's CTRL_C_EVENT helper attaches to (and refuses to use if it turns out to be the runner's console).
   const proc = spawn(Q2_BINARY, args, {
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, RUST_LOG: process.env.RUST_LOG ?? 'warn' },
+    env: { ...process.env, RUST_LOG: process.env.RUST_LOG ?? 'warn', ...extraEnv },
     windowsHide: true,
   });
   let log = '';
@@ -462,7 +462,8 @@ test('c1 step 9: stopping the hub during a git switch skips the flush and leaves
   cleanups.push(() => flush());
   const fx = buildLargeFixture(projectDir);
   const repo = fx.repo;
-  const hub = await startHub(projectDir, dataDir);
+  // info level: the shutdown steps ("Performing final filesystem sync", "Final filesystem sync complete") say where a slow exit is spent
+  const hub = await startHub(projectDir, dataDir, { RUST_LOG: process.env.RUST_LOG ?? 'quarto_hub=info,warn' });
   const mirror = await mirrorOf(hub, 'mirror9');
   await mirrorHolds(hub, mirror.dir, bulkPath(FILES - 1), bulkBody(FILES - 1, 'main'), 'the mirror holds every file');
   // an unflushed edit that must not be lost silently: a dirty doc on the hub's side
@@ -487,10 +488,14 @@ test('c1 step 9: stopping the hub during a git switch skips the flush and leaves
     test.skip(true, 'step 9 not run: Ctrl+C could not be delivered to the hub');
     return;
   }
-  const code = await Promise.race([hub.exited(), sleep(60_000).then(() => 'timeout' as const)]);
+  // Wait up to 5 minutes and time the exit: run 163017 saw the shutdown handler run and the flush skip, then no exit in 60 s,
+  // which a hang and a slow storage drain of 4,000 docs would both look like.
+  const sentAt = Date.now();
+  const code = await Promise.race([hub.exited(), sleep(300_000).then(() => 'timeout' as const)]);
+  const exitSeconds = Math.round((Date.now() - sentAt) / 1000);
   const log = hub.log();
-  record('9 stop the hub during the switch', { markerSeen, switchCode, hubExit: code, skippedFlushLogged: /shutdown flush was skipped/.test(log) });
-  expect(code, 'the hub exited on Ctrl+C').not.toBe('timeout');
+  record('9 stop the hub during the switch', { markerSeen, switchCode, hubExit: code, exitSeconds, skippedFlushLogged: /shutdown flush was skipped/.test(log), logTail: log.slice(-1500) });
+  expect(code, `the hub exited on Ctrl+C (waited ${exitSeconds} s; see the log tail in the transcript)`).not.toBe('timeout');
   expect(switchCode).toBe(0);
 
   // restart on the same data dir: no doc holds conflict markers or half-written text, and the disk is the switched tree
