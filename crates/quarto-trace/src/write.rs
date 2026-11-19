@@ -92,7 +92,7 @@ fn encode_v2(doc: &TraceDocument) -> TraceDocument {
         };
         match kind {
             "DocumentAst" => dedup_document_ast(data, &mut asts),
-            "AtProfile" => dedup_wrapped_ast(data, &mut asts),
+            "AtProfile" | "PandocInvocation" => dedup_wrapped_ast(data, &mut asts),
             _ => {}
         }
     }
@@ -122,7 +122,7 @@ fn dedup_document_ast(
     replace_with_ref(data, asts);
 }
 
-/// Wrapped shape (`AtProfile`, or wrapped `DocumentAst`): replace
+/// Wrapped shape (`AtProfile`, `PandocInvocation`, or wrapped `DocumentAst`): replace
 /// `data["ast"]` (if present) with a `$ref` sentinel.
 fn dedup_wrapped_ast(data: &mut serde_json::Value, asts: &mut BTreeMap<String, serde_json::Value>) {
     if let serde_json::Value::Object(map) = data

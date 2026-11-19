@@ -47,7 +47,7 @@ use crate::pandoc_filters::params::{
     BookSingleFileContributor, DocxCalloutIconsContributor, EntryPointFilter, FilterParamsBuilder,
     QuartoFilterEntryPointsContributor,
 };
-use crate::pandoc_filters::params_codec::encode_params_blob;
+use crate::pandoc_filters::params_codec::{decode_params_blob, encode_params_blob};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::pandoc_filters::version;
 use crate::pandoc_request::args::is_absolute_request_path;
@@ -62,6 +62,50 @@ use crate::stage::RenderedOutput;
 use crate::stage::{
     DocumentAst, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
 };
+
+/// Stable [`PipelineObserver::on_auxiliary_data`](super::super::observer::PipelineObserver::on_auxiliary_data)
+/// kind tag for the exact pandoc invocation recorded by [`PandocWriteStage`]
+/// when the observer opts in via `wants_pandoc_invocation`.
+pub const PANDOC_INVOCATION_KIND: &str = "PandocInvocation";
+
+/// The aux payload for [`PANDOC_INVOCATION_KIND`]: what a replay of the
+/// vendored Lua filter stage needs from one pandoc run.
+///
+/// - `ast`: the Pandoc JSON pandoc reads, i.e. the request file at
+///   `json_path`, parsed. The trace writer dedups it against the identical
+///   AST of the last traced stage. `null` if the file is missing or is not
+///   JSON.
+/// - `params`: the decoded `QUARTO_FILTER_PARAMS` (the gating params the Lua
+///   chain reads). `null` if absent; the raw string if it does not decode,
+///   so nothing is lost silently.
+/// - `to_format`, `argv`, `job_id`: the writer, the whole argv and the
+///   request's job id.
+///
+/// Built before pandoc runs, so a run that fails still leaves its input.
+pub fn pandoc_invocation_payload(request: &PandocRequest) -> serde_json::Value {
+    use serde_json::Value;
+
+    let ast = request
+        .files
+        .iter()
+        .find(|f| f.path == request.json_path)
+        .and_then(|f| serde_json::from_slice::<Value>(&f.bytes).ok())
+        .unwrap_or(Value::Null);
+    let params = match request.env.get("QUARTO_FILTER_PARAMS") {
+        None => Value::Null,
+        Some(blob) => decode_params_blob(blob)
+            .ok()
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+            .unwrap_or_else(|| Value::String(blob.clone())),
+    };
+    serde_json::json!({
+        "ast": ast,
+        "params": params,
+        "to_format": request.writer,
+        "argv": request.argv,
+        "job_id": request.job_id,
+    })
+}
 
 /// Removes the temp JSON input on a successful render; leaves it on disk
 /// on failure. The failure copy that outlives the render is made by
@@ -1669,6 +1713,17 @@ impl PipelineStage for PandocWriteStage {
         let prepared = self.prepare(&mut doc, ctx, &opts, &typst)?;
         ctx.add_diagnostics(prepared.diagnostics);
 
+        // Record the exact invocation (opt-in: the payload re-parses the
+        // AST) before pandoc runs, so a failing run still leaves its input.
+        if ctx.observer.wants_pandoc_invocation() {
+            ctx.observer.on_auxiliary_data(
+                self.name(),
+                0,
+                PANDOC_INVOCATION_KIND,
+                &pandoc_invocation_payload(&prepared.request),
+            );
+        }
+
         let warnings = self.execute_with(&prepared.request, &pandoc_bin, ctx.child_limits())?;
         ctx.add_diagnostics(warnings);
 
@@ -1875,6 +1930,96 @@ mod tests {
             source_info: SourceInfo::for_test(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         }))
+    }
+
+    /// A request shaped like a real docx one, with the input JSON mounted
+    /// at `/tmp/pw/input.json`, for the invocation-payload tests.
+    fn sample_request(ast_json: &str, params_env: Option<&str>) -> PandocRequest {
+        let mut env = std::collections::BTreeMap::new();
+        env.insert("QUARTO_SHARE_PATH".to_string(), "/tmp/pw/share".to_string());
+        if let Some(blob) = params_env {
+            env.insert("QUARTO_FILTER_PARAMS".to_string(), blob.to_string());
+        }
+        PandocRequest {
+            schema_version: crate::pandoc_request::REQUEST_SCHEMA_VERSION,
+            kind: Default::default(),
+            job_id: "0123456789abcdef".to_string(),
+            writer: "docx".to_string(),
+            argv: ["pandoc", "-f", "json", "-t", "docx", "/tmp/pw/input.json"]
+                .map(String::from)
+                .to_vec(),
+            env,
+            files: vec![
+                crate::pandoc_request::RequestFile {
+                    path: "/tmp/pw/deps.txt".to_string(),
+                    bytes: Vec::new(),
+                },
+                crate::pandoc_request::RequestFile {
+                    path: "/tmp/pw/input.json".to_string(),
+                    bytes: ast_json.as_bytes().to_vec(),
+                },
+            ],
+            dirs: Vec::new(),
+            resource_refs: Vec::new(),
+            share_root: "/tmp/pw".to_string(),
+            share_tree_path: "/tmp/pw/share".to_string(),
+            doc_dir: "/tmp/pw/doc".to_string(),
+            project_root: "/tmp/pw/doc".to_string(),
+            output_path: "/tmp/pw/out.docx".to_string(),
+            stage_name: "pandoc-write".to_string(),
+            json_path: "/tmp/pw/input.json".to_string(),
+            post: Default::default(),
+            expected_pandoc_wasm_sha256: String::new(),
+            share_tree_version: String::new(),
+            typst_available_fonts: None,
+            host_inputs: Vec::new(),
+            collect_dirs: Vec::new(),
+        }
+    }
+
+    /// The payload carries what a Lua-stage replay needs: the AST pandoc
+    /// reads (the file at `json_path`, parsed), the decoded filter params,
+    /// the writer and the argv.
+    #[test]
+    fn test_invocation_payload_carries_ast_params_writer_argv() {
+        let params = r#"{"active-filters":{"normalization":true},"crossref-numbering":"external"}"#;
+        let request = sample_request(
+            r#"{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[]}"#,
+            Some(&encode_params_blob(params)),
+        );
+
+        let payload = pandoc_invocation_payload(&request);
+
+        assert_eq!(
+            payload["ast"]["pandoc-api-version"],
+            serde_json::json!([1, 23, 1])
+        );
+        assert_eq!(payload["params"]["active-filters"]["normalization"], true);
+        assert_eq!(payload["params"]["crossref-numbering"], "external");
+        assert_eq!(payload["to_format"], "docx");
+        assert_eq!(payload["job_id"], "0123456789abcdef");
+        assert_eq!(payload["argv"][0], "pandoc");
+        assert_eq!(payload["argv"][5], "/tmp/pw/input.json");
+    }
+
+    /// Nothing is lost silently when the pieces are not the expected
+    /// shape: a missing input file gives a null AST, an undecodable blob is
+    /// kept as the raw string, and an absent blob gives null params.
+    #[test]
+    fn test_invocation_payload_degrades_without_panicking() {
+        let mut request = sample_request("not json", Some("not base64!!"));
+        let payload = pandoc_invocation_payload(&request);
+        assert!(
+            payload["ast"].is_null(),
+            "unparsable AST -> null: {payload}"
+        );
+        assert_eq!(payload["params"], "not base64!!");
+
+        request.files.retain(|f| f.path != request.json_path);
+        request.env.remove("QUARTO_FILTER_PARAMS");
+        let payload = pandoc_invocation_payload(&request);
+        assert!(payload["ast"].is_null(), "missing AST file -> null");
+        assert!(payload["params"].is_null(), "absent blob -> null");
     }
 
     /// pandoc-hybrid-typst Phase 1: a top-level level-1 heading means no
