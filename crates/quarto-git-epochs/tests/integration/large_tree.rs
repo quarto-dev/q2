@@ -57,10 +57,19 @@ fn build_repo(dir: &Path) {
     git(dir, &["switch", "-q", "a"]);
 }
 
-fn repo_dir() -> (Option<tempfile::TempDir>, PathBuf) {
+fn prepare_shared(dir: &Path, switch_to_a: bool) {
+    if switch_to_a {
+        git(dir, &["switch", "-q", "a"]);
+    }
+}
+
+/// The repository to test against. Only a test that needs the working tree on branch `a` passes
+/// `switch_to_a`: with `GIT_EPOCHS_LARGE_TREE_REPO` set, every test shares one repository and nextest runs
+/// them in parallel, so a test that merely reads must not take `index.lock` (Windows run item `a2`, GE-16a `A2`).
+fn repo_dir(switch_to_a: bool) -> (Option<tempfile::TempDir>, PathBuf) {
     if let Ok(p) = std::env::var("GIT_EPOCHS_LARGE_TREE_REPO") {
         let dir = PathBuf::from(p);
-        git(&dir, &["switch", "-q", "a"]);
+        prepare_shared(&dir, switch_to_a);
         return (None, dir);
     }
     let (t, dir) = temp_dir();
@@ -70,7 +79,7 @@ fn repo_dir() -> (Option<tempfile::TempDir>, PathBuf) {
 
 #[test]
 fn the_generated_tree_has_the_expected_size_and_two_branches() {
-    let (_t, dir) = repo_dir();
+    let (_t, dir) = repo_dir(false);
     let tracked = git(&dir, &["ls-files"]).lines().count();
     assert!(tracked >= FILES, "tracked {tracked}");
     let differing = git(&dir, &["diff", "--name-only", "a", "b"])
@@ -79,9 +88,22 @@ fn the_generated_tree_has_the_expected_size_and_two_branches() {
     assert_eq!(differing, DIFFERING);
 }
 
+/// Another test's `git switch` holds `index.lock` on a shared repository. Preparing the repository for the
+/// read-only size check must not need that lock, while preparing it for the gate test (which switches) does.
+#[test]
+fn preparing_a_shared_repo_for_a_read_only_check_takes_no_lock() {
+    let (_t, dir) = temp_dir();
+    build_repo(&dir);
+    git(&dir, &["switch", "-q", "b"]);
+    std::fs::write(dir.join(".git").join("index.lock"), b"").unwrap();
+    prepare_shared(&dir, false); // no switch, no lock needed
+    assert_eq!(git(&dir, &["symbolic-ref", "HEAD"]), "refs/heads/b");
+    assert_eq!(git(&dir, &["ls-files"]).lines().count(), FILES);
+}
+
 #[test]
 fn the_gate_closes_for_real_markers_during_a_switch_and_releases_after() {
-    let (_t, dir) = repo_dir();
+    let (_t, dir) = repo_dir(true);
     let probe = SubprocessProbe::new(ProbeOptions::new(&dir));
     let mut c = Controller::new(probe, ControllerOptions::default());
     c.init();
