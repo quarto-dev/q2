@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-11-19
+
+- [`1d0b1e1a5`](https://github.com/quarto-dev/q2/commits/1d0b1e1a5): A file the project owner replaces shows a notice and freezes while it swaps, and a banner appears while the owner is mid-operation
+
 ### 2026-11-17
 
 - [`e3a801cac`](https://github.com/quarto-dev/q2/commits/e3a801cac): Projects whose `_quarto.yml` does not declare `quarto-required: "^2"` now show a warning (Q-5-53), since such projects are presumed to be Quarto 1 projects; new projects declare it
