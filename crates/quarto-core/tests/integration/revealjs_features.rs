@@ -961,3 +961,30 @@ fn toc_options_depth_title_numbers_and_lang() {
         "{toc}"
     );
 }
+
+/// Quarto 1 does not number the title slide's `<h1 class="title">`: with
+/// `number-sections`, the first `#` section is 1, on its slide and in the
+/// TOC. q2 counted the generated title heading as section 1.
+#[test]
+fn number_sections_skip_the_title_slide_heading() {
+    let html = render_revealjs(
+        "---\ntitle: Deck\nformat: revealjs\ntoc: true\nnumber-sections: true\n---\n\n\
+         # Section A\n\n## Slide one\n\n# Section B\n\n## Slide two\n",
+    );
+    let title_start = html.find("id=\"title-slide\"").expect("title slide");
+    let title_end = title_start + html[title_start..].find("</section>").unwrap();
+    assert!(
+        !html[title_start..title_end].contains("header-section-number"),
+        "the title heading must not be numbered"
+    );
+    let toc = toc_slide(&html);
+    assert!(
+        toc.contains("<span class=\"header-section-number\">1</span> Section A")
+            && toc.contains("<span class=\"header-section-number\">2</span> Section B"),
+        "{toc}"
+    );
+    assert!(
+        html.contains("<span class=\"header-section-number\">1.1</span> Slide one"),
+        "slide numbers start at 1.1"
+    );
+}
