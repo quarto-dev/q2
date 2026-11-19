@@ -48,9 +48,12 @@ function findLlvmClang() {
  * payload plan Phase 1), so it is a hard requirement, not a nice-to-have.
  */
 function findWasmOpt() {
-  // shell on Windows: npm installs wasm-opt as a .cmd shim, which Node cannot launch without a shell
-  // (spawnSync reports ENOENT even though the user's shell finds it). run() below does the same.
-  const onPath = spawnSync('wasm-opt', ['--version'], { encoding: 'utf-8', shell: platform() === 'win32' });
+  // `npm install -g binaryen` puts a `wasm-opt.cmd` shim on PATH on Windows,
+  // which spawnSync only finds through a shell (same as run() below).
+  const onPath = spawnSync('wasm-opt', ['--version'], {
+    encoding: 'utf-8',
+    shell: platform() === 'win32',
+  });
   if (!onPath.error && onPath.status === 0) return 'wasm-opt';
   if (platform() === 'darwin') {
     const locations = [
