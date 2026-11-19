@@ -31,6 +31,8 @@ export interface BufferBinding {
   sendMoved?(): void;
   /** Bring the buffer to the doc's text now (used when a suspended binding resumes). */
   reconcile?(): void;
+  /** A detached file (G27): drop local edits and skip remote changes, keeping the handle. */
+  setInert?(inert: boolean): void;
 }
 
 /** What the sync core asks of a binding it asks the host to create. */

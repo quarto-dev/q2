@@ -79,6 +79,12 @@ export class Binding {
     void this.sync.applyRemote();
   }
 
+  /** A detached file (GE-10, G27): no edits go out and none come in; the handle stays for the re-attach comparison. */
+  setInert(inert: boolean): void {
+    this.sync.inert = inert;
+    if (!inert) void this.sync.applyRemote();
+  }
+
   /** Local keystrokes -> Automerge splices. */
   onLocalEdit(e: vscode.TextDocumentChangeEvent): void {
     this.sync.onLocalEdit(e.contentChanges);

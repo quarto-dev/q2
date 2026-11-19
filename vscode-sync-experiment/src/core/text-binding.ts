@@ -72,6 +72,11 @@ export class TextBindingCore {
   onLocalEditBatch: ((changes: readonly TextChange[]) => void) | null = null;
   /** While true the binding is suspended (the editor-only gate): local edits are dropped and the doc is not written into the buffer. */
   suspended: (() => boolean) | null = null;
+  /**
+   * A detached file (GE-10, G27): local edits are dropped and remote changes are not applied. The handle stays so the
+   * file can be compared with the doc and re-attached.
+   */
+  inert = false;
 
   constructor(
     readonly handle: DocHandle<TextDoc>,
@@ -96,7 +101,7 @@ export class TextBindingCore {
   /** Local keystrokes -> Automerge splices. */
   onLocalEdit(changes: readonly TextChange[]): void {
     if (this.applyingRemote || changes.length === 0) return;
-    if (this.suspended?.()) return; // dropped: the gate is closed
+    if (this.inert || this.suspended?.()) return; // dropped: the file is detached or the gate is closed
     const expected = applyChanges(this.mirror, changes);
     if (expected === null || expected !== this.buffer.getText()) {
       this.rejectedEdits++;
@@ -115,7 +120,7 @@ export class TextBindingCore {
 
   /** Automerge changes -> buffer. One replace covering the changed span. */
   async applyRemote(): Promise<void> {
-    if (this.suspended?.()) return; // never write the doc into a buffer that git is rewriting
+    if (this.inert || this.suspended?.()) return; // never write the doc into a buffer that git is rewriting, or a detached one
     const target = this.handle.doc()?.text;
     if (target === undefined) return;
     const replace = computeReplace(this.buffer.getText(), target);

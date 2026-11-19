@@ -84,6 +84,10 @@ export class FakeBufferHost implements BufferHost {
       },
       sendMoved: () => void this.bindingEvents.push(`moved:${absPath}`),
       reconcile: () => void core.applyRemote(),
+      setInert: (inert: boolean) => {
+        core.inert = inert;
+        if (!inert) void core.applyRemote();
+      },
     };
   }
   dispose(): void {}

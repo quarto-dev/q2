@@ -40,12 +40,16 @@ import type { BufferBinding, SyncHost } from './host';
 import { META_DIR, isIgnoredPath } from './ignore';
 import { META_FILE, type ProjectMeta, type ProjectMode } from './meta';
 import type { Identity } from './presence';
-import { movedNotice, type ControllerProbe } from '@quarto/quarto-git-epochs';
+import { movedNotice, normalizeText, type ControllerProbe } from '@quarto/quarto-git-epochs';
+import { CloneRefusedError, CloneSync, docKey, type CloneEvent, type CloneState, type DiskContent } from './clone/clone-sync';
+import { NOOP_POINTER_WRITER, type PointerWriter } from './clone/pointer-writer';
+import { RegistryClient } from './clone/registry-client';
+import type { RegistryView } from '@quarto/quarto-git-epochs';
 import { findDoc, makeRepo, webSocketAdapter } from './repo';
 import { UnsafePathError, safeJoin } from './safe-path';
 import type { TextDoc } from './text-binding';
 
-const MODE_LABEL = { mirror: 'Quarto Hub: mirror', 'editor-only': 'Quarto Hub: editor only' } as const;
+const MODE_LABEL = { mirror: 'Quarto Hub: mirror', 'editor-only': 'Quarto Hub: editor only', clone: 'Quarto Hub: clone' } as const;
 
 /** Knobs the tests (and later plans) turn; every one has a product default. */
 export interface SyncOptions {
@@ -60,10 +64,14 @@ export interface SyncOptions {
   gate?: { probe: ControllerProbe; clock: GateClock; flipWaitMs?: number };
   /** Editor-only: how long to wait for the hub's flip after the gate reopens when `gate` is not given (G32: 10 000). */
   flipWaitMs?: number;
+  /** Clone mode: the controller's clock and probe (default: real ones) and the owner hook (default: none). */
+  clone?: { clock?: GateClock; probe?: ControllerProbe; pointer?: PointerWriter };
 }
 
 export class ProjectSync {
-  readonly mode: Exclude<ProjectMode, 'clone'>;
+  readonly mode: ProjectMode;
+  private clone: CloneSync | null = null;
+  /** The content key last written to each path by this engine (the clone gate ignores the file's own event). */
   private follower!: Follower;
   private gate: EditorGate | null = null;
   private repo!: Repo;
@@ -87,12 +95,11 @@ export class ProjectSync {
     private readonly host: SyncHost,
     private readonly options: SyncOptions = {},
   ) {
-    if (meta.mode === 'clone') throw new Error('clone mode is not available in this version of the extension');
     this.mode = meta.mode ?? 'mirror';
   }
 
   private get writesDisk(): boolean {
-    return this.mode === 'mirror';
+    return this.mode === 'mirror' || this.mode === 'clone';
   }
 
   private get log() {
@@ -104,17 +111,21 @@ export class ProjectSync {
     // fold in whatever changed on disk since. Doing this before going online
     // means offline edits become changes rooted at the state the disk
     // actually reflected, which is what lets Automerge merge them properly.
-    this.repo = makeRepo(this.root, null);
+    // A freshly attached clone has no local store yet, so it starts online; its startup rule never merges disk into a
+    // doc without the registry's answer anyway (G10).
+    this.repo = makeRepo(this.root, this.mode === 'clone' ? this.meta.syncServer : null);
     this.index = await findDoc<IndexDocument>(this.repo, this.meta.indexDocId);
-    for (const [rel, docId] of Object.entries(this.index.doc()?.files ?? {})) {
-      if ((await this.safePath(rel)) === null) continue;
-      this.track(rel, await findDoc<FileDoc>(this.repo, docId));
+    if (this.mode !== 'clone') {
+      for (const [rel, docId] of Object.entries(this.index.doc()?.files ?? {})) {
+        if ((await this.safePath(rel)) === null) continue;
+        this.track(rel, await findDoc<FileDoc>(this.repo, docId));
+      }
+      if (this.writesDisk) await this.reconcileDisk();
     }
-    if (this.writesDisk) await this.reconcileDisk();
     this.knownFolders = new Set(Object.keys(this.index.doc()?.folders ?? {}));
 
     // Phase 2: go online. From here on, changes flow both ways live.
-    this.repo.networkSubsystem.addNetworkAdapter(webSocketAdapter(this.meta.syncServer));
+    if (this.mode !== 'clone') this.repo.networkSubsystem.addNetworkAdapter(webSocketAdapter(this.meta.syncServer));
     const onIndex = () => void this.syncIndex();
     this.index.on('change', onIndex);
     this.cleanups.push(() => this.index.off('change', onIndex));
@@ -134,15 +145,15 @@ export class ProjectSync {
     );
     this.cleanups.push(() => this.follower.dispose());
     if (this.mode === 'editor-only') await this.startGate();
-
     const { watcher, buffers } = this.host;
+    buffers.onOpen((p) => this.bind(p));
+    buffers.onClose((p) => this.unbind(p));
+    if (this.mode === 'clone') await this.startClone();
     if (this.writesDisk) {
       watcher.onChange((p) => void this.onDiskChange(p));
       watcher.onCreate((p) => void this.onDiskCreate(p));
       watcher.onDelete((p) => void this.onDiskDelete(p));
     }
-    buffers.onOpen((p) => this.bind(p));
-    buffers.onClose((p) => this.unbind(p));
     this.cleanups.push(() => watcher.dispose(), () => buffers.dispose());
     buffers.openPaths().forEach((p) => this.bind(p));
     this.log.appendLine(`project sync running: ${this.root} (${this.handles.size} files)`);
@@ -151,6 +162,7 @@ export class ProjectSync {
   }
 
   async dispose(): Promise<void> {
+    await this.clone?.dispose().catch(() => {});
     this.cleanups.forEach((c) => c());
     this.cleanups.length = 0;
     this.host.notifier.status(null); // clears the mode item
@@ -163,6 +175,114 @@ export class ProjectSync {
   /** The index and every tracked file doc with their current heads (URL-encoded). */
   inventory(): { docId: string; heads: string[] }[] {
     return [this.index, ...this.handles.values()].map((h) => ({ docId: h.documentId, heads: h.heads() as string[] }));
+  }
+
+  // --- clone mode (GE-10) -------------------------------------------------------
+
+  private async startClone(): Promise<void> {
+    const { createGitProbe } = await import('@quarto/quarto-git-epochs/probe');
+    const probe = createGitProbe({ cwd: this.root });
+    await excludeMetaDir(this.root).catch(() => false);
+    const clone = new CloneSync(this.cloneHost(), {
+      identity: this.meta.repo,
+      probe,
+      controllerProbe: this.options.clone?.probe,
+      clock: this.options.clone?.clock ?? { now: () => Date.now(), setTimeout, clearTimeout },
+      registry: new RegistryClient(this.repo, this.index),
+      pointer: this.options.clone?.pointer ?? NOOP_POINTER_WRITER,
+      isIgnored: (rel) => isIgnoredPath(rel, this.boundSubfolders),
+    });
+    try {
+      await clone.start();
+    } catch (err) {
+      await clone.dispose().catch(() => {});
+      if (err instanceof CloneRefusedError) this.host.notifier.error(err.message);
+      throw err;
+    }
+    this.clone = clone;
+    this.cleanups.push(() => void 0);
+  }
+
+  private cloneHost() {
+    return {
+      root: this.root,
+      repo: this.repo,
+      notifier: this.host.notifier,
+      log: (line: string) => this.log.appendLine(line),
+      handleOf: (rel: string) => this.handles.get(rel),
+      attachedPaths: () => [...this.handles.keys()],
+      switchTo: async (rel: string, handle: DocHandle<FileDoc>, o: { writeDisk: boolean }) => {
+        const old = this.handles.get(rel);
+        if (old?.documentId !== handle.documentId) {
+          this.bound.get(this.absOf(rel))?.sendMoved?.(); // the moved message goes out on the old doc first (G25)
+          this.untrack(rel);
+          this.track(rel, handle);
+        }
+        const doc = handle.doc();
+        if (o.writeDisk && doc) await this.writeDoc(rel, doc);
+      },
+      setInert: (rel: string, inert: boolean) => this.bound.get(this.absOf(rel))?.setInert?.(inert),
+      createDoc: (rel: string, disk: DiskContent) =>
+        disk.kind === 'binary'
+          ? this.repo.create<FileDoc>({ content: disk.bytes, mimeType: inferMimeType(rel), hash: disk.key } as FileDoc)
+          : this.repo.create<FileDoc>({ text: this.host.buffers.getText(this.absOf(rel)) ?? disk.text } as FileDoc),
+      readDisk: async (rel: string): Promise<DiskContent | null> => {
+        const abs = this.absOf(rel);
+        try {
+          if (isBinaryExtension(rel)) {
+            const bytes = new Uint8Array(await fs.readFile(abs));
+            return { kind: 'binary', bytes, key: createHash('sha256').update(bytes).digest('hex') };
+          }
+          const text = await fs.readFile(abs, 'utf8');
+          return { kind: 'text', text, key: normalizeText(text) };
+        } catch {
+          return null;
+        }
+      },
+      writeBytes: async (rel: string, bytes: Uint8Array) => {
+        const abs = await this.safePath(rel);
+        if (abs === null) return;
+        this.clone?.noteWritten(rel, isBinaryExtension(rel) ? createHash('sha256').update(bytes).digest('hex') : normalizeText(Buffer.from(bytes).toString('utf8')));
+        await fs.writeFile(abs, bytes);
+      },
+      mergeDiskIntoDoc: (rel: string) => this.mergeDiskIntoDoc(rel),
+      followPointer: async (untracked: (rel: string) => boolean) => {
+        for (const [rel, docId] of Object.entries(this.index.doc()?.files ?? {})) {
+          if (!untracked(rel) || this.handles.has(rel) || (await this.safePath(rel)) === null) continue;
+          if (!(await fs.stat(this.absOf(rel)).then((s) => s.isFile(), () => false))) continue; // never create (G14)
+          this.track(rel, await findDoc<FileDoc>(this.repo, docId));
+          await this.mergeDiskIntoDoc(rel);
+        }
+      },
+      loadDoc: (docId: string, signal: AbortSignal) => this.loadDoc(docId, signal),
+      logEvent: (event: CloneEvent, rel: string, extra: { from?: string; to?: string; reason?: string }) =>
+        this.logEvent(event, rel, 'local', extra),
+    };
+  }
+
+  /** Clone mode: HEAD, the gate, the attached docs, and the detached and superseded files. Null in other modes. */
+  cloneState(): CloneState | null {
+    return this.clone?.state() ?? null;
+  }
+
+  /** Clone mode: the registry as this peer sees it. */
+  registryView(): RegistryView {
+    return this.clone?.registryView() ?? { entries: [], retired: [] };
+  }
+
+  /** The text of the doc attached to `rel`, or undefined. */
+  docText(rel: string): string | undefined {
+    const doc = this.handles.get(rel)?.doc();
+    return isTextDocument(doc) ? doc.text : undefined;
+  }
+
+  /** Clone mode: take the shared version of a detached file ("Adopt", asking first when the file has local changes). */
+  adopt(rel: string): Promise<boolean> {
+    return this.clone?.adopt(rel) ?? Promise.resolve(false);
+  }
+
+  stayDetached(rel: string): Promise<void> {
+    return this.clone?.stayDetached(rel) ?? Promise.resolve();
   }
 
   // --- helpers -----------------------------------------------------------
@@ -220,10 +340,10 @@ export class ProjectSync {
   }
 
   private async logEvent(
-    event: 'created' | 'deleted' | 'edited-offline' | 'rejected' | 'flipped',
+    event: 'created' | 'deleted' | 'edited-offline' | 'rejected' | 'flipped' | CloneEvent,
     rel: string,
     source: 'hub' | 'local',
-    extra: { from?: string; to?: string } = {},
+    extra: { from?: string; to?: string; reason?: string } = {},
   ): Promise<void> {
     const line = JSON.stringify({ at: new Date().toISOString(), event, path: rel, source, ...extra }) + '\n';
     await fs.appendFile(path.join(this.root, META_DIR, 'events.jsonl'), line).catch(() => {});
@@ -239,10 +359,13 @@ export class ProjectSync {
       // The Binding keeps the handle it was created with; the base doc id tells the follower
       // whether an edit landed in a doc that is being, or has been, replaced.
       onLocalEdit: () => this.follower?.noteLocalEdit(rel, handle.documentId),
-      suspended: () => this.gate?.isClosed() ?? false,
+      suspended: () => (this.gate?.isClosed() ?? false) || (this.clone?.isClosed() ?? false),
       onMoved: (name) => this.host.notifier.status(movedNotice(name), 3000),
     });
-    if (binding) this.bound.set(abs, binding);
+    if (binding) {
+      this.bound.set(abs, binding);
+      if (this.clone?.isInert(rel)) binding.setInert?.(true);
+    }
   }
 
   private unbind(abs: string): void {
@@ -282,29 +405,36 @@ export class ProjectSync {
         await this.logEvent('deleted', rel, 'local');
         continue;
       }
-      const doc = handle.doc();
-      if (isTextDocument(doc)) {
-        const diskText = await fs.readFile(this.absOf(rel), 'utf8');
-        if (diskText !== doc.text) {
-          (handle as DocHandle<TextDoc>).change((d) => updateText(d, ['text'], diskText));
-          await this.logEvent('edited-offline', rel, 'local');
-        }
-      } else if (isBinaryDocument(doc)) {
-        // Local wins for binaries too: a differing file on disk replaces the
-        // hub copy wholesale (no character merge is meaningful for bytes).
-        const content = new Uint8Array(await fs.readFile(this.absOf(rel)));
-        const hash = createHash('sha256').update(content).digest('hex');
-        if (hash !== doc.hash) {
-          (handle as DocHandle<BinaryDocumentContent>).change((d) => {
-            d.content = content;
-            d.hash = hash;
-            d.mimeType = inferMimeType(rel);
-          });
-          await this.logEvent('edited-offline', rel, 'local');
-        }
-      }
+      await this.mergeDiskIntoDoc(rel);
     }
     for (const rel of onDisk) if (!this.handles.has(rel)) await this.createFromDisk(rel);
+  }
+
+  /** Fold what changed on disk while offline into the attached doc, as changes on top of its last-synced state. */
+  private async mergeDiskIntoDoc(rel: string): Promise<void> {
+    const handle = this.handles.get(rel);
+    const doc = handle?.doc();
+    if (!handle) return;
+    if (isTextDocument(doc)) {
+      const diskText = await fs.readFile(this.absOf(rel), 'utf8');
+      if (diskText !== doc.text) {
+        (handle as DocHandle<TextDoc>).change((d) => updateText(d, ['text'], diskText));
+        await this.logEvent('edited-offline', rel, 'local');
+      }
+    } else if (isBinaryDocument(doc)) {
+      // Local wins for binaries too: a differing file on disk replaces the
+      // hub copy wholesale (no character merge is meaningful for bytes).
+      const content = new Uint8Array(await fs.readFile(this.absOf(rel)));
+      const hash = createHash('sha256').update(content).digest('hex');
+      if (hash !== doc.hash) {
+        (handle as DocHandle<BinaryDocumentContent>).change((d) => {
+          d.content = content;
+          d.hash = hash;
+          d.mimeType = inferMimeType(rel);
+        });
+        await this.logEvent('edited-offline', rel, 'local');
+      }
+    }
   }
 
   // --- hub -> disk -------------------------------------------------------------
@@ -319,16 +449,22 @@ export class ProjectSync {
    */
   private async syncIndex(): Promise<void> {
     const files = this.index.doc()?.files ?? {};
+    const clone = this.clone;
+    if (this.mode === 'clone' && !clone) return; // the clone's startup has not finished: it reads the index itself
     for (const rel of [...this.handles.keys()]) {
+      if (clone?.isTracked(rel)) continue; // a tracked file ignores the pointer and its removals (G14, G13)
       if (!(rel in files)) {
         this.untrack(rel);
         const abs = await this.safePath(rel);
-        if (abs !== null && this.writesDisk) await fs.rm(abs, { force: true });
+        // A clone never deletes a file from the user's working tree because the pointer dropped it.
+        if (abs !== null && this.writesDisk && !clone) await fs.rm(abs, { force: true });
         await this.logEvent('deleted', rel, 'hub');
       }
     }
     for (const [rel, docId] of Object.entries(files)) {
       if ((await this.safePath(rel)) === null) continue;
+      if (clone?.isTracked(rel)) continue;
+      if (clone && !this.handles.has(rel) && !(await fs.stat(this.absOf(rel)).then((s) => s.isFile(), () => false))) continue; // the pointer never creates an untracked file (G14)
       const existing = this.handles.get(rel);
       if (existing) {
         this.follower.indexChanged(rel, docId); // a no-op when the doc is the one already bound
@@ -338,9 +474,10 @@ export class ProjectSync {
       if (this.handles.has(rel)) continue; // another pass got here first
       this.track(rel, handle);
       const doc = handle.doc();
-      if (doc && this.writesDisk) await writeFileDoc(this.root, rel, doc);
+      if (doc && this.writesDisk) await this.writeDoc(rel, doc);
       await this.logEvent('created', rel, 'hub');
     }
+    if (clone) return; // git owns the folders of a clone
     const folders = new Set(Object.keys(this.index.doc()?.folders ?? {}));
     for (const folder of folders) {
       if (this.knownFolders.has(folder)) continue;
@@ -426,7 +563,7 @@ export class ProjectSync {
     this.untrack(rel); // disposes the old Binding
     this.track(rel, newHandle); // binds an open buffer to the new doc
     const doc = newHandle.doc();
-    if (doc && this.writesDisk) await writeFileDoc(this.root, rel, doc);
+    if (doc && this.writesDisk) await this.writeDoc(rel, doc);
     await this.logEvent('flipped', rel, 'hub', { from: oldHandle?.documentId, to: newHandle.documentId });
   }
 
@@ -434,6 +571,13 @@ export class ProjectSync {
   // file that is missing on disk.
   private async onDocChange(rel: string): Promise<void> {
     if (!this.writesDisk) return; // editor-only: the hub owns the disk
+    if (this.clone) {
+      // A clone writes a doc to disk only while the file is attached, not held, and present at HEAD (G13, G27).
+      if (!this.clone.mayWriteDisk(rel)) {
+        if (this.clone.isInert(rel)) void this.clone.maybeReattach(rel);
+        return;
+      }
+    }
     if (this.isBound(rel)) return; // the binding + autosave own this file
     const doc = this.handles.get(rel)?.doc();
     if (!doc) return;
@@ -441,6 +585,13 @@ export class ProjectSync {
       const current = await fs.readFile(this.absOf(rel), 'utf8').catch(() => null);
       if (current === doc.text) return;
     }
+    await this.writeDoc(rel, doc);
+  }
+
+  /** Write a doc to disk, remembering the content so the clone gate recognizes the file's own event. */
+  private async writeDoc(rel: string, doc: FileDoc): Promise<void> {
+    const key = docKey(doc);
+    if (key !== undefined) this.clone?.noteWritten(rel, key);
     await writeFileDoc(this.root, rel, doc);
   }
 
@@ -448,7 +599,13 @@ export class ProjectSync {
 
   private async onDiskChange(abs: string): Promise<void> {
     const rel = this.relOf(abs);
-    if (!rel || this.isBound(rel)) return;
+    if (rel) void this.clone?.noteFsEvent(rel);
+    if (!rel) return;
+    if (this.clone) {
+      if (this.clone.isInert(rel)) return void this.clone.maybeReattach(rel);
+      if (this.clone.isClosed() || this.clone.isRemoved(rel)) return; // git is working: this is its rewrite, not an edit
+    }
+    if (this.isBound(rel)) return;
     const handle = this.handles.get(rel);
     const doc = handle?.doc();
     if (!handle || !isTextDocument(doc)) return;
@@ -459,7 +616,9 @@ export class ProjectSync {
 
   private async onDiskCreate(abs: string): Promise<void> {
     const rel = this.relOf(abs);
-    if (!rel || this.handles.has(rel)) return;
+    if (rel) void this.clone?.noteFsEvent(rel);
+    // A clone shares a new file when git adds it (arrival step 1), not when it appears on disk.
+    if (!rel || this.handles.has(rel) || this.clone) return;
     const stat = await fs.stat(abs).catch(() => null);
     if (stat?.isDirectory()) {
       // Empty folders are only representable via the index's explicit
@@ -494,7 +653,9 @@ export class ProjectSync {
 
   private async onDiskDelete(abs: string): Promise<void> {
     const rel = this.relOf(abs);
+    if (rel) void this.clone?.noteFsEvent(rel);
     if (!rel) return;
+    if (this.clone && (this.clone.isClosed() || this.clone.isRemoved(rel) || this.clone.isInert(rel))) return; // git removed it (G13)
     // A deleted directory arrives as one event for the directory itself.
     const gone = [...this.handles.keys()].filter((p) => p === rel || p.startsWith(`${rel}/`));
     const goneFolders = Object.keys(this.index.doc()?.folders ?? {}).filter((p) => p === rel || p.startsWith(`${rel}/`));
