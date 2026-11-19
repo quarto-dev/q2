@@ -939,6 +939,26 @@ test.describe('the mouse in the body', () => {
     expect(await editor.selectedText()).toBe('First')
   })
 
+  for (const [name, source] of [
+    ['a nested item', '- a\n    - b\n'],
+    ['an item', '- a\n- b\n'],
+    ['a paragraph', 'a\n\nb\n'],
+  ]) {
+    test(`a double click past the end of ${name}'s text, dragged up, selects up from there`, async ({ page }) => {
+      const document = await createDocument(`---\ntitle: T\n---\n\n${source}`)
+      const editor = await document.open(page)
+      const a = (await editor.line(0).boundingBox())!
+      const b = (await editor.line(1).boundingBox())!
+
+      await page.mouse.click(b.x + 100, b.y + b.height / 2)
+      await page.mouse.down({ clickCount: 2 })
+      await page.mouse.move(a.x + 3, a.y + a.height / 2, { steps: 5 })
+      await page.mouse.up({ clickCount: 2 })
+
+      expect((await editor.selectedText()).replace(/\s+/g, ' ')).toBe('a b')
+    })
+  }
+
   test('a triple click selects the paragraph, and typing replaces it and nothing else', async ({ page, browserName }) => {
     test.fixme(
       browserName !== 'firefox',

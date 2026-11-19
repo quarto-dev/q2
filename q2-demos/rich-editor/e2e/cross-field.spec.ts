@@ -285,6 +285,8 @@ test.describe('arrow keys past the author grid', () => {
   test('Shift+Down extends the selection into the abstract', async ({ page }) => {
     const editor = await openEditor(page, 'abstract')
     await editor.clickAt('subtitle', 30)
+    // To the end of the line's text, then on to the next line.
+    await page.keyboard.press('Shift+ArrowDown')
     await page.keyboard.press('Shift+ArrowDown')
 
     const selection = (await editor.selection())!

@@ -473,6 +473,8 @@ test.describe('the toolbar on an item', () => {
   }) => {
     const editor = await openEditor(page, 'lists')
     await editor.placeCaretInLine(3, 2)
+    // To the end of the line's text, then on to the next line.
+    await page.keyboard.press('Shift+ArrowDown')
     await page.keyboard.press('Shift+ArrowDown')
 
     await editor.chooseStyle('Heading 3')
@@ -521,6 +523,8 @@ test.describe('the bulleted list button', () => {
   test('a selection over paragraphs makes each an item', async ({ page }) => {
     const editor = await openEditor(page, 'lists')
     await editor.placeCaretInLine(4, 2)
+    // To the end of the line's text, then on to the next line.
+    await page.keyboard.press('Shift+ArrowDown')
     await page.keyboard.press('Shift+ArrowDown')
 
     await editor.listButton().click()
