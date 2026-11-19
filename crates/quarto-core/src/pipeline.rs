@@ -2396,6 +2396,26 @@ fn reveal_finalization_transforms(
     }
 }
 
+/// Dashboard transforms that must see a diagram while it is still a code
+/// block, i.e. before `mermaid-render` / `graphviz-render`. Today the only
+/// member wraps a titled diagram in a titled `.card` div, so the option
+/// reaches the card builder (`DashboardTransform`, which runs last). A
+/// sibling of [`reveal_finalization_transforms`]: the one place that maps
+/// "dashboard" to these transforms, rather than an inline `if`.
+///
+/// `TransformPhase::Finalization`, like the diagram transforms it precedes.
+fn dashboard_pre_diagram_transforms(
+    is_dashboard: bool,
+) -> Vec<Box<dyn crate::transform::AstTransform>> {
+    if is_dashboard {
+        vec![Box::new(
+            crate::dashboard::DashboardDiagramTitleTransform::new(),
+        )]
+    } else {
+        Vec::new()
+    }
+}
+
 pub fn build_transform_pipeline(
     shortcode_paths: Vec<std::path::PathBuf>,
     extensions: Vec<crate::extension::types::Extension>,
@@ -2847,6 +2867,10 @@ pub fn build_transform_pipeline(
     // hoisted `<img>` is still visible to resource collection). See
     // `reveal_finalization_transforms` and bd-w0c6d38k.
     pipeline.extend(reveal_finalization_transforms(is_revealjs));
+    // Dashboards: a diagram's `title` option becomes its card title. Must
+    // precede the two diagram transforms below, which replace the code
+    // block (and its `title` attribute) with a raw `<pre>`.
+    pipeline.extend(dashboard_pre_diagram_transforms(is_dashboard));
     // bd-5m4ga0s1: replace ```mermaid code blocks with
     // `<pre class="mermaid">` RawBlocks + the after-body CDN script.
     // HTML-family self-gated (html + revealjs). Must precede

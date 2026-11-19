@@ -228,6 +228,17 @@ fn try_desugar_code_block(
         None
     };
 
+    // Card title, also independent of any wrapper: Q1 reads a cell's
+    // `title` as its card title in a dashboard. It becomes a `title`
+    // attribute on the code block, which the dashboard's diagram-card step
+    // reads (`dashboard::DashboardDiagramTitleTransform`); elsewhere the
+    // diagram transforms drop it with the code block.
+    let title = if is_diagram_language(&language) {
+        consume("title".to_string()).map(|v| v.value.clone())
+    } else {
+        None
+    };
+
     // Layout engine (bd-ijlapt70), Graphviz only: `graph-layout` becomes
     // a `graph-layout` attribute on the code block, which the Graphviz
     // transform and the preview component both read.
@@ -263,6 +274,9 @@ fn try_desugar_code_block(
     }
     if let Some(engine) = graph_layout {
         attr.2.insert("graph-layout".to_string(), engine);
+    }
+    if let Some(title) = title {
+        attr.2.insert("title".to_string(), title);
     }
     let new_code_block = Block::CodeBlock(Box::new(quarto_pandoc_types::block::CodeBlock {
         attr,
@@ -445,7 +459,14 @@ fn diagram_option_keys(language: &str) -> &'static [&'static str] {
 /// they warn here — correctly, today. The mermaid theming strands
 /// (bd-sehm2rha, bd-nj25kgbu) should add `theme` when they land, or
 /// authors who follow Q1 will get a warning for an option that works.
-const DIAGRAM_OPTION_KEYS: &[&str] = &["label", "fig-cap", "fig-scap", "fig-alt", "fig-align"];
+const DIAGRAM_OPTION_KEYS: &[&str] = &[
+    "label",
+    "fig-cap",
+    "fig-scap",
+    "fig-alt",
+    "fig-align",
+    "title",
+];
 
 /// [`DIAGRAM_OPTION_KEYS`] plus the one option only Graphviz has.
 const GRAPHVIZ_OPTION_KEYS: &[&str] = &[
@@ -454,6 +475,7 @@ const GRAPHVIZ_OPTION_KEYS: &[&str] = &[
     "fig-scap",
     "fig-alt",
     "fig-align",
+    "title",
     "graph-layout",
 ];
 
@@ -548,10 +570,11 @@ fn warn_unconsumed_options(
             "Remove it, or move it to a position where it applies."
         } else if is_graphviz_language(language) {
             "Graphviz diagram cells accept `label`, `fig-cap`, `fig-scap`, `fig-alt`, \
-             `fig-align`, and `graph-layout`. A diagram has no execution engine, so other \
+             `fig-align`, `title`, and `graph-layout`. A diagram has no execution engine, so other \
              options have nowhere to go."
         } else {
-            "Diagram cells accept `label`, `fig-cap`, `fig-scap`, `fig-alt`, and `fig-align`. \
+            "Diagram cells accept `label`, `fig-cap`, `fig-scap`, `fig-alt`, `fig-align`, \
+             and `title`. \
              A diagram has no execution engine, so other options have nowhere to go."
         };
         diagnostics.push(
@@ -1638,6 +1661,30 @@ mod tests {
                 "{wrapper}: a consumed option must leave the diagram source; got:\n{}",
                 cb.text
             );
+        }
+    }
+
+    /// `title` on a diagram (Q1: the card title in a dashboard) is
+    /// consumed (no Q-2-47) and travels as a `title` attribute on the
+    /// code block, for the dashboard to read. Both diagram languages.
+    #[test]
+    fn diagram_title_becomes_a_code_block_attribute() {
+        let reg = RefTypeRegistry::builtin();
+        for (language, source) in [
+            ("mermaid", "%%| title: Flow card\nflowchart LR\n  A --> B\n"),
+            ("dot", "//| title: Flow card\ndigraph G { a -> b }\n"),
+        ] {
+            let mut blocks = vec![code_in(language, source)];
+            let diagnostics = desugar_collecting(&mut blocks, &reg);
+            assert!(diagnostics.is_empty(), "{language}: got {diagnostics:?}");
+            let cb = diagram_code_block(&blocks[0]);
+            assert_eq!(
+                cb.attr.2.get("title").map(String::as_str),
+                Some("Flow card"),
+                "{language}: got {:?}",
+                cb.attr
+            );
+            assert!(!cb.text.contains("title"), "{language}: got:\n{}", cb.text);
         }
     }
 
