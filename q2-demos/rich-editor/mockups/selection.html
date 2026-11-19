@@ -263,7 +263,8 @@ body.dragging, body.dragging * { cursor:grabbing !important; user-select:none; }
           <li>Select from inside a callout's text out past its end.</li>
           <li>With that selected, copy (⌘C) and paste (⌘V) it somewhere else: into a line, or into an empty paragraph. Cut (⌘X) or Backspace it.</li>
           <li>Drag what's selected somewhere else.</li>
-          <li>Click an image to select its figure; the source on the right is what copy writes.</li>
+          <li>Copy a selection that takes part of a callout and paste it into another app: a plain text editor gets only the text selected; a document (Google Docs, say) gets the callout as a box with only that much in it.</li>
+          <li>Click an image to select its figure.</li>
         </ul>
       </div>
       <div class="page">
@@ -1735,12 +1736,6 @@ function cover(u, s, e) {
 }
 /** Whether block i, as a block (a callout itself, not its text), is in [s, e]. */
 const blockIn = (i, s, e) => cmp(s, { edge: i }) <= 0 && cmp(e, { edge: i + 1 }) >= 0
-/** Whether all of what's in block i is in [s, e]. */
-function allOf(i, s, e) {
-  const us = unitsOf(i)
-  if (!us.length || blockIn(i, s, e)) return blockIn(i, s, e)
-  return cmp(s, { u: us[0], o: 0 }) <= 0 && cmp(e, { u: us.at(-1), o: unitText(us.at(-1)).length }) >= 0
-}
 
 // ---- where things are on the page
 /** Offset in el of a point in it. */
@@ -2026,25 +2021,6 @@ function insertText(ch) {
   else loc.blk.text = text
   sel = { u: sel.u, o: sel.o + 1 }
   render()
-}
-/** What [s, e] covers, as qmd: a callout partly covered, in its fences with what of it is. */
-function qmdOf([s, e]) {
-  const parts = []
-  doc.forEach((b, i) => {
-    if (!isObj(b)) {
-      const r = cover('p:' + b.k, s, e)
-      if (r && r[0] < r[1]) parts.push((b.tag === 'h2' ? '## ' : '') + b.text.slice(...r))
-      return
-    }
-    if (allOf(i, s, e)) return parts.push(objQmd(b))
-    // A figure's only ever selected whole (or within its caption, as text).
-    if (isFigure(b)) return
-    const us = unitsOf(i)
-    const slice = (u) => { if (!us.includes(u)) return ''; const r = cover(u, s, e); return r ? unitText(u).slice(...r) : '' }
-    const title = slice('t:' + b.k), body = b.body.map((p) => ({ text: slice('p:' + p.k) })).filter((p) => p.text)
-    if (title || body.length) parts.push(calloutQmd({ ...b, title, body }))
-  })
-  return parts.join('\n\n')
 }
 
 // ---- drawing it
@@ -2585,16 +2561,38 @@ function pressMove(ev0, range, onClick = null) {
 }
 
 // ---- the clipboard
-// Copy writes what's shown selected as qmd (a partly covered object, as
-// itself with only that much in it); the editor keeps the slice it came
-// from, so pasting that text back is the same blocks again, as an editor
-// would read its own copy back from the clipboard's HTML. Anything else
-// pastes as plain text, a paragraph a blank line.
-let clip = null   // { text, slice }
+// Copy puts what's shown selected on the clipboard in the forms other apps
+// read, each taking what it can: plain text (only the text selected, no
+// fences or markup), for a chat, an email or a plain editor; and HTML (a
+// partly covered callout as a box with only that much in it), for a
+// document. The HTML also carries the slice itself, in a data attribute,
+// which pasting back into the editor reads, as figure.html's image copy
+// does: the same blocks again, exactly. Anything else pastes as plain text,
+// a paragraph a blank line.
+const escHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+/** A slice's text, without markup: a paragraph a blank line. */
+function sliceText({ pieces }) {
+  const lines = pieces.flatMap((x) => (x.tag === 'callout' ? [x.title, ...x.body.map((p) => p.text)] : isFigure(x) ? [x.title] : [x.text]))
+  return lines.filter(Boolean).join('\n\n')
+}
+/** A slice as HTML a document can take: a callout as a box (styled inline, as a document keeps it), a figure as a figure. */
+function sliceHtml(slice) {
+  const HEADER = { note: '#e7f1ff', tip: '#e8f4ee', warning: '#fff9e6', caution: '#fff2e8', important: '#fcebec' }
+  const html = slice.pieces.map((x) => {
+    if (x.tag === 'callout') {
+      const title = x.title ? `<p style="margin:0;padding:4px 8px;background:${HEADER[x.type]};font-weight:600">${escHtml(x.title)}</p>` : ''
+      const body = x.body.filter((p) => p.text).map((p) => `<p style="margin:6px 8px">${escHtml(p.text)}</p>`).join('')
+      return `<div style="border:1px solid #dedfe0;border-left:5px solid ${KIND_COLOR[x.type]};border-radius:6px;margin:12px 0">${title}${body}</div>`
+    }
+    if (isFigure(x)) return `<figure><img src="${escHtml(FILES[x.src] ?? x.src)}" alt="${escHtml(x.alt || x.title)}">${x.title ? `<figcaption>${escHtml(x.title)}</figcaption>` : ''}</figure>`
+    return `<${x.tag}>${escHtml(x.text)}</${x.tag}>`
+  }).join('')
+  return `<div data-q2-slice="${escHtml(JSON.stringify(slice))}">${html}</div>`
+}
 function copySelection(e) {
-  const r = effective(), text = qmdOf(r)
-  e.clipboardData.setData('text/plain', text)
-  clip = { text, slice: sliceOf(r) }
+  const slice = sliceOf(effective())
+  e.clipboardData.setData('text/plain', sliceText(slice))
+  e.clipboardData.setData('text/html', sliceHtml(slice))
 }
 document.addEventListener('copy', (e) => {
   if (!sel?.anchor) return
@@ -2615,14 +2613,22 @@ function rekey(x) {
   if (y.body) y.body = y.body.map((p) => ({ ...p, k: key() }))
   return y
 }
+/** The slice the editor copied, if it's on the clipboard. */
+function ownSlice(dt) {
+  const html = dt?.getData('text/html')
+  const data = html && new DOMParser().parseFromString(html, 'text/html').querySelector('[data-q2-slice]')?.dataset.q2Slice
+  if (!data) return null
+  try { return JSON.parse(data) } catch { return null }
+}
 document.addEventListener('paste', (e) => {
   if (!editor.contains(document.activeElement) && document.activeElement !== editor) return
   if (sel?.u == null && sel?.gap == null && !sel?.anchor) return
   e.preventDefault()
+  const own = ownSlice(e.clipboardData)
   const text = e.clipboardData?.getData('text/plain') ?? ''
-  const slice = clip && text === clip.text
-    ? { ...clip.slice, pieces: clip.slice.pieces.map(rekey) }
-    : { pieces: text.split(/\n\s*\n/).map((t) => ({ k: key(), tag: 'p', text: t.replace(/\s*\n\s*/g, ' ') })), openStart: true, openEnd: true }
+  const slice = own
+    ? { ...own, pieces: own.pieces.map(rekey) }
+    : { pieces: text.split(/\n\s*\n/).filter((t) => t.trim()).map((t) => ({ k: key(), tag: 'p', text: t.replace(/\s*\n\s*/g, ' ') })), openStart: true, openEnd: true }
   if (!slice.pieces.length) return
   if (sel.anchor) { deleteRange(effective()); render() }
   else record()
