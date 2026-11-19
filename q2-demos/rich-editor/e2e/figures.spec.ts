@@ -2,7 +2,9 @@
  * A figure is edited as in Google Docs: its image is one unit in the
  * text, and its caption is a line of text under it. The caption is typed
  * in place, and a selection takes the image whole and as much of the
- * caption as it covers (a drag that ends on an image takes it in).
+ * caption as it covers (a drag that ends on an image takes it in, and
+ * Shift+Down from the line above, or Shift+Up from the caption's start,
+ * stops after or before the image before going on).
  * Deleting the image (with Backspace at the start
  * of its caption, or a selection that takes it in) leaves the caption's
  * text as a paragraph, joined to the line the selection started in, and
@@ -217,6 +219,41 @@ ${tray}
 
 ${sketch}`, '![A *wide* view of the site sketch](site.png)'))
     await expect(editor.frame.locator('figure > img')).toHaveCount(1)
+  })
+})
+
+test.describe('Shift+Up and Shift+Down', () => {
+  const imageOnly = figures.replace(`Before the figures.\n\n${wide}`, 'Before the figures.A *wide* view of the site')
+
+  test('Shift+Down from the line above a figure takes in its image first, then its caption', async ({ page }) => {
+    const document = await createDocument(figures)
+    const editor = await document.open(page)
+    await editor.placeCaretInLine(0, 'Before the figures.'.length)
+
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.keyboard.press('Backspace')
+
+    await document.expectSource(imageOnly)
+
+    await page.keyboard.press(`${mod}+z`)
+    await document.expectSource(figures)
+    await editor.placeCaretInLine(0, 'Before the figures.'.length)
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.keyboard.press('Backspace')
+
+    await document.expectSource(figures.replace(`${wide}\n\n`, ''))
+  })
+
+  test("Shift+Up from the start of a caption takes in its image, up to the end of the line above", async ({ page }) => {
+    const document = await createDocument(figures)
+    const editor = await document.open(page)
+    await editor.placeCaretInLine(1, 0)
+
+    await page.keyboard.press('Shift+ArrowUp')
+    await page.keyboard.press('Backspace')
+
+    await document.expectSource(imageOnly)
   })
 })
 

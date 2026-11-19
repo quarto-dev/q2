@@ -115,7 +115,8 @@ under it (a `#fig-` label's number isn't shown yet), and is edited as in
 Google Docs: the image is one unit in the text, and the caption a line of
 text under it, typed and formatted in place. A selection takes the image
 whole and as much of the caption as it covers, and a drag that ends on
-an image takes it in. Deleting the image
+an image takes it in. Shift+Down from the line above, and Shift+Up from
+the caption's start, take in the image on a step of their own. Deleting the image
 (Backspace at the start of the caption, or deleting a selection that
 takes it in) leaves the caption's text as a paragraph, joined to the line
 the selection started in. Enter at the end of a caption starts a

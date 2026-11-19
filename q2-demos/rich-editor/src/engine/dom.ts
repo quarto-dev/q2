@@ -371,6 +371,12 @@ export function writeSelection(root: HTMLElement, selection: Selection): void {
  */
 export const WRAP_ATTR = 'data-qe-wrap'
 
+/** What a line's `wrap` adds around `field`, a line's element, if anything. */
+export function wrapOf(root: HTMLElement, field: HTMLElement): Element | null {
+  const wrap = field.closest(`[${WRAP_ATTR}]`)
+  return wrap && root.contains(wrap) ? wrap : null
+}
+
 /** Whether a DOM point is in what a line's `wrap` adds, outside the line's own element. */
 function inWrap(root: HTMLElement, node: Node): boolean {
   const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
