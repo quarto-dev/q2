@@ -132,11 +132,12 @@ async function startHub(dir: string, dataDir: string): Promise<Hub> {
   const port = await freePort();
   const args = ['preview', '--no-browser', '--data-dir', dataDir, '--allow-edit', '--ui', 'editor', '--git', 'track', '--host', '127.0.0.1', '--port', String(port), dir];
   record('invoke', `${Q2_BINARY} ${args.join(' ')}`);
-  // detached on win32 gives the child its own console, which step 9's CTRL_C_EVENT helper attaches to.
+  // Not `detached`: on win32 that is DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP, a child with no console to attach to
+  // (AttachConsole failed: 6) and with Ctrl+C disabled. `windowsHide` gives the child its own, hidden console, which
+  // step 9's CTRL_C_EVENT helper attaches to (and refuses to use if it turns out to be the runner's console).
   const proc = spawn(Q2_BINARY, args, {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, RUST_LOG: process.env.RUST_LOG ?? 'warn' },
-    detached: process.platform === 'win32',
     windowsHide: true,
   });
   let log = '';
@@ -448,7 +449,7 @@ test('c1 steps 1-8: gate, classifier, registry, flips, unlists, a binary file', 
 /** Sends Ctrl+C to the hub: SIGINT on unix, CTRL_C_EVENT through ctrl-c.ps1 on Windows. Returns false when it could not. */
 function sendCtrlC(proc: ChildProcess): boolean {
   if (process.platform !== 'win32') return proc.kill('SIGINT');
-  const r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(here, 'ctrl-c.ps1'), '-TargetPid', String(proc.pid)], { stdio: 'pipe', encoding: 'utf8' });
+  const r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(here, 'ctrl-c.ps1'), '-TargetPid', String(proc.pid), '-GuardPid', String(process.pid)], { stdio: 'pipe', encoding: 'utf8' });
   record('9 ctrl-c helper', { status: r.status, stderr: (r.stderr ?? '').slice(0, 300) }, r.status === 0);
   return r.status === 0;
 }
