@@ -100,6 +100,7 @@ export function FigureFrame({
   src,
   imageAttr: [, imageClasses, keyvals],
   caption,
+  attrs,
   children,
 }: {
   id: string
@@ -107,6 +108,8 @@ export function FigureFrame({
   src: string
   imageAttr: Attr
   caption: string
+  /** More attributes for its outermost element (the editor's). */
+  attrs?: Record<string, string>
   children: ReactNode
 }) {
   const figAlt = keyvals.find(([key]) => key === 'fig-alt')?.[1]
@@ -115,6 +118,7 @@ export function FigureFrame({
   const attributes = Object.fromEntries(keyvals.filter(([key]) => key !== 'fig-alt' && key !== 'style'))
   return (
     <div
+      {...attrs}
       id={id || undefined}
       className={['quarto-figure', 'quarto-figure-center', ...classes, ...(id ? ['anchored'] : [])].join(' ')}
     >
