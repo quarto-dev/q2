@@ -569,6 +569,12 @@ pub async fn sync_file_by_path(
 /// any `..` that pops above the root. Allows ordinary nested paths and `.`.
 /// Pure lexical check — no filesystem access.
 fn contained_join(project_root: &Path, rel: &str) -> Option<PathBuf> {
+    // Every backslash is rejected up front: on POSIX it is an ordinary
+    // character, so the component walk below would see `a\..\..\x` as one
+    // harmless segment, but a Windows peer reads it as a traversal (G36).
+    if rel.contains('\\') {
+        return None;
+    }
     let mut folded = Vec::new();
     for component in Path::new(rel).components() {
         match component {
@@ -579,7 +585,12 @@ fn contained_join(project_root: &Path, rel: &str) -> Option<PathBuf> {
                 folded.pop()?;
             }
             Component::CurDir => {}
-            Component::Normal(seg) => folded.push(seg),
+            Component::Normal(seg) => {
+                if !is_safe_segment(seg) {
+                    return None;
+                }
+                folded.push(seg)
+            }
         }
     }
     // Empty fold resolves to project_root itself (a directory); we only ever
@@ -595,6 +606,46 @@ fn contained_join(project_root: &Path, rel: &str) -> Option<PathBuf> {
                 p
             }),
     )
+}
+
+/// Segment names the hub never reads or writes through an index key (G36):
+/// git's metadata, the hub's own state, and the editor settings directory
+/// (a write there is a code-execution vector). Compared case-insensitively.
+const RESERVED_SEGMENTS: [&str; 3] = [".git", ".quarto-hub", ".vscode"];
+
+/// Whether one normal path segment is acceptable: not reserved, no `:`
+/// (drive letters and NTFS alternate data streams), and no trailing dot or
+/// space (Windows strips them, so `.git.` names `.git`).
+fn is_safe_segment(seg: &std::ffi::OsStr) -> bool {
+    let Some(seg) = seg.to_str() else {
+        return false;
+    };
+    if seg.contains(':') || seg.ends_with('.') || seg.ends_with(' ') {
+        return false;
+    }
+    !RESERVED_SEGMENTS
+        .iter()
+        .any(|reserved| seg.eq_ignore_ascii_case(reserved))
+}
+
+/// [`contained_join`] plus a filesystem walk: rejects the key when an
+/// existing ancestor below the root is a symlink or junction. Ancestors that
+/// do not exist yet are fine, since there is nothing to follow.
+fn contained_join_checked(project_root: &Path, rel: &str) -> Option<PathBuf> {
+    let joined = contained_join(project_root, rel)?;
+    let below_root = joined.strip_prefix(project_root).ok()?;
+    let mut cur = project_root.to_path_buf();
+    let mut comps: Vec<_> = below_root.components().collect();
+    comps.pop(); // the file itself is checked by the canonicalize guard
+    for comp in comps {
+        cur.push(comp);
+        match std::fs::symlink_metadata(&cur) {
+            Ok(meta) if meta.file_type().is_symlink() => return None,
+            Ok(_) => {}
+            Err(_) => break, // missing from here down
+        }
+    }
+    Some(joined)
 }
 
 /// Synchronize all documents in the index with their corresponding filesystem files.
@@ -639,7 +690,7 @@ pub async fn sync_all_documents(
 
     for (file_path_str, doc_id_str) in &files {
         // Reject index keys that escape the root (traversal / absolute / rooted).
-        let Some(file_path) = contained_join(project_root, file_path_str) else {
+        let Some(file_path) = contained_join_checked(project_root, file_path_str) else {
             warn!(path = %file_path_str, "Index path escapes project root, rejecting");
             result.rejected += 1;
             continue;
@@ -1170,6 +1221,66 @@ mod tests {
         assert_eq!(contained_join(root, "."), None);
         assert_eq!(contained_join(root, "a/.."), None);
         assert_eq!(contained_join(root, "a/b/../.."), None);
+    }
+
+    // ===== G36: reserved segments, backslashes, odd segment shapes =====
+
+    #[test]
+    fn contained_join_rejects_reserved_segments_case_insensitively() {
+        let root = Path::new("/project");
+        for rel in [
+            ".git/hooks/h",
+            ".GIT/config",
+            "a/.git/x",
+            ".quarto-hub/x",
+            ".Quarto-Hub/x",
+            ".vscode/tasks.json",
+            "sub/.VSCode/tasks.json",
+        ] {
+            assert_eq!(contained_join(root, rel), None, "{rel}");
+        }
+        // Names that merely contain a reserved name stay legal.
+        assert!(contained_join(root, "git/x.qmd").is_some());
+        assert!(contained_join(root, ".gitignore").is_some());
+        assert!(contained_join(root, "a.vscode/x.qmd").is_some());
+    }
+
+    #[test]
+    fn contained_join_rejects_every_backslash() {
+        // On POSIX a backslash is an ordinary character, so a lexical
+        // component walk sees one segment; the product check must reject it.
+        let root = Path::new("/project");
+        for rel in [r"a\b", r"C:\x", r"a\..\..\x", r"\x", r"x\"] {
+            assert_eq!(contained_join(root, rel), None, "{rel}");
+        }
+    }
+
+    #[test]
+    fn contained_join_rejects_colon_and_trailing_dot_or_space_segments() {
+        let root = Path::new("/project");
+        for rel in [
+            "a:b.qmd", "dir/C:", "a./x.qmd", "x/b.", "x/b ", ".git.", ".git ",
+        ] {
+            assert_eq!(contained_join(root, rel), None, "{rel}");
+        }
+        assert!(contained_join(root, "a.b/c d.qmd").is_some());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn existing_symlinked_parent_is_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("root");
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("link")).unwrap();
+        std::fs::create_dir_all(root.join("real")).unwrap();
+
+        assert_eq!(contained_join_checked(&root, "link/x.qmd"), None);
+        assert!(contained_join_checked(&root, "real/x.qmd").is_some());
+        // A parent that does not exist yet is fine: nothing to follow.
+        assert!(contained_join_checked(&root, "new/dir/x.qmd").is_some());
     }
 
     /// Helper to create a test repo

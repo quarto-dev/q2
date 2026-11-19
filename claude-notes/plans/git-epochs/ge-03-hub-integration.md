@@ -180,7 +180,7 @@ with real temp git repos, a real `HubContext`, and real Automerge docs, in both 
   peer retired stays attached.
 - [ ] Ignore watcher events whose disk hash equals the hash the hub last wrote (the checkpoint content hash) when
   waiting out the quiet window.
-- [ ] `contained_join` (`sync.rs:571`) also rejects `.git`, `.quarto-hub`, and `.vscode` segments
+- [x] `contained_join` (`sync.rs:571`) also rejects `.git`, `.quarto-hub`, and `.vscode` segments
   (case-insensitive), every backslash, and segments that contain `:` or end in a dot or a space; add a `symlink_metadata`
   walk so that an existing symlink or junction parent is rejected (the function is purely lexical today); a rejected key
   is skipped and logged.
@@ -225,4 +225,16 @@ behavior (GE-6, GE-7); anything in the extension.
 
 ## Notes from the run
 
-Not started.
+**Paused after the first slice (session 1).** Done and committed on `ge/03-hub-integration`: the G36 path hardening.
+`contained_join` now rejects every backslash, `.git`/`.quarto-hub`/`.vscode` segments (ASCII case-insensitive),
+segments with `:` or a trailing dot or space, and non-UTF-8 segments; the new `contained_join_checked` adds the
+`symlink_metadata` walk (an existing symlink or junction ancestor below the root is rejected; a missing ancestor is
+fine) and is what `sync_all_documents` calls. Tests were written first (the first build failed on the missing
+function; the lexical cases would have failed on the old code). Gates: `cargo clippy -p quarto-hub --all-targets -- -D
+warnings` clean; `cargo nextest run -p quarto-hub` 510 passed. Not yet run: Windows cross-clippy, `cargo xtask lint`.
+`sync_file_by_path` (the watcher path) does not use the key check; it only looks up keys already in the index, which
+the next `sync_all` vets. Revisit if the gate work touches it.
+
+**Not started:** everything else in the checklist (config option, gate, adapter module and registry, arrival and
+switch, `apply_switch`, status accessor). Read the GE-2 notes first: the controller reports through `GateState` and
+`Action::Decision`, and the verdict is computed by the hub with `classify`.
