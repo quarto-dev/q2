@@ -64,8 +64,13 @@ as Myra (or Maurice, in the presets that have his terminal). With `--play` it ru
 | `--screen <n>` | The monitor to place windows on (default 0, the main one). |
 | `--root <dir>` | The demo root (default a fresh temporary directory). |
 
-The typed commands and the editor text appear at a human tempo: a base of 40 ms per character, slower after spaces and
-punctuation, with an occasional hesitation and a pause before the first character and before Enter.
+The typed commands and the editor text appear the way a person types them (`demo/src/typing.ts`, seeded by `--seed`):
+a base of 40 ms per character; longer pauses at the start of a word and after `&&`, `|`, or `;`; alternating-hand keys
+and common letter pairs faster, same-finger repeats slower; capitals, digits, and symbols slower; speed that drifts from
+word to word; an occasional hesitation. A long token (24 or more characters, such as a URL or a project id) is pasted
+at once after a pause, and a command the story says was copied is pasted whole. Very occasionally (at most once per
+command) a key lands next to the right one; the typist keeps going for a letter or two, notices, backspaces, and
+retypes. `--fast` turns all of this off.
 
 ## Free play and reset
 

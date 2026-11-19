@@ -534,3 +534,24 @@ capture each), and a headed pass with `--pace key`.
 **For Gordon.** (1) Watch a headed run for the typing tempo. (2) Product, not fixed here: finding 1 of the third
 session (auto save in an editor-only VS Code window on the hub's own folder overwrites the disk after a flip) is still
 unattributed; worth a strand or a plan.
+
+### Typing realism (2026-11-19, after landing, at Gordon's request)
+
+Gordon watched a headed run: the tempo was "pretty good", and asked for more realism. `demo/src/typing.ts` now plans each
+text as steps (type, Backspace, paste) instead of per-character gaps: longer waits at word starts (and after `&&`, `|`,
+`;`, plus an occasional 200 to 500 ms stop to think); alternating-hand keys 12% faster, same-finger repeats 25% slower,
+common digraphs 25% faster; capitals, digits, and symbols 50% slower; a speed that drifts word to word; gaps clustered
+near the typical value (the mean of two draws). Tokens of 24 or more characters are pasted in one write after a 400 to
+900 ms reach for the clipboard (the terminal writes the chunk once; the editors use `keyboard.insertText`), and a step
+can say `paste: 'all'` (the `hubless` guest's copied command). A typo (0.6% per eligible letter, at most one per text,
+never in a paste or at the start of a word) lands on a neighboring QWERTY key, the typist types on 0 to 2 letters,
+pauses 250 to 600 ms, backspaces, and retypes; the final text is always the input (tested over 60 seeds, three paste
+modes, and three typo rates). `--fast` still plans one zero-wait step per character. Fifteen typist tests, written first
+(14 failed on the missing API). As with the first tempo pass, the feel is Gordon's to judge: the constants are at the
+top of `gap()` and in `createTypist()`.
+
+Gates for this follow-up: typecheck clean; 69 demo unit tests; `npm run test:demo` 20 of 20 (8.8 min). One trap, for the
+next agent: switching this worktree to the old `parking/workspace-8` branch (which has no `vscode-sync-experiment/`)
+deleted the ignored `dist/`, so every VS Code preset timed out waiting for the "Quarto Hub" status bar item (8 failures)
+until `npm run build` rebuilt it. A VS Code window left running by an interrupted headed run (`pkill -INT` on the
+launcher does not close it) is a second thing to rule out before reading such failures as defects.
