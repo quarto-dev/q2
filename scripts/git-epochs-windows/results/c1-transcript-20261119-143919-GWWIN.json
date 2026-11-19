@@ -1,0 +1,40 @@
+{
+  "platform": "win32",
+  "node": "v24.21.0",
+  "q2": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2",
+  "files": 4000,
+  "differing": 800,
+  "steps": [
+    {
+      "step": "invoke",
+      "ok": true,
+      "observed": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2 preview --no-browser --data-dir C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-data9-X1kwJH --allow-edit --ui editor --git track --host 127.0.0.1 --port 49387 C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-hub9-PlEEd3"
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4005,
+        "seconds": 0,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "9 ctrl-c helper",
+      "ok": false,
+      "observed": {
+        "status": 2,
+        "stderr": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\c1\\ctrl-c.ps1 : \r\nAttachConsole failed: 6\r\n    + CategoryInfo          : NotSpecified: (:) [Write-Error], \r\nWriteErrorException\r\n    + FullyQualifiedErrorId : \r\nMicrosoft.PowerShell.Commands.WriteErrorException,ctrl-c.ps1\r\n \r\n"
+      }
+    },
+    {
+      "step": "9 stop the hub during the switch",
+      "ok": true,
+      "observed": {
+        "markerSeen": true,
+        "delivered": false,
+        "note": "not run on this machine: Ctrl+C could not be delivered (GE-3 stands in)"
+      }
+    }
+  ]
+}
