@@ -51,6 +51,7 @@ import {
   select,
   selectAllStep,
   setLinePrefixes,
+  setFieldPrefixes,
   setLink as setLinkCommand,
   stepCaret,
   toggleMark as toggleMarkCommand,
@@ -177,6 +178,14 @@ export interface LinesProps {
   placeholder?: string
 }
 
+/** An element a line is put in (see `LineElement.parent`). */
+export interface LineParent {
+  as: string
+  className?: string
+  shared?: boolean
+  attrs?: Record<string, string>
+}
+
 /** How a line of a multi-line field is rendered (see `LinesProps.lineElement`). */
 export interface LineElement {
   as: string
@@ -187,7 +196,7 @@ export interface LineElement {
    * parents are `shared` and the same element with the same class are in
    * one (a list's items), which has the first's `attrs`.
    */
-  parent?: { as: string; className?: string; shared?: boolean; attrs?: Record<string, string> }
+  parent?: LineParent
   /** More attributes for the line's element. */
   attrs?: Record<string, string>
   /** Shown, faintly, while the line has no text (as the field's own placeholder is). */
@@ -197,6 +206,14 @@ export interface LineElement {
    * (a figure's caption under its image). What it adds can't be edited.
    */
   wrap?: (line: ReactNode) => ReactNode
+  /**
+   * The elements to put the line in, outermost first, in place of
+   * `parent`: lines next to each other share each of them, from the
+   * outermost, while they're `shared` and the same (a nested list's items
+   * are in the `ul` of the list it's in, and in an `li` of it, and in the
+   * nested list's own `ul`).
+   */
+  parents?: readonly LineParent[]
 }
 
 /**
@@ -206,16 +223,28 @@ export interface LineElement {
  */
 export function Lines({ name, text, className, as = 'p', lineElement, renderAtom, renderVoid, view, caret, placeholder }: LinesProps) {
   if (text === undefined) return null
-  // Each line's element, with the lines next to each other that share a
-  // parent together under the first's key.
-  const groups: { key: number; parent?: LineElement['parent']; nodes: ReactNode[] }[] = []
+  // Each line's element, in the elements it's put in; lines next to each
+  // other that share a parent are together in it, under the first's key.
+  const top: ReactNode[] = []
+  const open: Group[] = []
+  const put = (node: ReactNode, path: readonly LineParent[], key: number) => {
+    let shared = 0
+    while (shared < open.length && shared < path.length && sameParent(open[shared].parent, path[shared])) shared++
+    open.length = shared
+    for (const parent of path.slice(shared)) {
+      const group: Group = { key, parent, nodes: [] }
+      ;(open[open.length - 1]?.nodes ?? top).push(group)
+      open.push(group)
+    }
+    ;(open[open.length - 1]?.nodes ?? top).push(node)
+  }
   let start = 0
   let atoms = 0
   text.split('\n').forEach((line, i) => {
     const at = start
     start += line.length + 1
     if (line === ATOM || line === VOID) {
-      groups.push({ key: i, nodes: [line === ATOM ? renderAtom(atoms++) : renderVoid?.()] })
+      put(<Fragment key={i}>{line === ATOM ? renderAtom(atoms++) : renderVoid?.()}</Fragment>, [], i)
       return
     }
     const prefix = linePrefix(line, 0)
@@ -238,22 +267,34 @@ export function Lines({ name, text, className, as = 'p', lineElement, renderAtom
       />
     )
     if (element?.wrap) {
-      groups.push({ key: i, nodes: [<Fragment key={i}>{element.wrap(field)}</Fragment>] })
+      put(<Fragment key={i}>{element.wrap(field)}</Fragment>, [], i)
       return
     }
-    const parent = element?.parent
-    const last = groups[groups.length - 1]
-    const shares = parent?.shared && last?.parent?.shared && last.parent.as === parent.as && last.parent.className === parent.className
-    if (shares) last.nodes.push(field)
-    else groups.push({ key: i, parent, nodes: [field] })
+    put(field, element?.parents ?? (element?.parent ? [element.parent] : []), i)
   })
-  return groups.map(({ key, parent, nodes }) =>
-    parent ? (
-      createElement(parent.as, { ...parent.attrs, key, className: parent.className }, ...nodes)
-    ) : (
-      <Fragment key={key}>{nodes}</Fragment>
-    ),
-  )
+  return top.map(renderGroup)
+}
+
+/** Lines' elements in an element they're put in (see `Lines`). */
+interface Group {
+  key: number
+  parent: LineParent
+  nodes: (ReactNode | Group)[]
+}
+
+function isGroup(node: unknown): node is Group {
+  return typeof node === 'object' && node !== null && 'parent' in node && 'nodes' in node
+}
+
+function renderGroup(node: ReactNode | Group): ReactNode {
+  if (!isGroup(node)) return node
+  const { parent, key, nodes } = node
+  return createElement(parent.as, { ...parent.attrs, key, className: parent.className }, ...nodes.map(renderGroup))
+}
+
+/** Whether a line put in `b` goes in the element `a` made for the line before it. */
+function sameParent(a: LineParent, b: LineParent): boolean {
+  return Boolean(a.shared && b.shared) && a.as === b.as && a.className === b.className
 }
 
 export interface FieldEditor {
@@ -270,6 +311,11 @@ export interface FieldEditor {
    * the one it has (see `setLinePrefixes`): an edit of its own.
    */
   setPrefixes(prefixFor: (prefix: string) => string): void
+  /**
+   * Give the lines of the field the selection is in the prefixes
+   * `prefixesFor` returns (see `setFieldPrefixes`): an edit of its own.
+   */
+  setFieldPrefixes(prefixesFor: (prefixes: string[], first: number, last: number) => string[] | null): void
   /** Undo the last edit, as the keyboard's undo does (nothing to undo: nothing happens). */
   undo(): void
   /** Redo the last undone edit (nothing to redo: nothing happens). */
@@ -412,6 +458,16 @@ export function useFieldEditor(
       if (!source.writable()) return
       const h = latest.current
       const next = setLinePrefixes(schema, h.present, prefixFor)
+      commit(apply(h, next, { schema, inputType: 'formatBlock' }), true)
+    },
+    [schema, source, commit],
+  )
+
+  const setAllPrefixes = useCallback(
+    (prefixesFor: (prefixes: string[], first: number, last: number) => string[] | null) => {
+      if (!source.writable()) return
+      const h = latest.current
+      const next = setFieldPrefixes(schema, h.present, prefixesFor)
       commit(apply(h, next, { schema, inputType: 'formatBlock' }), true)
     },
     [schema, source, commit],
@@ -847,6 +903,7 @@ export function useFieldEditor(
     add,
     focusStart,
     setPrefixes,
+    setFieldPrefixes: setAllPrefixes,
     undo: undoEdit,
     redo: redoEdit,
     toggleMark,

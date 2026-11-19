@@ -24,14 +24,14 @@
  *   the line before it.
  * - A line's prefix (see `isPrefix`) is never typed, and the caret never
  *   goes before it. Backspace at the start of a line's text removes it,
- *   all of it. A line joined to the one before takes that line's
+ *   all of it, or leaves what `Schema.outdent` says. A line joined to the one before takes that line's
  *   prefix. Enter in the middle of a line keeps the prefix on both halves
  *   (or gives the second half the one `Schema.splitPrefix` says);
  *   at the end of the line the new line has none; and at the start of the
  *   line's text, the new line goes above, so the prefix stays with the
  *   text. A prefix the schema carries on (`Schema.continued`) is on the
  *   new line at the end or above too, and Enter on an empty line with
- *   one takes it off.
+ *   one takes it off, as Backspace does.
  * - In a field that can be formatted (`Schema.marks`, see `marks.ts`),
  *   marks are never typed, pasted or deleted: a deletion keeps the marks
  *   of what it deletes, so what follows keeps its formats, and deletes
@@ -192,8 +192,9 @@ function lineBreak(schema: Schema, state: State): State {
   const continued = prefix !== '' && (schema.continued?.(prefix) ?? false)
   const fields = { ...cleared.fields }
   if (continued && textStart === lineEnd) {
-    fields[at.field] = text.slice(0, start) + text.slice(textStart)
-    return select(schema, { fields, selection: cleared.selection }, caret(at.field, start))
+    const left = schema.outdent?.(prefix) ?? ''
+    fields[at.field] = text.slice(0, start) + left + text.slice(textStart)
+    return select(schema, { fields, selection: cleared.selection }, caret(at.field, start + left.length))
   }
   if (prefix === '' || (!continued && at.offset === lineEnd && at.offset > textStart)) {
     return insertText(schema, cleared, '\n')
@@ -225,8 +226,9 @@ function formattedLineBreak(schema: Schema, state: State, line: LineAround): Sta
   const continued = prefix !== '' && (schema.continued?.(prefix) ?? false)
   const fields = { ...state.fields }
   if (continued && count === 0) {
-    fields[at.field] = text.slice(0, lineStart) + text.slice(textStart)
-    return select(schema, { fields, selection: state.selection }, caret(at.field, at.offset - prefix.length))
+    const left = schema.outdent?.(prefix) ?? ''
+    fields[at.field] = text.slice(0, lineStart) + left + text.slice(textStart)
+    return select(schema, { fields, selection: state.selection }, caret(at.field, at.offset - prefix.length + left.length))
   }
   if (prefix !== '' && stop.index === 0) {
     const above = continued ? prefix : ''
@@ -276,6 +278,22 @@ export function applyInputRule(schema: Schema, state: State): State {
  * The selection stays on the same text.
  */
 export function setLinePrefixes(schema: Schema, state: State, prefixFor: (prefix: string) => string): State {
+  return setFieldPrefixes(schema, state, (prefixes, first, last) =>
+    prefixes.map((prefix, i) => (i >= first && i <= last ? prefixFor(prefix) : prefix)),
+  )
+}
+
+/**
+ * Give the lines of each multi-line field the selection is in the prefixes
+ * `prefixesFor` returns, given every line's prefix and the first and last
+ * line the selection is on (null: leave them). Lines that can't be edited
+ * (`ATOM`, `VOID`) keep theirs. The selection stays on the same text.
+ */
+export function setFieldPrefixes(
+  schema: Schema,
+  state: State,
+  prefixesFor: (prefixes: string[], first: number, last: number) => string[] | null,
+): State {
   const { selection } = state
   if (!selection) return state
   const { from, to } = ordered(schema, selection)
@@ -290,19 +308,33 @@ export function setLinePrefixes(schema: Schema, state: State, prefixFor: (prefix
     if (value === undefined || !schema.multiline?.includes(field)) continue
     const start = i === first ? from.offset : 0
     const end = i === last ? to.offset : value.length
-    let out = ''
+    const split = value.split('\n')
+    const prefixes = split.map((line) => linePrefix(line, 0))
+    // The first and last line the selection is on.
+    let firstLine = -1
+    let lastLine = -1
     let at = 0
+    split.forEach((line, n) => {
+      if (at <= end && at + line.length >= start) {
+        if (firstLine < 0) firstLine = n
+        lastLine = n
+      }
+      at += line.length + 1
+    })
+    const given = prefixesFor(prefixes, firstLine, lastLine)
+    if (given === null) continue
+    let out = ''
     let shift = 0
+    at = 0
     const lines: { start: number; shift: number }[] = []
-    for (const line of value.split('\n')) {
-      const prefix = linePrefix(line, 0)
-      const covered = at <= end && at + line.length >= start && !isAtom(line)
-      const next = covered ? prefixFor(prefix) : prefix
+    split.forEach((line, n) => {
+      const prefix = prefixes[n]
+      const next = isAtom(line) ? prefix : given[n]
       shift += next.length - prefix.length
       lines.push({ start: at, shift })
       out += (at > 0 ? '\n' : '') + next + line.slice(prefix.length)
       at += line.length + 1
-    }
+    })
     if (out !== value) {
       fields[field] = out
       shifts.set(field, lines)
@@ -400,6 +432,15 @@ function deleteDirection(
   if (target) {
     start = Math.max(lineStart, target.from.field === at.field ? target.from.offset : 0)
     end = Math.min(lineEnd, target.to.field === at.field ? target.to.offset : text.length)
+  }
+  const prefix = linePrefix(text, at.offset)
+  const textStart = lineStart + prefix.length
+  if (backward && schema.outdent && prefix !== '' && (visibleEdge || at.offset === textStart)) {
+    // At the start of a line's text: its prefix becomes what's left of it
+    // (whatever range the browser would delete, which takes it all).
+    const left = schema.outdent(prefix)
+    const outdented = { ...fields, [at.field]: text.slice(0, lineStart) + left + text.slice(textStart) }
+    return select(schema, { fields: outdented, selection }, caret(at.field, selection.focus.offset - prefix.length + left.length))
   }
   if (start < end && withoutMarks(text.slice(start, end)) !== '') {
     // The browser's range.

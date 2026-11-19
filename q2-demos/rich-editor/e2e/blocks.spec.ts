@@ -206,11 +206,11 @@ test.describe('what blocks hold', () => {
     '',
   ].join('\n')
 
-  test('a list in a list item is shown in it', async ({ page }) => {
+  test('a list in a list item is shown under it, in an item of the list after the item\'s line', async ({ page }) => {
     const editor = await (await createDocument(source)).open(page)
 
-    await expect(shown(editor, 'ul > li')).toHaveText(['OneNested', 'Two'])
-    await expect(shown(editor, 'ul > li > ul > li')).toHaveText('Nested')
+    await expect(shown(editor, 'ul > li.qe-field')).toHaveText(['One', 'Two'])
+    await expect(shown(editor, 'ul > li:not(.qe-field) > ul > li')).toHaveText('Nested')
   })
 
   test('a list with blank lines between its items holds the same items as one without', async ({ page }) => {

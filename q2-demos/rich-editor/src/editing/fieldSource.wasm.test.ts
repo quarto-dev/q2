@@ -303,3 +303,46 @@ End.
     expect(text()).toBe('---\ntitle: T\n---\n\nEnd.\n')
   })
 })
+
+describe('nested lists in the body', () => {
+  const B = '﷘'
+  const N = '﷙'
+  const I = '﷛'
+  const BODY = `---
+title: T
+---
+
+- A
+    - B
+        1. C
+- D
+
+1. One
+    - or two?
+2.
+`
+  function openBody(text = BODY) {
+    const file = createLocalFile(text)
+    const source = createMetaFieldSource(file, { keys: ['title'], body: 'body' })
+    return { source, text: () => file.getSnapshot().text }
+  }
+
+  it('reads an item in an item as a line after it, a level deeper', () => {
+    expect(openBody().source.get().body).toBe(`${B}A\n${B}${I}B\n${N}${I}${I}C\n${B}D\n${N}One\n${B}${I}or two?\n${N}`)
+  })
+
+  it('writes an item moved in a level, and reads it back', () => {
+    const { source, text } = openBody()
+    const body = `${B}A\n${B}${I}B\n${N}${I}${I}C\n${B}${I}D\n${N}One\n${B}${I}or two?\n${N}`
+    source.set({ body })
+    expect(text()).toContain('* A\n  * B\n    1.  C\n  * D\n')
+    expect(openBody(text()!).source.get().body).toBe(body)
+  })
+
+  it('writes an empty item with an item in it, and reads it back', () => {
+    const { source, text } = openBody('---\ntitle: T\n---\n\nIntro.\n')
+    const body = `Intro.\n${B}\n${B}${I}A`
+    source.set({ body })
+    expect(openBody(text()!).source.get().body).toBe(body)
+  })
+})
