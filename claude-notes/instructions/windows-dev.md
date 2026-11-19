@@ -35,9 +35,32 @@ significantly.
 
 ## CI
 
-Windows is not currently in the CI matrix. All Windows testing is manual.
+Windows is not in the automatic CI matrix. `test-suite.yml` has a compile-only
+`windows-clippy` job that runs on every PR. Every other leg is opt-in through a
+shared `runners` input, so the platform is a separate axis from the suite:
 
-Until a Windows leg exists, the pre-landing gate is a cross-check, which works
+| Workflow | Default runners | Extra inputs |
+|---|---|---|
+| `test-suite.yml` (Rust, nextest) | `ubuntu-latest`, `macos-latest` | `filter` (nextest `-E` expression) |
+| `ts-test-suite.yml` (TS suites) | `ubuntu-latest`, `macos-latest` | |
+| `hub-client-e2e.yml` (Playwright) | `ubuntu-latest` | `run-smoke-all`, ... |
+| `q2-preview-spa-e2e.yml` (Playwright) | `ubuntu-latest` | |
+
+Push, PR and scheduled runs always use the default. To add Windows, start a
+manual run with `runners` set to a JSON array, like quarto-cli's `test-smokes.yml`:
+
+```bash
+gh workflow run test-suite.yml --ref <branch> \
+  -f runners='["windows-latest"]' -f filter='package(pampa)'
+gh workflow run q2-preview-spa-e2e.yml --ref <branch> -f runners='["windows-latest"]'
+```
+
+On Windows each job runs its `run:` steps under Git Bash, so the steps stay POSIX.
+The Windows legs of the TS and Playwright workflows have not been run yet; expect
+to fix setup steps (WASM build, Playwright browsers) on the first runs. The Rust
+leg skips the tree-sitter grammar test and the Jupyter kernel setup on Windows.
+
+The pre-landing gate is still a cross-check, which works
 from any OS because `cargo check`/`cargo clippy` do not link:
 
 ```bash
