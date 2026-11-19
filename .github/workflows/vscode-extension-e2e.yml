@@ -1,10 +1,17 @@
 name: VS Code Extension E2E
 
-# Playwright drives a real VS Code with the Quarto Hub extension against an
-# in-process test hub (vscode-sync-experiment/e2e/README.md). Manual only until
-# GE-14 chooses the permanent subset: it gates nothing yet. The intended
-# pull-request trigger is a path filter on the extension and on the packages it
-# shares with the preview clients (see the README).
+# Two Playwright runs against a real VS Code with the Quarto Hub extension:
+#
+#   1. `npm run test:e2e -w quarto-hub-vscode`: the extension flows (GE-8 to GE-12) against the in-process test hub.
+#   2. `npm run test:e2e:cross -w quarto-hub-vscode`: the cross-client scenarios of GE-14, the permanent subset of the
+#      hub demo (a real `q2 preview --git track` hub, a chromium guest, headless peers) and of the hub-less demo (a
+#      VS Code window originating a project, `q2 preview --hub-url`, second peers). They need the `q2` binary built
+#      with the hub-client embed, so this job builds what q2-preview-spa-e2e.yml's `embed` leg builds.
+#
+# Manual only (`continue-on-error: true`, like its model) until the permanent subset has passed on several manual runs
+# under the virtual display. Then Gordon decides whether to add path triggers (the extension, `crates/quarto*`,
+# `crates/quarto-hub`, `ts-packages/quarto-sync-client`, `ts-packages/preview-runtime`, the schema and git-epochs
+# packages, and this file) and whether to gate it. `cargo xtask verify --e2e` runs both scripts locally (step 15).
 on:
   workflow_dispatch:
 
@@ -17,10 +24,41 @@ jobs:
     runs-on: ubuntu-latest
     name: VS Code extension E2E
     if: github.repository == 'quarto-dev/q2'
-    timeout-minutes: 30
+    timeout-minutes: 90
+    continue-on-error: true
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v6
+
+      - name: Set up Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+          components: rust-src
+
+      - name: Set up Clang
+        uses: egor-tensin/setup-clang@v2
+        with:
+          version: latest
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      - name: Install wasm-bindgen-cli
+        run: |
+          VERSION=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/version = |"/, ""); print; exit}' Cargo.lock)
+          cargo install -f wasm-bindgen-cli --version "$VERSION"
+
+      - name: Set up tree-sitter CLI
+        run: |
+          curl -LO https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-linux-x86.gz
+          gunzip tree-sitter-linux-x86.gz
+          chmod +x tree-sitter-linux-x86
+          sudo mv tree-sitter-linux-x86 /usr/local/bin/tree-sitter
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -31,10 +69,34 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Install binaryen (wasm-opt)
+        run: npm install -g binaryen@132.0.0
+
       - name: Build the workspace packages and the extension
         run: |
           npm run build --if-present -w ts-packages/quarto-sync-client -w ts-packages/quarto-automerge-schema -w ts-packages/quarto-git-epochs -w ts-packages/quarto-share-url
           npm run build -w quarto-hub-vscode
+
+      # The q2 binary embeds the WASM and both SPA dists at compile time, so build them in this order before
+      # `cargo build` (q2-preview-spa/e2e/README.md §1); the embed build dedupes against the viewer dist.
+      - name: Build WASM
+        run: npm run build:wasm
+        working-directory: hub-client
+
+      - name: Build trace-viewer
+        run: npm run build
+        working-directory: trace-viewer
+
+      - name: Build q2-preview-spa
+        run: npm run build
+        working-directory: q2-preview-spa
+
+      - name: Build the hub-client preview embed
+        run: cargo xtask build-hub-client-embed
+
+      # The e2e helpers require the debug binary at target/debug/q2.
+      - name: Build q2
+        run: cargo build --bin q2
 
       # The pinned version lives in e2e/helpers/launch.ts (VSCODE_VERSION); the
       # cache key reads it from there so a bump invalidates the cache.
@@ -54,13 +116,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb libgbm1 libasound2t64 libgtk-3-0 libnss3
 
-      - name: Run the smoke tests
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: vscode-sync-experiment
+
+      - name: Run the extension flows
         run: xvfb-run --auto-servernum npm run test:e2e -w quarto-hub-vscode
 
+      - name: Run the cross-client scenarios (permanent subset)
+        run: xvfb-run --auto-servernum npm run test:e2e:cross -w quarto-hub-vscode
+
       - name: Upload Playwright results
-        if: failure()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: vscode-e2e-results
           path: vscode-sync-experiment/test-results
           retention-days: 7
+          if-no-files-found: ignore

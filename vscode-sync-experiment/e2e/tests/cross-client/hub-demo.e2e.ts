@@ -11,12 +11,17 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { test } from '@playwright/test';
 import { FEATURE_A, FEATURE_B, MAIN_FILES } from '../../../../q2-preview-spa/e2e/helpers/gitRepo';
-import { noticeLocator, shownText, treeItem, typeInEditor } from '../../../../q2-preview-spa/e2e/helpers/editor';
+import { gitStatus, noticeLocator, shownText, treeItem, typeInEditor } from '../../../../q2-preview-spa/e2e/helpers/editor';
 import { Scene, decision, expect, expectFile, read, readBytes, waitFor } from '../../helpers/cross-client';
 import { dumpSidecar } from '../../helpers/registry-dump';
-import { ensureWasm } from '../../helpers/hub';
+import { ensureWasm, HeadlessPeer } from '../../helpers/hub';
+import { launchVscode, type RunningVscode } from '../../helpers/launch';
+import { execFileSync } from 'node:child_process';
+import { bindFolder } from '../../../src/core/join';
+import { activeEditorText, openFile } from '../../helpers/palette';
 
 let scene: Scene;
+let vscode: RunningVscode | undefined;
 
 test.beforeAll(async () => {
   await ensureWasm();
@@ -25,6 +30,8 @@ test.beforeEach(() => {
   scene = new Scene();
 });
 test.afterEach(async () => {
+  await vscode?.close();
+  vscode = undefined;
   await scene.close();
 });
 
@@ -43,12 +50,22 @@ test('H1 @permanent: a hub commit while every peer types causes no swap and no n
   const clone = await scene.clone(hub);
   await expectFile(mirror.dir, 'a.qmd', (t) => t === MAIN_FILES['a.qmd'], 'the mirror holds a.qmd');
 
-  // Everyone types: the browser in the editor, the clone and the mirror on disk.
+  // Everyone types, one after another so that no peer writes its disk while another peer's edit is landing there (two
+  // disk appends racing a sync write is a test race, not the behavior under test): the browser in the editor, then
+  // the clone and the mirror on disk. Each edit must reach every peer before the next is typed.
+  const everywhere = async (needle: string) => {
+    await expect.poll(async () => (await shownText(guest.page).catch(() => '')).includes(needle), { timeout: 30_000, message: `${needle} in the browser` }).toBe(true);
+    for (const [where, dir] of [['hub', hub.dir], ['mirror', mirror.dir], ['clone', clone.dir]] as const) {
+      await expectFile(dir, 'a.qmd', (t) => !!t && t.includes(needle), `${needle} on the ${where} disk`);
+    }
+  };
   await typeInEditor(guest.page, 'GUEST-EDIT ');
+  await everywhere('GUEST-EDIT');
   await appendOnDisk(clone.dir, 'a.qmd', 'CLONE-EDIT\n');
+  await everywhere('CLONE-EDIT');
   await appendOnDisk(mirror.dir, 'a.qmd', 'MIRROR-EDIT\n');
+  await everywhere('MIRROR-EDIT');
   const all = (t: string | undefined) => !!t && ['GUEST-EDIT', 'CLONE-EDIT', 'MIRROR-EDIT'].every((e) => t.includes(e));
-  await expectFile(hub.dir, 'a.qmd', all, 'every edit reached the hub disk');
 
   // The hub commits what is on its disk.
   const committed = hub.repo.commitAll('commit while everyone is typing');
@@ -57,7 +74,9 @@ test('H1 @permanent: a hub commit while every peer types causes no swap and no n
   const status = await decision(hub.handle.url, ['moved-forward']);
   expect(status.decisions.every((d) => d.kind !== 'flipped' && d.kind !== 'seeded')).toBe(true);
 
-  // No swap and no notice anywhere; every edit survives in every peer.
+  // The browser keeps typing across the commit; no swap and no notice anywhere; every edit survives in every peer.
+  await typeInEditor(guest.page, 'AFTER-COMMIT ');
+  await everywhere('AFTER-COMMIT');
   await expect(noticeLocator(guest.page)).toHaveCount(0);
   await expect.poll(async () => all(await shownText(guest.page).catch(() => '')), { timeout: 30_000 }).toBe(true);
   await expectFile(mirror.dir, 'a.qmd', all, 'every edit on the mirror');
@@ -131,8 +150,12 @@ test('H5 @permanent: git reset --hard after a browser edit retires the doc: no r
   await expect.poll(() => shownText(guest.page), { timeout: 30_000 }).not.toContain('DIRTY-EDIT');
   expect(await shownText(guest.page)).toContain('Version MAIN of a.');
   await expectFile(hub.dir, 'a.qmd', (t) => t === MAIN_FILES['a.qmd'], 'the hub disk is HEAD');
-  const status = await decision(hub.handle.url, ['reset']);
-  expect(status.decisions.some((d) => (d.discarded ?? 0) >= 1)).toBe(true);
+  await expect
+    .poll(async () => (await gitStatus(hub.handle.url)).decisions.some((d) => (d.discarded ?? 0) >= 1), {
+      timeout: 30_000,
+      message: 'a decision reports the browser edit as discarded',
+    })
+    .toBe(true);
   // The browser edit stayed in the retired doc: the registry lists it as retired.
   await expect
     .poll(async () => (await dumpSidecar(hub.wsUrl, hub.indexDocId)).retired.some((e) => e.path === 'a.qmd'), {
@@ -203,4 +226,61 @@ test('H8 @exploratory: a rebase that stops for conflicts pauses the hub; guests 
   const after = (await (await fetch(new URL('api/preview/git-status', hub.handle.url))).json()).decisions.length;
   expect(after - before).toBeGreaterThanOrEqual(1);
   await waitFor(async () => !MARKERS.test((await read(hub.dir, 'a.qmd')) ?? ''), 'no conflict marker on the hub disk');
+});
+
+test('H4 @exploratory: a real VS Code clone that runs git switch feature attaches the doc for that blob, peers on main stay put, and the hub pointer does not move', async () => {
+  const hub = await scene.trackingHub();
+  const guest = await scene.guest(hub.handle.url, 'a.qmd');
+  // Bind a clone folder with the join logic, then open it in a real window (the extension runs clone mode there).
+  const clone = await scene.clone(hub);
+  await clone.peer.stop();
+  vscode = await launchVscode({ workspace: clone.dir });
+  await expect(vscode.page.locator('.statusbar')).toContainText('Quarto Hub: clone', { timeout: 60_000 });
+  const before = await dumpSidecar(hub.wsUrl, hub.indexDocId);
+  const mainDoc = before.entries.find((e) => e.path === 'a.qmd')!.doc;
+
+  execFileSync('git', ['switch', '--quiet', 'feature'], { cwd: clone.dir });
+  await expectFile(clone.dir, 'a.qmd', (t) => t === FEATURE_A, 'the clone checkout has the feature text');
+  // Arrival attaches the doc for that blob, or creates one and registers it.
+  const featureBlob = clone.dir && execFileSync('git', ['rev-parse', 'HEAD:a.qmd'], { cwd: clone.dir, encoding: 'utf8' }).trim();
+  await expect
+    .poll(async () => (await dumpSidecar(hub.wsUrl, hub.indexDocId)).entries.some((e) => e.path === 'a.qmd' && e.blob === featureBlob), {
+      timeout: 60_000,
+      message: 'the registry lists a.qmd under the feature blob',
+    })
+    .toBe(true);
+  // The hub's pointer does not move: no decision, the hub disk and the browser stay on main.
+  expect((await gitStatus(hub.handle.url)).decisions.some((d) => d.kind === 'flipped')).toBe(false);
+  expect(await read(hub.dir, 'a.qmd')).toBe(MAIN_FILES['a.qmd']);
+  expect(await shownText(guest.page)).toContain('Version MAIN of a.');
+  const after = await dumpSidecar(hub.wsUrl, hub.indexDocId);
+  expect(after.entries.find((e) => e.path === 'a.qmd' && e.doc === mainDoc)).toBeDefined();
+  void HeadlessPeer;
+});
+
+test('H2e @permanent: an editor-only VS Code window on a clone of the hub repository suspends during its own checkout, rebinds to the hub\'s feature doc, shows the feature text, and splices nothing into the hub', async () => {
+  const hub = await scene.trackingHub();
+  const parent = await scene.dir('ge14-editor-only-');
+  const folder = path.join(parent, 'repo');
+  execFileSync('git', ['clone', '--quiet', hub.dir, folder], { stdio: 'ignore', env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null' } });
+  for (const [k, v] of [['user.name', 'GE'], ['user.email', 'ge@example.invalid'], ['commit.gpgsign', 'false'], ['core.autocrlf', 'false']] as const) {
+    execFileSync('git', ['config', k, v], { cwd: folder });
+  }
+  execFileSync('git', ['fetch', '--quiet', 'origin', 'feature:feature'], { cwd: folder });
+  await bindFolder({ root: folder, indexDocId: hub.indexDocId, syncServer: hub.wsUrl, mode: 'editor-only' });
+  scene.log(`editor-only clone ${folder} bound to ${hub.wsUrl} (${hub.indexDocId})`);
+  vscode = await launchVscode({ workspace: folder });
+  const { page } = vscode;
+  await expect(page.locator('.statusbar')).toContainText('Quarto Hub: editor only', { timeout: 60_000 });
+  await openFile(page, 'a.qmd');
+  await expect.poll(() => activeEditorText(page), { timeout: 60_000 }).toContain('Version MAIN of a.');
+
+  // The hub switches, then the editor's own repository does: the window suspends during git's rewrite, then follows the flip.
+  hub.repo.switch('feature');
+  await decision(hub.handle.url, ['flipped', 'seeded']);
+  execFileSync('git', ['switch', '--quiet', 'feature'], { cwd: folder });
+  await expect.poll(() => activeEditorText(page), { timeout: 60_000 }).toContain('Version FEATURE of a.');
+  expect(await activeEditorText(page)).not.toContain('Version MAIN of a.');
+  // Nothing from the window's own git rewrite was spliced into the hub's doc.
+  await expectFile(hub.dir, 'a.qmd', (t) => t === FEATURE_A, 'the hub doc holds exactly the feature text', 60_000);
 });

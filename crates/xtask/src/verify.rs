@@ -26,13 +26,15 @@
 //!     quarto-sync-client + quarto-hub-mcp, including the q2-mcp bundle smoke test)
 //! 13. Build q2-preview-spa placeholder
 //! 14. q2-preview-spa Playwright E2E (only when --e2e is set)
+//! 15. VS Code extension Playwright E2E: the extension flows and the cross-client
+//!     scenarios' permanent subset (only when --e2e is set)
 
 use anyhow::{Context, Result, bail};
 
 use crate::lint;
 use crate::test;
 
-const TOTAL_STEPS: u32 = 14;
+const TOTAL_STEPS: u32 = 15;
 
 /// The hub-client CSS lint, exactly as CI's `Lint hub-client CSS` step in
 /// `.github/workflows/ts-test-suite.yml` runs it (from the repo root, via the
@@ -948,6 +950,48 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
         };
         println!(
             "\n━━━ Step 14/{}: Skipping q2-preview-spa Playwright E2E ({}) ━━━\n",
+            TOTAL_STEPS, reason
+        );
+    }
+
+    // Step 15: VS Code extension Playwright E2E (gated on --e2e; git-epochs GE-14).
+    //
+    // Two scripts of the `quarto-hub-vscode` workspace, both needing a display (macOS, Windows, or Linux under
+    // `xvfb-run`): the extension flows against the in-process test hub, and the permanent subset of the cross-client
+    // scenarios, which also needs `target/debug/q2` built with the hub-client embed
+    // (`cargo xtask build-hub-client-embed` before `cargo build --bin q2`) and Playwright's chromium. The extension
+    // bundle (`dist/extension.js`) is built by step 12.
+    let have_vscode_ext = project_root
+        .join("vscode-sync-experiment/package.json")
+        .is_file();
+    if config.include_e2e && have_vscode_ext {
+        println!(
+            "\n━━━ Step 15/{}: Running VS Code extension Playwright E2E ━━━\n",
+            TOTAL_STEPS
+        );
+        run_command(
+            "npm",
+            &["run", "test:e2e", "-w", "quarto-hub-vscode"],
+            &project_root,
+            None,
+            "VS Code extension Playwright E2E failed",
+        )?;
+        run_command(
+            "npm",
+            &["run", "test:e2e:cross", "-w", "quarto-hub-vscode"],
+            &project_root,
+            None,
+            "VS Code cross-client Playwright E2E failed",
+        )?;
+        println!("✓ VS Code extension E2E complete");
+    } else {
+        let reason = if !have_vscode_ext {
+            "vscode-sync-experiment/ not present"
+        } else {
+            "--e2e not set"
+        };
+        println!(
+            "\n━━━ Step 15/{}: Skipping VS Code extension Playwright E2E ({}) ━━━\n",
             TOTAL_STEPS, reason
         );
     }

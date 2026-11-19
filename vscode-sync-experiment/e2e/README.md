@@ -88,3 +88,24 @@ swap's load timeout, default 5000).
 The intended pull-request trigger is a path filter on `vscode-sync-experiment/**`,
 `ts-packages/quarto-automerge-schema/**`, `ts-packages/quarto-git-epochs/**`, and
 `ts-packages/quarto-share-url/**` (GE-14 enables it).
+
+## GE-14: the cross-client scenarios
+
+`tests/cross-client/` holds the two demos of the git-epochs epic, run with real programs and nobody at the keyboard.
+They have their own script and config: `npm run test:e2e:cross` (`e2e/playwright.cross-client.config.ts`). It runs the
+tests tagged `@permanent`; set `GE14_ALL=1` to include the `@exploratory` ones (a `--grep` then picks among them).
+
+- `hub-demo.e2e.ts` (H1 to H8): a real `q2 preview --git track --ui editor --allow-edit` hub on the GE-13 fixture
+  repository, a chromium guest on its editor, a headless mirror, and headless clones, through a commit, a switch, a
+  reset, and a switch back. H2e and H4 use a real VS Code window (editor-only and clone mode).
+- `hubless-demo.e2e.ts` (L1 to L5): a real VS Code window runs **Share this folder** against the in-process test hub,
+  `q2 preview --hub-url` shows the project in the browser, and second peers join as a clone and as a mirror.
+- `registry-crosscheck.e2e.ts`: reads the sidecar a real hub wrote through a raw `Repo` and decodes it with the
+  TypeScript registry. `UPDATE_GOLDEN=1` rewrites `ts-packages/quarto-git-epochs/fixtures/golden/from-hub-run.bin` and
+  its manifest entry; the TypeScript and Rust golden tests decode that file.
+
+What it needs, beyond the extension flows above: `target/debug/q2` built with the hub-client embed (run
+`cd hub-client && npm run build:wasm`, `cargo xtask build-q2-preview-spa`, `cargo xtask build-hub-client-embed`, then
+`cargo build --bin q2`), Playwright's chromium (`npx playwright install chromium`), and `git`. `jj` is not used here.
+`Scene` (`helpers/cross-client.ts`) starts every process, logs the exact invocation of each (`[scene]` lines), and
+tears everything down. `GE14_GIT=ignore` is the control run: the hub ignores git, and the scenarios must fail.

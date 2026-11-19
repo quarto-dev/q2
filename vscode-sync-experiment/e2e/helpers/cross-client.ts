@@ -89,9 +89,12 @@ export class Scene {
    * scenarios omit `--share`: a ticket needs the network.
    */
   async trackingHub(opts: Partial<StartOptions> = {}): Promise<HubInfo> {
-    const handle = await startPreviewServer({ gitRepo: true, git: 'track', ui: 'editor', allowEdit: true, ...opts });
+    // GE14_GIT=ignore is the control run: the same scenarios against a hub that ignores git must fail (the plan's
+    // test-first record), so a scenario cannot pass by ordinary sync alone.
+    const git = process.env.GE14_GIT === 'ignore' ? 'ignore' : 'track';
+    const handle = await startPreviewServer({ gitRepo: true, git, ui: 'editor', allowEdit: true, ...opts });
     this.cleanups.push(() => handle.stop());
-    this.log(`${Q2_BINARY} preview --no-browser --data-dir <data> --allow-edit --ui editor --git track ${handle.projectDir}   # ${handle.url}`);
+    this.log(`${Q2_BINARY} preview --no-browser --data-dir <data> --allow-edit --ui editor --git ${git} ${handle.projectDir}   # ${handle.url}`);
     const { indexDocId } = await health(handle.url);
     return { handle, wsUrl: `ws://127.0.0.1:${handle.port}/ws`, indexDocId, repo: handle.repo!, dir: handle.projectDir };
   }
