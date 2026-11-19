@@ -1,0 +1,385 @@
+{
+  "name": "quarto2-vscode",
+  "displayName": "Quarto 2",
+  "description": "Quarto 2 (q2) language support: highlighting, diagnostics and outline via `q2 lsp`.",
+  "version": "0.0.1",
+  "private": true,
+  "publisher": "quarto",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quarto-dev/q2"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "quarto2",
+        "aliases": [
+          "Quarto 2",
+          "q2"
+        ],
+        "extensions": [
+          ".qmd"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "semanticTokenTypes": [
+      {
+        "id": "qmdHeading",
+        "description": "Markdown heading"
+      },
+      {
+        "id": "qmdEmphasis",
+        "description": "Emphasized text"
+      },
+      {
+        "id": "qmdStrong",
+        "description": "Strong text"
+      },
+      {
+        "id": "qmdStrikethrough",
+        "description": "Struck-through text"
+      },
+      {
+        "id": "qmdLinkText",
+        "description": "Link text"
+      },
+      {
+        "id": "qmdLinkUrl",
+        "description": "Link destination"
+      },
+      {
+        "id": "qmdLinkTitle",
+        "description": "Link title"
+      },
+      {
+        "id": "qmdImageText",
+        "description": "Image alt text"
+      },
+      {
+        "id": "qmdImageUrl",
+        "description": "Image source"
+      },
+      {
+        "id": "qmdInlineCode",
+        "description": "Inline code"
+      },
+      {
+        "id": "qmdCodeBlock",
+        "description": "Code block content"
+      },
+      {
+        "id": "qmdCodeInfo",
+        "description": "Code block info string"
+      },
+      {
+        "id": "qmdMath",
+        "description": "Math"
+      },
+      {
+        "id": "qmdShortcode",
+        "description": "Shortcode"
+      },
+      {
+        "id": "qmdListMarker",
+        "description": "List marker"
+      },
+      {
+        "id": "qmdQuote",
+        "description": "Block quote"
+      },
+      {
+        "id": "qmdPunctuation",
+        "description": "Markdown punctuation"
+      },
+      {
+        "id": "qmdFence",
+        "description": "Code or div fence"
+      },
+      {
+        "id": "qmdFrontMatterFence",
+        "description": "Front matter delimiter"
+      },
+      {
+        "id": "qmdAttribute",
+        "description": "Attribute block"
+      },
+      {
+        "id": "qmdBoolean",
+        "description": "Boolean literal in code"
+      },
+      {
+        "id": "qmdConstant",
+        "description": "Constant in code"
+      },
+      {
+        "id": "qmdEmbedded",
+        "description": "Embedded code"
+      },
+      {
+        "id": "qmdError",
+        "description": "Error in code"
+      },
+      {
+        "id": "qmdEscape",
+        "description": "Escape sequence"
+      },
+      {
+        "id": "qmdCodeMarkup",
+        "description": "Markup inside code"
+      },
+      {
+        "id": "qmdCodePunctuation",
+        "description": "Punctuation in code"
+      },
+      {
+        "id": "qmdTag",
+        "description": "Tag in code"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "quarto2",
+        "scopes": {
+          "qmdHeading": [
+            "markup.heading.markdown",
+            "markup.heading",
+            "entity.name.section"
+          ],
+          "qmdEmphasis": [
+            "markup.italic.markdown",
+            "markup.italic"
+          ],
+          "qmdStrong": [
+            "markup.bold.markdown",
+            "markup.bold"
+          ],
+          "qmdStrikethrough": [
+            "markup.strikethrough.markdown",
+            "markup.strikethrough"
+          ],
+          "qmdLinkText": [
+            "string.other.link.title.markdown",
+            "markup.underline.link"
+          ],
+          "qmdLinkUrl": [
+            "markup.underline.link.markdown",
+            "markup.underline.link"
+          ],
+          "qmdLinkTitle": [
+            "string.other.link.description.title.markdown",
+            "string"
+          ],
+          "qmdImageText": [
+            "string.other.link.description.markdown",
+            "string.other.link.title.markdown"
+          ],
+          "qmdImageUrl": [
+            "markup.underline.link.image.markdown",
+            "markup.underline.link"
+          ],
+          "qmdInlineCode": [
+            "markup.inline.raw.string.markdown",
+            "markup.inline.raw"
+          ],
+          "qmdCodeBlock": [
+            "markup.fenced_code.block.markdown",
+            "markup.raw"
+          ],
+          "qmdCodeInfo": [
+            "fenced_code.block.language.markdown",
+            "entity.name.tag"
+          ],
+          "qmdMath": [
+            "markup.math.inline",
+            "string.other.math",
+            "markup.inline.raw"
+          ],
+          "qmdShortcode": [
+            "meta.shortcode",
+            "entity.name.function",
+            "support.function"
+          ],
+          "qmdListMarker": [
+            "punctuation.definition.list.begin.markdown",
+            "markup.list"
+          ],
+          "qmdQuote": [
+            "markup.quote.markdown",
+            "markup.quote"
+          ],
+          "qmdPunctuation": [
+            "punctuation.definition.markdown",
+            "punctuation"
+          ],
+          "qmdFence": [
+            "punctuation.definition.markdown",
+            "punctuation"
+          ],
+          "qmdFrontMatterFence": [
+            "punctuation.definition.tag",
+            "punctuation"
+          ],
+          "qmdAttribute": [
+            "entity.other.attribute-name",
+            "attribute.name"
+          ],
+          "qmdBoolean": [
+            "constant.language.boolean",
+            "constant.language"
+          ],
+          "qmdConstant": [
+            "constant.language",
+            "constant.other"
+          ],
+          "qmdEmbedded": [
+            "meta.embedded"
+          ],
+          "qmdError": [
+            "invalid.illegal",
+            "invalid"
+          ],
+          "qmdEscape": [
+            "constant.character.escape"
+          ],
+          "qmdCodeMarkup": [
+            "markup"
+          ],
+          "qmdCodePunctuation": [
+            "punctuation"
+          ],
+          "qmdTag": [
+            "entity.name.tag"
+          ]
+        }
+      }
+    ],
+    "configurationDefaults": {
+      "[quarto2]": {
+        "editor.semanticHighlighting.enabled": true,
+        "editor.wordWrap": "on"
+      }
+    },
+    "commands": [
+      {
+        "command": "q2.preview",
+        "title": "Preview",
+        "category": "Quarto 2",
+        "icon": "$(open-preview)",
+        "enablement": "q2.previewAvailable"
+      },
+      {
+        "command": "q2.restartServer",
+        "title": "Restart Language Server",
+        "category": "Quarto 2"
+      },
+      {
+        "command": "q2.showOutput",
+        "title": "Show Output",
+        "category": "Quarto 2"
+      }
+    ],
+    "configuration": {
+      "title": "Quarto 2",
+      "properties": {
+        "q2.path": {
+          "scope": "machine-overridable",
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the `q2` binary. Empty: look for `q2` on `PATH`, then in `~/.local/bin` (where `install.sh` and `install.ps1` put it)."
+        },
+        "q2.trace.server": {
+          "scope": "window",
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace the communication between VS Code and `q2 lsp`."
+        },
+        "q2.preview.target": {
+          "scope": "window",
+          "type": "string",
+          "enum": [
+            "panel",
+            "browser"
+          ],
+          "enumDescriptions": [
+            "Show the preview in a panel beside the editor.",
+            "Open the preview in your web browser."
+          ],
+          "default": "panel",
+          "description": "Where Quarto 2: Preview shows the rendered document."
+        }
+      }
+    },
+    "menus": {
+      "editor/title": [
+        {
+          "command": "q2.preview",
+          "when": "editorLangId == quarto2",
+          "group": "navigation"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "q2.preview",
+          "when": "resourceLangId == quarto2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "q2.preview",
+          "when": "resourceLangId == quarto2",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "q2.preview",
+          "when": "editorLangId == quarto2"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "q2.preview",
+        "key": "ctrl+shift+k",
+        "mac": "cmd+shift+k",
+        "when": "editorLangId == quarto2"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "package": "npx --yes @vscode/vsce@3 package --no-dependencies",
+    "clean": "rm -rf dist *.vsix",
+    "test": "vitest run",
+    "test:smoke": "npm run build && node test/run.mjs",
+    "vscode:prepublish": "node esbuild.mjs --minify"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/vscode": "~1.90.0",
+    "@vscode/test-electron": "^3.1.0",
+    "esbuild": "^0.28.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.8"
+  }
+}

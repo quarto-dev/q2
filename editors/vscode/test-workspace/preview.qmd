@@ -1,0 +1,7 @@
+---
+title: Preview smoke test
+---
+
+# Hello from the preview
+
+No code cells, so nothing executes.

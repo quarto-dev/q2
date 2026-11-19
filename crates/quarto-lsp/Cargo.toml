@@ -43,6 +43,13 @@ quarto-lsp-project = { workspace = true }
 quarto-system-runtime = { workspace = true }
 quarto-util.workspace = true
 
+# stdout is reserved for JSON-RPC (src/stdio.rs): fd/handle redirection.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console"] }
+
 [dev-dependencies]
 insta.workspace = true
 tempfile = "3"
