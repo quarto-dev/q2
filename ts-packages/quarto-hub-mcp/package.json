@@ -25,10 +25,10 @@
     "dist"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc && node scripts/build-wasm-host.mjs --allow-stub && node -e \"import('node:fs').then(fs => fs.chmodSync('dist/index.js', 0o755))\"",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc && node scripts/build-wasm-host.mjs --allow-stub && node -e \"import('node:fs').then(fs => fs.chmodSync('dist/index.js', 0o755))\"",
     "bundle": "node scripts/bundle.mjs",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist dist-bundle",
+    "clean": "node -e \"for (const d of ['dist','dist-bundle']) require('node:fs').rmSync(d,{recursive:true,force:true})\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "eval": "npm run build && node eval/run.mjs"
