@@ -25,6 +25,7 @@ pub(crate) mod footer_logo;
 mod footnotes;
 mod slides;
 mod theme;
+pub(crate) mod toc;
 mod transform;
 
 pub use absolute::RevealAbsoluteTransform;
@@ -37,4 +38,5 @@ pub use footer_logo::{RevealFooterAliasTransform, RevealFooterLogoTransform};
 pub use footnotes::RevealFootnotesTransform;
 pub use slides::{DEFAULT_SLIDE_LEVEL, build_reveal_slides};
 pub use theme::{RevealThemeResolution, resolve_reveal_theme};
+pub use toc::RevealTocTransform;
 pub use transform::RevealSlidesTransform;

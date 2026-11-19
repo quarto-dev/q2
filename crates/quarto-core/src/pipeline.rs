@@ -2370,6 +2370,23 @@ fn footer_render_stage(is_revealjs: bool) -> Box<dyn crate::transform::AstTransf
     }
 }
 
+/// Select the format-specific TOC-render stage, the sibling of
+/// [`footer_render_stage`].
+///
+/// TOC *generation* is format-agnostic (`TocGenerateTransform` →
+/// `navigation.toc`); rendering is not. `format: html` renders the page TOC
+/// into `rendered.navigation.toc` for the template (and, from it, the
+/// scroll-tracking script). `format: revealjs` adds Quarto 1's TOC *slide*
+/// after the title slide instead, with reveal hash links, and must not run the
+/// html render, whose output nothing in a deck reads.
+fn toc_render_stage(is_revealjs: bool) -> Box<dyn crate::transform::AstTransform> {
+    if is_revealjs {
+        Box::new(crate::revealjs::RevealTocTransform::new())
+    } else {
+        Box::new(TocRenderTransform::new())
+    }
+}
+
 /// The format-specific *presentation* transforms that run in the Finalization
 /// phase, after the crossref custom nodes have been rendered to writer-visible
 /// shapes (`CrossrefRenderTransform`).
@@ -2700,7 +2717,7 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(
         crate::project::listing::feed::ListingFeedLinkTransform::new(),
     ));
-    pipeline.push(Box::new(TocRenderTransform::new()));
+    pipeline.push(toc_render_stage(is_revealjs));
     // Placement decision for the rendered TOC (bd-e2kpwy7n): must run
     // after TocRenderTransform (it gates on `rendered.navigation.toc`)
     // and before SidebarRenderTransform (which consumes the
@@ -7337,7 +7354,7 @@ mod tests {
                 "categories-sidebar",
                 "listing-feed-stage",
                 "listing-feed-link",
-                "toc-render",
+                "reveal-toc",
                 "toc-location",
                 "toc-js",
                 "repo-actions-render",
