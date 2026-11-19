@@ -59,6 +59,8 @@ test.describe('git epochs, hub with viewer guests', () => {
       await expect(noticeLocator(g)).toHaveCount(0);
     }
     expect(await readDisk(hub, 'a.qmd')).toBe(FEATURE_A);
+    // Ordinary sync would also show the new text, so the swap itself is read from the status route.
+    await waitForDecision(hub, ['flipped']);
   });
 
   test('S4: git switch main back re-renders the main text', async ({ browser }) => {
@@ -94,22 +96,24 @@ test.describe('git epochs, hub with viewer guests', () => {
   });
 
   test('S8: files added and removed on feature appear in and leave the project, and back', async ({ browser }) => {
+    test.setTimeout(150_000);
     hub = await startGitHub({ ui: 'viewer' });
     const [a] = await guestsOnA(browser, hub.url);
     const repo = hub.repo!;
-    const open = async (file: string) => {
-      await a.goto(new URL(`?page=${file}`, hub!.url).toString());
-    };
+    // A fresh load seeds the page from `?page=`, and a file the index does not list yet falls back to the first page,
+    // so each check reloads until the project lists (or stops listing) the file.
+    const eventually = (file: string, check: (body: string) => void) =>
+      expect(async () => {
+        await a.goto(new URL(`?page=${file}`, hub!.url).toString());
+        await expect.poll(() => previewBodyText(a), { timeout: 15_000 }).not.toBe('');
+        check(await previewBodyText(a));
+      }).toPass({ timeout: 60_000 });
     repo.switch('feature');
-    await open('b.qmd');
-    await shows(a, 'The file b exists on feature.');
-    await open('c.qmd');
-    await expect.poll(() => previewBodyText(a), { timeout: 30_000 }).not.toContain('The file c exists on main.');
+    await eventually('b.qmd', (body) => expect(body).toContain('The file b exists on feature.'));
+    await eventually('c.qmd', (body) => expect(body).not.toContain('The file c exists on main.'));
     repo.switch('main');
-    await open('c.qmd');
-    await shows(a, 'The file c exists on main.');
-    await open('b.qmd');
-    await expect.poll(() => previewBodyText(a), { timeout: 30_000 }).not.toContain('The file b exists on feature.');
+    await eventually('c.qmd', (body) => expect(body).toContain('The file c exists on main.'));
+    await eventually('b.qmd', (body) => expect(body).not.toContain('The file b exists on feature.'));
   });
 
   test('S9: a tracked binary follows the checkout byte for byte', async ({ browser }) => {

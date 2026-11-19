@@ -14,11 +14,13 @@ export interface HubOptions {
   ui: 'viewer' | 'editor';
   allowEdit?: boolean;
   git?: 'track' | 'ignore';
+  /** Colocate jj on the repository before the hub starts. */
+  jjColocate?: boolean;
 }
 
 /** A hub started with `--git <git>` (default `track`) on the fixture repo, on `main`. */
 export function startGitHub(opts: HubOptions): Promise<PreviewServerHandle> {
-  return startPreviewServer({ gitRepo: true, git: opts.git ?? 'track', ui: opts.ui, allowEdit: opts.allowEdit });
+  return startPreviewServer({ gitRepo: true, git: opts.git ?? 'track', ui: opts.ui, allowEdit: opts.allowEdit, jjColocate: opts.jjColocate });
 }
 
 export interface Guest {

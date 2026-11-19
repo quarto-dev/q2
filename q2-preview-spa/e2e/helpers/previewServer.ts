@@ -227,6 +227,8 @@ export interface StartOptions {
    * `c.qmd`, and adds `b.qmd`), left on `main`. Replaces `fixtureFiles` and `copyFromDir`; pass neither. Exposed as `handle.repo`.
    */
   gitRepo?: boolean;
+  /** GE-13: with `gitRepo`, run `jj git init --colocate` on the repository before the server starts (needs `jj`). */
+  jjColocate?: boolean;
   /**
    * bd-eip0naf4: launch `q2 preview --static --no-watch` instead of the
    * default hub/SPA preview — render the project to `_site/` through
@@ -302,6 +304,7 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
   let repo: (GitRepo & FixtureBranches) | undefined;
   if (opts.gitRepo) {
     repo = buildFixtureRepo(projectDir);
+    if (opts.jjColocate) repo.jjColocate();
   } else if (opts.copyFromDir) {
     await copyDirRecursive(opts.copyFromDir, projectDir);
   } else {

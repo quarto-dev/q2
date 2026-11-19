@@ -28,8 +28,8 @@ test.afterEach(async () => {
   extra = hub = undefined;
 });
 
-async function start(opts: { allowEdit?: boolean; git?: 'track' | 'ignore' } = {}): Promise<PreviewServerHandle> {
-  hub = await startGitHub({ ui: 'editor', allowEdit: opts.allowEdit ?? true, git: opts.git });
+async function start(opts: { allowEdit?: boolean; git?: 'track' | 'ignore'; jjColocate?: boolean } = {}): Promise<PreviewServerHandle> {
+  hub = await startGitHub({ ui: 'editor', allowEdit: opts.allowEdit ?? true, git: opts.git, jjColocate: opts.jjColocate });
   test.skip(!(await isEmbedBuilt(hub)), 'q2 was built without the hub-client embed (placeholder)');
   return hub;
 }
@@ -76,7 +76,7 @@ test.describe('git epochs, hub with editor guests', () => {
     for (const g of [a, b]) {
       await expect(editorText(g.page)).toContainText('Version FEATURE of a.', { timeout: 30_000 });
       await expect(noticeLocator(g.page)).toHaveCount(1);
-      await expect(noticeLocator(g.page)).toContainText('was replaced');
+      await expect(noticeLocator(g.page)).toContainText('replaced because the project owner');
     }
     expect(await readDisk(h, 'a.qmd')).toBe(FEATURE_A);
     // Still one notice after the batch settles (a quiet window longer than the aggregation window).
@@ -146,18 +146,27 @@ test.describe('git epochs, hub with editor guests', () => {
     expect(after.decisions.length - before).toBeGreaterThanOrEqual(1);
   });
 
-  test('S6: jj new onto another commit follows the flip from disk (arrival under jj is unsupported)', async ({ browser }) => {
+  test('S6: jj new follows each flip from disk; arrival under jj seeds a doc and registers nothing', async ({ browser }) => {
     test.skip(!jjAvailable(), 'jj is not installed');
-    const h = await start();
+    const h = await start({ jjColocate: true });
     const [a, b] = await guestsOnA(browser, h.url);
-    h.repo!.jjColocate();
+    // First arrival on `feature`: no doc is registered for its blobs, so G9 step 1 applies (jj has no effect on it).
     h.repo!.jjNew('feature');
     for (const g of [a, b]) {
       await expect(editorText(g.page)).toContainText('Version FEATURE of a.', { timeout: 30_000 });
       await expect(editorText(g.page)).not.toContainText(MARKERS);
     }
+    await waitForDecision(h, ['flipped']);
+    // Back to `main`, whose doc exists: without jj this attaches silently (step 3); under jj every such file takes the
+    // step 5 fallback, so the decision is `seeded` (a doc created from disk, nothing registered).
+    h.repo!.jjNew('main');
+    for (const g of [a, b]) {
+      await expect(editorText(g.page)).toContainText('Version MAIN of a.', { timeout: 30_000 });
+      await expect(editorText(g.page)).not.toContainText(MARKERS);
+    }
     const status = await waitForDecision(h, ['seeded']);
     expect(status.decisions.some((d) => d.kind === 'seeded')).toBe(true);
+    expect(await readDisk(h, 'a.qmd')).toBe(MAIN_FILES['a.qmd']);
   });
 
   test('S7: save then commit inside the debounce is treated as a commit', async ({ browser }) => {
