@@ -25,12 +25,15 @@ import {
   type FilePayload,
   type SyncDiagnostics,
   type DocInventoryEntry,
+  type ReplacedEvent,
 } from '@quarto/quarto-sync-client';
 import type { Repo } from '@automerge/automerge-repo';
 
+import { swapStatus } from './swapStatus';
 import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClear, initWasm, type ProjectFile } from './wasmRenderer';
 
 // Re-export types for use in other components
+export type { ReplacedEvent };
 export type { ConnectOptions, Patch, EditorContentChange, FileEntry, ActorIdentity, CaptureRef, CreateBinaryFileResult, CreateFileIfAbsentResult, CreateProjectOptions, CreateProjectResult, SyncDiagnostics, DocInventoryEntry };
 
 // Event handlers for state changes
@@ -42,7 +45,9 @@ type FileContentHandler = (path: string, content: string, patches: Patch[]) => v
 type BinaryContentHandler = (path: string, content: Uint8Array, mimeType: string) => void;
 type ConnectionHandler = (connected: boolean) => void;
 type ErrorHandler = (error: Error) => void;
+type FileReplacedHandler = (event: ReplacedEvent) => void;
 
+let onFileReplaced: FileReplacedHandler | null = null;
 let onFilesChange: FilesChangeHandler | null = null;
 let onIdentitiesChange: IdentitiesChangeHandler | null = null;
 let onCapturesChange: CapturesChangeHandler | null = null;
@@ -78,6 +83,8 @@ export function setSyncHandlers(handlers: {
   onBinaryContent?: BinaryContentHandler;
   onConnectionChange?: ConnectionHandler;
   onError?: ErrorHandler;
+  /** Phases of a swap (GE-7). The runtime's `swapStatus` store is fed regardless; this is for consumers that act on the event itself, such as rebinding presence. */
+  onFileReplaced?: FileReplacedHandler;
 }) {
   if (handlers.onFilesChange) onFilesChange = handlers.onFilesChange;
   if (handlers.onIdentitiesChange) onIdentitiesChange = handlers.onIdentitiesChange;
@@ -87,6 +94,7 @@ export function setSyncHandlers(handlers: {
   if (handlers.onBinaryContent) onBinaryContent = handlers.onBinaryContent;
   if (handlers.onConnectionChange) onConnectionChange = handlers.onConnectionChange;
   if (handlers.onError) onError = handlers.onError;
+  if (handlers.onFileReplaced) onFileReplaced = handlers.onFileReplaced;
 }
 
 /**
@@ -134,6 +142,10 @@ function createInternalCallbacks(): SyncClientCallbacks {
     onError: (error: Error) => {
       onError?.(error);
     },
+    onFileReplaced: (event: ReplacedEvent) => {
+      swapStatus.handle(event);
+      onFileReplaced?.(event);
+    },
   };
 }
 
@@ -168,6 +180,7 @@ export async function connect(syncServerUrl: string, indexDocId: string, authorI
  */
 export async function disconnect(): Promise<void> {
   vfsClear();
+  swapStatus.reset();
   if (client) {
     await client.disconnect();
   }
@@ -210,8 +223,8 @@ export async function getBinaryDocById(
 /**
  * Update the content of a file using incremental text updates.
  */
-export function updateFileContent(path: string, content: string): void {
-  ensureClient().updateFileContent(path, content);
+export function updateFileContent(path: string, content: string, baseDocId?: string): void {
+  ensureClient().updateFileContent(path, content, baseDocId);
   // VFS is updated via callback
 }
 
@@ -220,8 +233,12 @@ export function updateFileContent(path: string, content: string): void {
  * Each change maps directly to an Automerge splice, avoiding the
  * full-text diff race in updateText.
  */
-export function applyEditorOperations(path: string, changes: EditorContentChange[]): void {
-  ensureClient().applyEditorOperations(path, changes);
+export function applyEditorOperations(
+  path: string,
+  changes: EditorContentChange[],
+  baseDocId?: string,
+): void {
+  ensureClient().applyEditorOperations(path, changes, baseDocId);
   // VFS is updated via callback (change handler fires onFileChanged)
 }
 

@@ -41,6 +41,8 @@ export type {
   BinaryFilePayload,
   FilePayload,
   SyncClientCallbacks,
+  ReplacedEvent,
+  SwapPhase,
   ASTOptions,
   CaptureRef,
   ConnectOptions,

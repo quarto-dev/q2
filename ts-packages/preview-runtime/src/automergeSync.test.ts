@@ -18,6 +18,7 @@ import {
   getRepo,
   getDocInventory,
   applyEditorOperations,
+  updateFileContent,
   isFileBinary,
   setImmediateFileChangeCallback,
   importProjectFromZip,
@@ -25,6 +26,7 @@ import {
   _setClientForTesting,
   _getCallbacksForTesting,
 } from './automergeSync';
+import { swapStatus } from './swapStatus';
 import { createMockSyncClient, type MockSyncClient } from './test-utils/mockSyncClient';
 
 // Mock the wasmRenderer module to avoid WASM initialization
@@ -322,6 +324,47 @@ describe('automergeSync', () => {
         { rangeOffset: 0, rangeLength: 5, text: 'HI' },
       ]);
       expect(getFileContent('test.qmd')).toBe('HI EARTH');
+    });
+  });
+
+  describe('swaps (GE-7)', () => {
+    beforeEach(() => {
+      swapStatus.reset();
+    });
+
+    it('feeds the swap status store and the consumer handler from onFileReplaced', () => {
+      const onFileReplaced = vi.fn();
+      setSyncHandlers({ onFileReplaced });
+      const callbacks = _getCallbacksForTesting();
+
+      callbacks.onFileReplaced?.({ path: 'index.qmd', phase: 'pending', oldDocId: 'a', newDocId: 'b' });
+      expect(swapStatus.getSnapshot().pending).toEqual(['index.qmd']);
+      expect(onFileReplaced).toHaveBeenCalledTimes(1);
+
+      callbacks.onFileReplaced?.({ path: 'index.qmd', phase: 'done', oldDocId: 'a', newDocId: 'b' });
+      expect(swapStatus.getSnapshot().pending).toEqual([]);
+      expect(onFileReplaced).toHaveBeenCalledTimes(2);
+    });
+
+    it('passes baseDocId through updateFileContent and applyEditorOperations', async () => {
+      mockClient = createMockSyncClient(
+        {
+          onFileAdded: vi.fn(),
+          onFileChanged: vi.fn(),
+          onBinaryChanged: vi.fn(),
+          onFileRemoved: vi.fn(),
+        },
+        { initialFiles: new Map([['a.qmd', { type: 'text' as const, text: 'x' }]]) },
+      );
+      _setClientForTesting(mockClient as unknown as SyncClient);
+      const update = vi.spyOn(mockClient, 'updateFileContent');
+      const apply = vi.spyOn(mockClient, 'applyEditorOperations');
+
+      updateFileContent('a.qmd', 'y', 'doc-1');
+      applyEditorOperations('a.qmd', [{ rangeOffset: 0, rangeLength: 0, text: 'z' }], 'doc-1');
+
+      expect(update).toHaveBeenCalledWith('a.qmd', 'y', 'doc-1');
+      expect(apply).toHaveBeenCalledWith('a.qmd', [{ rangeOffset: 0, rangeLength: 0, text: 'z' }], 'doc-1');
     });
   });
 

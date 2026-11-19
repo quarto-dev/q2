@@ -48,8 +48,8 @@ export interface MockSyncClient {
   isFileBinary(path: string): boolean;
   getFileContent(path: string): string | null;
   getBinaryFileContent(path: string): { content: Uint8Array; mimeType: string } | null;
-  updateFileContent(path: string, content: string): void;
-  applyEditorOperations(path: string, changes: EditorContentChange[]): void;
+  updateFileContent(path: string, content: string, baseDocId?: string): void;
+  applyEditorOperations(path: string, changes: EditorContentChange[], baseDocId?: string): void;
   createFile(path: string, content?: string): Promise<void>;
   createBinaryFile(path: string, content: Uint8Array, mimeType: string): Promise<CreateBinaryFileResult>;
   deleteFile(path: string): void;
@@ -169,7 +169,7 @@ export function createMockSyncClient(
       return { content: file.data, mimeType: file.mimeType };
     },
 
-    updateFileContent(path: string, content: string): void {
+    updateFileContent(path: string, content: string, _baseDocId?: string): void {
       const existing = files.get(path);
       if (!existing || existing.type !== 'text') {
         throw new Error(`Cannot update non-text file: ${path}`);
@@ -178,7 +178,7 @@ export function createMockSyncClient(
       callbacks.onFileChanged(path, content, []);
     },
 
-    applyEditorOperations(path: string, changes: EditorContentChange[]): void {
+    applyEditorOperations(path: string, changes: EditorContentChange[], _baseDocId?: string): void {
       if (changes.length === 0) return;
       const existing = files.get(path);
       if (!existing || existing.type !== 'text') {
