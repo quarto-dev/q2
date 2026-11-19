@@ -29,7 +29,7 @@ npm install                      # from the repo root (workspace member)
 npm run build -w quarto-hub-vscode   # or: npm run watch
 ```
 
-Then open `hub-client/vscode-sync-experiment/` as a folder in VS Code, go to the
+Then open `vscode-sync-experiment/` as a folder in VS Code, go to the
 Run and Debug view in the sidebar, and start **Run Quarto Hub Extension**.
 That builds the bundle and opens a second VS Code window with the extension
 loaded; run "Quarto Hub: Connect to Document" from its command palette.
