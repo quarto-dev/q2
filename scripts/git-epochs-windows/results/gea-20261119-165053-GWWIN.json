@@ -1,0 +1,95 @@
+{
+  "run_id": "20261119-165053-GWWIN",
+  "branch": "windows/git-epochs",
+  "commit": "81dfb1363b254eede0b8017bb508a332d0ea77d5",
+  "base": "current tip of origin/windows/git-epochs",
+  "host_triple": "x86_64-pc-windows-msvc",
+  "os": "Microsoft Windows 11 Pro",
+  "git": "git version 2.47.1.windows.1",
+  "node": "v24.21.0",
+  "autocrlf": "true",
+  "longpaths": "(unset)",
+  "tools": [
+    {
+      "tool": "git",
+      "required": "yes",
+      "found": true,
+      "install": "winget install Git.Git   (Git for Windows; the probe is tested against it)"
+    },
+    {
+      "tool": "rustc",
+      "required": "no",
+      "found": true,
+      "install": "winget install Rustlang.Rustup   (then: rustup default stable-x86_64-pc-windows-msvc)"
+    },
+    {
+      "tool": "cargo",
+      "required": "no",
+      "found": true,
+      "install": "comes with rustup"
+    },
+    {
+      "tool": "cargo-nextest",
+      "required": "no",
+      "found": true,
+      "install": "cargo install cargo-nextest --locked"
+    },
+    {
+      "tool": "uv",
+      "required": "no",
+      "found": true,
+      "install": "winget install astral-sh.uv   (runs make_large_tree.py and extract_failures.py)"
+    },
+    {
+      "tool": "nasm",
+      "required": "no",
+      "found": true,
+      "install": "winget install NASM.NASM   (the aws-lc-sys crates in quarto-hub need it)"
+    },
+    {
+      "tool": "cmake",
+      "required": "no",
+      "found": true,
+      "install": "winget install Kitware.CMake   (the aws-lc-sys crates in quarto-hub need it)"
+    },
+    {
+      "tool": "link",
+      "required": "no",
+      "found": false,
+      "install": "Visual Studio Build Tools, \"Desktop development with C++\" (cargo finds link.exe itself, so absent from PATH is normal; install only if the build says \"linker not found\")"
+    },
+    {
+      "tool": "node",
+      "required": "no",
+      "found": true,
+      "install": "fnm/nvm; Node major per .nvmrc (items b1 to b7)"
+    },
+    {
+      "tool": "npm",
+      "required": "no",
+      "found": true,
+      "install": "comes with Node"
+    },
+    {
+      "tool": "jj",
+      "required": "no",
+      "found": false,
+      "install": "optional: winget install jj-vcs.jj (the jj scenarios of b1 skip without it)"
+    }
+  ],
+  "items": [
+    {
+      "id": "c1",
+      "catalog": "W9",
+      "title": "scripted end-to-end scenario against q2.exe and git.exe",
+      "status": "FAIL",
+      "reason": "exit code 1; 1 passed, 1 failed; the transcript names the failing step",
+      "caveat": "",
+      "known_unrelated": false,
+      "proves": "The whole feature works end to end on Windows through the real q2.exe and git.exe on a generated repo in %TEMP% (about 4,000 tracked files): the gate pauses during a real git switch, the classifier treats a commit as a move-forward and a switch as a flip, a changed file flips, a removed file is unlisted, an added file is listed, a binary changes, arrival re-attaches the earlier docs without a fork, reset --hard keeps the dirty text in the retired doc, and a hub stopped during a switch skips the flush and leaves no conflict markers.",
+      "does_not_prove": "jj on Windows; other Git builds; a long soak; the browser (c2 covers the editor surfaces).",
+      "output_tail": "\nRunning 2 tests using 1 worker\n\n[c1] ok   1 generate the repo: {\"tracked\":4005}\n[c1] ok   1 tracked files: 4005\n[c1] ok   invoke: \"C:\\\\Users\\\\GordonWoodhull\\\\src\\\\fuck\\\\q2\\\\target\\\\debug\\\\q2 preview --no-browser --data-dir C:\\\\Users\\\\GordonWoodhull\\\\AppData\\\\Local\\\\Temp\\\\c1-data-1BjurQ --allow-edit --ui editor --git track --host 127.0.0.1 --port 59360 C:\\\\Users\\\\GordonWoodhull\\\\AppData\\\\Local\\\\Temp\\\\c1-hub-2CPMrG\"\n[c1] ok   2 start the hub: {\"port\":59360,\"indexDocId\":\"471KQqRrhGg5VUnT4NLbkqmGUFpF\"}\n[c1] ok   progress: the mirror holds the last bulk file: {\"files\":4005,\"seconds\":0,\"hubAlive\":true}\n[c1] ok   3 peers attached and the clone edits a.qmd: {\"hubId\":\"471KQqRrhGg5VUnT4NLbkqmGUFpF\"}\n[c1] ok   4 commit on main while the peer edits: no flip, the edit intact: {\"decisions\":[\"moved-forward\"],\"aDoc\":[\"3RVp9wfedk3ASvneezDPJLcMsJUm\"]}\n[c1] ok   5 git switch feature: the gate pauses, then the flip: {\"switchMs\":1422,\"sawLock\":true,\"sawPaused\":true,\"markers\":[\"index.lock\"],\"decisions\":[\"moved-forward\",\"flipped\"]}\n[c1] ok   6 git switch main: arrival re-attaches the registered docs, disk equals the doc: {\"aDoc\":[\"3RVp9wfedk3ASvneezDPJLcMsJUm\"],\"decisions\":[\"moved-forward\",\"flipped\",\"flipped\"]}\n[c1] ok   7 save and commit inside the debounce window: a commit, not a flip: {\"flipsBefore\":2,\"decisions\":[\"moved-forward\",\"flipped\",\"flipped\",\"moved-forward\"]}\n[c1] ok   8 git reset --hard after a dirty edit: a new doc equal to HEAD, the dirty text stays in the retired doc: {\"newDoc\":[\"3aBk1Qdgoh9YJ6T6dHSm85zyiunT\"],\"atHead\":[\"3RVp9wfedk3ASvneezDPJLcMsJUm\",\"3aBk1Qdgoh9YJ6T6dHSm85zyiunT\"],\"retired\":[\"3RVp9wfedk3ASvneezDPJLcMsJUm\"],\"decisions\":[\"retired(discarded=1)\"]}\n  ✓  1 scripts\\git-epochs-windows\\c1\\windows-scenario.e2e.ts:271:1 › c1 steps 1-8: gate, classifier, registry, flips, unlists, a binary file (10.2m)\n[c1] ok   invoke: \"C:\\\\Users\\\\GordonWoodhull\\\\src\\\\fuck\\\\q2\\\\target\\\\debug\\\\q2 preview --no-browser --data-dir C:\\\\Users\\\\GordonWoodhull\\\\AppData\\\\Local\\\\Temp\\\\c1-data9-2x0PRL --allow-edit --ui editor --git track --host 127.0.0.1 --port 55841 C:\\\\Users\\\\GordonWoodhull\\\\AppData\\\\Local\\\\Temp\\\\c1-hub9-RewtKk\"\n[c1] ok   progress: the mirror holds every file: {\"files\":4005,\"seconds\":0,\"hubAlive\":true}\n[c1] ok   9 ctrl-c helper: {\"status\":0,\"stderr\":\"\"}\n[c1] ok   9 stop the hub during the switch: {\"markerSeen\":true,\"switchCode\":0,\"hubExit\":\"timeout\",\"skippedFlushLogged\":true}\n  ✘  2 scripts\\git-epochs-windows\\c1\\windows-scenario.e2e.ts:457:1 › c1 step 9: stopping the hub during a git switch skips the flush and leaves no conflict markers (3.3m)\n\n\n  1) scripts\\git-epochs-windows\\c1\\windows-scenario.e2e.ts:457:1 › c1 step 9: stopping the hub during a git switch skips the flush and leaves no conflict markers \n\n    Error: the hub exited on Ctrl+C\n\n    expect(received).not.toBe(expected) // Object.is equality\n\n    Expected: not \"timeout\"\n\n      491 |   const log = hub.log();\n      492 |   record('9 stop the hub during the switch', { markerSeen, switchCode, hubExit: code, skippedFlushLogged: /shutdown flush was skipped/.test(log) });\n    > 493 |   expect(code, 'the hub exited on Ctrl+C').not.toBe('timeout');\n          |                                                ^\n      494 |   expect(switchCode).toBe(0);\n      495 |\n      496 |   // restart on the same data dir: no doc holds conflict markers or half-written text, and the disk is the switched tree\n        at C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\c1\\windows-scenario.e2e.ts:493:48\n\n    Error Context: scripts\\git-epochs-windows\\c1\\test-results\\windows-scenario.e2e.ts-c1-f6284--leaves-no-conflict-markers\\error-context.md\n\n  Slow test file: scripts\\git-epochs-windows\\c1\\windows-scenario.e2e.ts (13.5m)\n  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel\n  1 failed\n    scripts\\git-epochs-windows\\c1\\windows-scenario.e2e.ts:457:1 › c1 step 9: stopping the hub during a git switch skips the flush and leaves no conflict markers \n  1 passed (13.5m)",
+      "log": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-165053-GWWIN\\c1-scenario.log"
+    }
+  ]
+}
