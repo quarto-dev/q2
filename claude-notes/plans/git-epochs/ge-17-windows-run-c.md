@@ -158,8 +158,8 @@ say so instead of claiming success.
 ## Notes from the run
 
 **Session 1 (lane A, 2026-11-19).** Branch `ge/17a-windows-fixes` off `feature/git-epochs` (`32478b2b8`). GE-14, GE-15, GE-16, and
-GE-16a were done when the session started. The plan is **not done**: `c1` found a product defect, fixed below, and its
-rerun on Windows is the open step.
+GE-16a were done when the session started. The plan is **not done**: `c1` found two product defects, fixed below; `c1`
+now passes steps 1 to 8 on Windows, and the `a6` failures, `c3`, and the GE-16a leftovers are open.
 
 **Tooling** (`windows/git-epochs`, merged with `feature/git-epochs`, never rebased; temporary, never lands). Items `c1`,
 `c2`, and `c3` in `run.ps1`; the scenario `scripts/git-epochs-windows/c1/windows-scenario.e2e.ts` (a Playwright-driven
@@ -217,10 +217,68 @@ experimental fallback on this machine.
 tests are in the epic\'s own crate and are the ones to explain first; none of the 18 is classified until the
 `main` baseline (`run.ps1 -Only a6` at the merge base) and the failure text are in hand.
 
-**Open (Gordon, on the Windows machine).**
-1. Pull `windows/git-epochs` after the macOS side merges `ge/17a-windows-fixes` into it; run `run.ps1 -Only c1 -Publish`.
-2. `run.ps1 -Only c3 -Publish` (all `a` and `b` items together), then the `a6` baseline on `main`, `b5,b6` with
-   Developer Mode on, and `b4` with `QUARTO_HUB_DEBUG=1`.
-3. Optionally `c2` with `-BuildEmbed` for the cross-client scenarios.
+**Later runs (all `c1` on Windows unless noted).**
 
-**The final statement, end-to-end record, and landing are not written**: they wait for a green `c1`.
+| Run | Base | Result |
+|---|---|---|
+| `20261119-113752` | `67336526b` (backslash-key fix) | FAIL: the mirror peer got "Document is unavailable" (cause not seen: nothing logged the hub output at that point) |
+| `20261119-114524` | `f2cdb1e27` | `a6`: 23 failing (below); `c3` FAIL only because `-SkipBuild` left `a0` and `a6` out |
+| `20261119-140625` | `381085929` (peer-join retry, hub log on failure) | steps 1 to 8 PASS, then FAIL with `UnsafePathError: "d15/f1335.qmd" resolves outside the project root` from the mirror peer |
+| `20261119-143919` | `2229d3f75` (`safeJoin` fix) | steps 1 to 6 PASS, step 7 FAIL: "the saved text reaches the mirror" timed out at 120 s (test ran 7.7 min) |
+| `20261119-150923` | `4f3c6c433` (failure diagnostics) | **PASS** (1 passed, 1 skipped, 12.3 min): steps 1 to 8 green; step 9 not run (below) |
+
+**Second defect found by `c1` (product, fixed).** `vscode-sync-experiment/src/core/safe-path.ts`: `safeJoin` read *any*
+`fs.realpath` failure as "the path does not exist" and walked up to the drive root, so a transient failure under file load
+(the error code was not captured; `EMFILE` or `EBUSY` are the candidates) became "resolves outside the project root" for
+one file of 4,000, which failed the mirror peer. Fix: only `ENOENT` and `ENOTDIR` mean "missing"; anything else is
+rethrown with its own code (commit `f47ec4a7b`). Test, red then green: `safe-path.test.ts` injects `EMFILE` into
+`realpath` and expects that error, not an `UnsafePathError`; it failed with the Windows run\'s own message first. The
+extension suite is 338 passed, 1 skipped; `tsc` is clean. The next occurrence will name the real error code.
+
+**My two new tests failed on Windows (test bug, fixed).** `discovery_indexes_nested_files_with_forward_slash_keys` and
+`sync_file_by_path_finds_a_nested_file_by_its_forward_slash_key` wrote a file named `d00\f.qmd`; on Windows the `\` is a
+separator and `d00` did not exist. Both now create the parent directory first, which is a no-op on Unix (commit
+`2e646f9cc`). The cross-check `cargo clippy --target x86_64-pc-windows-msvc` cannot run on this Mac (the `aws-lc-sys`
+C build fails), so the Windows `a6` rerun is the proof.
+
+**`c1`, what the passing run shows.** On Windows with 4,005 tracked files: the hub starts, the mirror and the clone
+attach; a commit on `main` while a peer edits leaves the edit intact (`moved-forward`); `git switch feature` pauses the
+gate on `index.lock` and then flips (switch 1.4 s); switching back re-attaches the registered docs and disk equals the doc;
+a save and commit inside the debounce window is a commit, not a flip; `git reset --hard` after a dirty edit makes a new doc
+equal to HEAD and the dirty text stays in the retired doc (`retired(discarded=1)`).
+
+**Open on `c1`.**
+- **Step 7 is intermittent** (failed once in three runs on identical code; the run with the diagnostics passed). Unknown
+  whether it is the hub watcher or the mirror. `c1` now records the hub log tail, gate, decisions, and `a.qmd` on the hub
+  disk, the mirror, and the clone when any step fails; rerun `c1` until it either fails with that evidence or has passed
+  several times in a row.
+- **Step 9 (Ctrl+C during a switch) has not run on Windows.** `ctrl-c.ps1` failed with `AttachConsole failed: 6`
+  (`ERROR_INVALID_HANDLE`): `detached: true` on Windows is `DETACHED_PROCESS`, a child with no console (and
+  `CREATE_NEW_PROCESS_GROUP`, which disables Ctrl+C). Tooling commit `18df11e3f` spawns the hub without `detached`
+  (`windowsHide` gives it its own hidden console), and the helper refuses to send the event when the hub shares a console
+  with the test runner. Untested on Windows. Run only step 9 with `$env:C1_GREP='step 9'; run.ps1 -Only c1 -Publish`. If
+  it still cannot deliver, the exit criterion must say step 9 is covered by the GE-3 tests only.
+
+**`a6` on Windows (run `114524`): 23 failing of 1,906.** Mine, now fixed in the tests: the two nested-key tests above.
+Not mine and listed in the first look: `lmd_snapshots` (4), `render_scripts_cli` (2), `render_dry_run`, `convert_positron_cli`,
+`smoke_all` (14 smoke-all failures: `great_tables` not installed, and the `brand-monospace-*` typst files fail their
+regexes), `preview_static_e2e` (2), `render_record_sources_cli`, `route_tests` (2), `import_route`, `book_downloads`,
+`render_scripts_boot`, `live_reexecute`, `storage` double-lock (2). **Possibly ours:**
+`quarto-hub::integration git_epochs::unreachable_canonical_docs_wait_one_cap_not_one_per_doc` (8.8 s against a 1.5 s
+limit; Windows slowness or a real bug, failure text needed). The two `quarto-git-epochs` probe tests from the earlier
+first look did not fail in this run. The tooling items `d1` (the `quarto-hub` failure text) and `d2` (which failures also
+fail on the merge base with `main`) were added to answer this; their first run is in progress.
+
+**Open (Gordon, on the Windows machine).**
+1. `run.ps1 -Only a6,d1,d2 -Publish` (running as this was written).
+2. After step 9 and step 7 are settled: `c1` again, twice.
+3. `run.ps1 -Only c3 -WithTools -Publish`, which needs the `a6` failures classified as known unrelated (`d2`) or fixed.
+4. Still open from GE-16a: `b5,b6` with Developer Mode on, and `b4` with `QUARTO_HUB_DEBUG=1`.
+5. Optionally `c2` with `-BuildEmbed` for the cross-client scenarios.
+
+**Also to do on the macOS side.** Land the `join.e2e (b)` race fix or file it (skip `.quarto-hub-tmp-*`). The
+`ge/17a-windows-fixes` branch must land with the plan: it carries three code commits (`5c0ccc508`, `2e646f9cc`,
+`f47ec4a7b`). The tooling branch `windows/git-epochs` stays unmerged and undeleted (GE-18 deletes it).
+
+**The final statement, end-to-end record, and landing are not written**: they wait for the `a6` classification, `c3`, and
+the step 7 and step 9 outcomes.
