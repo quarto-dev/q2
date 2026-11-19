@@ -256,7 +256,7 @@ body.dragging, body.dragging * { cursor:grabbing !important; user-select:none; }
     <div class="toolbar" id="toolbar"></div>
     <div class="scroller" id="scroller">
       <div class="tips">
-        Figures and callouts are both objects: a box with fields in it (a figure's caption; a callout's title and text). How they look and their controls are settled (figure.html, callouts.html); this compares only how a selection treats them, chosen on the left.
+        Figures and callouts are both objects: a box with fields in it (a figure's caption; a callout's title and text). How they look and their controls are settled (figure.html, callouts.html); this compares only how a selection treats a callout, chosen on the left. A figure is selected whole in both: a selection that crosses its edge takes all of it.
         <h3>Try, in each model</h3>
         <ul>
           <li>Select from the middle of a paragraph into the middle of a caption, or of a callout's text, with Shift and the arrows, a Shift-click or a drag. Then back out again.</li>
@@ -281,10 +281,11 @@ body.dragging, body.dragging * { cursor:grabbing !important; user-select:none; }
 const GROUPS = [
   // The one open question here. Both select text within a field (a line, a
   // caption, a callout's title or its text) as text; they differ where a
-  // selection's ends are in different places.
-  { key: 'model', title: 'Selecting across a figure or callout\'s edge', options: [
-    ['partial', 'Partial', 'A selection can take part of a figure or callout and what\'s outside it, as in ProseMirror editors (Confluence, RStudio\'s visual editor). What it covers of the object is its text, a line or character at a time; a figure\'s image shows selected with any of its caption, since it goes with it. Deleting keeps the object and what\'s left in it; copying takes the object with only that much in it, and pastes as one.'],
-    ['whole', 'Whole objects', 'A selection is in one field, or holds whole objects, as in Notion and Word\'s tables. Crossing a figure or callout\'s edge (into it, or out of it) takes all of it in one step; crossing from a callout\'s title into its text too. Back inside, it\'s text again. Copy and paste take whole objects, or text.'],
+  // selection's ends are in different places. A figure is selected whole in
+  // both (see wholeFromOutside).
+  { key: 'model', title: 'Selecting across a callout\'s edge', options: [
+    ['partial', 'Partial', 'A selection can take part of a callout and what\'s outside it, as in ProseMirror editors (Confluence, RStudio\'s visual editor). What it covers of the callout is its text, a line or character at a time. Deleting keeps the callout and what\'s left in it; copying takes the callout with only that much in it, and pastes as one.'],
+    ['whole', 'Whole objects', 'A selection is in one field, or holds whole objects, as in Notion and Word\'s tables. Crossing a callout\'s edge (into it, or out of it) takes all of it in one step; crossing from its title into its text too. Back inside, it\'s text again. Copy and paste take whole objects, or text.'],
   ]},
 ]
 const opts = Object.fromEntries(GROUPS.map((g) => [g.key, g.options[0][0]]))
@@ -1700,8 +1701,9 @@ function partOf(p) {
 const inCallout = (p, c) => partOf(p)?.c === c
 // Selected whole: from outside it in, as opts.select says (a collapsed one
 // always, its text being out of sight; and an object with no text in it at
-// all, a figure with no caption).
-const wholeFromOutside = (c) => opts.select === 'whole' || !bodyShown(c) || !unitsOf(doc.indexOf(c)).length
+// all). A figure always, in either model: no one wants an image with part of
+// its caption (only inside its caption is its text selected as text).
+const wholeFromOutside = (c) => opts.select === 'whole' || isFigure(c) || !bodyShown(c) || !unitsOf(doc.indexOf(c)).length
 
 /** What the selection covers: [start, end]. */
 function effective(a = sel.anchor, f = sel.focus) {
@@ -2035,10 +2037,10 @@ function qmdOf([s, e]) {
       return
     }
     if (allOf(i, s, e)) return parts.push(objQmd(b))
+    // A figure's only ever selected whole (or within its caption, as text).
+    if (isFigure(b)) return
     const us = unitsOf(i)
     const slice = (u) => { if (!us.includes(u)) return ''; const r = cover(u, s, e); return r ? unitText(u).slice(...r) : '' }
-    // A figure partly covered: the figure, with what of its caption is.
-    if (isFigure(b)) { const title = slice('t:' + b.k); if (title) parts.push(figureQmd({ ...b, title })); return }
     const title = slice('t:' + b.k), body = b.body.map((p) => ({ text: slice('p:' + p.k) })).filter((p) => p.text)
     if (title || body.length) parts.push(calloutQmd({ ...b, title, body }))
   })
@@ -2069,8 +2071,6 @@ function renderSelection() {
       } else paint(el.getBoundingClientRect(), 'sel-box sel-block')
       continue
     }
-    // A figure's image, with part of its caption: the image alone.
-    if (c.image != null) { paint(editor.children[c.image].querySelector('.frame').getBoundingClientRect(), 'sel-box sel-block'); continue }
     const el = unitEl(c.u), t = el.firstChild
     if (c.from < c.to && t?.nodeType === 3) {
       const rg = document.createRange()
@@ -2089,13 +2089,6 @@ function coverage(s, e) {
   const out = []
   doc.forEach((b, i) => {
     if (isObj(b) && blockIn(i, s, e)) return out.push({ block: i })
-    // A figure partly covered, from outside it: its image goes with what's
-    // covered of its caption (copied, moved, as the figure), so it's shown
-    // selected too. Not from inside its caption, which is only text.
-    if (isFigure(b) && !(partOf(s)?.c === b && partOf(e)?.c === b)) {
-      const r = unitsOf(i).length ? cover('t:' + b.k, s, e) : null
-      if (r && r[0] < r[1]) out.push({ image: i })
-    }
     for (const u of unitsOf(i)) {
       const r = cover(u, s, e)
       // Its line break, shown selected (a sliver past its end) only where
@@ -2294,13 +2287,12 @@ function sliceOf([s, e]) {
     if (blockIn(i, s, e)) return pieces.push(copyOf(b))
     const lines = unitsOf(i).map((u) => { const r = cover(u, s, e); return r && { u, text: unitText(u).slice(...r) } }).filter(Boolean)
     if (!lines.length) return
-    // Lines in one callout, the selection in it: lines. Partly covered
-    // otherwise: a callout with what of it's covered (as copy gives it).
+    // Lines in one callout (or a caption), the selection in it: lines.
+    // Partly covered otherwise: a callout with what of it's covered (as
+    // copy gives it). A figure never is: it's always selected whole.
     if (partOf(s)?.c === b && partOf(e)?.c === b) return lines.forEach((l) => pieces.push({ k: key(), tag: 'p', text: l.text }))
+    if (isFigure(b)) return
     const title = lines.find((l) => l.u.startsWith('t:'))?.text ?? ''
-    // A figure partly covered: the figure, with what of its caption is.
-    // (With none of its caption, none of it: as copy, and as shown.)
-    if (isFigure(b)) return title && pieces.push({ ...copyOf(b), k: key(), title })
     const body = lines.filter((l) => l.u.startsWith('p:')).map((l) => ({ k: key(), tag: 'p', text: l.text }))
     pieces.push({ ...copyOf(b), k: key(), title, body: body.length ? body : [para('')] })
   })
