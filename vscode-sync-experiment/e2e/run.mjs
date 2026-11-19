@@ -16,7 +16,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const cli = join(dirname(require.resolve('@playwright/test/package.json')), 'cli.js');
 const env = { ...process.env, NODE_OPTIONS: [process.env.NODE_OPTIONS, '--conditions=source'].filter(Boolean).join(' ') };
-const result = spawnSync(process.execPath, [cli, 'test', '--config', join(here, 'playwright.config.ts'), ...process.argv.slice(2)], {
+// `--timing` selects the checkout-reload timing test (its own config; see tests/checkout-reload.timing.ts).
+const args = process.argv.slice(2);
+const timing = args.includes('--timing');
+const config = join(here, timing ? 'playwright.timing.config.ts' : 'playwright.config.ts');
+const result = spawnSync(process.execPath, [cli, 'test', '--config', config, ...args.filter((a) => a !== '--timing')], {
   stdio: 'inherit',
   env,
 });

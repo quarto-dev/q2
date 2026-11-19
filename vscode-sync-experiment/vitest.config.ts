@@ -8,6 +8,8 @@ export default defineConfig({
   },
   // Workspace deps compile from source, as in esbuild.mjs: the unit tests need
   // no built dist/ of the other packages (`ssr` covers the server-side module graph).
-  resolve: { conditions: ['source'] },
+  // The git-epochs package imports the full `@automerge/automerge`; use the slim entry the core
+  // initializes (one wasm instance, as in the bundle; see esbuild.mjs).
+  resolve: { conditions: ['source'], alias: [{ find: /^@automerge\/automerge$/, replacement: '@automerge/automerge/slim' }] },
   ssr: { resolve: { conditions: ['source'], externalConditions: ['source'] } },
 });

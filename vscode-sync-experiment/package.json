@@ -54,7 +54,8 @@
     "clean": "rm -rf dist *.vsix",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "node e2e/run.mjs"
+    "test:e2e": "node e2e/run.mjs",
+    "test:e2e:timing": "node e2e/run.mjs --timing"
   },
   "dependencies": {
     "@automerge/automerge": "^3.5.0",

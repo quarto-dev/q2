@@ -114,7 +114,10 @@ async function startProject(root: string, context: vscode.ExtensionContext): Pro
     if (!meta) return;
     await ensureWasm();
     const host = { log, watcher: new VscodeFileWatcher(root), buffers: new VscodeBufferHost(), notifier: new VscodeNotifier() };
-    const sync = new ProjectSync(root, meta, getIdentity(context), host);
+    // QUARTO_HUB_TEST_* are test-only seams for the Playwright tests (GE-9): shorter waits.
+    const flipWaitMs = Number(process.env.QUARTO_HUB_TEST_FLIP_WAIT_MS) || undefined;
+    const swapTimeoutMs = Number(process.env.QUARTO_HUB_TEST_SWAP_TIMEOUT_MS) || undefined;
+    const sync = new ProjectSync(root, meta, getIdentity(context), host, { flipWaitMs, swapTimeoutMs });
     projects.set(root, sync);
     await sync.start();
   } catch (err) {

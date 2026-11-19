@@ -4,4 +4,7 @@
  */
 export { Seeder, startHub, tempDir, waitFor, readText, sleep } from '../../src/core/test-support';
 export { HeadlessPeer } from '../../src/headless/peer';
+export { HeadlessOwner } from '../../src/headless/owner';
+export { createProjectFolder } from '../../src/core/create-folder';
+export { readProjectMeta, writeProjectMeta } from '../../src/core/meta';
 export { ensureWasm } from '../../src/core/wasm';

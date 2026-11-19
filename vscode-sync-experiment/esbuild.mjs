@@ -16,7 +16,24 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const watch = process.argv.includes('--watch');
 
+/**
+ * `@quarto/quarto-git-epochs` imports the full `@automerge/automerge` (its own tests and the
+ * browser clients want the auto-initialized wasm). In this bundle that entry would read a
+ * `.wasm` file next to the bundle at load time, which does not exist, and would be a second
+ * wasm instance besides the slim one `ensureWasm` initializes. Send the bare specifier to the
+ * slim entry so the whole bundle shares one instance (GE-9).
+ */
+const slimAutomerge = {
+  name: 'slim-automerge',
+  setup(build) {
+    build.onResolve({ filter: /^@automerge\/automerge$/ }, (args) =>
+      build.resolve('@automerge/automerge/slim', { kind: args.kind, resolveDir: args.resolveDir }),
+    );
+  },
+};
+
 const options = {
+  plugins: [slimAutomerge],
   entryPoints: [join(here, 'src/extension.ts')],
   outfile: join(here, 'dist/extension.js'),
   bundle: true,

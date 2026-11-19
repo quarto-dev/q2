@@ -133,6 +133,14 @@ export class HeadlessOwner {
     });
   }
 
+  /** Send an ephemeral message on the doc currently listed at `path`, as another peer would. */
+  broadcast(path: string, message: unknown): void {
+    const docId = this.docIdOf(path);
+    const handle = docId ? this.docs.get(docId) : undefined;
+    if (!handle) throw new Error(`owner holds no doc for ${path}`);
+    handle.broadcast(message);
+  }
+
   /** Edit the text of the doc currently listed at `path` (what a browser user typing does). */
   editText(path: string, text: string): void {
     const docId = this.docIdOf(path);

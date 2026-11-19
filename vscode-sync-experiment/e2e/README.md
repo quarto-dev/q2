@@ -56,6 +56,23 @@ tests, the VS Code layer (not the core) reads `QUARTO_HUB_TEST_SYNC_SERVER` and 
 it as the server. Users see no change; GE-11 replaces it with the real per-folder
 binding.
 
+## GE-9 tests and the timing script
+
+`tests/follower-modes.e2e.ts` runs the mirror and editor-only modes in a real window against the
+test hub, with a headless owner (`src/headless/owner.ts`) standing in for the project owner. They
+read the disk, the editor text, the status bar, and the notification toasts. Every test in it is a
+candidate for the permanent subset (GE-14 decides).
+
+`tests/checkout-reload.timing.ts` is the permanent form of Gate 0 item 12: after `git switch`
+across a few thousand files, how long after `index.lock` is released does VS Code reload the last
+open buffer? It has its own script, `npm run test:e2e:timing -w quarto-hub-vscode`, because it
+fails by design when the machine is slow, and it prints the measured gap. It is not a permanent
+subset candidate. `QUARTO_HUB_TIMING_FILES` changes the file count (default 3000).
+
+Two more test-only environment variables, read by the VS Code layer only: `QUARTO_HUB_TEST_FLIP_WAIT_MS`
+(editor-only wait for the hub's flip, default 10 000) and `QUARTO_HUB_TEST_SWAP_TIMEOUT_MS` (a follower
+swap's load timeout, default 5000).
+
 ## CI shape
 
 `.github/workflows/vscode-extension-e2e.yml` runs the suite on Linux under

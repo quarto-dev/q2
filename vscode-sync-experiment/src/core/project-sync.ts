@@ -58,6 +58,8 @@ export interface SyncOptions {
    * directory (no gate when it is not inside a git repository) and the real clock.
    */
   gate?: { probe: ControllerProbe; clock: GateClock; flipWaitMs?: number };
+  /** Editor-only: how long to wait for the hub's flip after the gate reopens when `gate` is not given (G32: 10 000). */
+  flipWaitMs?: number;
 }
 
 export class ProjectSync {
@@ -369,7 +371,7 @@ export class ProjectSync {
       clock: gate.clock,
       notifier: this.host.notifier,
       log: (line) => this.log.appendLine(line),
-      flipWaitMs: gate.flipWaitMs,
+      flipWaitMs: gate.flipWaitMs ?? this.options.flipWaitMs,
       inspect: () => this.inspectBuffers(),
       reconcile: () => this.bound.forEach((b) => b.reconcile?.()),
     });
