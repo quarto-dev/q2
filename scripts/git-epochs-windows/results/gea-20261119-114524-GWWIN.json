@@ -1,0 +1,290 @@
+﻿{
+    "run_id":  "20261119-114524-GWWIN",
+    "branch":  "windows/git-epochs",
+    "commit":  "f2cdb1e27160718f34f73f5cf8fb8158c5f72233",
+    "base":  "current tip of origin/windows/git-epochs",
+    "host_triple":  "x86_64-pc-windows-msvc",
+    "os":  "Microsoft Windows 11 Pro",
+    "git":  "git version 2.47.1.windows.1",
+    "node":  "v24.21.0",
+    "autocrlf":  "true",
+    "longpaths":  "(unset)",
+    "tools":  [
+                  {
+                      "tool":  "git",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Git.Git   (Git for Windows; the probe is tested against it)"
+                  },
+                  {
+                      "tool":  "rustc",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Rustlang.Rustup   (then: rustup default stable-x86_64-pc-windows-msvc)"
+                  },
+                  {
+                      "tool":  "cargo",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "comes with rustup"
+                  },
+                  {
+                      "tool":  "cargo-nextest",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "cargo install cargo-nextest --locked"
+                  },
+                  {
+                      "tool":  "uv",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install astral-sh.uv   (runs make_large_tree.py and extract_failures.py)"
+                  },
+                  {
+                      "tool":  "nasm",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install NASM.NASM   (the aws-lc-sys crates in quarto-hub need it)"
+                  },
+                  {
+                      "tool":  "cmake",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Kitware.CMake   (the aws-lc-sys crates in quarto-hub need it)"
+                  },
+                  {
+                      "tool":  "link",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "Visual Studio Build Tools, \"Desktop development with C++\" (cargo finds link.exe itself, so absent from PATH is normal; install only if the build says \"linker not found\")"
+                  },
+                  {
+                      "tool":  "node",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "fnm/nvm; Node major per .nvmrc (items b1 to b7)"
+                  },
+                  {
+                      "tool":  "npm",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "comes with Node"
+                  },
+                  {
+                      "tool":  "jj",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "optional: winget install jj-vcs.jj (the jj scenarios of b1 skip without it)"
+                  }
+              ],
+    "items":  [
+                  {
+                      "id":  "a0",
+                      "catalog":  "",
+                      "title":  "build the test binaries for the four crates",
+                      "status":  "PASS",
+                      "reason":  "built",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "",
+                      "does_not_prove":  "",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\a0-build.log"
+                  },
+                  {
+                      "id":  "a1",
+                      "catalog":  "W1",
+                      "title":  "git probe on Git for Windows",
+                      "status":  "PASS",
+                      "reason":  "21 tests ran and passed",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "rev-parse --git-path output with a drive letter (C:/...) and from a linked worktree parses; ls-tree -r -z with a project prefix returns the right paths; symlink entries (mode 120000) are filtered; cat-file --batch frames binary content correctly; reflog subjects parse.",
+                      "does_not_prove":  "Any Git build other than Git for Windows, or colocated jj.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\a1.log"
+                  },
+                  {
+                      "id":  "a2",
+                      "catalog":  "W2",
+                      "title":  "the gate during a real git switch of a 4,000-file tree",
+                      "status":  "PASS",
+                      "reason":  "3 tests ran and passed",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The controller reports the gate closed for every real marker git creates during a switch of a large tree, and releases it afterward (six switches). The skip-never-delete behavior for an unreadable file is a hub behavior, covered by a5.",
+                      "does_not_prove":  "Antivirus or OneDrive interplay, or timings on a cold cache.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\a2.log"
+                  },
+                  {
+                      "id":  "a3",
+                      "catalog":  "W3",
+                      "title":  "core.autocrlf=true: classifier and arrival comparisons",
+                      "status":  "PASS",
+                      "reason":  "17 tests ran and passed",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "A CRLF-checked-out file compares equal to its blob content after normalization, through the classifier and the arrival comparison, for text; binaries compare by bytes.",
+                      "does_not_prove":  ".gitattributes filters (LFS, ident), or the CRLF case if autocrlf was not true (the script marks that caveat).",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\a3.log"
+                  },
+                  {
+                      "id":  "a4",
+                      "catalog":  "W4",
+                      "title":  "paths and keys: registry keys and hub path_keys",
+                      "status":  "PASS",
+                      "reason":  "16 tests ran and passed",
+                      "caveat":  "core.longpaths is (unset), not true: git operations on paths over 260 characters may fail for reasons unrelated to the code.",
+                      "known_unrelated":  false,
+                      "proves":  "Registry keys use /; a case-insensitive collision of two keys falls back to ordinary sync; drive letters, UNC prefixes, and long paths (with core.longpaths) round-trip.",
+                      "does_not_prove":  "NTFS 8.3 short names or Unicode normalization differences.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\a4.log"
+                  },
+                  {
+                      "id":  "a5",
+                      "catalog":  "W5",
+                      "title":  "hub gate and checkpoint integration with a real repo",
+                      "status":  "PASS",
+                      "reason":  "26 tests ran and passed",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The gate inside sync_all holds with a real repo; the checkpoint is written before the pointer flips; no code path renames a directory while it holds a handle in it; the unreadable-file test (an injected PermissionDenied, a skip and never a delete) passes on Windows. The injected error stands in for a real sharing violation; a real one needs a second process holding the file open.",
+                      "does_not_prove":  "Network filesystems or Dev Drive behavior.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\a5.log"
+                  },
+                  {
+                      "id":  "a6-clippy",
+                      "catalog":  "W10",
+                      "title":  "clippy -D warnings, four crates",
+                      "status":  "PASS",
+                      "reason":  "clean",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The epic\u0027s own gate is green on the Windows host target.",
+                      "does_not_prove":  "Tests that need pandoc or typst unless -WithTools was given. Failures that also appear in the macOS baseline are listed as known unrelated in the plan notes.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\a6-clippy.log"
+                  },
+                  {
+                      "id":  "a6-nextest",
+                      "catalog":  "W10",
+                      "title":  "nextest, four crates",
+                      "status":  "FAIL",
+                      "reason":  "23 failing: quarto::bin/q2 commands::render_dry_run::tests::would_render_lines_are_project_relative, quarto::integration convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes, quarto::integration lmd_snapshots::lmd_blog_project_renders_as_snapshotted, quarto::integration lmd_snapshots::lmd_fixtures_render_as_snapshotted, quarto::integration lmd_snapshots::lmd_html_fixtures_render_as_snapshotted, quarto::integration lmd_snapshots::lmd_project_renders_as_snapshotted, quarto::integration preview_static_e2e::cli_flags_override_project_preview_keys, quarto::integration preview_static_e2e::project_preview_keys_set_the_defaults_and_unsupported_keys_warn, quarto::integration render_record_sources_cli::the_key_in_front_matter_works_like_dash_m, quarto::integration render_scripts_cli::explicit_interpreter_command_line_with_args, quarto::integration render_scripts_cli::list_form_runs_scripts_in_order, quarto::integration smoke_all::smoke_all, quarto-hub context::tests::discovery_indexes_nested_files_with_forward_slash_keys, quarto-hub storage::tests::test_storage_manager_prevents_double_lock, quarto-hub storage::tests::test_storage_manager_standalone_prevents_double_lock, quarto-hub sync::tests::sync_file_by_path_finds_a_nested_file_by_its_forward_slash_key, quarto-hub::integration git_epochs::unreachable_canonical_docs_wait_one_cap_not_one_per_doc, quarto-preview import_route::tests::every_fixture_reads_to_the_recorded_json_and_status, quarto-preview route_tests::a_book_request_reaches_the_book_seam_with_every_capture, quarto-preview route_tests::pdf_is_inline_with_stats_and_the_typst_pdf_target, quarto-preview::integration book_downloads::a_chapters_recorded_plot_reaches_the_book, quarto-preview::integration live_reexecute::the_cache_does_not_answer_a_re_execute_under_engine_only_sources, quarto-preview::integration render_scripts_boot::pre_render_scripts_run_once_at_boot",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The epic\u0027s own gate is green on the Windows host target.",
+                      "does_not_prove":  "Tests that need pandoc or typst unless -WithTools was given. Failures that also appear in the macOS baseline are listed as known unrelated in the plan notes.",
+                      "output_tail":  "        typst [render]: Error: Execution failed in jupyter: code cell at C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\margin-layout\\margin-table-great-tables-shift.qmd:39:17 raised ModuleNotFoundError: No module named \u0027great_tables\u0027\n    Use `#| error: true` on the cell (or `execute: error: true` in the document metadata) to show the error in the output instead.\n\n\n      typst\\margin-layout\\margin-table-great-tables.qmd:\n        typst [render]: Error: Execution failed in jupyter: code cell at C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\margin-layout\\margin-table-great-tables.qmd:44:17 raised ModuleNotFoundError: No module named \u0027great_tables\u0027\n    Use `#| error: true` on the cell (or `execute: error: true` in the document metadata) to show the error in the output instead.\n\n\n      typst\\syntax-highlighting\\brand-monospace-block\\brand-monospace-block.qmd:\n        typst [ensureTypstFileRegexMatches]: 3 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-block\\brand-monospace-block.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 400, size: 10pt, fill: rgb\\(\"#cdd6f4\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set block\\(fill: rgb\\(\"#1e1e2e\"\\)\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.85em\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-block-no-bg\\brand-monospace-block-no-bg.qmd:\n        typst [ensureTypstFileRegexMatches]: 2 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-block-no-bg\\brand-monospace-block-no-bg.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 500, size: 10pt, fill: rgb\\(\"#2d3748\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.75em\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-idiomatic\\brand-monospace-idiomatic.qmd:\n        typst [ensureTypstFileRegexMatches]: 5 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-idiomatic\\brand-monospace-idiomatic.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 400, size: 11pt, fill: rgb\\(\"#1a365d\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set block\\(fill: rgb\\(\"#f0f4f8\"\\)\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.75em\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): set text\\(weight: 600, size: 0\\.9em, fill: rgb\\(\"#9b2c2c\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): content =\u003e highlight\\(fill: rgb\\(\"#fed7d7\"\\), content\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-inheritance\\brand-monospace-inheritance.qmd:\n        typst [ensureTypstFileRegexMatches]: 6 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-inheritance\\brand-monospace-inheritance.typ:\n      - Required pattern not found: codefont: \\(\"Fira Code\",\\),$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 400, size: 0\\.85em, fill: rgb\\(\"#2d3748\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set block\\(fill: rgb\\(\"#edf2f7\"\\)\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.75em\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): set text\\(weight: 700, size: 0\\.85em, fill: rgb\\(\"#2d3748\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): content =\u003e highlight\\(fill: rgb\\(\"#fefcbf\"\\), content\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-inline\\brand-monospace-inline.qmd:\n        typst [ensureTypstFileRegexMatches]: 2 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-inline\\brand-monospace-inline.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): set text\\(weight: 600, size: 0\\.85em, fill: rgb\\(\"#664d03\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): content =\u003e highlight\\(fill: rgb\\(\"#fff3cd\"\\), content\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-with-theme\\brand-monospace-with-theme.qmd:\n        typst [ensureTypstFileRegexMatches]: 5 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-with-theme\\brand-monospace-with-theme.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 400, size: 9pt, fill: rgb\\(\"#f8f8f2\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set block\\(fill: rgb\\(\"#282a36\"\\)\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.65em\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): set text\\(weight: 500, fill: rgb\\(\"#6c3483\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): content =\u003e highlight\\(fill: rgb\\(\"#e8e0f0\"\\), content\\)$\n\n    thread \u0027smoke_all::smoke_all\u0027 (4188) panicked at crates\\quarto\\tests\\integration\\smoke_all.rs:141:9:\n    14 smoke-all test(s) failed (see output above)\n    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n────────────\n     Summary [ 585.437s] 1906 tests run: 1883 passed (4 slow, 1 leaky), 23 failed, 1 skipped\n        FAIL [   3.117s] ( 141/1906) quarto::integration convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes\n        FAIL [  11.363s] ( 264/1906) quarto::integration lmd_snapshots::lmd_blog_project_renders_as_snapshotted\n        FAIL [  12.007s] ( 266/1906) quarto::integration lmd_snapshots::lmd_fixtures_render_as_snapshotted\n        FAIL [  11.221s] ( 267/1906) quarto::integration lmd_snapshots::lmd_html_fixtures_render_as_snapshotted\n        FAIL [  11.552s] ( 269/1906) quarto::integration lmd_snapshots::lmd_project_renders_as_snapshotted\n        FAIL [   0.520s] ( 436/1906) quarto::integration render_record_sources_cli::the_key_in_front_matter_works_like_dash_m\n        FAIL [  11.624s] ( 459/1906) quarto::integration render_scripts_cli::explicit_interpreter_command_line_with_args\n        FAIL [  11.567s] ( 473/1906) quarto::integration render_scripts_cli::list_form_runs_scripts_in_order\n        FAIL [   0.220s] ( 824/1906) quarto::bin/q2 commands::render_dry_run::tests::would_render_lines_are_project_relative\n        FAIL [   0.381s] (1095/1906) quarto-hub context::tests::discovery_indexes_nested_files_with_forward_slash_keys\n        FAIL [   0.442s] (1266/1906) quarto-hub storage::tests::test_storage_manager_prevents_double_lock\n        FAIL [   0.666s] (1272/1906) quarto-hub storage::tests::test_storage_manager_standalone_prevents_double_lock\n        FAIL [   0.306s] (1293/1906) quarto-hub sync::tests::sync_file_by_path_finds_a_nested_file_by_its_forward_slash_key\n        FAIL [   8.826s] (1453/1906) quarto-hub::integration git_epochs::unreachable_canonical_docs_wait_one_cap_not_one_per_doc\n        FAIL [   0.701s] (1657/1906) quarto-preview import_route::tests::every_fixture_reads_to_the_recorded_json_and_status\n        FAIL [   2.696s] (1673/1906) quarto-preview route_tests::a_book_request_reaches_the_book_seam_with_every_capture\n        FAIL [   2.314s] (1699/1906) quarto-preview route_tests::pdf_is_inline_with_stats_and_the_typst_pdf_target\n        FAIL [  25.646s] (1784/1906) quarto-preview::integration book_downloads::a_chapters_recorded_plot_reaches_the_book\n        FAIL [  27.058s] (1794/1906) quarto::integration preview_static_e2e::cli_flags_override_project_preview_keys\n        FAIL [   5.144s] (1872/1906) quarto-preview::integration render_scripts_boot::pre_render_scripts_run_once_at_boot\n        FAIL [   0.922s] (1892/1906) quarto::integration preview_static_e2e::project_preview_keys_set_the_defaults_and_unsupported_keys_warn\n        FAIL [  20.539s] (1905/1906) quarto-preview::integration live_reexecute::the_cache_does_not_answer_a_re_execute_under_engine_only_sources\n        FAIL [ 414.675s] (1906/1906) quarto::integration smoke_all::smoke_all\nerror: test run failed",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\a6-nextest.log"
+                  },
+                  {
+                      "id":  "b7",
+                      "catalog":  "",
+                      "title":  "clean root install, extension typecheck and bundle, ts-packages builds",
+                      "status":  "PASS",
+                      "reason":  "0 tests passed, 0 skipped",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "npm ci succeeded at the pinned Node; the extension typechecks (including e2e), its esbuild bundle builds, and every ts-packages workspace builds on Windows.",
+                      "does_not_prove":  "vsce package; installing a .vsix; the hub-client and preview-SPA builds (they need the WASM and a pandoc download).",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\b7-build-ts-packages.log"
+                  },
+                  {
+                      "id":  "b1",
+                      "catalog":  "W6",
+                      "title":  "git probe, controller, and scenarios of the TypeScript package on Git for Windows",
+                      "status":  "PASS",
+                      "reason":  "204 tests passed, 1 skipped",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The probe parses Git for Windows output (C:/... from --git-path, ls-tree -z quoting, reflog); the controller sees real index.lock and rebase-merge markers; the shared scenario step lists run against real repositories in %TEMP%. jj scenarios skip when jj is absent.",
+                      "does_not_prove":  "Other Git builds; jj on Windows unless it is installed.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\b1-package.log"
+                  },
+                  {
+                      "id":  "b2",
+                      "catalog":  "W4",
+                      "title":  "keys and paths: registry keys, ignore rules, safeJoin NTFS forms, junction, long path",
+                      "status":  "PASS",
+                      "reason":  "115 tests passed, 0 skipped",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The TypeScript key normalization, ignore rules, and safeJoin hold for Windows path forms: / keys, drive letters and UNC prefixes, case collisions, nested .quarto-hub and .git segments, .git. and .git::$INDEX_ALLOCATION, a directory junction pointing outside the root, a path over 260 characters, and (where the volume has 8.3 names) GIT~1.",
+                      "does_not_prove":  "Filesystems other than NTFS; Dev Drive or OneDrive behavior. The 8.3 row skips on a volume with short names disabled.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\b2-extension.log"
+                  },
+                  {
+                      "id":  "b3",
+                      "catalog":  "W3",
+                      "title":  "core.autocrlf=true: content rule, arrival, and the dirty check",
+                      "status":  "PASS",
+                      "reason":  "91 tests passed, 0 skipped",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "A CRLF checkout does not look dirty, and comparisons normalize as the macOS tests assume (the autocrlf-checkout scenario, arrival step 3, the origination dirty check).",
+                      "does_not_prove":  ".gitattributes filters (LFS, ident); autocrlf=input.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\b3-extension.log"
+                  },
+                  {
+                      "id":  "b4",
+                      "catalog":  "",
+                      "title":  "extension core engine and headless peer: watcher, disk writes, rebind, atomic record write",
+                      "status":  "PASS",
+                      "reason":  "131 tests passed, 0 skipped",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The engine runs on Windows: the injected watcher, writes to disk, rebind deleting the Automerge store after the repo is shut down (no EBUSY), and the atomic write of git-epochs.json retrying a rename refused with EPERM or EBUSY.",
+                      "does_not_prove":  "VS Code\u0027s own file watcher; a real scanner or watcher holding the file (the EPERM test injects the error).",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\b4-core.log"
+                  },
+                  {
+                      "id":  "b5",
+                      "catalog":  "W7",
+                      "title":  "Join: q2 spawn through a stub q2.cmd, readiness, stdin close, tree kill, ticket hygiene",
+                      "status":  "PASS",
+                      "reason":  "57 tests passed, 1 skipped",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "Spawn and kill semantics on Windows: the ticket in argv, a free port, the readiness poll of the stub /health, stdin close ending the stub, kill of the whole process tree on Leave, stderr surfaced, no ticket in any log; .cmd is spawned through a shell.",
+                      "does_not_prove":  "The iroh tunnel across real networks. The optional real q2 preview --share host and --join guest is not scripted: run it by hand if the network allows.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\b5-join.log"
+                  },
+                  {
+                      "id":  "b6",
+                      "catalog":  "",
+                      "title":  "origination: offline publish, resume, second peer reads every file",
+                      "status":  "PASS",
+                      "reason":  "63 tests passed, 1 skipped",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "Publish order and resume on NTFS paths and Node file handles: docs and registry entries exist before the connect, the share link only after the heads are confirmed, an interrupted publish resumes from local storage, and a second peer reads every file.",
+                      "does_not_prove":  "An out-of-process q2 hub (these tests run an in-process hub); the public server; very large uploads.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-114524-GWWIN\\b6-origination.log"
+                  },
+                  {
+                      "id":  "c3",
+                      "catalog":  "",
+                      "title":  "every a and b item together on the final code",
+                      "status":  "FAIL",
+                      "reason":  "items did not run: a6 (with -SkipBuild a0 is absent)",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "Nothing regressed on Windows after the fix plans: every a and b item ran in one invocation on the final code and is green together.",
+                      "does_not_prove":  "Anything the items did not already cover.",
+                      "output_tail":  "",
+                      "log":  ""
+                  }
+              ]
+}
