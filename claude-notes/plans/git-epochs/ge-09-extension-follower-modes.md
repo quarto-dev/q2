@@ -56,9 +56,10 @@ sent to the old doc as an edit.
   `BufferHost`, `Notifier`), a thin VS Code layer, a headless peer, and a Playwright harness with a local test hub.
   GE-6 provides `createSwapCoordinator`, `NoticeAggregator`, and the moved message type in
   `@quarto/quarto-git-epochs`. GE-5 provides the gate (the marker probe and the quiet window) in the same package.
-- **No hub plan is needed here.** A headless peer from GE-8 plays the owner against the test hub: it writes
+- **No hub plan is needed here.** A headless owner plays the owner against the test hub: it writes
   `files[path]` flips with a plain Automerge change on the index and registers docs with the GE-5 registry
-  operations.
+  operations. GE-8\'s headless peer has only `join` and `publish`, so this plan builds the owner side (see the
+  checklist); GE-12, GE-14, and GE-17 reuse it.
 
 ## Test specifications
 
@@ -82,8 +83,8 @@ Written first and seen failing.
 6. **Editor-only gate** (fake probe and clock): while a marker exists no outbound edit is sent from any bound buffer;
    after the markers clear the quiet window must pass; if every bound buffer equals its current doc, editing resumes
    at once (a plain commit); otherwise it waits up to 10 s for a flip, rebinds on a flip, and on timeout stays
-   suspended and warns; it never writes the old doc\'s text into the buffer; one "Edits made during a git operation were
-   not kept." warning per gate episode appears when a bound buffer was dirty as the gate closed, and none when no
+   suspended and warns; it never writes the old doc\'s text into the buffer; one `GIT_OP_EDITS_DROPPED` warning (GE-6\'s
+   constant) per gate episode appears when a bound buffer was dirty as the gate closed, and none when no
    buffer was dirty.
 7. **Moved message:** a swap that completes sends it on the old handle before the old Binding is disposed; receiving
    it shows the transient status text naming the sender, and a missing or malformed message is ignored.
@@ -98,6 +99,11 @@ Written first and seen failing.
   `meta.ts`), default `mirror` when absent, and write `mode: 'mirror'` in `createProjectFolder` (today at
   `project.ts:123`). Implement the Binding mirror check in `core/text-binding.ts`; the pre-edit comparison uses the
   Binding\'s own mirror of the doc text, updated after every remote apply and every accepted local edit.
+- [ ] **Headless owner.** Extend `src/headless/peer.ts` with the owner operations, `flipPath(path, newDocId)`,
+  `removePath(path)`, `relistPath(path, docId)`, and `createDocFor(path, text)` (each one index change, so a batch
+  `applyBatch({ flips, removals, relists, additions })` is also one change), built with a plain Automerge change on the
+  index and the GE-5 registry operations (register, move forward, retire). Test it against the test hub before spec 3
+  uses it (a flip written by the owner reaches a second client). The owner is test code; GE-12 builds the real one.
 - [ ] Write test specs 3 and 4 against a headless owner. Implement the **follower** in `src/core/follower.ts`
   with `createSwapCoordinator` from the GE-6 package:
   `currentDocId(path)` from the tracked handles; `loadDoc` through the engine\'s `findDoc` with the abort signal;
@@ -122,7 +128,7 @@ Written first and seen failing.
 - [ ] Resume rule: after the markers clear and the 1 s quiet window passes, compare each bound buffer with its
   current doc text; if all are equal, resume; otherwise wait up to 10 s for `indexChanged` to rebind (the swap
   coordinator\'s `done` ends the wait); on timeout show `Notifier.warn` with the actions "Keep waiting" (re-arm
-  10 s) and "Dismiss", and stay suspended. A buffer that still differs from the new doc after the rebind is replaced
+  10 s) and "Dismiss" (the `EDITOR_ONLY_NO_FLIP` constant from GE-6), and stay suspended. A buffer that still differs from the new doc after the rebind is replaced
   by the doc text, as `Binding` already does at bind time; keystrokes typed while the gate was closed are dropped
   (detail chosen by the plan author; confirm), and when a bound buffer was dirty at the moment the gate closed one
   `Notifier.warn` per gate episode says "Edits made during a git operation were not kept." (G20). Timeouts are options of the core so tests can shorten them.
@@ -146,7 +152,9 @@ Written first and seen failing.
   quiet window after `index.lock` is released (the test records the measured gap and fails above the window, which
   triggers the experimental fallback in G20).
 - [ ] Mark which of these Playwright tests are candidates for the permanent subset (no network, deterministic) in a
-  comment at the top of each file; GE-14 decides.
+  comment at the top of each file; GE-14 decides. The timing test is not a candidate (it fails by design when the
+  machine is slow); give it its own script, `test:e2e:timing`, run locally and by GE-17\'s `c2` on Windows, where its
+  measured gap is recorded.
 - [ ] Reconcile this checklist with what landed, update "Notes from the run", and commit.
 
 ## Gates

@@ -24,7 +24,8 @@ summary and a pre-push recommendation. Gordon decides when to push and which hel
   conflicts with `--join`, `--static`, and `--hub-url`; `track` means this preview owns the project\'s pointer.
 - **G35:** the accepted gaps are stated in the docs, not hidden: the hub restart gap, a stale pointer while the owner is
   offline, extension builds older than this epic overwriting a working tree on a flip, two tips after `git add -p`,
-  `git stash pop` and `git restore` still looking like edits, nested repos and submodules, two sync agents on one
+  `git stash pop` and `git restore` still looking like edits, `jj edit` onto another commit under colocated jj
+  changing the tree with no trigger, nested repos and submodules, two sync agents on one
   directory, unknown retention on the public server, file deletions on mirror folders of older builds, arrival under
   colocated jj being unsupported, and peers staying split after a `reset --hard` or `git stash` by one peer.
 - **G13, G15, G19, G21, G22, G24:** the extension\'s user-facing behavior (modes, join, attach, share) is documented in

@@ -27,8 +27,10 @@ See the [epic decisions](../2026-11-18-git-epochs-epic.md#decisions).
 - **G26** the shared swap module: phases `pending`, `done`, `unavailable`; per-path serialization with the latest index
   state winning; a 5 s timeout; retired handles kept, at most 8 per path, never deleted; docId-bound writes with a
   stranded-edit counter; one aggregate notice per batch.
-- **G25** the moved message: the type is defined once in the shared package; this plan exports it and the short text
-  shown for it.
+- **G25** the moved message: the type is defined once in the shared package (`src/moved.ts`, from the fields GE-1\'s
+  contract lists: `{ type: 'moved', peerId }`); this plan exports it and the short text shown for it.
+- **G26** the notice constants: every notice text of the epic is an exported constant in `src/notices.ts`, the one
+  source; GE-7, GE-9, and GE-10 import them and never restate them.
 - **G15** vocabulary: the notices say \"project owner\", not \"host\".
 - **G32** the numbers: freeze and unavailable timeout 5 s, retired handles 8 per path.
 
@@ -67,6 +69,9 @@ export interface SwapHost<H> {
   currentDocId(path: string): string | undefined;
   loadDoc(docId: string, signal: AbortSignal): Promise<H>; // rejects if unavailable
   rebind(path: string, newDocId: string, newHandle: H, oldHandle?: H): void | Promise<void>;
+  // Optional. Edits this peer made to the old doc that the server has not confirmed yet (for example, typed while
+  // offline), counted as stranded when a swap starts (detail chosen by the third reviewer; confirm).
+  unconfirmedLocalEdits?(path: string, oldHandle: H): number;
   onReplaced(event: ReplacedEvent): void;
   clock?: { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout };
 }
@@ -106,6 +111,9 @@ Behaviors, each with a test:
 - **Edits during `pending`.** The old handle is still bound, so a write with `baseDocId` equal to the old docId
   resolves to the old handle and counts as stranded, because that handle is about to be retired. After `done` such a
   write resolves as `retired`. A write with no `baseDocId` resolves to the live handle, as today.
+- **Edits made before the swap began.** When a swap starts, the coordinator adds `unconfirmedLocalEdits(path, oldHandle)`
+  (when the host provides it) to the path\'s stranded count, because an edit typed offline is already in the old doc
+  and never passes through `resolveWriteTarget` (GE-13 S3 and GE-14 H2 expect the notice to say it stayed).
 - **Timeout.** If the new doc is not loaded after 5 s, fire `unavailable` and leave the old doc bound. The host routes
   the path into its unavailable-file machinery; the path stays read-only (the host\'s job).
 - **Retired handles** are kept for the life of the coordinator, at most 8 per path (the oldest is forgotten, never
@@ -127,9 +135,24 @@ count is nonzero.
 | Any, with N stranded edits | Append: N of your recent edits stayed with the previous version. |
 
 `unavailable` events are not counted in the notice; the host shows the unavailable marker it already has. The strings
-are exported constants: GE-7, GE-9, and GE-10 import them and never restate them.
+are exported constants in `src/notices.ts`, and so are all the other notice texts of the epic, which this plan owns
+so that no client restates one. The other plans refer to them by constant name:
 
-The moved message (G25) is a type and a text helper only: `MovedMessage` re-exported from the contract (the one message type for every client, with no reason field on
+| Constant | Text | Used by |
+|---|---|---|
+| `PAUSED_BANNER` | Paused for git: edits to files the project owner rewrites may be set aside | GE-7 |
+| `BRANCHES_STAY` | N branches of this file stay with the previous version | GE-7 |
+| `GIT_OP_EDITS_DROPPED` | Edits made during a git operation were not kept. | GE-9 |
+| `EDITOR_ONLY_NO_FLIP` | The project owner has not switched versions yet. Keep waiting? (actions: Keep waiting, Dismiss) | GE-9 |
+| `FILES_DETACHED` | N files are detached: your checked-out version differs from the shared one. Your edits to them no longer reach the project. (actions: Adopt shared version, Stay detached) | GE-10 |
+| `FILES_JOINED_LIVE` | N files joined live edits from collaborators that are not committed to git. (action: Use my checkout instead) | GE-10 |
+| `ADOPT_CONFIRM` | This file has uncommitted changes. Replace it with the shared version? | GE-10 |
+| `DOC_SUPERSEDED` | Your doc was superseded | GE-10 |
+
+(texts chosen by the plan authors of GE-7, GE-9, and GE-10; confirm.)
+
+The moved message (G25) is a type and a text helper only: `MovedMessage` defined in `src/moved.ts` from the fields in
+the GE-1 contract (`{ type: 'moved', peerId }`, the one message type for every client, with no reason field on
 `leave`), and
 `movedNotice(name?: string): string` returning `"<name> switched versions"`, or \"This person switched versions\" when
 there is no name (detail chosen by the plan author; confirm). Sending and showing it is GE-7 for browsers and
@@ -146,7 +169,8 @@ timers; nothing outlives a test.
 4. `resolveWriteTarget`: live with no `baseDocId`; live and counted during `pending` for the old docId; retired after
    `done`; `drop` for an unknown docId.
 5. The stranded counter: counts during `pending` and after `done`; `takeStranded` returns and resets; the `done` event
-   carries the count at that moment.
+   carries the count at that moment; a host whose `unconfirmedLocalEdits` returns 2 at swap start produces a `done`
+   event with `stranded` of at least 2.
 6. The 5 s timeout fires `unavailable` and leaves the old doc bound; a later `indexChanged` to the same docId retries.
 7. The retired cap: the ninth retired handle drops the oldest; none is deleted by the module.
 8. Flip back reuses the retired handle without calling `loadDoc`; a flip to the current docId calls nothing.
@@ -163,7 +187,8 @@ timers; nothing outlives a test.
 - [ ] Implement `createSwapCoordinator`: per-path state, abort signals, the injected clock, the retired list with its
   cap, and the stranded counter. Make tests 1 to 9 pass one at a time.
 - [ ] Implement `NoticeAggregator` and `movedNotice`; tests 10 and 11 pass.
-- [ ] Export `MovedMessage` from the contract type and re-export the whole surface from `src/index.ts`.
+- [ ] Define `MovedMessage` in `src/moved.ts`, the constants in `src/notices.ts` (every notice text of the epic, one
+  constant each, with a test that lists them), and re-export the whole surface from `src/index.ts`.
 - [ ] Add the module to the package README: the API, the host contract, and the rule that wording lives here only.
 - [ ] Check there is no import of `vscode`, IndexedDB, or Automerge, and no direct use of a global timer
   (`grep` the file; the injected clock is the only way).

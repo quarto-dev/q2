@@ -45,9 +45,14 @@ Nothing in the epic may block this, and this plan makes it real.
 - `project.json` is `ProjectMeta` (`project.ts:44-48`), extended by GE-9 and GE-10.
 - Share links need all four parts: `buildShareUrl({ server, indexDocId, name, file })` in
   `ts-packages/quarto-hub-mcp/src/share-url.ts` (lines 49 to 66), moved to a shared package by GE-8.
-- Waiting for the server to hold the data: `disconnect({ drainMs })` waits for the hub to confirm local heads, and the
-  test hub offers `hubHasHeadsOf` (`quarto-sync-client` `client.ts:1663-1685`, `test-hub.ts:61`;
-  `.claude/rules/hub-client-tests.md`, "presence is not delivery").
+- Waiting for the server to hold the data: `drainOutbound(drainMs)` inside `createSyncClient` waits for the hub to
+  confirm local heads, and the test hub offers `hubHasHeadsOf` (`quarto-sync-client` `client.ts:1663-1685`,
+  `test-hub.ts:61`; `.claude/rules/hub-client-tests.md`, "presence is not delivery"). The extension uses a raw `Repo`
+  (`vscode-sync-experiment/src/project.ts:63`), not a `SyncClient`, so it cannot call `drainOutbound`: this plan builds
+  `waitForServerHeads(repo, handles, ms)` in the core on the same primitives (`getSyncInfo` and the `remote-heads`
+  event). Gate 0 items 1 and 4 record whether the preview hub and the public server report remote heads to a raw
+  `Repo`; if one does not, the fallback is a second raw `Repo` that fetches each doc by id from the server and
+  compares heads.
 - From earlier plans: the TypeScript logic and the registry document operations (GE-5), the controller and the owner
   hook it leaves empty (GE-10), the probe\'s `lsTree`, `showPrefix`, and root-commit queries (GE-5 and GE-10; if one is
   missing, add it to the probe here with a fixture test).
@@ -94,7 +99,7 @@ second reviewer; confirm). The server is any `ws` or `wss` URL, defaulting to
 the folder\'s own Automerge storage: the index (via `createIndexDocumentContent`), `setIdentity` with the extension\'s
 id, name, and color, one doc per file, the sidecar, the sidecar pointer, `owner`, and (git) `repo` with the root
 commits and path prefix, and the registry entries, each doc under its blob at HEAD with generation 0, in one change.
-(3) Connect and sync. (4) Wait until the server confirms the heads of every doc (the `drainMs` mechanism; 30 s, detail
+(3) Connect and sync. (4) Wait until the server confirms the heads of every doc (`waitForServerHeads`; 30 s, detail
 chosen by the plan author; confirm). (5) Show the share panel. An interrupted publish resumes from local storage:
 reopening the folder starts the normal sync, which finishes the upload, and **Quarto Hub: Show share information**
 shows the panel.
@@ -126,7 +131,9 @@ In the vscode-free core, written and seen failing first.
 3. The confirm text builder: the exact strings for public and custom servers, clean and dirty, three names then "and
    N more", a plain folder, and the secret-looking line.
 4. Publish order, with a recording fake network: no network call before the docs exist; the registry entries are in
-   the sidecar before the link; the link function is not called until the heads are confirmed.
+   the sidecar before the link; the link function is not called until the heads are confirmed; `waitForServerHeads`
+   returns only when the server\'s heads equal the local heads for every doc (against the test hub), and times out
+   after the cap otherwise.
 5. Bootstrap content: the index at version 4 with the three keys, one registry entry per published doc under its HEAD
    blob with generation 0, a dirty file registered under the HEAD blob.
 6. The sidecar race: two peers create it offline, merge through the test hub, both converge on one pointer, and the
@@ -148,8 +155,9 @@ In the vscode-free core, written and seen failing first.
   builder, and refusals in the core.
 - [ ] Write test specifications 4 to 6 and 8; implement the offline build, the registry bootstrap, the sidecar creation
   and adoption, the heads wait, and resume.
-- [ ] Write test specification 7; fill GE-10\'s owner hook (single-change index updates, removal, re-listing, git-added
-  files) and the `ownerId` match.
+- [ ] Write test specification 7; implement GE-10\'s `PointerWriter.applyDecision(batch)` (one index change per call:
+  the batch\'s flips, removals, relists, additions, and resets) and the `ownerId` match. Spec 7 uses GE-10\'s
+  `joinAsClone` and `joinAsMirror` helpers and GE-9\'s headless owner.
 - [ ] Add `quartoHub.shareFolder` and `quartoHub.showShare` to `package.json`; implement the VS Code layer (folder
   pick, server prompt, modal, panel, clipboard).
 - [ ] Store `name`, `file`, and `ownerId` in `project.json` (additive fields) and remember the server in workspace

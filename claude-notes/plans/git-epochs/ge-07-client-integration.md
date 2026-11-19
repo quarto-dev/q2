@@ -122,6 +122,11 @@ on the state asserted, and before a second client reads what the first wrote, wa
 - [ ] In `syncWithFiles`, for an existing path whose index docId differs from the bound handle, call `indexChanged`
   and do not await it; new paths keep the inline path; the repair of an unavailable entry stays separate.
 - [ ] Route `updateFileContent` and `applyEditorOperations` through `resolveWriteTarget(path, baseDocId)`.
+- [ ] Implement the host\'s `unconfirmedLocalEdits(path, oldHandle)` from GE-6 on the sync client: the number of this
+  peer\'s changes to the old doc whose heads the server has not yet confirmed (from the sync info and `remote-heads`
+  state the client already tracks for `drainOutbound`, `client.ts:~1665`), so that an edit typed while offline is
+  counted as stranded when the flip arrives (GE-13 S3). Add a test: go offline, edit, flip, reconnect; the `done`
+  event carries `stranded` of at least 1.
 - [ ] Tests 1 and 2 pass; the whole sync-client suite passes.
 
 ### Preview runtime and the preview SPA
@@ -142,8 +147,8 @@ on the state asserted, and before a second client reads what the first wrote, wa
   handle).
 - [ ] `services/presenceService.ts`: add an explicit rebind entry point that broadcasts the moved message on the old
   handle, stops listening, clears remote presences for the path, and listens on the new handle; call it from
-  `done`. Receivers handle the shared `MovedMessage` from GE-6 (the same type the extension sends; do not add a reason
-  to `leave`) and show \"this person switched versions\" for a short time. `hooks/usePresence.ts` re-resolves the doc after the rebind.
+  `done`. Receivers handle the shared `MovedMessage` from GE-6 (`src/moved.ts`, the same type the extension sends; do
+  not add a reason to `leave`) and show \"this person switched versions\" for a short time. `hooks/usePresence.ts` re-resolves the doc after the rebind.
 - [ ] `services/attribution-store.ts`: reset the cached incremental state (and any run list) when the path\'s docId
   changes, because histories are unrelated.
 - [ ] `pandoc/downloadAttribution.ts`, `services/debugAutomerge.ts`, `components/SyncStatusBadge.tsx`,
@@ -155,14 +160,13 @@ on the state asserted, and before a second client reads what the first wrote, wa
 
 - [ ] Flag-on tests (test 5) first. On `done`, `setActiveBranch(path, null)`; `applyBranchEdits` gains
   `baseDocId` and uses the branch doc of that docId, warning (not returning silently) when none exists; if the path had
-  branches, add one line to the notice: \"N branches of this file stay with the previous version\" (from D16; detail
-  chosen by the plan author; confirm). No orphan UI.
+  branches, add one line to the notice, the `BRANCHES_STAY` constant from GE-6 (from D16). No orphan UI.
 
 ### Paused indicator
 
 - [ ] Test 6 first. Poll `GET /api/preview/git-status` every 2 s only while the response says `tracking` is true; stop
-  polling on a 404 (detail chosen by the plan author; confirm). Show a banner, \"Paused for git: edits to files the
-  project owner rewrites may be set aside\", in `role="status"`. The response shape is the one in GE-1\'s contract.
+  polling on a 404 (detail chosen by the plan author; confirm). Show a banner, the `PAUSED_BANNER` constant from GE-6,
+  in `role="status"`. The response shape is the one in GE-1\'s contract.
   The surfaces: the preview SPA and the hub-client when served by a preview. No read-only mode. Style the banner and
   the notice with solid colors (`.claude/rules/hub-client-theme.md`) and run `npm run lint:css -w hub-client`.
 

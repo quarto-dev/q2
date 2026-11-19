@@ -70,8 +70,9 @@ of W3 and W4, run C holds W8 and W9.
 - **`a2` (W2), the gate during a real `git switch`.** Generate a deterministic tree of 4,000 files with
   `uv run scripts/git-epochs-windows/make_large_tree.py`, then switch between two branches with real git while the
   controller test runs. Filter: `package(quarto-git-epochs) & binary(integration) & test(large_tree::)`.
-  - Proves: no sync or merge happens while a marker exists; a sharing-violation or access-denied read error is a skip,
-    never a delete.
+  - Proves: the controller reports the gate closed for every real marker git creates during a switch of a large tree,
+    and releases it afterward. (The skip-never-delete behavior for an unreadable file is a hub behavior, covered by
+    `a5`.)
   - Does not prove: antivirus or OneDrive interplay, or timings on a cold cache.
 - **`a3` (W3), `core.autocrlf=true`.** Filter: `package(quarto-git-epochs) & (test(classify::) | test(arrival::))`, run in a
   checkout where the script confirms `core.autocrlf` is `true`.
@@ -88,7 +89,9 @@ of W3 and W4, run C holds W8 and W9.
   `package(quarto-hub) & binary(integration) & test(git_epochs::)`, with a real temp repo under the Windows temp
   directory.
   - Proves: the gate inside `sync_all` holds with a real repo; the checkpoint is written before the pointer flips; no
-    code path renames a directory while it holds a handle in it (`cross-platform.md`).
+    code path renames a directory while it holds a handle in it (`cross-platform.md`); the unreadable-file test of GE-3
+    (an injected `PermissionDenied`, a skip and never a delete) passes on Windows. The injected error stands in for a
+    real sharing violation; a real one needs a second process holding the file open.
   - Does not prove: network filesystems or Dev Drive behavior.
 - **`a6` (W10), native clippy and nextest.** `cargo clippy -p quarto-git-epochs -p quarto-hub -p quarto-preview -p quarto
   --all-targets -- -D warnings`, then `cargo nextest run` for the same four crates.

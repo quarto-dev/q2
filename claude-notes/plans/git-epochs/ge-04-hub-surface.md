@@ -22,8 +22,8 @@ extension folder. It changes no sync behavior; it only exposes and configures wh
 
 - **G33.** `q2 preview --git <track|ignore>`: experimental, default `ignore`, a value is required (a bare `--git` is a
   parse error), conflicts with `--join`, `--static`, and `--hub-url`. `track` means this preview owns the project\'s
-  pointer. The route `/api/preview/git-status` reports tracking, paused, and pending; web clients show an indicator
-  only (no read-only mode).
+  pointer. The route `/api/preview/git-status` reports tracking, paused, pending, the marker names, and the decision
+  ring; web clients show an indicator only (no read-only mode).
 - **G28.** At startup `q2 preview` checks its project root for `.quarto-hub/project.json` and warns that running a hub
   on a directory an extension has bound syncs the same files twice. Warn only; do not refuse.
 - **G5 and G3** are consumed, not changed: the route reports the paused state of the gate GE-3 put inside
@@ -67,13 +67,13 @@ order:
    `Ignore`; `Track` sets the GE-3 hub option; `Ignore` leaves it off.
 3. **Route integration test** `crates/quarto-preview/tests/integration/git_status.rs`, modeled on
    `config_endpoint.rs` (boot a real server on a fixture, GET the route):
-   - With `Ignore`: all three fields false.
+   - With `Ignore`: `tracking`, `paused`, and `pending` are false, and `markers` and `decisions` are empty arrays.
    - With `Track` on a temp git repo: `tracking` is true and `paused` is false.
    - Create the file that `git rev-parse --git-path index.lock` names: `paused` becomes true; remove it: false again.
      Poll with a retrying helper until the state holds; no fixed sleeps.
    - `pending` is true while GE-3\'s decision is held and false after it is applied (use the held-decision hook GE-3
      provides for its own tests; GE-3 provides one, with `HubContext::git_status()`). After a real `git switch`, `decisions` lists it (kind, files,
-     G9 step, at most 20 entries) and `markers` names the marker holding the gate while one exists.
+     G9 step, `discarded`, at most 20 entries), and after a real commit it lists a `moved-forward` decision and `markers` names the marker holding the gate while one exists.
 4. **Warning tests**: a unit test for `extension_bound(project_root)` (true only when
    `<root>/.quarto-hub/project.json` exists and its `mode` is not `editor-only`; built with `Path::join`), and a binary-level test in
    `crates/quarto/tests/integration/` that starts `q2 preview --no-browser` on a temp directory containing that file

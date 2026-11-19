@@ -93,8 +93,9 @@ Written first, seen failing for the right reason, then the code that makes them 
    joins by index id and sees them on its disk; an edit on A reaches B.
 6. **`safeJoin`** (table-driven, G36): it accepts `a.qmd`, `dir/a.qmd`, and `dir/../a.qmd` inside the root; it rejects
    `../x`, `a/../../x`, `/abs`, `C:\x`, `\\server\share\x`, `a\b`, a path containing NUL, `.git/hooks/h`, `.GIT/x`,
-   `sub/.quarto-hub/x`, and `.vscode/tasks.json`; a symlinked parent directory that points outside the root is
-   rejected (the case is skipped where the platform cannot create symlinks); `syncIndex` and `createProjectFolder`
+   `sub/.quarto-hub/x`, `.vscode/tasks.json`, `.git.`, `.git ` (trailing space), and `.git::$INDEX_ALLOCATION`; a
+   symlinked parent directory that points outside the root is rejected (the case is skipped where the platform cannot
+   create symlinks), and so is a directory junction on Windows, which needs no privilege to create; `syncIndex` and `createProjectFolder`
    skip a rejected key, log it, and still apply the other keys.
 7. **Playwright smoke tests** (below).
 
@@ -112,7 +113,14 @@ Written first, seen failing for the right reason, then the code that makes them 
 - [ ] Fix the README: the "workspace member" line is true now (check each command in it runs from the root); leave
   the server and folder-placement text, which GE-11 changes.
 - [ ] Write test spec 1, run it red, then add `src/core/ignore.ts` with the G23 rule and make `project.ts` use it.
-- [ ] Write test spec 6 and see it fail. Add `src/core/safe-path.ts` with `safeJoin(root, rel)` (G36) and route every
+- [ ] **Test hub export (before any test that needs a hub).** Importing `quarto-sync-client`\'s `test-hub.ts` by a
+  relative path fails the extension\'s `tsc --noEmit` with TS6059, because its `tsconfig.json` has `rootDir: ./src`
+  (reproduced in the third review). Add a `./testing` export to `@quarto/quarto-sync-client` (types and source pointing
+  at `src/test-hub.ts`, as its other entries do) and import it as `@quarto/quarto-sync-client/testing` from the
+  extension\'s tests and the Playwright helpers. Check that the extension\'s `typecheck` and `build` still pass and
+  that the esbuild bundle of the extension does not include it.
+- [ ] Write test spec 6 and see it fail. Add `src/core/safe-path.ts` with `safeJoin(root, rel)` (G36; it also rejects
+  any segment that contains `:` or ends in a dot or a space) and route every
   doc-derived write, `rm`, `mkdir`, and `rmdir` through it: `writeFileDoc`, the removal and folder handling in
   `syncIndex` (`project.ts:313-341`), and `createProjectFolder`. A rejected key is skipped and logged (an event line
   and the output channel), never thrown. GE-16 `b2` runs the hostile-index fixture on Windows.
@@ -121,8 +129,9 @@ Written first, seen failing for the right reason, then the code that makes them 
   `quarto-hub-mcp/src/share-url.ts` re-export it so every import and the MCP tests are unchanged, and add the package
   to the extension\'s dependencies. Run `npm run test -w @quarto/hub-mcp` (the share-URL and embed tests) and
   `cargo xtask build-hub-mcp-bundle` to prove the bundle still builds. In the same commit add a step
-  `npm test -w ts-packages/quarto-share-url` to `.github/workflows/ts-test-suite.yml` (`ci-test-suite-unwired`), and add
-  the package to the build step at `:272`, because `quarto-hub-mcp` now depends on it.
+  `npm test -w ts-packages/quarto-share-url` to `.github/workflows/ts-test-suite.yml` (`ci-test-suite-unwired`), add
+  the package to the build step at `:272`, because `quarto-hub-mcp` now depends on it, and add its tests to
+  `cargo xtask verify` step 12 (`crates/xtask/src/verify.rs:785-830`; GE-1 extended that step).
 - [ ] Write test specs 3 and 4 as characterization tests against the current code (red against the not-yet-extracted
   core: the imports do not exist), then extract.
 - [ ] **Extract the core.** Create `src/core/` with: `host.ts` (the interfaces below), `project-sync.ts` (the engine
@@ -146,16 +155,17 @@ Written first, seen failing for the right reason, then the code that makes them 
   Write test spec 5 first.
 - [ ] **Vitest for the extension.** Add `vitest` and a `test` script to `vscode-sync-experiment/package.json`; add the
   workflow step `npm run test -w quarto-hub-vscode` and a typecheck step to the "Workspace TS suites" job of
-  `.github/workflows/ts-test-suite.yml`; run `cargo xtask lint` and confirm `ci-test-suite-unwired` is satisfied.
+  `.github/workflows/ts-test-suite.yml`, and in the same commit the `cargo xtask verify` counterpart: the extension is
+  not under `ts-packages/*`, so rejoining the workspaces does not add it to verify (the step 6 build and step 12 tests
+  enumerate `ts-packages` only); add its typecheck, build, and `npm run test -w quarto-hub-vscode` to
+  `crates/xtask/src/verify.rs`. Run `cargo xtask lint` and confirm `ci-test-suite-unwired` is satisfied.
 - [ ] **Playwright harness**, in `vscode-sync-experiment/e2e/`: `playwright.config.ts`; `helpers/launch.ts` that
   downloads a pinned VS Code with `@vscode/test-electron` (`downloadAndUnzipVSCode`, cached under `.vscode-test/`) and
   starts it with Playwright\'s `_electron.launch` using `--extensionDevelopmentPath`, throwaway `--user-data-dir` and
   `--extensions-dir`, `--disable-workspace-trust`, `--skip-release-notes`, `--disable-updates`, `--no-sandbox` and
   `--disable-gpu` (containers), a short `--user-data-dir` path (macOS socket paths are limited to about 100
   characters), user settings with `"window.dialogStyle": "custom"` (Playwright cannot click native modal dialogs,
-  and GE-11 and GE-12 use modal confirms), and a workspace folder (details chosen by the second reviewer; confirm); `helpers/hub.ts` that starts the in-process test hub from
-  `quarto-sync-client` (import by a relative path, or add a `./testing` export to that package; detail chosen by the
-  plan author; confirm); `helpers/palette.ts` (run a command, fill an input box); fixtures for a published project and
+  and GE-11 and GE-12 use modal confirms), and a workspace folder (details chosen by the second reviewer; confirm); `helpers/hub.ts` that starts the in-process test hub through the `./testing` export added above; `helpers/palette.ts` (run a command, fill an input box); fixtures for a published project and
   a temp git repo helper (shared with later plans).
 - [ ] **Smoke test A** (hermetic): a folder whose `.quarto-hub/project.json` names `ws://127.0.0.1:PORT` of the test
   hub auto-starts sync (activation event `workspaceContains:.quarto-hub/project.json`); an edit published by the
@@ -175,7 +185,7 @@ Written first, seen failing for the right reason, then the code that makes them 
 
 ```bash
 npm install && npm ci                                   # from a clean root, under the .nvmrc Node
-npm run typecheck && npm run build                       # root: must be green, extension included
+npm run typecheck && npm run build                       # root: must be green, extension included (the root build also runs the hub-client and preview-SPA builds, which need the network for the pandoc fetch; where that is unavailable, build -w quarto-hub-vscode and the ts-packages instead)
 npm run test -w quarto-hub-vscode                        # core, ignore, headless peer
 npm run test -w @quarto/share-url && npm run test -w @quarto/hub-mcp
 npm run test:e2e -w quarto-hub-vscode                    # the smoke tests, locally, with a display
@@ -197,7 +207,8 @@ from the run", and say that the output was inspected. A human has not watched th
   passes its table, and a hostile index key is skipped and logged.
 - `src/core/` contains no `vscode` import (a test enforces it) and the characterization tests pass; the three
   existing flows behave as before.
-- The headless peer joins and publishes against the test hub; the Playwright smoke tests pass locally.
+- The headless peer joins and publishes against the test hub, through the `./testing` export; the Playwright smoke
+  tests pass locally. The extension\'s typecheck, build, and tests run in `cargo xtask verify` as well as in CI.
 - The share-URL helpers live in one package and the MCP tests and bundle are unchanged.
 - The extension\'s tests are wired into CI and `cargo xtask lint` passes.
 

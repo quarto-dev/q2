@@ -68,7 +68,10 @@ All written first and seen failing for the right reason.
 - **`registry`:** every case in `registry.json` (including creation races on one key and on a new path, retire, and
   repair); and the golden documents: reading each golden document yields the
   expected entries, and applying the crate\'s operation to the "before" document gives a document whose decoded entries
-  equal the "after" document (logical equality; bytes may differ).
+  equal the "after" document (logical equality; bytes may differ). The first doc of a path gets generation 0 and the
+  next gets the maximum plus one (the registry fixture rows). The event kinds the crate exports equal
+  `fixtures/vocabulary.json`. The crate writes one sidecar document of its own, `fixtures/golden/from-rust-*.bin`, with
+  generations stored as `int`; nothing in GE-5 reads it (GE-14 cross-checks it).
 - **`controller` with a fake probe, no sleeps:** a tick sequence for each of: gate closes on `index.lock`, a lock that
   outlasts 60 s resumes with a warning, a state marker (`rebase-merge`) pauses indefinitely until removed, HEAD moves
   then the decision waits for 1 s of quiet, the 30 s cap forces a decision, an unresolvable HEAD means no change and is
@@ -112,7 +115,8 @@ All written first and seen failing for the right reason.
   `hash-object`, no filters. The probe also answers the repo identity queries (G4): `root_commits()` through
   `rev-list --max-parents=0 HEAD`, `is_shallow()` through `rev-parse --is-shallow-repository`, and `show_prefix()`;
   GE-3 uses them to write the `repo` entry. `cheap_state()` stats the marker paths and the reflog file (size and mtime)
-  with no subprocess, for the controller\'s synchronous `check()`. Real-repo tests: a repo with two root commits, and a `--depth 1` clone made
+  with no subprocess, for the controller\'s synchronous `check()`; a missing reflog file (no `.git/logs` directory when
+  `core.logAllRefUpdates=false`) means "no reflog", not an error, and a test pins that. Real-repo tests: a repo with two root commits, and a `--depth 1` clone made
   through a `file://` URL (a plain local path ignores `--depth`).
 - [ ] A timeout per call (use a helper the workspace already depends on; check `Cargo.lock` before adding one)
   (detail chosen by the plan author; confirm). A missing git or a refused repository turns the probe off with one log

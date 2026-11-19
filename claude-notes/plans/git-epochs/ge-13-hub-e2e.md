@@ -67,16 +67,16 @@ and `img/logo.png`, removes `c.qmd`, and adds `b.qmd` (the fixture GE-14 reuses 
 
 | Id | Scenario | What must hold |
 |---|---|---|
-| S1 | An owner commit while two guests edit | No notice and no swap; both guests\' edits stay in both pages and on disk; a marker typed after the commit reaches the other guest; the registry entry moves forward within a few seconds although the guests keep typing |
+| S1 | An owner commit while two guests edit | No notice and no swap; both guests\' edits stay in both pages and on disk; a marker typed after the commit reaches the other guest; the status route lists a `moved-forward` decision within a few seconds although the guests keep typing (this plan has no sidecar reader: GE-13 does not wait for GE-5, so the registry itself is read in GE-14) |
 | S2 | `git switch feature` | Both guests show the `feature` text; the hub\'s disk equals it; the aggregate notice appears once per guest (editor) or not at all (viewer, which re-renders instead) |
-| S3 | A stranded edit | A guest edits against the old doc while the switch happens; the notice also says the edit stayed with the previous version; the file on screen and on disk match `feature` |
+| S3 | A stranded edit | A guest edits against the old doc while the switch happens (offline, so the edit is unconfirmed when the flip arrives; GE-7\'s `unconfirmedLocalEdits` counts it); the notice also says the edit stayed with the previous version; the file on screen and on disk match `feature` |
 | S4 | `git switch main` back | Editor and disk agree; under `--allow-edit` a stranded edit retained in the old doc may resurface, because arrival joins live edits (G9 step 4); the spec asserts agreement between editor and disk and records which outcome occurred |
 | S5 | A rebase stopped for conflicts | `GET /api/preview/git-status` reports paused; the guests show the paused indicator and no conflict markers; after the rebase finishes, paused clears and exactly one decision is applied: one notice, editor equal to disk |
-| S6 | jj `edit` (colocated), skipped when `jj` is absent | Arrival under jj is unsupported: guests follow the flip to a doc created from disk (the step 5 fallback, nothing registered); no conflict marker reaches a doc |
+| S6 | jj `new` onto another commit (colocated), skipped when `jj` is absent | `jj new` writes the reflog, so the trigger fires. Arrival under jj is unsupported: guests follow the flip to a doc created from disk (the step 5 fallback, a `seeded` decision, nothing registered); no conflict marker reaches a doc. `jj edit` between sibling commits changes the tree with no reflog change and is a stated gap (G35), so no scenario uses it |
 | S7 | Save then commit inside the 500 ms debounce | Treated as a commit: no swap, no notice, the new text reaches the guests by ordinary sync |
 | S8 | `feature` adds `b.qmd` and removes `c.qmd` | After the switch the tree lists `b.qmd` and not `c.qmd`; after switching back the reverse |
 | S9 | A tracked binary changes on `feature` | After each switch the hub\'s disk bytes equal the checked-out blob and the guests see the same image bytes; no cross-branch overwrite |
-| S10 | `git reset --hard` after a dirty edit | The reflog trigger fires with HEAD unchanged; the pointer moves to a new doc equal to the HEAD content; the dirty text stays in the retired doc, counted, and the decision appears in the status route |
+| S10 | `git reset --hard` after a dirty edit | The reflog trigger fires with HEAD unchanged; the pointer moves to a new doc equal to the HEAD content; the dirty text stays in the retired doc, and the decision appears in the status route with `discarded` of at least 1 |
 | S11 | No `--allow-edit` (`ReadOnly`) | A switch follows without any browser edit reaching disk; arrival attaches only a doc equal to disk, otherwise a new doc from disk |
 | S12 | Control: `--git ignore` | No paused indicator; the status route reports tracking false; today\'s behavior |
 | S13 | Optional: a guest through `startJoinGuest` | Sees the S2 swap through the tunnel; skipped when the relay is unreachable |
@@ -107,8 +107,11 @@ and `img/logo.png`, removes `c.qmd`, and adds `b.qmd` (the fixture GE-14 reuses 
   `paused`, assert the indicator and the absence of conflict markers in the editors, then `rebaseContinue` after
   resolving, and count notices.
 - [ ] Wire and verify the CI legs by reading `.github/workflows/q2-preview-spa-e2e.yml`: the new viewer spec is picked
-  up by `chromium` and `firefox`, the editor spec by `embed`, the `paths:` filter already includes the changed
-  directories, and nothing in the workflow needs a `git` or `jj` install (the specs skip jj). Record this reading.
+  up by `chromium` and `firefox`, the editor spec by `embed`, and nothing in the workflow needs a `git` or `jj`
+  install (the specs skip jj). The `paths:` filter covers `q2-preview-spa/e2e/**`, `crates/quarto-hub/**`,
+  `crates/quarto-preview/**`, and `crates/quarto/**` but not the client code these specs exercise: add
+  `ts-packages/quarto-sync-client/**`, `ts-packages/quarto-git-epochs/**`, `ts-packages/preview-runtime/**`, and
+  `hub-client/src/**`. Record this reading.
 - [ ] Rebuild chain before the first run (from `AGENTS.md`): `cd hub-client && npm run build:wasm`,
   `cargo xtask build-q2-preview-spa`, `cargo xtask build-hub-client-embed`, `cargo build --bin q2`.
 - [ ] Run the specs; fix defects in the specs, and report defects in product code as findings in the notes without

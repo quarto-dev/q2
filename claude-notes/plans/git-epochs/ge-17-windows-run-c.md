@@ -52,29 +52,35 @@ landed since those runs. The deliverable is a final statement of what Windows do
 | Item | How it is tested | A pass proves | It does not prove |
 |---|---|---|---|
 | `c1` (W9) | The scripted scenario below, against the real `q2.exe` and `git.exe` on a generated temp repo in `%TEMP%`; the script exits non-zero if any assertion fails and writes a JSON transcript of each step and the observed values | The feature works end to end on Windows: the gate, the classifier, the registry, the flips, the unlists, a binary file, and shutdown with a marker set | jj on Windows; other Git builds; long soak |
-| `c2` (W8) | The Playwright subset GE-14 marked permanent, with the pinned VS Code build that the harness downloads (`downloadAndUnzipVSCode`, the same version as on Linux),
-launched the same way the Linux harness launches it | The extension\'s VS Code surfaces (commands, notifications, status bar, buffers) work with `Code.exe` | VS Code Insiders or other versions; the unmarked exploratory tests |
+| `c2` (W8) | The Playwright subset GE-14 marked permanent, plus GE-9\'s timing test (`test:e2e:timing`, not in the permanent subset), with the pinned VS Code build that the harness downloads (`downloadAndUnzipVSCode`, the same version as on Linux),
+launched the same way the Linux harness launches it. The timing test\'s measured gap (from `index.lock` release to the last buffer reload) is recorded in the results; a gap above the 1 s window is a finding for the experimental fallback in G20, not a failed run | The extension\'s VS Code surfaces (commands, notifications, status bar, buffers) work with `Code.exe`; editor-only\'s quiet window against a real Windows reload | VS Code Insiders or other versions; the unmarked exploratory tests |
 | `c3` | Every item from GE-15 (`a*`) and GE-16 (`b1` to `b7`), run in one invocation without `-Only`, on the final code | Nothing regressed on Windows after the fix plans; the whole set is green together | Anything the items did not already cover |
 
 **The scenario for `c1`** (each step asserts; the transcript records what it saw):
 
-1. Generate the deterministic repo (the generator from GE-15, with text files, one binary, and nested directories) on
-   `main`; create a `feature` branch that changes one text file, removes one file, adds one file, and changes the binary.
+1. Generate the deterministic repo (the generator from GE-15, run in its large-tree mode of about 4,000 files, with a
+   few text files, one binary, and nested directories, so that a `git switch` holds the lock long enough to observe; add
+   a `--with-binary` mode to the generator in GE-15\'s tests if it lacks one) on `main`; create a `feature` branch that
+   changes one text file, removes one file, adds one file, and changes the binary.
 2. Start `q2.exe preview --git track --allow-edit --ui editor --no-browser --port N` (N free) in the repo.
 3. Attach a headless clone peer from a second clone by the Join logic (`/health` gives the index id), and type an edit
    into one file.
 4. Commit on `main` in the hub\'s repo while the peer edits: no flip, the peer\'s edit intact.
-5. `git switch feature` on the hub\'s repo, polling `.git/index.lock` and `/api/preview/git-status`: the route reports
-   paused at least once and not paused after; the changed file flips, the removed file is unlisted, the added file is
+5. `git switch feature` on the hub\'s repo, polling `.git/index.lock` and `/api/preview/git-status` every 20 ms (the
+   large tree of step 1 keeps the lock for long enough): the route reports paused at least once and not paused after; the changed file flips, the removed file is unlisted, the added file is
    listed, the binary\'s doc changes; the peer, still on `main`, keeps its docs and its disk is untouched.
 6. `git switch main`: arrival re-attaches the registered docs (the pointer returns to the earlier docIds, no fork), and
    disk equals the doc.
 7. Save a file and commit inside the debounce window: handled as a commit (no flip).
 8. `git reset --hard` after a dirty edit: the pointer moves to a new doc equal to the HEAD content, and the dirty text
    stays in the retired doc.
-9. In a second run, send Ctrl-C to the hub during a `git switch` of the large tree: the shutdown flush is skipped
-   while the marker exists, and no doc contains conflict markers or half-written text (detail chosen by the plan
-   author; confirm).
+9. In a second run, stop the hub during a `git switch` of the large tree: the shutdown flush is skipped while the
+   marker exists, and no doc contains conflict markers or half-written text (detail chosen by the plan author;
+   confirm). The hub\'s shutdown handler is `tokio::signal::ctrl_c()` (`crates/quarto/src/commands/preview.rs:698`),
+   which on Windows listens for `CTRL_C_EVENT`, and a Node parent cannot send that event to one child process. The
+   script therefore starts the hub in its own console through a small PowerShell helper and sends the event with
+   `GenerateConsoleCtrlEvent` (P/Invoke); if that cannot reach the hub, step 9 is recorded as not run on Windows, and
+   the skipped-flush behavior is the hub-level test of GE-3 (which stands in for the marker with a file).
 
 ## Checklist
 

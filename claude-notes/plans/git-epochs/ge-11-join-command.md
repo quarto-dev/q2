@@ -56,12 +56,14 @@ has no iroh.
 
 | Input | Meaning | Server and id |
 |---|---|---|
-| Starts with `q2preview` | A share ticket | Spawn the proxy on a free port N; server is `ws://127.0.0.1:N/ws` |
+| Matches `^q2preview[A-Za-z0-9_-]+$` | A share ticket | Spawn the proxy on a free port N; server is `ws://127.0.0.1:N/ws` |
 | `ws://` or `wss://` | A hub websocket URL | Used as given |
 | `http://` or `https://` | The address a user copies from a browser | `/ws` URL derived: scheme `ws` or `wss`, same host and port, path `/ws` (detail chosen by the plan author; confirm) |
 | A share link (`#/share/<id>?server=…`) | A quarto-hub.com style link | Id and server from `parseProjectRef`; the proxy is not involved |
 
-Anything else is refused with "That is not a ticket, a URL, or a share link."
+Anything else is refused with "That is not a ticket, a URL, or a share link." The ticket pattern is checked before
+anything is spawned: the spawn for a `.cmd` uses `shell: true` (below), and an input that merely starts with `q2preview`
+must never reach a shell.
 
 **The flow.**
 
@@ -128,7 +130,8 @@ Deactivation kills any spawned proxy too.
 All in the vscode-free core from GE-8 unless marked. Each is written and seen failing first.
 
 1. `classifyJoinInput`: a table of tickets, `ws`, `wss`, `http`, `https`, share links with and without `server=`,
-   whitespace, garbage, and a bare doc id (refused).
+   whitespace, garbage, a bare doc id (refused), and a string that starts with `q2preview` but carries shell
+   metacharacters (`q2preview x & calc`, refused before any spawn).
 2. `deriveWsUrl` and `healthUrlFor`: `http://127.0.0.1:3000/` to `ws://127.0.0.1:3000/ws`, `https` to `wss`, a
    `/ws` URL to its `/health`, IPv6 loopback, a URL with a path.
 3. `projectRootMatches`: symlinked temp directories (real paths), trailing separators, case folding on `darwin` and

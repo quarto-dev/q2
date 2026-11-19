@@ -43,7 +43,8 @@ config option that defaults to off.
 - **D14 (kept):** a failed switch falls back to ordinary sync for that file.
 - **G7:** a sidecar change re-evaluates every attached file; a doc that is no longer canonical goes through the
   arrival steps.
-- **G36:** `contained_join` also rejects `.git`, `.quarto-hub`, and `.vscode` segments.
+- **G36:** `contained_join` also rejects `.git`, `.quarto-hub`, and `.vscode` segments, every backslash, segments that
+  contain `:` or end in a dot or a space, and any path whose existing parent is a symlink or junction.
 
 ## Context
 
@@ -115,11 +116,20 @@ with real temp git repos, a real `HubContext`, and real Automerge docs, in both 
 - **Quiet window and own writes:** a guest typing continuously (the hub writing disk every tick) does not keep the
   decision waiting to the 30 s cap; the hub\'s own writes are recognized by the disk hash equal to the checkpoint
   hash.
-- **Paths:** an index key naming `.git/hooks/h`, `.quarto-hub/x`, or `.vscode/tasks.json` is rejected and logged, like
-  `../x`.
+- **Paths:** an index key naming `.git/hooks/h`, `.quarto-hub/x`, `.vscode/tasks.json`, `a/../../x`, `C:\x`, `a\b`,
+  or `.git.` is rejected and logged, like `../x`; on POSIX the backslash forms need the product check, because a
+  lexical check sees one ordinary component. A key whose parent directory is a symlink (a junction on Windows) pointing
+  outside the root is rejected, and nothing is written through it.
+- **Unreadable file:** the file reader sits behind a small seam, and a test injects `PermissionDenied` (the Windows
+  sharing violation) for one file: the sync skips that file, logs it, never deletes the doc or the file, and syncs the
+  others. GE-15 `a5` runs the same test on Windows.
+- **Lock scope:** the arrival waits (5 s per unreachable doc) run outside the `sync_state` mutex, concurrently per file
+  with one overall cap of 5 s per switch, so a switch with many unreachable docs does not stall every sync for N times
+  5 s; a test with three unreachable docs finishes within the cap.
 - **Status accessor:** `HubContext::git_status()` returns tracking, paused, pending, the marker names, and at most 20
-  decisions (kind, time, files, G9 step), using the shared event names; a held-decision test hook exists for GE-4
-  and GE-13.
+  decisions (kind, time, files, G9 step, `discarded`), using the shared event names (including `moved-forward`,
+  `joined`, and `seeded`); a `reset --hard` decision carries the number of edits set aside as `discarded`; a
+  held-decision test hook exists for GE-4 and GE-13.
 
 ## Checklist
 
@@ -170,9 +180,13 @@ with real temp git repos, a real `HubContext`, and real Automerge docs, in both 
 - [ ] Ignore watcher events whose disk hash equals the hash the hub last wrote (the checkpoint content hash) when
   waiting out the quiet window.
 - [ ] `contained_join` (`sync.rs:571`) also rejects `.git`, `.quarto-hub`, and `.vscode` segments
-  (case-insensitive); a rejected key is skipped and logged.
+  (case-insensitive), every backslash, and segments that contain `:` or end in a dot or a space; add a `symlink_metadata`
+  walk so that an existing symlink or junction parent is rejected (the function is purely lexical today); a rejected key
+  is skipped and logged.
+- [ ] Put the file reader behind a seam for the unreadable-file test, and keep the arrival waits outside the
+  `sync_state` mutex (see the tests).
 - [ ] Add `HubContext::git_status()` (tracking, paused, pending, marker names, the last 20 decisions with the shared
-  event names) and a held-decision test hook; GE-4 and GE-13 consume both. Record both names in the notes.
+  event names and `discarded`) and a held-decision test hook; GE-4 and GE-13 consume both. Record both names in the notes.
 
 ### Verification
 
@@ -182,12 +196,14 @@ with real temp git repos, a real `HubContext`, and real Automerge docs, in both 
 
 ## Gates
 
-- `cargo clippy -p quarto-hub --all-targets -- -D warnings`
+- `cargo clippy -p quarto-hub -p quarto-preview -p quarto --all-targets -- -D warnings` (the new `HubConfig` field
+  touches struct literals in `quarto-preview` and `quarto/src/commands/hub.rs`; recount with
+  `grep -rn "HubConfig {" crates --include='*.rs'`)
 - `cargo nextest run -p quarto-hub`
 - `cargo clippy -p quarto-hub --all-targets --target x86_64-pc-windows-msvc -- -D warnings` (note any limitation)
 - `cargo xtask lint`; `q2 render --strict` on this file.
-- Recommend, but do not run unprompted, `cargo nextest run -p quarto-preview -p quarto` in the pre-push summary,
-  since `quarto-hub` has dependents.
+- Recommend, but do not run unprompted, `cargo nextest run -p quarto-preview -p quarto -p quarto-hub-lsp -p
+  quarto-hub-provider` in the pre-push summary, since `quarto-hub` has those dependents (`cargo tree -i quarto-hub`).
 
 ## End-to-end verification
 

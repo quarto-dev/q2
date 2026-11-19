@@ -57,7 +57,8 @@ browser, and a second peer joins. Decide which of these tests are permanent, and
 **Peers.** The hub is `q2 preview --git track --ui editor --allow-edit` on the repo. The permanent tests omit
 `--share`, since a ticket needs the network; joins use the loopback URL. A browser guest is a Playwright page on the
 hub\'s editor UI. One scenario uses a real VS Code window for the mode under test; the other modes are headless peers
-running the same core (detail chosen by the plan author; confirm). A clone peer is a separate clone of the fixture
+running the same core (detail chosen by the plan author; confirm), built with GE-9\'s headless owner and GE-10\'s
+`joinAsClone` and `joinAsMirror` helpers. A clone peer is a separate clone of the fixture
 repo attached through the Join logic; a mirror is a folder the Join logic created.
 
 ## Scenarios
@@ -69,11 +70,11 @@ Every assertion waits on the state it asserts, with retrying assertions, never a
 
 | Id | Action | Expected |
 |---|---|---|
-| H1 | The hub commits while all peers are typing | No swap and no notice anywhere. Every edit survives in every peer. The registry shows the doc moved forward: an entry under the new blob, none under the old |
+| H1 | The hub commits while all peers are typing | No swap and no notice anywhere. Every edit survives in every peer. The registry shows the doc moved forward: an entry under the new blob, none under the old (read with GE-5\'s registry operations through a raw `Repo`, as in the dump script above) |
 | H2 | The hub runs `git switch feature` | The browser swaps with the owner notice and shows the feature text; an edit typed just before the switch is counted as stayed with the previous version. The mirror\'s disk equals the feature file. Editor only suspends, waits for the flip, rebinds, and shows the feature text, writing nothing. The clone on `main` stays in its own doc and its disk is untouched. A second clone already on `feature` joins the hub\'s new doc |
 | H3 | A clone on `main`, same as the hub, types | The edit reaches the browser and the hub\'s disk; a browser edit reaches the clone\'s disk |
 | H4 | The clone runs `git switch feature` (one real VS Code run) | Arrival attaches the doc for that blob, or creates one; peers still in the old doc see the moved message; a clean file with live edits joins with the notice and the "use my checkout instead" action; the hub\'s pointer does not move |
-| H5 | The hub runs `git reset --hard` after a browser edit | No guest sees a revert merged in as an author edit; the pointer moves to a new doc equal to disk; the browser edit stays in the retired doc and is counted; a clone on the same blob stays in the retired doc, and its status bar says "your doc was superseded" |
+| H5 | The hub runs `git reset --hard` after a browser edit | No guest sees a revert merged in as an author edit; the pointer moves to a new doc equal to disk; the browser edit stays in the retired doc and the decision\'s `discarded` count is at least 1; a clone on the same blob stays in the retired doc, and its status bar says "your doc was superseded" |
 | H6 | The hub switches to `feature` and back | `c.qmd` leaves the browser tree, the mirror\'s disk loses it, the clone on `main` keeps its own; `b.qmd` appears in the tree and in the mirror; on return `c.qmd` is listed again at its old doc and `b.qmd` is gone |
 | H7 | The hub switches and back, with `logo.png` differing | The browser shows the new image; the mirror\'s bytes equal the feature file; the clone on `main` keeps its own bytes (never overwritten) |
 | H8 | The hub starts a rebase that stops for conflicts, then continues | The status route reports paused; guests keep editing; no conflict marker reaches any doc; after the rebase one decision runs and guests swap once |
@@ -105,13 +106,15 @@ notes (detail chosen by the plan author; confirm).
   modeled on `q2-preview-spa-e2e.yml`: Rust nightly,
   clang, wasm-pack, wasm-bindgen-cli, Node 24, `npm ci`, the WASM, trace-viewer, SPA, and hub-client embed builds,
   `cargo build --bin q2`, the extension build, the VS Code download step of the GE-8 harness (cached), and the
-  Playwright run under a virtual display (`xvfb-run`), with a report upload. Path-triggered on the extension, the hub
-  crates, `quarto-sync-client`, `preview-runtime`, the schema and git epochs packages, and the workflow itself. It
-  starts non-gating (`continue-on-error: true`) like its model, since VS Code under a virtual display is new here
-  (detail chosen by the plan author; confirm).
+  Playwright run under a virtual display (`xvfb-run`), with a report upload. The workflow rebuilds Rust, the WASM, and
+  the embeds, which the existing 75-minute `q2-preview-spa-e2e` legs already do, so it stays `workflow_dispatch` only
+  (non-gating, `continue-on-error: true` like its model) until the permanent subset has passed on several manual runs
+  under the virtual display; then Gordon decides whether to add path triggers (the extension, the hub crates,
+  `quarto-sync-client`, `preview-runtime`, the schema and git epochs packages, and the workflow itself) and whether to
+  gate it.
 - A new `cargo xtask verify` step (step 15, under `--e2e`) running the permanent subset; update `TOTAL_STEPS` and the
-  header list in `verify.rs`.
-- GE-17 runs the permanent subset on Windows.
+  header list in `verify.rs`. GE-1 and GE-8 already added the unit-test steps for the new packages and the extension.
+- GE-17 runs the permanent subset on Windows, plus GE-9\'s timing test, which is not in the permanent subset.
 
 ## Test specifications
 
@@ -123,9 +126,12 @@ process and removes every temporary directory, and no async work outlives a test
 
 - [ ] Extend GE-13\'s fixture builder with `c.qmd`, `b.qmd`, and the PNG; unit-test blob determinism.
 - [ ] **Cross-implementation registry check** (the first plan that waits for both the Rust and TypeScript logic): the
-  TypeScript package decodes a sidecar written by the hub (a golden doc dumped from a real hub run), and the Rust
-  crate decodes the doc GE-5 committed under `fixtures/golden/`; both yield the same logical entries. A mismatch is
-  a contract bug: stop and bring it to Gordon.
+  TypeScript package decodes the sidecar document GE-2 committed under `fixtures/golden/from-rust-*.bin` and a sidecar
+  written by a real hub run, and the Rust crate decodes the doc GE-5 committed under `fixtures/golden/`; each pair
+  yields the same logical entries, with generations as `int` and both string forms accepted. To dump the hub\'s
+  sidecar, a small script connects a raw JS `Repo` to the running hub\'s `/ws`, reads the sidecar docId from the
+  index\'s `epochs` key, fetches the doc, and writes `A.save(doc)` to a fixture file (the same raw-`Repo` path Gate 0
+  item 1 proved). A mismatch is a contract bug: stop and bring it to Gordon.
 - [ ] Extend `q2-preview-spa/e2e/helpers/previewServer.ts` with `hubUrl` and `project` options (`--hub-url`,
   `--project`; `startPreviewServer` has neither today) and add a standalone-hub starter for L2 and L4 (GE-8\'s
   `helpers/hub.ts` hub, or `q2 hub`; the relay hub must need no sign-in). These helpers are not in GE-13.

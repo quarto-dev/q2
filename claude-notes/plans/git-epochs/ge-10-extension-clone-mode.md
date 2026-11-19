@@ -117,6 +117,16 @@ clock where timing matters.
 
 - [ ] `git switch -c ge/10-extension-clone-mode feature/git-epochs`; confirm GE-9\'s gates pass on the integration
   line.
+- [ ] **First, the git-enabled publish helper**, because specs 1 to 4 and the Playwright tests need a share that
+  carries a `repo` entry. Add `publishGit(dir, serverUrl)` to the headless peer: an index at version 4 with the
+  sidecar, `repo`, and a registry entry for each file under its HEAD blob at generation 0, built with the GE-1 schema
+  helpers and the GE-5 registry operations. It is test code only (GE-12 builds the real origination). Test it by
+  reading the result back with the GE-5 registry operations.
+- [ ] Add `joinAsClone(dir, serverUrl, indexDocId)` and `joinAsMirror(dir, serverUrl, indexDocId)` to the headless peer
+  once attach and the mirror binding exist (wrappers over the core functions: the attach check and the binding
+  writer), so that GE-12 spec 10, GE-14, and GE-17 `c1` step 3 can attach a headless clone without a VS Code window.
+  They live here, not in GE-11, because GE-11 and GE-12 run in parallel and GE-12 needs them. Test them against
+  `publishGit`.
 - [ ] Write test specs 1 to 4 and see them fail. Implement `src/core/clone/attach.ts` (preconditions, identity check,
   prefix mapping) and the exclude-file writer. Extend the GE-5 probe with the missing helpers if needed.
 - [ ] Add `mode: 'clone'` and the `repo` identity (roots, prefix) to `ProjectMeta`; write them at attach; re-verify
@@ -132,7 +142,7 @@ clock where timing matters.
   file, a move forward or `arrive`; resume sync for the held files. The controller runs only in clone mode. It passes `isOwnWrite(path)` (the engine\'s last-written content hash) so the
   engine\'s own disk writes do not restart the quiet window, and every file holds from the trigger if its disk differs
   from its last synced content.
-- [ ] Arrival side effects: a created doc is registered with generation max over the path plus one (zero when the path has no entry); step 2 with
+- [ ] Arrival side effects: a created doc is registered with generation max over the path plus one (the maximum of a path with no entry is -1, so its first doc gets 0); step 2 with
   S equal to B and T different retires the entry and creates a doc from disk (the owner also flips the pointer;
   GE-12);
   attach rebinds any open buffer to the chosen doc; step 4 writes the doc text to disk and queues the aggregate
@@ -147,11 +157,9 @@ clock where timing matters.
 - [ ] Add `Binding.setInert(bool)` in the core: inert drops local edits and skips `applyRemote`, keeping the handle for
   the re-attach comparison. Write test spec 8 and implement the detached set, the aggregated notices, and the actions
   (texts below).
-- [ ] **Notices** (texts chosen by the plan author; confirm): "N files are detached: your checked-out version differs
-  from the shared one. Your edits to them no longer reach the project." with actions "Adopt shared version" and
-  "Stay detached"; "N files joined live edits from collaborators that are not committed to git." with the action "Use
-  my checkout instead"; the adopt confirm: "This file has uncommitted changes. Replace it with the shared version?"
-  Notices aggregate per batch, one message each.
+- [ ] **Notices.** Use GE-6\'s constants and never restate them: `FILES_DETACHED` (actions "Adopt shared version" and
+  "Stay detached"), `FILES_JOINED_LIVE` (action "Use my checkout instead"), `ADOPT_CONFIRM` for the adopt confirm, and
+  `DOC_SUPERSEDED` for the status bar line. Notices aggregate per batch, one message each.
 - [ ] **No "share mine".** A dirty file offers two actions, adopt and stay detached (decided 2026-11-18: a second doc
   under the current blob would lose to the canonical doc under G7, so it could never be joined). A detached file that
   is later committed goes through arrival again for its new blob; no doc is registered there, so one is created from
@@ -161,7 +169,7 @@ clock where timing matters.
   content (read with `git cat-file`, no filters) back to the file and detaches the file (inert); it never creates a
   second doc (detail chosen by the plan author; confirm). Test it: the file text equals the blob and the Binding is
   inert.
-- [ ] Event log: add `switched` (arrival attached a different doc), `detached`, `reattached`, `held`, `reset`, and `retired` to the
+- [ ] Event log: add `switched` (arrival attached a different doc), `detached`, `reattached`, `held`, `reset`, `retired`, and `moved-forward` (a commit-type decision) to the
   events GE-9 widened (`logEvent`, `project.ts:247`), each with the path, the doc ids, and the reason; the first
   plan listed these for the extension. Test that each decision writes its event (detail chosen by the epic
   reviewer; confirm).
@@ -172,20 +180,32 @@ clock where timing matters.
 - [ ] Write test spec 9. Implement the persisted record `.quarto-hub/git-epochs.json` (`version`, `head`, `blobs` as a
   path-to-blob map for the participating files, `detached` as a list of paths) written atomically after each decision
   and on shutdown, and the startup rule over it. Reconcile as today for files whose blob is unchanged.
-- [ ] Write test specs 10 and 11. Implement `rebind(root, newMeta)` in the core (confirm, remove the Automerge store
-  and the record, rewrite `project.json`, re-run the first-run rule) and the sidecar race handling.
+- [ ] Write test specs 10 and 11. Implement `rebind(root, newMeta)` in the core (confirm, shut the repo and its storage
+  down first, because on Windows deleting a store that is still open fails with EBUSY; remove the Automerge store and
+  the record; rewrite `project.json`; re-run the first-run rule) and the sidecar race handling. Write the record
+  atomically with a rename and retry a rename that fails with EPERM a few times (Windows, a watcher or scanner holding
+  the target); GE-16 `b4` covers both on Windows.
 - [ ] Write test spec 12 if it is not already covered by GE-9\'s spec 2 and the gate: assert the whole-file reload
   during a closed gate is not spliced.
 - [ ] **Interim commands** so every flow is driveable end to end: "Quarto Hub: Attach Folder to Project" (asks for a
   server URL and a project id or share URL, parsed with the shared package) and "Quarto Hub: Rebind Folder to Project"
   (detail chosen by the plan author; confirm; GE-11\'s Join command calls the same core functions and then these two
   are removed or kept as shortcuts).
-- [ ] An owner hook: define a `PointerWriter` interface that the clone controller calls after each decision, with a
-  no-op default; GE-12 supplies the owner implementation. Do not write the pointer here.
-- [ ] Add a git-enabled publish helper to the headless peer, `publishGit(dir, serverUrl)`: an index at version 4 with
-  the sidecar, `repo`, and a registry entry for each file under its HEAD blob at generation 0, built with the GE-1
-  schema helpers and the GE-5 registry operations. It is test code only (GE-12 builds the real origination); spec 1
-  and the Playwright tests use it.
+- [ ] An owner hook: define this interface in `src/core/clone/pointer-writer.ts`, which the clone controller calls
+  after each decision, with a no-op default; GE-12 supplies the owner implementation. Do not write the pointer here.
+
+  ```ts
+  export interface PointerBatch {
+    flips: { path: string; docId: string }[];      // paths whose doc changed (checkout, or a doc created from disk)
+    removals: string[];                            // tracked files git removed
+    relists: { path: string; docId: string }[];    // files that returned, at the registry's doc
+    additions: string[];                           // files git added; the owner publishes a fresh doc each
+    resets: { path: string; retiredDocId: string; newDocId: string; discarded: number }[];
+  }
+  export interface PointerWriter {
+    applyDecision(batch: PointerBatch): Promise<void>;   // one index change per call
+  }
+  ```
 - [ ] **Playwright tests** (GE-8 harness; a project published with the headless peer\'s `publishGit`, a temp git repo
   as the workspace; later steps use `git switch` run from the test): attach succeeds and the status bar says clone;
   attach to an unrelated repo is refused and a mirror is offered; a `git switch` to a branch another peer already

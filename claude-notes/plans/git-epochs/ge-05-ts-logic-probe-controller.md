@@ -88,8 +88,9 @@ Written first, seen failing for the right reason (a missing module, then a wrong
    but drifted (join with a notice); dirty (detach); `ReadOnly` with a differing disk (create from disk); a doc live
    under another path (fork); an unavailable canonical doc (create after the timeout); already attached with S equal to B and T different (retire,
    create, register, flip); a doc another peer retired; every changed file under colocated jj (step 5 fallback).
-4. **Registry rows and golden docs:** canonical by lowest `(generation, docId)`; a creation race on one key and on a new path (flat union); a later
-   creator gets generation max over the path plus one; retire skips the doc and repair never re-registers it; move forward is one change and carries the generation; two tips;
+4. **Registry rows and golden docs:** canonical by lowest `(generation, docId)`; a creation race on one key and on a new path (flat union); the first doc
+   of a path gets generation 0 and a later creator gets the maximum over the path plus one (the maximum of an empty path is -1); the exported event
+   kinds equal `fixtures/vocabulary.json`; retire skips the doc and repair never re-registers it; move forward is one change and carries the generation; two tips;
    case-insensitive collision; unborn repo refused. The package reads each golden doc and checks its logical entries;
    it applies the operation and checks that the result decodes to the golden \"after\" entries. Reading this package\'s
    docs with the Rust crate is not checked here; GE-14, the first plan that waits for both, does that.
@@ -126,7 +127,8 @@ Written first, seen failing for the right reason (a missing module, then a wrong
 - [ ] `probe` interface and a fake probe used by the controller tests. The interface also has the repo identity
   queries (G4): `rootCommits()` (`rev-list --max-parents=0 HEAD`), `isShallow()` (`rev-parse
   --is-shallow-repository`), and `showPrefix()`; GE-10 uses them for the attach check and GE-12 for the `repo` entry. The interface also has `cheapState()`, which
-  stats the marker paths and the reflog file with no subprocess, for `check()`.
+  stats the marker paths and the reflog file with no subprocess, for `check()`; a missing reflog file (no `.git/logs`
+  directory when `core.logAllRefUpdates=false`) means "no reflog", not an error, and a test pins that.
   Real-repo tests: a repo with two root commits, and a `--depth 1` clone made through a `file://` URL (a plain local
   path ignores `--depth`).
 - [ ] `controller`: write the fake-probe and fake-clock tests, see them fail, then implement the state machine with the
