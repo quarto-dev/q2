@@ -1,0 +1,15 @@
+# worktrunk hooks for worktrees made from this branch (rich-editor-* work
+# branches off rich-editor-prototype).
+
+# The rich-editor prototype needs the base worktree's node_modules and WASM
+# build, not its Rust target/: that's ~11 GB of small files, and reflinks are
+# made one file at a time, so copying it took 10+ minutes.
+[step.copy-ignored]
+exclude = ["target/"]
+
+# pre-start, not post-start: worktrunk runs post-* hooks at macOS background
+# priority (`taskpolicy -b`), where the copy starves whenever the machine is
+# busy. `wt switch` now returns once the copy is done, so there's no need to
+# `wt-wait`.
+[pre-start]
+copy = "wt step copy-ignored --from {{ base }} || wt step copy-ignored"
