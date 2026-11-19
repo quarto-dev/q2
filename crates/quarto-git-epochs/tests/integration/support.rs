@@ -54,3 +54,15 @@ pub fn temp_dir() -> (tempfile::TempDir, PathBuf) {
     let p = t.path().canonicalize().unwrap();
     (t, p)
 }
+
+/// Commits `rel` with LF content, then re-checks it out under `core.autocrlf=true`, so the working copy holds
+/// CRLF the way a Windows checkout does. Returns the disk bytes (asserted to contain CRLF for text).
+pub fn crlf_checkout(dir: &Path, rel: &str, blob: &[u8]) -> Vec<u8> {
+    init_repo(dir);
+    put(dir, rel, blob);
+    commit_all(dir, "base");
+    git(dir, &["config", "core.autocrlf", "true"]);
+    std::fs::remove_file(dir.join(rel)).unwrap();
+    git(dir, &["checkout", "--", rel]);
+    std::fs::read(dir.join(rel)).unwrap()
+}
