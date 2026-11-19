@@ -283,4 +283,17 @@ The logic itself (GE-2, GE-5), the swap module and the notice texts (GE-6), adop
 
 ## Notes from the run
 
-Not started.
+**Session 1 (lane A, 2026-11-18).**
+
+- Step 0 done: `feature/git-epochs` rebased onto `origin/main` (9 commits replayed over 47 new ones, no conflicts;
+  the only conflict-marker lines in the tree are quoted text in
+  `claude-notes/research/2026-05-19-attribution-merge-briefing.md`, identical to `origin/main`). `cargo build
+  --workspace` passed on the branch in workspace-7 (exit 0).
+- Gate 0 item 7, partly done (git 2.55.0, temp repo): reflog subjects are `commit (amend): <msg>`,
+  `revert: Revert "<subject>"`, `cherry-pick: <subject>`, `checkout: moving from X to Y` (for `switch`), and
+  `reset: moving to HEAD` for both `git stash` and a plain `git reset --hard`, so the two are indistinguishable by
+  subject, as the second review found. A repo with `core.logAllRefUpdates=false` has no `.git/logs`. In a linked
+  worktree, `git rev-parse --git-path logs/HEAD` and `index.lock` resolve under `.git/worktrees/<name>/`.
+  **Not done:** `pull --ff-only` and stopped-`rebase` subjects, `sequencer/` and `BISECT_LOG` presence, and the
+  millisecond lock/file/ref ordering on a 3,000-file tree.
+- Not started: Gate 0 items 6, 8, 9 and part two; the contract, package, schemas, fixtures. No code changed.
