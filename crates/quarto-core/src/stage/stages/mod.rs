@@ -158,11 +158,12 @@ pub use math_js::{DEFAULT_KATEX_URL_BASE, DEFAULT_MATHJAX_URL, MathEngine, MathJ
 pub use math_ml::MathMlStage;
 pub use metadata_merge::MetadataMergeStage;
 pub use pandoc_prepare::PandocPrepareStage;
-pub use pandoc_write::{PandocWriteStage, PreparedPandoc, TypstPrepInputs};
 #[cfg(not(target_arch = "wasm32"))]
 pub use pandoc_write::{
-    resolve_and_gate_pandoc, retain_failed_json, retain_temp_json_unless_success,
+    PANDOC_INVOCATION_KIND, pandoc_invocation_payload, resolve_and_gate_pandoc, retain_failed_json,
+    retain_temp_json_unless_success,
 };
+pub use pandoc_write::{PandocWriteStage, PreparedPandoc, TypstPrepInputs};
 pub use prefetch_remote_images::{PrefetchRemoteImagesStage, REMOTE_DIR, REMOTE_SRC_ATTR};
 pub use rasterize_svg_images::{RASTER_DIR, RASTER_SRC_ATTR, RasterizeSvgImagesStage};
 pub use unexecuted_cell_count::{UnexecutedCellCountStage, count_engine_cells};

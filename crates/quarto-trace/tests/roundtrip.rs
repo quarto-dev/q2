@@ -879,3 +879,78 @@ fn preview_and_hub_capture_bytes_unchanged_when_trace_field_exists() {
     let with_record: serde_json::Value = serde_json::to_value(&capture).unwrap();
     assert_eq!(with_record["record"], json!({ "cells": [] }));
 }
+
+/// A `PandocInvocation` entry (the exact pandoc input AST, decoded filter
+/// params and argv) dedups its `ast` into the top-level `asts` map like
+/// every other AST-carrying kind, so it shares storage with the final
+/// traced stage's identical AST instead of doubling the trace size.
+#[test]
+fn test_v2_writer_dedups_pandoc_invocation_ast() {
+    let tmp = std::env::temp_dir().join(format!(
+        "quarto-trace-pandoc-invocation-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos())
+    ));
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+    let path = tmp.join("latest.json");
+
+    let fat_ast = json!({
+        "pandoc-api-version": [1, 23, 0],
+        "meta": {},
+        "blocks": (0..20).map(|i| json!({
+            "t": "Para",
+            "c": [{"t": "Str", "c": format!("block-{}", i)}],
+        })).collect::<Vec<_>>(),
+    });
+    let mut doc = TraceDocument::new(RenderInfo::default());
+    doc.pipeline.push(TraceEntry {
+        stage: "unwrap-profile".into(),
+        index: 0,
+        data_kind: Some("DocumentAst".into()),
+        data: Some(json!({"path": "doc.qmd", "ast": fat_ast.clone(), "warnings_count": 0})),
+        duration_ms: None,
+        status: StageStatus::Ok,
+        error: None,
+    });
+    let invocation = json!({
+        "ast": fat_ast.clone(),
+        "params": {"active-filters": {"normalization": true}},
+        "to_format": "docx",
+        "argv": ["pandoc", "-f", "json"],
+    });
+    doc.pipeline.push(TraceEntry {
+        stage: "pandoc-write".into(),
+        index: 0,
+        data_kind: Some("PandocInvocation".into()),
+        data: Some(invocation.clone()),
+        duration_ms: None,
+        status: StageStatus::Ok,
+        error: None,
+    });
+
+    write_trace(&doc, &path).unwrap();
+
+    let raw: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    let asts = raw["asts"].as_object().expect("asts map");
+    assert_eq!(
+        asts.len(),
+        1,
+        "the invocation's AST must dedup against the identical DocumentAst: {:?}",
+        asts.keys().collect::<Vec<_>>()
+    );
+    let entry = &raw["pipeline"][1]["data"];
+    assert!(
+        entry["ast"].get("$ref").is_some(),
+        "PandocInvocation data.ast must be a $ref: {entry}"
+    );
+    assert_eq!(entry["params"], invocation["params"]);
+    assert_eq!(entry["argv"], invocation["argv"]);
+
+    let read_back = read_trace(&path).unwrap();
+    assert_eq!(read_back.pipeline[1].data.as_ref(), Some(&invocation));
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}

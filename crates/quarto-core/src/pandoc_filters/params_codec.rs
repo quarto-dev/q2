@@ -21,6 +21,16 @@ pub fn encode_params_blob(json: &str) -> String {
     base64::engine::general_purpose::STANDARD.encode(json)
 }
 
+/// Decodes a `QUARTO_FILTER_PARAMS` value back to its JSON text: the exact
+/// inverse of [`encode_params_blob`] (standard alphabet, padded). Used to
+/// record the params a pandoc run received in a readable form.
+pub fn decode_params_blob(encoded: &str) -> Result<String, String> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|e| e.to_string())?;
+    String::from_utf8(bytes).map_err(|e| e.to_string())
+}
+
 /// The Windows environment-block size cap, in characters: `CreateProcess`
 /// rejects an environment block larger than 32,767 characters. Modelled as a
 /// pure predicate (rather than inlined at the call site) because this
@@ -39,6 +49,28 @@ pub fn params_blob_exceeds_platform_limit(len: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `decode_params_blob` is the exact inverse of `encode_params_blob`.
+    ///
+    /// Revert hunk: decoding with a different alphabet (`URL_SAFE`) makes the
+    /// `+`/`/`-bearing payload below fail to round-trip.
+    #[test]
+    fn test_decode_round_trips_encode() {
+        // Bytes that encode to `+` and `/` in the standard alphabet.
+        let payload = "{\"k\":\"\u{fb}\u{ff}?>>\"}";
+        let encoded = encode_params_blob(payload);
+        assert!(
+            encoded.contains('+') || encoded.contains('/'),
+            "fixture must exercise the non-URL-safe characters: {encoded}"
+        );
+        assert_eq!(decode_params_blob(&encoded).unwrap(), payload);
+    }
+
+    /// Malformed input is an error, not a panic or lossy output.
+    #[test]
+    fn test_decode_rejects_invalid_base64() {
+        assert!(decode_params_blob("not base64!!").is_err());
+    }
 
     /// T3.1: a payload whose byte length is `% 3 == 2` produces padded
     /// output ending in `=`. The fixture length is the discriminator, not

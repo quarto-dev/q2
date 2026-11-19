@@ -303,6 +303,12 @@ impl PipelineObserver for JsonTraceObserver {
         );
     }
 
+    /// A trace records the exact pandoc invocation so the Lua filter stage
+    /// can be replayed from it (see `PANDOC_INVOCATION_KIND`).
+    fn wants_pandoc_invocation(&self) -> bool {
+        true
+    }
+
     /// EXR-5: a trace carries each engine's record on its capture
     /// (`engine_capture.record`), so `ReplayEngine` can replay from it after the
     /// flip (EXR-6). Trace size grows by the base64 figures; accepted, the trace
@@ -585,6 +591,14 @@ fn pipeline_data_summary(data: &PipelineData) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The JSON trace observer records the exact pandoc invocation.
+    #[test]
+    fn test_json_trace_observer_wants_pandoc_invocation() {
+        let obs =
+            JsonTraceObserver::new(PathBuf::from("/tmp/test-trace.json"), RenderInfo::default());
+        assert!(obs.wants_pandoc_invocation());
+    }
     use crate::stage::data::LoadedSource;
 
     #[test]
