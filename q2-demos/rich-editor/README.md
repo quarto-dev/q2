@@ -375,6 +375,12 @@ that's already there. To run them outside the queue in two checkouts at
 once, give one a port of its own (`E2E_PORT=5200 npx playwright test`), or
 each will be testing the other's app.
 
+Throwaway specs go in `e2e/scratch/`, which git ignores. A run leaves them
+out unless its arguments name the folder
+(`npm run test:e2e -- e2e/scratch/repro.spec.ts`). `npm run drive --
+<script.mjs>` runs a one-off script from anywhere, with this package's
+dependencies (say, to drive a mockup in Playwright).
+
 Every spec runs in Chromium, Firefox and WebKit (`npx playwright install`
 fetches them; `--project=firefox` runs one). The engines differ most
 where an editor lives: the caret, selections and `contenteditable`. A

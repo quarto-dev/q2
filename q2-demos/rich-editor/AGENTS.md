@@ -33,6 +33,25 @@ background.
 Run the unit tests (`npm run test:unit`) and `npm run typecheck` too
 before committing.
 
+Firefox runs need no setup: `playwright.config.ts` gives Firefox the
+throwaway home folder it needs to launch from Claude's shell, so don't set
+`CFFIXED_USER_HOME` yourself.
+
+## Throwaway repros and scripts
+
+Other sessions often work in the same checkout, so keep throwaway files
+out of the places they use:
+
+- **A throwaway spec** (a repro, a probe) goes in `e2e/scratch/`, which git
+  ignores. Give it a name of your own. A run leaves `e2e/scratch/` out
+  unless its arguments name it, so another session's suite never picks up
+  your probe: `npm run test:e2e:chromium -- e2e/scratch/<name>.spec.ts`.
+  Delete it when you're done. Don't put throwaway specs in `e2e/` itself.
+- **A one-off script** (say, one that drives a mockup in every browser)
+  stays in your scratchpad. Run it with `npm run drive -- <path> [args]`:
+  imports like `@playwright/test` resolve from this package. Don't copy
+  scripts into the package to run them.
+
 ## The desktop app is tested for what it adds
 
 The desktop app (`src-tauri/`, `desktop.html`) is the same editor on a

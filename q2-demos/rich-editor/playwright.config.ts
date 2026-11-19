@@ -20,8 +20,16 @@ const PORT = Number(process.env.E2E_PORT ?? 5192)
 const firefoxHome = join(tmpdir(), 'rich-editor-e2e-firefox-home')
 mkdirSync(firefoxHome, { recursive: true })
 
+// `e2e/scratch/` holds throwaway specs (repros, probes); git ignores it. A run
+// leaves them out unless its arguments name the folder, so a whole suite
+// never runs (or trips over) another session's half-written probe. The
+// runner records the choice in the environment, which its workers inherit
+// when they load this config again.
+if (process.argv.some((a) => a.includes('scratch'))) process.env.E2E_SCRATCH = '1'
+
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: process.env.E2E_SCRATCH ? [] : ['scratch/**'],
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? 'github' : 'list',
