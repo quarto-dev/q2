@@ -33,6 +33,7 @@ import {
   type IndexDocument,
 } from '@quarto/quarto-automerge-schema';
 import { writeFileDoc, type FileDoc } from './create-folder';
+import { excludeMetaDir } from './git-exclude';
 import { EditorGate, type GateBuffer, type GateClock } from './editor-gate';
 import { Follower, type Clock } from './follower';
 import type { BufferBinding, SyncHost } from './host';
@@ -43,6 +44,8 @@ import { movedNotice, type ControllerProbe } from '@quarto/quarto-git-epochs';
 import { findDoc, makeRepo, webSocketAdapter } from './repo';
 import { UnsafePathError, safeJoin } from './safe-path';
 import type { TextDoc } from './text-binding';
+
+const MODE_LABEL = { mirror: 'Quarto Hub: mirror', 'editor-only': 'Quarto Hub: editor only' } as const;
 
 /** Knobs the tests (and later plans) turn; every one has a product default. */
 export interface SyncOptions {
@@ -141,12 +144,14 @@ export class ProjectSync {
     this.cleanups.push(() => watcher.dispose(), () => buffers.dispose());
     buffers.openPaths().forEach((p) => this.bind(p));
     this.log.appendLine(`project sync running: ${this.root} (${this.handles.size} files)`);
+    this.host.notifier.status(MODE_LABEL[this.mode]); // the persistent status bar item
     this.host.notifier.status(`$(sync) Quarto Hub: syncing ${path.basename(this.root)}`, 5000);
   }
 
   async dispose(): Promise<void> {
     this.cleanups.forEach((c) => c());
     this.cleanups.length = 0;
+    this.host.notifier.status(null); // clears the mode item
     for (const rel of [...this.handles.keys()]) this.untrack(rel);
     for (const abs of [...this.bound.keys()]) this.unbind(abs);
     await this.repo.flush().catch(() => {});
@@ -354,6 +359,7 @@ export class ProjectSync {
     let gate = this.options.gate;
     if (!gate) {
       const { createGitProbe } = await import('@quarto/quarto-git-epochs/probe');
+      await excludeMetaDir(this.root).catch(() => false); // keep .quarto-hub/ out of `git status`
       const probe = createGitProbe({ cwd: this.root });
       await probe.ready().catch(() => {}); // not a repository: the controller goes off at init
       gate = { probe, clock: { now: () => Date.now(), setTimeout, clearTimeout } };

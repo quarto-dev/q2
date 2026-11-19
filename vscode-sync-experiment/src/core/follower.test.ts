@@ -203,6 +203,11 @@ describe('moved message, event log, and legacy folders', () => {
     await waitFor(async () => (await readText(path.join(root, 'a.qmd'))) === 'A2\n', 'the flip on disk');
   });
 
+  it('shows the mode in a persistent status item', async () => {
+    await mirrorOf({ 'a.qmd': 'A1\n' });
+    expect(host.notifier.statuses).toContain('Quarto Hub: mirror');
+  });
+
   it('createProjectFolder writes mode: mirror', async () => {
     owner = await HeadlessOwner.create(hub, { 'a.qmd': 'A1\n' });
     const root = await createProjectFolder(owner.indexDocId, parent, host.log, { syncServer: hub.url });

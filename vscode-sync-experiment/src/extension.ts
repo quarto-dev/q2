@@ -109,9 +109,9 @@ async function createFolder(): Promise<void> {
 
 async function startProject(root: string, context: vscode.ExtensionContext): Promise<void> {
   if (projects.has(root)) return;
-  const meta = await readProjectMeta(root);
-  if (!meta) return;
   try {
+    const meta = await readProjectMeta(root); // throws for a mode this version does not know
+    if (!meta) return;
     await ensureWasm();
     const host = { log, watcher: new VscodeFileWatcher(root), buffers: new VscodeBufferHost(), notifier: new VscodeNotifier() };
     const sync = new ProjectSync(root, meta, getIdentity(context), host);

@@ -120,6 +120,11 @@ describe('editor-only follower (spec 5)', () => {
     expect(owner.textOf('a.qmd')).toBe('A1\n');
   });
 
+  it('shows the mode in a persistent status item', async () => {
+    await editorOnly({ 'a.qmd': 'A1\n' });
+    expect(host.notifier.statuses).toContain('Quarto Hub: editor only');
+  });
+
   it('rebinds an open buffer to the new doc on a flip', async () => {
     const { abs } = await editorOnly({ 'a.qmd': 'A1\n' });
     await openBound(abs, 'A1\n');

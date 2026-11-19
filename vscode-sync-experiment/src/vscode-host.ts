@@ -76,6 +76,9 @@ export class VscodeBufferHost implements BufferHost {
 }
 
 export class VscodeNotifier implements Notifier {
+  /** The persistent item (the mode label); created on first use. */
+  private item: vscode.StatusBarItem | null = null;
+
   info(message: string, ...actions: string[]): Promise<string | undefined> {
     return Promise.resolve(vscode.window.showInformationMessage(`Quarto Hub: ${message}`, ...actions));
   }
@@ -86,8 +89,17 @@ export class VscodeNotifier implements Notifier {
     return Promise.resolve(vscode.window.showErrorMessage(`Quarto Hub: ${message}`, ...actions));
   }
   status(text: string | null, timeoutMs?: number): void {
-    if (text === null) return;
-    if (timeoutMs === undefined) vscode.window.setStatusBarMessage(text);
-    else vscode.window.setStatusBarMessage(text, timeoutMs);
+    if (text === null) {
+      this.item?.dispose();
+      this.item = null;
+      return;
+    }
+    if (timeoutMs !== undefined) {
+      vscode.window.setStatusBarMessage(text, timeoutMs);
+      return;
+    }
+    this.item ??= vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
+    this.item.text = text;
+    this.item.show();
   }
 }
