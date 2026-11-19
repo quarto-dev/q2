@@ -193,3 +193,64 @@ windows/git-epochs` against `git rev-parse HEAD`. The plan is **not landed**; it
 Checklist items still open: the push, the Windows run, recording the results, classifying failures, and the final landing.
 
 **Session 2 (push).** Gordon said go. The first push was rejected as non-fast-forward: the remote held `f83a4ec66` (GE-15\'s Windows results, committed from the Windows machine). I merged it into the tooling branch (no rebase), and the conflict-marker grep found only quoted text in an old research note. Pushed `windows/git-epochs` at `e82260135`; `git ls-remote` matches `git rev-parse HEAD`. Waiting for the Windows run.
+
+**Session 3 (the Windows run).** Two runs came back from the Windows machine, both on branch `windows/git-epochs`.
+
+**Run 20261119-053347-GWWIN is void.** It ran no items: `powershell -File run.ps1 -Only b1,b2,...` delivers one string
+(`"b1,b2,..."`) under Windows PowerShell 5.1, so no item id matched. A tooling defect, fixed by splitting `-Only` on
+commas (tooling commit `e90975b6f`, pushed; never lands).
+
+**Run 20261119-053817-GWWIN** (base `e90975b6f`; host `x86_64-pc-windows-msvc`, Windows 11 Pro; git 2.47.1.windows.1;
+node v24.21.0; `core.autocrlf=true`; `core.longpaths` unset; no `jj`; uv, nasm, cmake present; `link.exe` not on PATH,
+irrelevant to run B). The checkout path was under `C:\Users\GordonWoodhull\src\...`, and `os.tmpdir()` returned both the
+long and the 8.3 form (`GORDON~1`), so the volume has short names.
+
+| Item | Result | Detail |
+|---|---|---|
+| `b1` (W6) | PASS | 204 passed, 1 skipped (the macOS count is 205). The probe, controller, and scenarios hold on Git for Windows. |
+| `b2` (W4) | FAIL | 94 passed, 1 failed: the `GIT~1` row. |
+| `b3` (W3) | PASS | 91 passed. The CRLF checkout does not look dirty. |
+| `b4` | FAIL | 121 passed, 6 failed (see below). |
+| `b5` (W7) | FAIL | 57 passed, 1 failed: a symlink test. The spawn, readiness, stdin close, tree kill, and ticket-hygiene tests all passed. |
+| `b6` | FAIL | 63 passed, 1 failed: a symlink test. |
+| `b7` | FAIL | `npm ci`, the extension typecheck, and the extension bundle passed; one ts-packages build failed. |
+
+**Failures and classification.**
+
+1. `b2`, `safe-path.test.ts` "an 8.3 short name of .git is rejected": `safeJoin(root, 'GIT~1/hooks/pre-commit')`
+   resolved to `...\root\GIT~1\hooks\pre-commit` instead of rejecting. **Product defect**, and the one the session 1 notes
+   predicted. Proposed fix plan: *GE-F1 safeJoin rejects NTFS 8.3 aliases of `.git`.* Cause: the segment check does not
+   know `GIT~1`, and the `realpath` check only asks whether the result stays inside the root. Files:
+   `vscode-sync-experiment/src/core/safe-path.ts` (and the same rule in `ts-packages/quarto-git-epochs` if `safeJoin`
+   is shared there). Fix: after the segment check, compare the `realpath.native` of the deepest existing ancestor to the
+   segment names, or reject any segment matching `/^[^.]{1,6}~\d+(\.[^.]*)?$/` (an 8.3 form) on win32. Test: the existing
+   row, which now fails for the right reason.
+2. `b5`, `join.test.ts` "matches through a symlink, by real path", and `b6`, `select.test.ts` "drops symlinks and
+   submodule links": `EPERM: operation not permitted, symlink`. **Machine plus test defect.** Creating a symlink on
+   Windows needs Developer Mode or an elevated token; the code under test is not implicated. Proposed fix plan: *GE-F2
+   tests that need a file symlink skip, with a stated reason, when `symlink` fails with `EPERM` on win32* (a shared
+   `trySymlink` helper in the extension's test support; the junction-based directory rows already work without
+   privilege). Files: `src/core/join.test.ts`, `src/core/origination/select.test.ts`, the test support. The skipped
+   symlink behavior then needs one run with Developer Mode on (add that to GE-17's checklist).
+3. `b4` has six failures; three are visible in the committed tail.
+   - `follower.test.ts` "shows the mode in a persistent status item": `EPERM` on `fs.rename` of the temp folder
+     to the final name in `createProjectFolder` (`src/core/create-folder.ts:117`), after `repo.shutdown()`.
+     **Probable product defect**: a directory rename on Windows fails while a handle is open inside it
+     (`cross-platform.md`), and the Automerge storage or a watcher may still hold one after `shutdown()` resolves.
+     Proposed fix plan: *GE-F3 `createProjectFolder` retries the final rename and closes every handle first.* Test: a
+     rename with a held handle, using the injected-error pattern from `record.test.ts`.
+   - `project-sync.test.ts` "writes a file whose index entry appears...": the event log has no `created` event
+     for `docs/new.qmd` although the file reached disk. **Unclassified**, a timing or ordering difference.
+   - `clone-modes.test.ts` "each decision writes its event to events.jsonl": "timed out waiting for edit reaching the
+     doc". **Unclassified**.
+   - The other three failures were cut off by the 60-line tail in the results file. The run did not commit the log
+     (`results/logs/20261119-053817-GWWIN/b4-core.log`).
+4. `b7`: the build of `@quarto/hub-mcp` (`ts-packages/quarto-hub-mcp/package.json`) runs `rm -rf dist && tsc && ...`, and
+   `rm` does not exist in `cmd.exe`. **Pre-existing defect** (the package predates the epic; list, do not chase). Every
+   other `ts-packages` workspace, including `@quarto/quarto-git-epochs`, built. `npm run build -w quarto-hub-vscode`
+   passed, so the extension is fine. A fix is a one-line change (a node `fs.rmSync` script, or `rimraf`); it belongs to
+   the hub-mcp owner, not this epic.
+
+**Not run or not proved.** The real `q2 preview --share` and `--join` pair, `jj` on Windows, a volume with short names
+disabled, and the symlink behavior (blocked by `EPERM`) were not exercised. The tool that ran this is temporary and
+never lands.
