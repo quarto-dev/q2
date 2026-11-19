@@ -58,6 +58,25 @@ q2 diagrams, all inside their card body: dot 203x59 and 369x59, mermaid
 360x61 twice (the same as a plain `format: html` render). Q1 draws dot at
 768x480, wider than the card (clipped), and mermaid at about 207x70.
 
+## `title` on a diagram (2026-11-19, Andrew: add it)
+
+Q1 reads `title` on a `{dot}` / `{mermaid}` cell as its dashboard card
+title. q2 now does the same for `//| title:` / `%%| title:`:
+
+- [x] `crossref::codeblock_shorthand` consumes `title` on a diagram cell
+      (no Q-2-47) and keeps it as a `title` attribute on the code block.
+- [x] `dashboard::DashboardDiagramTitleTransform`, added only to dashboard
+      pipelines (`dashboard_pre_diagram_transforms`) right before
+      `mermaid-render` / `graphviz-render`, wraps a titled diagram in a
+      `.card` div with that title. Inside an existing `.card` the card's
+      title stands and the diagram's is dropped.
+- [x] Other formats: the diagram transforms drop the attribute with the
+      code block, so no output and no warning. Q1 puts `title="..."` on the
+      HTML cell div, which shows as a hover tooltip; q2 does not copy that.
+- [x] Docs: diagrams guide, Q-2-47 page, dashboards Cards section.
+- [x] Measured at 1400x900 against Quarto 1.9.38: card, header and body
+      rectangles identical for a titled bare dot and mermaid diagram.
+
 ## Divergence (c44)
 
 Quarto 1 cards carry a `cell` class (bare: on the card; in a `.card` div:
@@ -68,8 +87,6 @@ classes, titles and expand buttons are the same.
 
 ## Not covered
 
-- `//| title:` on a diagram block (Q1 sets the card title from it) still
-  warns Q-2-47. Open question for Andrew.
 - A diagram with `fig-cap` arrives inside a figure, not as a bare raw
   block, so it still joins a loose flow card; Q1 gives the cell a fill
   card. Not checked against Q1.

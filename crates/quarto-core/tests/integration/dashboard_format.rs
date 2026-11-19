@@ -574,3 +574,44 @@ fn raw_html_alone_is_still_not_a_card() {
     let doc = scraper::Html::parse_document(&html);
     assert!(select(&doc, "div.bslib-card").is_empty(), "{html}");
 }
+
+/// `title` on a bare diagram (`//| title:`, `%%| title:`) is its card's
+/// title, as on a Quarto 1 `{dot}` / `{mermaid}` cell, with no Q-2-47.
+#[test]
+fn diagram_title_option_is_the_card_title() {
+    let temp = tempfile::TempDir::new().unwrap();
+    write(
+        &temp.path().join("doc.qmd"),
+        "---\ntitle: D\nformat: dashboard\n---\n\n## Row\n\n```dot\n//| title: Flow card\ndigraph G { a -> b }\n```\n\n```mermaid\n%%| title: Mermaid card\nflowchart LR\n  A --> B\n```\n",
+    );
+    let options = RenderToFileOptions {
+        quiet: true,
+        ..Default::default()
+    };
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(&temp.path().join("doc.qmd"), "dashboard", &options, runtime)
+        .expect("renders");
+    let codes: Vec<_> = result
+        .render_output
+        .diagnostics
+        .iter()
+        .filter_map(|d| d.code.clone())
+        .collect();
+    assert!(codes.is_empty(), "{codes:?}");
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+    let doc = scraper::Html::parse_document(&html);
+    assert_eq!(select(&doc, "div.bslib-card").len(), 2, "{html}");
+    let titles: Vec<String> = select(&doc, "div.bslib-card > div.card-header .card-title")
+        .into_iter()
+        .map(text)
+        .collect();
+    assert_eq!(titles, ["Flow card", "Mermaid card"]);
+    assert_eq!(
+        select(&doc, "div.bslib-card > div.card-body > pre.graphviz").len(),
+        1
+    );
+    assert_eq!(
+        select(&doc, "div.bslib-card > div.card-body > pre.mermaid").len(),
+        1
+    );
+}
