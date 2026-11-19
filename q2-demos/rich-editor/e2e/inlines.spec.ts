@@ -213,7 +213,22 @@ test.describe('the toolbar', () => {
     const editor = await openEditor(page, 'inlines')
 
     const names = await editor.toolbar().getByRole('button').evaluateAll((buttons) => buttons.map((b) => b.getAttribute('aria-label')))
-    expect(names).toEqual(['Undo', 'Redo', 'Text style', 'Bold', 'Italic', 'Underline', 'Highlight', 'Link', 'Bulleted list', 'Numbered list', 'Quote'])
+    expect(names).toEqual([
+      'Undo',
+      'Redo',
+      'Text style',
+      'Bold',
+      'Italic',
+      'Underline',
+      'Highlight',
+      'Link',
+      'Bulleted list',
+      'Numbered list',
+      'Decrease indent',
+      'Increase indent',
+      'Quote',
+      'Developer tools',
+    ])
   })
 
   test("its format buttons are pressed for the caret's formats", async ({ page }) => {

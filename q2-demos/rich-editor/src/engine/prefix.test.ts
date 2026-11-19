@@ -202,3 +202,21 @@ describe('a prefix of several characters (a kind that holds data)', () => {
     expect(enter(schema, body(`${D}Two`, caret('body', D.length + 1))).fields.body).toBe(`${D}T\n${D}wo`)
   })
 })
+
+describe('outdenting a line (Schema.outdent)', () => {
+  const ITEM = '﷘'
+  const IN = '﷛'
+  const nested: Schema = { ...schema, continued: (p) => p.startsWith(ITEM), outdent: (p) => (p.length > 1 ? p.slice(0, -1) : '') }
+
+  it('Backspace at the start of a line\'s text gives its prefix what outdent says', () => {
+    const next = deleteBackward(nested, body(`One\n${ITEM}${IN}${IN}Two`, caret('body', 7)))
+    expect(next.fields.body).toBe(`One\n${ITEM}${IN}Two`)
+    expect(next.selection).toEqual(caret('body', 6))
+  })
+
+  it('Enter on an empty line with a prefix carried on gives it what outdent says', () => {
+    const next = enter(nested, body(`One\n${ITEM}${IN}`, caret('body', 6)))
+    expect(next.fields.body).toBe(`One\n${ITEM}`)
+    expect(next.selection).toEqual(caret('body', 5))
+  })
+})

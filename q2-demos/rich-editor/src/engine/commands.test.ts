@@ -10,6 +10,7 @@ import {
   select,
   selectAllStep,
   setLinePrefixes,
+  setFieldPrefixes,
 } from './commands.ts'
 import { ATOM, VOID, caret, range, selectedText, type Fields, type Schema, type State } from './model.ts'
 
@@ -388,5 +389,29 @@ describe('setLinePrefixes', () => {
   it('does nothing without a selection', () => {
     const s = at(null)
     expect(setLinePrefixes(doc, s, () => Q)).toBe(s)
+  })
+})
+
+describe('setFieldPrefixes', () => {
+  const A = '\ufdd8'
+  const IN = '\ufddb'
+  const doc: Schema = { order: ['title', 'body'], multiline: ['body'] }
+  const text = `${A}One\n${A}Two\n${A}${IN}Three\nFour`
+  const at = (selection: State['selection']) => state({ title: 'T', body: text }, selection)
+
+  it('is given every line\'s prefix and the lines the selection is on, and can change any line\'s', () => {
+    const seen: unknown[] = []
+    const next = setFieldPrefixes(doc, at(range('body', 6, 'body', 7)), (prefixes, first, last) => {
+      seen.push(prefixes, first, last)
+      return prefixes.map((p, i) => (i >= 1 && i <= 2 ? p + IN : p))
+    })
+    expect(seen).toEqual([[A, A, A + IN, ''], 1, 1])
+    expect(next.fields.body).toBe(`${A}One\n${A}${IN}Two\n${A}${IN}${IN}Three\nFour`)
+    expect(next.selection).toEqual(range('body', 7, 'body', 8))
+  })
+
+  it('returns the same state when given null', () => {
+    const s = at(caret('body', 2))
+    expect(setFieldPrefixes(doc, s, () => null)).toBe(s)
   })
 })

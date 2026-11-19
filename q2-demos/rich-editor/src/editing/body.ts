@@ -98,6 +98,12 @@ export function isFigure(line: string): boolean {
   return line.startsWith(FIGURE)
 }
 
+/**
+ * After an item's prefix, one of these for each level it's nested at: an
+ * item of a list in the item at the first level has one, and so on.
+ */
+export const INDENT = '\ufddb'
+
 /** Whether a line of the body's text is a block quote. */
 export function isQuote(line: string): boolean {
   return line.startsWith(QUOTE)
@@ -116,6 +122,53 @@ export function isNumbered(line: string): boolean {
 /** Whether a line of the body's text is a list's item, of either kind. */
 export function isItem(line: string): boolean {
   return isBullet(line) || isNumbered(line)
+}
+
+/** How deep a list's item is nested (0: at the first level), or -1 for a line that isn't an item. */
+export function itemDepth(line: string): number {
+  if (!isItem(line)) return -1
+  let depth = 0
+  while (line[1 + depth] === INDENT) depth++
+  return depth
+}
+
+/** The prefix of an item of `kind` (`BULLET` or `NUMBERED`) at `depth`. */
+function itemPrefixAt(kind: string, depth: number): string {
+  return kind + INDENT.repeat(depth)
+}
+
+/**
+ * What's left of a line's prefix when it's taken off by Backspace at the
+ * start of the line's text or by Enter on an empty item: a nested item
+ * moves out a level, and anything else becomes a paragraph.
+ */
+export function outdentPrefix(prefix: string): string {
+  return isItem(prefix) && itemDepth(prefix) > 0 ? prefix.slice(0, -1) : ''
+}
+
+/**
+ * The prefixes of the body's lines (`prefixes`), with the items among
+ * lines `first` to `last` moved in a level (`by` 1, under the item before
+ * them) or out a level (-1), each with the items nested in it; or null
+ * when none can be. An item can move in only under an item before it at
+ * its level or deeper, and out only from a nested level; moving in, it's
+ * all the items or none.
+ */
+export function indentLines(prefixes: readonly string[], first: number, last: number, by: 1 | -1): string[] | null {
+  const depths = prefixes.map(itemDepth)
+  const moved = new Array<boolean>(prefixes.length).fill(false)
+  for (let i = first; i <= last; i++) {
+    if (depths[i] < 0 || moved[i] || (by < 0 && depths[i] === 0)) continue
+    moved[i] = true
+    for (let j = i + 1; j < prefixes.length && depths[j] > depths[i]; j++) moved[j] = true
+  }
+  if (!moved.includes(true)) return null
+  const next = depths.map((d, i) => (moved[i] ? d + by : d))
+  // Every item is at most a level deeper than the item before it, and an
+  // item after a line that isn't one is at the first level.
+  const fits = next.every((d, i) => d < 0 || d <= (i > 0 && next[i - 1] >= 0 ? next[i - 1] + 1 : 0))
+  if (!fits) return null
+  return prefixes.map((p, i) => (moved[i] ? itemPrefixAt(p[0], next[i]) : p))
 }
 
 /** The heading level of a line of the body's text, or 0 for a paragraph. */
@@ -247,23 +300,31 @@ function itemPrefix(list: Node): string | undefined {
 }
 
 /**
- * The lines of a list's items, or undefined when it can't be edited: when
- * an item is anything but one line of plain text, or it's numbered in a
- * way the editor doesn't keep.
+ * The lines of a list's items, nested `depth` levels deep, or undefined
+ * when it can't be edited: when an item is anything but one line of plain
+ * text followed by lists that can be edited (no two of a kind in a row,
+ * whose items would read as one list's), or it's numbered in a way the
+ * editor doesn't keep.
  */
-function itemLines(list: Node): string[] | undefined {
-  const prefix = itemPrefix(list)
-  if (prefix === undefined) return undefined
-  const lines: string[] = []
+function itemLines(list: Node, block: number, depth = 0): BodyLine[] | undefined {
+  const kind = itemPrefix(list)
+  if (kind === undefined) return undefined
+  const prefix = itemPrefixAt(kind, depth)
+  const lines: BodyLine[] = []
   for (const item of listItems(list)) {
-    if (item.length === 0) {
-      lines.push(prefix)
-      continue
-    }
-    if (item.length !== 1 || item[0].t !== 'Plain') return undefined
-    const text = inlineText(item[0].c as Node[])
+    const plain = item[0]?.t === 'Plain' ? item[0] : undefined
+    const text = plain ? inlineText(plain.c as Node[]) : ''
     if (text === undefined) return undefined
-    lines.push(prefix + (text === NBSP ? '' : text))
+    lines.push({ line: prefix + (text === NBSP ? '' : text), block, list, plain, item })
+    let last: string | undefined
+    for (const sub of item.slice(plain ? 1 : 0)) {
+      const subKind = itemPrefix(sub)
+      if (subKind === undefined || subKind === last) return undefined
+      last = subKind
+      const subLines = itemLines(sub, block, depth + 1)
+      if (subLines === undefined) return undefined
+      lines.push(...subLines)
+    }
   }
   return lines
 }
@@ -272,35 +333,34 @@ function itemLines(list: Node): string[] | undefined {
 interface BodyLine {
   line: string
   block: number
-  /** The index of the list item the line is, or -1. */
-  item: number
+  /** For an item's line: the list it's an item of (nested in the block, or the block). */
+  list?: Node
+  /** For an item's line: the item's text, if it has any. */
+  plain?: Node
+  /** For an item's line: the item. */
+  item?: Node[]
 }
 
 /**
  * The body's lines: one per block, or per item of a list that can be
- * edited, and an atom for each block that can't be. A list right after
- * one of its kind that can be edited can't be, since the lines of items
- * of a kind next to each other are one list.
+ * edited (an item in an item after it), and an atom for each block that
+ * can't be. A list right after one of its kind that can be edited can't
+ * be, since the lines of items of a kind next to each other are one list.
  */
 function bodyLines(blocks: readonly Node[]): BodyLine[] {
   const lines: BodyLine[] = []
   blocks.forEach((block, i) => {
     if (block.t === 'BulletList' || block.t === 'OrderedList') {
       const prev = lines[lines.length - 1]
-      const follows = prev?.item >= 0 && linePrefix(prev.line) === itemPrefix(block)
-      const items = follows ? undefined : itemLines(block)
-      if (items) items.forEach((line, item) => lines.push({ line, block: i, item }))
-      else lines.push({ line: ATOM, block: i, item: -1 })
+      const follows = prev?.list !== undefined && prev.line[0] === itemPrefix(block)
+      const items = follows ? undefined : itemLines(block, i)
+      if (items) lines.push(...items)
+      else lines.push({ line: ATOM, block: i })
       return
     }
-    lines.push({ line: lineOf(block) ?? ATOM, block: i, item: -1 })
+    lines.push({ line: lineOf(block) ?? ATOM, block: i })
   })
   return lines
-}
-
-/** The item a line of a list is. */
-function itemOf(blocks: readonly Node[], line: BodyLine): Node[] {
-  return listItems(blocks[line.block])[line.item]
 }
 
 /** The blocks that can't be edited, in order: what the body's atoms stand for. */
@@ -329,8 +389,9 @@ export function bodyInputRule(line: string): string | null {
 /** A line's prefix as qmd, for the clipboard. */
 export function prefixMarkdown(prefix: string): string {
   if (isQuote(prefix)) return '> '
-  if (isBullet(prefix)) return '- '
-  if (isNumbered(prefix)) return '1. '
+  const indent = '    '.repeat(Math.max(0, itemDepth(prefix)))
+  if (isBullet(prefix)) return `${indent}- `
+  if (isNumbered(prefix)) return `${indent}1. `
   if (isFigure(prefix)) return ''
   const level = headingLevel(prefix)
   return level > 0 ? `${'#'.repeat(level)} ` : ''
@@ -346,7 +407,7 @@ export function blocksOfLines(blocks: readonly Node[], text: string): (Node | un
     before.map((line) => line.line),
     text.split('\n'),
   )
-  return match.map((i) => (i >= 0 ? blocks[before[i].block] : undefined))
+  return match.map((i) => (i >= 0 ? (before[i].list ?? blocks[before[i].block]) : undefined))
 }
 
 /**
@@ -390,12 +451,10 @@ export function editBody(blocks: readonly Node[], text: string): Node[] | null {
   const replaced = replacedBlocks(match, before.length)
   const wrapped = keptWraps(blocks, units, before.join('\n'), lines.join('\n'))
   const edited: Node[] = []
-  // The items of the list the lines so far end in, the lines they were,
-  // and their prefix.
-  let items: { item: Node[]; was: number }[] = []
-  let kind = ''
+  // The items of the lists the lines so far end in.
+  let items: Entry[] = []
   const endList = () => {
-    if (items.length > 0) edited.push(listOf(blocks, units, kind, items))
+    if (items.length > 0) edited.push(...listsOf(blocks, units, items))
     items = []
   }
   let atoms = 0
@@ -407,11 +466,12 @@ export function editBody(blocks: readonly Node[], text: string): Node[] | null {
     const textStart = lineStart + line.length - text.length
     const wraps = (offset: number) => wrapped(textStart + offset)
     if (isItem(line)) {
-      const prefix = linePrefix(line)
-      if (prefix !== kind) endList()
-      kind = prefix
       const was = match[i]
-      items.push({ item: was >= 0 ? itemOf(blocks, units[was]) : item(text, wraps), was })
+      const plain = was >= 0 ? units[was].plain : undefined
+      const content = was >= 0 ? (plain ? [plain] : []) : item(text, wraps)
+      // At most a level deeper than the item before it.
+      const depth = Math.min(itemDepth(line), items.length > 0 ? items[items.length - 1].depth + 1 : 0)
+      items.push({ kind: line[0], depth, content, was, item: was >= 0 ? units[was].item : undefined })
       return
     }
     endList()
@@ -431,29 +491,69 @@ export function editBody(blocks: readonly Node[], text: string): Node[] | null {
   return edited
 }
 
+/** An item's line, for `editBody`: its kind, depth and text, and the line it was (or -1). */
+interface Entry {
+  kind: string
+  depth: number
+  content: Node[]
+  was: number
+  /** The item the line was. */
+  item?: Node[]
+}
+
 /**
- * The list of `items`, whose lines have the prefix `kind`: the list they
- * were all the items of, in order, or else a new one, numbered (if it's
- * numbered) as the list of the first item that was in one was.
+ * The lists of a run of items' lines next to each other, each item with
+ * the lists of the deeper items after it in it. A list whose lines are a
+ * list that was, all of them, as they were, is that list.
  */
-function listOf(
-  blocks: readonly Node[],
-  units: readonly BodyLine[],
-  kind: string,
-  items: { item: Node[]; was: number }[],
-): Node {
-  const first = items[0].was >= 0 ? units[items[0].was] : undefined
-  const whole =
-    first !== undefined &&
-    first.item === 0 &&
-    listItems(blocks[first.block]).length === items.length &&
-    items.every(({ was }, i) => was === items[0].was + i)
-  if (whole) return blocks[first.block]
-  const content = items.map(({ item }) => item)
-  if (kind !== NUMBERED) return { t: 'BulletList', c: content }
-  const kept = items.find(({ was }) => was >= 0)
-  const attrs = kept ? (blocks[units[kept.was].block].c as [ListAttrs])[0] : NEW_LIST
-  return { t: 'OrderedList', c: [attrs, content] }
+function listsOf(blocks: readonly Node[], units: readonly BodyLine[], entries: readonly Entry[]): Node[] {
+  const lists: Node[] = []
+  let i = 0
+  while (i < entries.length) {
+    const from = i
+    const { list, next } = buildList(units, entries, i)
+    i = next
+    const first = entries[from].was >= 0 ? units[entries[from].was] : undefined
+    const block = first?.block
+    const whole =
+      first !== undefined &&
+      first.list === blocks[block!] &&
+      (block === 0 || units[entries[from].was - 1]?.block !== block) &&
+      units.filter((u) => u.block === block).length === next - from &&
+      entries.slice(from, next).every(({ was }, k) => was === entries[from].was + k)
+    lists.push(whole ? blocks[block!] : list)
+  }
+  return lists
+}
+
+/**
+ * The list of the items from `entries[from]` at its depth and of its kind,
+ * each with the deeper items after it as lists in it, and where the
+ * entries after it start. Numbered (if it's numbered) as the list of the
+ * first item that was in one was.
+ */
+function buildList(units: readonly BodyLine[], entries: readonly Entry[], from: number): { list: Node; next: number } {
+  const { kind, depth } = entries[from]
+  const content: Node[][] = []
+  const kept: Entry[] = []
+  let i = from
+  while (i < entries.length && entries[i].depth === depth && entries[i].kind === kind) {
+    const entry = entries[i++]
+    const item = [...entry.content]
+    while (i < entries.length && entries[i].depth > depth) {
+      const sub = buildList(units, entries, i)
+      item.push(sub.list)
+      i = sub.next
+    }
+    // An item with no items in it, before or now, is the item it was.
+    const same = entry.item !== undefined && item.length === entry.content.length && entry.item.length === item.length
+    content.push(same ? entry.item! : item)
+    kept.push(entry)
+  }
+  if (kind !== NUMBERED) return { list: { t: 'BulletList', c: content }, next: i }
+  const was = kept.find((e) => e.was >= 0 && units[e.was].list?.t === 'OrderedList')
+  const attrs = was ? (units[was.was].list!.c as [ListAttrs])[0] : NEW_LIST
+  return { list: { t: 'OrderedList', c: [attrs, content] }, next: i }
 }
 
 /** An item reading `text` (nothing in it, for no text), wrapped in the source where `wrapped` says. */
@@ -519,13 +619,12 @@ function keptWraps(
   if (!change) return () => false
   // The body's text with a line break where the source wraps a paragraph.
   const source = units
-    .map(({ line, block: index, item }) => {
+    .map(({ line, block: index, list, plain }) => {
       const block = blocks[index]
       if (line === ATOM) return ATOM
-      if (item >= 0) {
-        const [plain] = itemOf(blocks, { line, block: index, item })
+      if (list !== undefined) {
         const prefix = linePrefix(line)
-        return line === prefix ? line : prefix + inlineText(plain.c as Node[], '\n')
+        return line === prefix || !plain ? line : prefix + inlineText(plain.c as Node[], '\n')
       }
       if (block.t === 'Para' && line) return inlineText(block.c as Node[], '\n')
       if (block.t === 'BlockQuote' && line !== QUOTE) {

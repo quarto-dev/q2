@@ -34,6 +34,8 @@ export const SHORTCUTS = {
   bulletList: { key: '8', shift: true },
   numberedList: { key: '7', shift: true },
   quote: { key: '9', shift: true },
+  indent: { key: ']' },
+  outdent: { key: '[' },
 } satisfies Record<string, Shortcut>
 
 /** The shortcut for a line style: 0 for Paragraph, 1 to 4 for a heading's level. */

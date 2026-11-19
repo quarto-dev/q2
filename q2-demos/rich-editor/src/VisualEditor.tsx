@@ -11,7 +11,9 @@
  * body's paragraphs, headings, one-paragraph quotes and tight bullet and
  * numbered lists of text, formatted or not, and its horizontal rules can
  * be made and removed; the rest of the body (text with math, notes or
- * images, other lists, code) is shown and can't be edited yet. A
+ * images, other lists, code) is shown and can't be edited yet. Lists
+ * in items are edited as the lists they're in, and Tab and Shift+Tab (or
+ * the toolbar's indent buttons) indent and outdent items. A
  * document has only the title-block fields its author adds, with the "+"
  * row above the title block (`TitleBlockWidget`); an added field stays,
  * empty, until Backspace in it removes it. Every edit is
@@ -44,19 +46,21 @@ import {
   figureImage,
   headingAttr,
   headingLevel,
-  isBullet,
   isFigure,
   isItem,
   isNumbered,
   isQuote,
+  itemDepth,
   listStart,
   NUMBERED,
+  outdentPrefix,
   prefixMarkdown,
   readOnlyBlocks,
   type Node,
 } from './editing/body.ts'
 import { createMetaFieldSource, type QmdFile } from './editing/fieldSource.ts'
-import { canChoose, canList, canQuote, caretLine, chooseStyle, toggleList, toggleQuote } from './editing/lineStyles.ts'
+import { canChoose, canIndent, canList, canQuote, caretLine, chooseStyle, indent, toggleList, toggleQuote } from './editing/lineStyles.ts'
+import type { LineParent } from './engine/react.tsx'
 import { setMetaText, type Meta } from './editing/meta.ts'
 import { FigureFrame, hasOwnAlt, ReadOnlyBlock } from './ReadOnlyBlock.tsx'
 import { withoutMarks } from './engine/marks.ts'
@@ -90,6 +94,7 @@ const EDITING_CSS = `
 .qe-unknown { margin-bottom: 1rem; padding: 0.5rem 0.75rem; border: 1px dashed #ced4da; color: #6c757d; font-size: 0.875em; }
 .qe-field { display: block; position: relative; min-height: 1lh; outline: none; white-space: pre-wrap; }
 li.qe-field { display: list-item; }
+li.qe-nest { list-style: none; }
 .qe-field[data-empty][data-placeholder]::before {
   content: attr(data-placeholder);
   position: absolute;
@@ -154,7 +159,8 @@ const TITLE_BLOCK = ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[
  * In the body, `## ` at the start of a paragraph makes it a heading,
  * `> ` a quote, `- ` a list item and `1. ` a numbered one, and they're
  * copied with their `#`s, `>`, `-` and `1.`. Enter in an item starts
- * another, and on an empty one ends the list. `---` there makes a horizontal rule, which is copied as `---`.
+ * another, and on an empty one ends the list, or, nested, moves out a
+ * level, as Backspace at the start of its text does. `---` there makes a horizontal rule, which is copied as `---`.
  * A figure's caption is a line too, which holds its image (see
  * `editing/body.ts`): Enter in its middle moves the rest of it to a
  * paragraph, and it's copied as its text alone.
@@ -171,6 +177,7 @@ const SCHEMA: Schema = {
   prefixText: prefixMarkdown,
   continued: isItem,
   splitPrefix: (prefix) => (isFigure(prefix) ? '' : prefix),
+  outdent: outdentPrefix,
   voidText: '---',
   keepEmpty: TITLE_BLOCK,
   always: ['body'],
@@ -191,6 +198,9 @@ const ADDABLE = TITLE_BLOCK.map((name) => ({ name, label: PLACEHOLDERS[name] }))
 const noop = () => {}
 
 const renderRule = () => <hr />
+
+/** The `li` a nested list is in, after its parent item's line. */
+const NESTED: LineParent = { as: 'li', className: 'qe-nest', shared: true }
 
 export function VisualEditor({ file, devTools }: VisualEditorProps) {
   const { ast, parseError, connected } = useSyncExternalStore(file.subscribe, file.getSnapshot)
@@ -234,7 +244,7 @@ export function VisualEditor({ file, devTools }: VisualEditorProps) {
   // Where the focus goes in the "+" row when the caret leaves the fields for it.
   const [widgetFocus, setWidgetFocus] = useState<WidgetFocus | null>(null)
   const onLeaveStart = useCallback((how: LeaveStart) => setWidgetFocus({ field: how.removed, x: how.x }), [])
-  const { state, editor, writable, add, focusStart, setPrefixes, undo, redo, toggleMark, setLink, focusAt } = useFieldEditor(root, SCHEMA, source, {
+  const { state, editor, writable, add, focusStart, setPrefixes, setFieldPrefixes, undo, redo, toggleMark, setLink, focusAt } = useFieldEditor(root, SCHEMA, source, {
     autoFocus: true,
     onLeaveStart,
   })
@@ -280,6 +290,17 @@ export function VisualEditor({ file, devTools }: VisualEditorProps) {
         e.preventDefault()
         const kind = matches(e, SHORTCUTS.bulletList) ? BULLET : NUMBERED
         if (line && canList(line)) setPrefixes(toggleList(line, kind))
+      } else if (matches(e, SHORTCUTS.indent) || matches(e, SHORTCUTS.outdent)) {
+        e.preventDefault()
+        const by = matches(e, SHORTCUTS.indent) ? 1 : -1
+        if (line && canIndent(state, by)) setFieldPrefixes(indent(by))
+      } else if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey && (line?.bulleted || line?.numbered) && !caretLink) {
+        // Tab in a list's item (but in a link, where it goes to the link's
+        // popover) indents it, and Shift+Tab outdents it; where it can't,
+        // it does nothing, rather than take the focus out of the document.
+        e.preventDefault()
+        const by = e.shiftKey ? -1 : 1
+        if (canIndent(state, by)) setFieldPrefixes(indent(by))
       } else if (matches(e, SHORTCUTS.quote)) {
         e.preventDefault()
         if (line && canQuote(line)) setPrefixes(toggleQuote(line))
@@ -290,7 +311,7 @@ export function VisualEditor({ file, devTools }: VisualEditorProps) {
     }
     frameDoc.addEventListener('keydown', onKey)
     return () => frameDoc.removeEventListener('keydown', onKey)
-  }, [frameDoc, root, toggleMark, openLinkForm, line, setPrefixes])
+  }, [frameDoc, root, toggleMark, openLinkForm, line, setPrefixes, setFieldPrefixes, state, caretLink])
   const present = useMemo(() => new Set(TITLE_BLOCK.filter((f) => state.fields[f] !== undefined)), [state.fields])
   const caretInTitleBlock = TITLE_BLOCK.some((f) => state.selection?.focus.field === f)
   const empty = present.size === 0 && !state.fields.body
@@ -313,12 +334,36 @@ export function VisualEditor({ file, devTools }: VisualEditorProps) {
   // quote line a paragraph in a `blockquote`, the lines of a list's
   // items `li`s in one `ul`, or in one `ol` from the list's start number,
   // and a caption line a `figcaption` under its image, as `q2 render`
-  // shows them.
+  // shows them. A nested list is in an `li` of the list it's in, after its
+  // parent item's (whose own `li` is the parent's line, so it can't hold
+  // another line's).
   const lineBlocks = useMemo(
     () => (ast && state.fields.body !== undefined ? blocksOfLines(ast.blocks as Node[], state.fields.body) : []),
     [ast, state.fields.body],
   )
   const bodyLines = useMemo(() => state.fields.body?.split('\n') ?? [], [state.fields.body])
+  // For each line of an item, the lines of the items it's nested in.
+  const itemAncestors = useMemo(() => {
+    const ancestors: number[][] = []
+    const open: number[] = []
+    ;(state.fields.body ?? '').split('\n').forEach((line, i) => {
+      const depth = itemDepth(line)
+      // An item's at most a level deeper than the one before it.
+      open.length = depth < 0 ? 0 : Math.min(depth, open.length)
+      ancestors.push([...open])
+      if (depth >= 0) open.push(i)
+    })
+    return ancestors
+  }, [state.fields.body])
+  const listParent = useCallback(
+    (index: number): LineParent => {
+      if (!isNumbered(state.fields.body?.split('\n')[index] ?? '')) return { as: 'ul', shared: true }
+      const start = listStart(lineBlocks[index])
+      const attrs: Record<string, string> = start === 1 ? { type: '1' } : { start: String(start), type: '1' }
+      return { as: 'ol', shared: true, attrs }
+    },
+    [lineBlocks, state.fields.body],
+  )
   const lineElement = useCallback(
     (prefix: string, index: number) => {
       const image = figureImage(prefix)
@@ -336,17 +381,15 @@ export function VisualEditor({ file, devTools }: VisualEditorProps) {
         }
       }
       if (isQuote(prefix)) return { as: 'p', parent: { as: 'blockquote' } }
-      if (isBullet(prefix)) return { as: 'li', parent: { as: 'ul', shared: true } }
-      if (isNumbered(prefix)) {
-        const start = listStart(lineBlocks[index])
-        const attrs: Record<string, string> = start === 1 ? { type: '1' } : { start: String(start), type: '1' }
-        return { as: 'li', parent: { as: 'ol', shared: true, attrs } }
+      if (isItem(prefix)) {
+        const outer = (itemAncestors[index] ?? []).flatMap((a) => [listParent(a), NESTED])
+        return { as: 'li', parents: [...outer, listParent(index)] }
       }
       const level = headingLevel(prefix)
       const { id, classes } = headingAttr(lineBlocks[index])
       return { as: `h${level || 6}`, className: classes.length > 0 ? classes.join(' ') : undefined, id }
     },
-    [lineBlocks, bodyLines],
+    [lineBlocks, bodyLines, itemAncestors, listParent],
   )
 
   const renderField = useCallback(
@@ -371,6 +414,7 @@ export function VisualEditor({ file, devTools }: VisualEditorProps) {
           writable={writable}
           frameDoc={frameDoc}
           setPrefixes={setPrefixes}
+          setFieldPrefixes={setFieldPrefixes}
           canUndo={editor.past.length > 0}
           canRedo={editor.future.length > 0}
           undo={undo}

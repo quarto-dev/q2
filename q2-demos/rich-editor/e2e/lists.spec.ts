@@ -7,7 +7,7 @@
  * the end of an item starts another, and Enter on an empty item ends the
  * list. Items' text can be formatted (see `inlines.spec.ts`). A list of
  * anything else (a note or math in an item, items of more than one
- * paragraph, blank lines between items, lists in items) can't be edited
+ * paragraph, blank lines between items) can't be edited
  * yet.
  */
 

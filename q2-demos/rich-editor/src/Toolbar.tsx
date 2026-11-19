@@ -36,7 +36,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { BULLET, NUMBERED } from './editing/body.ts'
 import { EMPH, HIGHLIGHT, STRONG, UNDERLINE } from './editing/inlines.ts'
-import { canChoose, canList, canQuote, caretLine, chooseStyle, toggleList, toggleQuote } from './editing/lineStyles.ts'
+import { canChoose, canIndent, canList, canQuote, caretLine, chooseStyle, indent, toggleList, toggleQuote } from './editing/lineStyles.ts'
 import { type State } from './engine/model.ts'
 import { ariaKeyshortcuts, SHORTCUTS, shortcutText, styleShortcut, type Shortcut } from './shortcuts.ts'
 import { useTooltips } from './Tooltip.tsx'
@@ -49,6 +49,8 @@ interface ToolbarProps {
   frameDoc: Document | null
   /** Give each line the selection is on the prefix `prefixFor` returns for its own. */
   setPrefixes: (prefixFor: (prefix: string) => string) => void
+  /** Give the body's lines the prefixes `prefixesFor` returns (see `setFieldPrefixes`). */
+  setFieldPrefixes: (prefixesFor: (prefixes: string[], first: number, last: number) => string[] | null) => void
   /** Whether there is an edit to undo, and one to redo. */
   canUndo: boolean
   canRedo: boolean
@@ -131,6 +133,22 @@ const LIST_ICON = (
   </svg>
 )
 
+// Material Icons' "format_indent_decrease" and "format_indent_increase" (Apache 2.0), as in Google Docs' toolbar.
+const INDENTS = [
+  {
+    name: 'Decrease indent',
+    by: -1 as const,
+    shortcut: SHORTCUTS.outdent,
+    icon: icon('M11 17h10v-2H11v2zm-8-5l4 4V8l-4 4zm0 9h18v-2H3v2zM3 3v2h18V3H3zm8 6h10V7H11v2zm0 4h10v-2H11v2z'),
+  },
+  {
+    name: 'Increase indent',
+    by: 1 as const,
+    shortcut: SHORTCUTS.indent,
+    icon: icon('M3 21h18v-2H3v2zM3 8v8l4-4-4-4zm8 9h10v-2H11v2zM3 3v2h18V3H3zm8 6h10V7H11v2zm0 4h10v-2H11v2z'),
+  },
+]
+
 // Material Icons' "format_list_numbered" (Apache 2.0), as in Google Docs' toolbar.
 const NUMBERED_ICON = (
   <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -175,6 +193,7 @@ export function Toolbar({
   writable,
   frameDoc,
   setPrefixes,
+  setFieldPrefixes,
   canUndo,
   canRedo,
   undo,
@@ -363,6 +382,22 @@ export function Toolbar({
       >
         {NUMBERED_ICON}
       </button>
+      {INDENTS.map((d) => (
+        <button
+          key={d.name}
+          type="button"
+          className="qe-icon"
+          aria-label={d.name}
+          {...tip(d.name, d.shortcut)}
+          disabled={line === null || !canIndent(state, d.by)}
+          onClick={() => {
+            setOpen(false)
+            setFieldPrefixes(indent(d.by))
+          }}
+        >
+          {d.icon}
+        </button>
+      ))}
       <button
         type="button"
         className="qe-icon"

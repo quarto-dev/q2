@@ -43,13 +43,19 @@ const SELECTORS: Record<Field, string> = {
 /** The body's editable paragraphs. */
 const PARAGRAPH = '#quarto-document-content > p.qe-field'
 
-/** The body's editable lines: paragraphs, headings, the paragraphs of quotes, list items and figures' captions. */
+/**
+ * The body's editable lines: paragraphs, headings, the paragraphs of
+ * quotes, list items (nested ones too: an item of a list in an `li` of a
+ * list) and figures' captions.
+ */
 const LINE = [
   '#quarto-document-content > .qe-field',
   '#quarto-document-content > blockquote > .qe-field',
   '#quarto-document-content > ul > .qe-field',
   '#quarto-document-content > ol > .qe-field',
   '#quarto-document-content > .quarto-figure > figure > .qe-field',
+  '#quarto-document-content li > ul > .qe-field',
+  '#quarto-document-content li > ol > .qe-field',
 ].join(', ')
 
 /** The row of "+" items that add the title-block fields a document doesn't have. */
@@ -296,7 +302,8 @@ export class Editor {
   /**
    * The body's editable lines (paragraphs, headings, quotes, list items
    * and figures' captions), each as `tag: text`, where a quote's tag is
-   * `blockquote` and a numbered list's item's is `ol`.
+   * `blockquote` and a numbered list's item's is `ol`, after two spaces for
+   * each list a list item is nested in.
    */
   lines(): Promise<string[]> {
     return this.frame.evaluate(
@@ -305,7 +312,9 @@ export class Editor {
           const tag = el.parentElement?.matches('blockquote, ol')
             ? el.parentElement.tagName.toLowerCase()
             : el.tagName.toLowerCase()
-          return `${tag}: ${(el.textContent ?? '').replaceAll('\u200b', '')}`
+          let depth = 0
+          for (let list = el.parentElement?.closest('li'); list; list = list.parentElement?.closest('li')) depth++
+          return `${'  '.repeat(depth)}${tag}: ${(el.textContent ?? '').replaceAll('\u200b', '')}`
         }),
       LINE,
     )
@@ -493,6 +502,16 @@ export class Editor {
   /** The toolbar's numbered list button. */
   numberedListButton() {
     return this.toolbar().getByRole('button', { name: 'Numbered list' })
+  }
+
+  /** The toolbar's increase indent button. */
+  indentButton() {
+    return this.toolbar().getByRole('button', { name: 'Increase indent' })
+  }
+
+  /** The toolbar's decrease indent button. */
+  outdentButton() {
+    return this.toolbar().getByRole('button', { name: 'Decrease indent' })
   }
 
   /** The toolbar's quote button. */

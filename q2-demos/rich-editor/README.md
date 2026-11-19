@@ -40,6 +40,13 @@ Numbered lists of such items, written `1.` or `1)`, are edited the same
 way, made by typing `1.` and a space; an edit keeps a list's start
 number and delimiter, and a new list is numbered `1.` from 1. A bullet
 item and a numbered one next to each other are in two lists.
+A list in an item (a nested list) of such items is edited the same way:
+each of its items is a line after its parent item's, shown indented as
+`q2 render` shows it. Tab in an item indents it a level, under the item
+before it, and Shift+Tab outdents it, each with the items nested in it
+(where it can't, the key does nothing); with a selection, every item it
+is on moves. Enter on an empty nested item, or Backspace at the start of
+a nested item's text, moves it out a level.
 Typing `---` (or `***` or `___`) at the start of a paragraph puts a
 horizontal rule before it; Backspace at the start of the line after a
 rule, Delete at the end of the line before it, or deleting a selection
@@ -70,8 +77,10 @@ A toolbar above the document (`src/Toolbar.tsx`) follows the caret, as
 in a word processor: its style box shows the style of the caret's line
 (Paragraph, Heading 1 to 4) and its menu changes it, its bulleted and
 numbered list buttons are pressed while the caret is on an item of their
-kind and make the line one (from an item of the other kind too) or a
-paragraph again, and its quote button is pressed while the
+kind and make the line one (from an item of the other kind too, at the
+level it's nested at) or a paragraph again, its decrease and increase
+indent buttons do what Shift+Tab and Tab do in an item, and are disabled
+where they can't, and its quote button is pressed while the
 caret is in a quote and quotes or unquotes the line. Its bold, italic,
 underline and highlight buttons, after the style box, are pressed for
 the formats of what's selected (or of what typing at the caret gives)
@@ -91,12 +100,12 @@ section of `mockups/shortcut-tooltips.html`. The line styles have
 shortcuts as in Google Docs (`src/shortcuts.ts`), which do what the
 toolbar does, and nothing where it's disabled: Cmd+Option+0 Paragraph,
 Cmd+Option+1 to 4 the headings, Cmd+Shift+8 the bulleted list,
-Cmd+Shift+7 the numbered list and Cmd+Shift+9 the quote (Ctrl and Alt
-elsewhere).
+Cmd+Shift+7 the numbered list, Cmd+Shift+9 the quote, and Cmd+] and
+Cmd+[ indent and outdent (Ctrl and Alt elsewhere).
 The rest of the body (paragraphs, headings, quotes and lists with math,
 a citation, a note, an image or a span of another kind in their text,
 quotes of more than one paragraph, lists with blank lines
-between items or lists in items, example lists (`(@)`), code, figures of
+between items or anything but lists in items, example lists (`(@)`), code, figures of
 more than one image) is shown by
 `src/ReadOnlyBlock.tsx` and can't be edited yet; no edit removes it or
 changes its source.
@@ -365,7 +374,8 @@ reason.
 
 The specs are: `title-block.spec.ts`, `cross-field.spec.ts`,
 `body.spec.ts`, `headings.spec.ts`, `quotes.spec.ts`, `lists.spec.ts`,
-`numbered-lists.spec.ts`, `rules.spec.ts`, `figures.spec.ts`, `inlines.spec.ts` (formatting)
+`numbered-lists.spec.ts`, `nested-lists.spec.ts` (lists in items, and
+indenting and outdenting items), `rules.spec.ts`, `figures.spec.ts`, `inlines.spec.ts` (formatting)
 and `links.spec.ts` (links, their popover and form)
 (editing),
 `title-block-widget.spec.ts` (adding and removing title-block fields),
@@ -447,7 +457,10 @@ editor has to keep:
   holding a "Text style" button that opens a "Text style" `menu` of
   `menuitemradio`s, "Undo" and "Redo" buttons, and "Bold", "Italic",
   "Underline", "Highlight", "Link", "Bulleted list", "Numbered list" and
-  "Quote" buttons with `aria-pressed`.
+  "Quote" buttons with `aria-pressed`, and "Decrease indent" and
+  "Increase indent" buttons.
+- A nested list's items are `li.qe-field`s in a `ul` or `ol` in an `li`
+  of the list it's in, after its parent item's `li`.
 - A link's popover is `.qe-linkbar`, holding its address as a link and
   "Edit" and "Remove" buttons, and the link form is the `form` in
   `.qe-linkform`, with `text` and `url` inputs; both are in the document's

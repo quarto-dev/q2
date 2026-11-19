@@ -136,6 +136,12 @@ export interface Schema {
    * kind only one line can be (a figure's caption, which has its image).
    */
   readonly splitPrefix?: (prefix: string) => string
+  /**
+   * What's left of a line's prefix when Backspace at the start of its text,
+   * or Enter on an empty line whose prefix is carried on, takes it off (a
+   * nested list item's, a level out). None, unless given.
+   */
+  readonly outdent?: (prefix: string) => string
   /** A line prefix as text, for the clipboard (none unless given). */
   readonly prefixText?: (prefix: string) => string
   /** A `VOID` line as text, for the clipboard (none unless given). */

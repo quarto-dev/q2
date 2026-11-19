@@ -201,3 +201,23 @@ describe('fromPage', () => {
     expect(fromPage(schema, state, caret('body', 5))).toEqual(caret('body', 4))
   })
 })
+
+describe('outdenting a line (Schema.outdent)', () => {
+  const ITEM = '﷘'
+  const IN = '﷛'
+  const nested: Schema = { ...schema, continued: (p) => p.startsWith(ITEM), outdent: (p) => (p.length > 1 ? p.slice(0, -1) : '') }
+
+  it('Enter on an empty line with a prefix carried on gives it what outdent says', () => {
+    const next = enter(nested, at(`${ITEM}a\n${ITEM}${IN}${IN}`, 6))
+    expect(next.fields.body).toBe(`${ITEM}a\n${ITEM}${IN}`)
+    expect(next.selection).toEqual(caret('body', 5))
+    expect(enter(nested, at(`${ITEM}a\n${ITEM}`, 4)).fields.body).toBe(`${ITEM}a\n`)
+  })
+
+  it('Backspace at the start of a line\'s text gives its prefix what outdent says', () => {
+    const next = deleteBackward(nested, at(`${ITEM}a\n${ITEM}${IN}${bold('b')}`, 6))
+    expect(next.fields.body).toBe(`${ITEM}a\n${ITEM}${bold('b')}`)
+    expect(next.selection).toEqual(caret('body', 5))
+    expect(deleteBackward(nested, at(`${ITEM}a\n${ITEM}b`, 4)).fields.body).toBe(`${ITEM}a\nb`)
+  })
+})

@@ -6,6 +6,10 @@ import {
   bodyInputRule,
   bodyText,
   editBody,
+  indentLines,
+  INDENT,
+  itemDepth,
+  outdentPrefix,
   headingLevel,
   headingPrefix,
   isBullet,
@@ -268,7 +272,7 @@ describe('bullet lists', () => {
     const others = [
       list([{ t: 'Plain', c: [...words('One '), math] }]),
       list([para('Loose.')], [para('List.')]),
-      list([...plain('One.'), list(plain('Nested.'))]),
+      list([...plain('One.'), { t: 'CodeBlock', c: [['', [], []], 'x'] }]),
     ]
     expect(bodyText(others)).toBe(others.map(() => ATOM).join('\n'))
     expect(readOnlyBlocks(others)).toEqual(others)
@@ -414,5 +418,127 @@ describe('numbered lists', () => {
   })
   it('an item is copied with a 1.', () => {
     expect(prefixMarkdown(NUMBERED)).toBe('1. ')
+  })
+})
+
+describe('nested lists', () => {
+  const plain = (text: string): Node[] => [{ t: 'Plain', c: words(text) }]
+  const bullets = (...items: Node[][]): Node => ({ t: 'BulletList', c: items })
+  const attrs = (start = 1) => [start, { t: 'Decimal' }, { t: 'Period' }]
+  const numbered = (start: number, ...items: Node[][]): Node => ({ t: 'OrderedList', c: [attrs(start), items] })
+  const b = (depth: number, text: string) => BULLET + INDENT.repeat(depth) + text
+  const n = (depth: number, text: string) => NUMBERED + INDENT.repeat(depth) + text
+  // - A
+  //     - B
+  //         1. C
+  //     - D
+  // - E
+  const nested = bullets(
+    [...plain('A'), bullets([...plain('B'), numbered(1, plain('C'))], plain('D'))],
+    plain('E'),
+  )
+  const lines = [b(0, 'A'), b(1, 'B'), n(2, 'C'), b(1, 'D'), b(0, 'E')].join('\n')
+
+  it('an item in an item is a line after its parent\'s, with an indent for each level', () => {
+    expect(bodyText([nested])).toBe(lines)
+    expect(itemDepth(b(2, 'x'))).toBe(2)
+    expect(itemDepth(b(0, 'x'))).toBe(0)
+    expect(itemDepth('x')).toBe(-1)
+    expect(isBullet(b(1, 'B'))).toBe(true)
+    expect(isNumbered(n(2, 'C'))).toBe(true)
+    expect(headingLevel(b(1, 'B'))).toBe(0)
+  })
+  it('an item of only a nested list is a line of only its prefix', () => {
+    expect(bodyText([bullets([bullets(plain('A'))])])).toBe(`${b(0, '')}\n${b(1, 'A')}`)
+  })
+  it('an item with two lists of a kind in a row can\'t be edited, nor one with anything else in it', () => {
+    const others = [
+      bullets([...plain('A'), bullets(plain('B')), bullets(plain('C'))]),
+      bullets([...plain('A'), bullets([para('Loose.')])]),
+    ]
+    expect(bodyText(others)).toBe(`${ATOM}\n${ATOM}`)
+  })
+  it('each nested item\'s line shows its own list', () => {
+    const inner = ((nested.c as Node[][])[0][1].c as Node[][])[0][1]
+    expect(blocksOfLines([nested], lines)[2]).toBe(inner)
+    expect(blocksOfLines([nested], lines)[0]).toBe(nested)
+  })
+
+  it('keeps an unchanged nested list as it was', () => {
+    expect(editBody([nested, para('End.')], `${lines}\nEnd!`)![0]).toBe(nested)
+  })
+  it('writes a line indented under an item as an item of a list in it', () => {
+    expect(editBody([para('x')], [b(0, 'A'), b(1, 'B'), b(1, 'C'), b(0, 'D')].join('\n'))).toEqual([
+      bullets([...plain('A'), bullets(plain('B'), plain('C'))], plain('D')),
+    ])
+  })
+  it('writes items of different kinds at one level as two lists in the item', () => {
+    expect(editBody([para('x')], [b(0, 'A'), b(1, 'B'), n(1, 'C')].join('\n'))).toEqual([
+      bullets([...plain('A'), bullets(plain('B')), numbered(1, plain('C'))]),
+    ])
+  })
+  it('writes an item indented more than one level past the item before it one level past it', () => {
+    expect(editBody([para('x')], [b(0, 'A'), b(2, 'B')].join('\n'))).toEqual([bullets([...plain('A'), bullets(plain('B'))])])
+    expect(editBody([para('x')], `Intro.\n${b(1, 'A')}`)).toEqual([para('Intro.'), bullets(plain('A'))])
+  })
+  it('writes an empty item with a nested list as the list alone', () => {
+    expect(editBody([para('x')], [b(0, ''), b(1, 'A')].join('\n'))).toEqual([bullets([bullets(plain('A'))])])
+  })
+  it('keeps the items that read the same, and a nested numbered list\'s start number', () => {
+    const list = bullets([...plain('A'), numbered(3, plain('B'), plain('C'))])
+    const [edited] = editBody([list], [b(0, 'A'), n(1, 'B'), n(1, 'C!')].join('\n'))!
+    expect(edited).toEqual(bullets([...plain('A'), numbered(3, plain('B'), plain('C!'))]))
+    expect((edited.c as Node[][])[0][0]).toBe((list.c as Node[][])[0][0])
+  })
+  it('moves an item, with its own items, out of the list it was in', () => {
+    // Shift+Tab on B: it and C move up a level.
+    expect(editBody([nested], [b(0, 'A'), b(0, 'B'), n(1, 'C'), b(1, 'D'), b(0, 'E')].join('\n'))).toEqual([
+      bullets(plain('A'), [...plain('B'), numbered(1, plain('C')), bullets(plain('D'))], plain('E')),
+    ])
+  })
+  it('keeps the line breaks of a wrapped nested item around what changed', () => {
+    const wrapped = bullets([...plain('A'), bullets([{ t: 'Plain', c: [...words('One two'), { t: 'SoftBreak' }, ...words('three.')] }])])
+    const [edited] = editBody([wrapped], [b(0, 'A'), b(1, 'One two, three.')].join('\n'))!
+    expect(edited).toEqual(
+      bullets([...plain('A'), bullets([{ t: 'Plain', c: [...words('One two,'), { t: 'SoftBreak' }, ...words('three.')] }])]),
+    )
+  })
+  it('a nested item is copied with four spaces for each level', () => {
+    expect(prefixMarkdown(BULLET + INDENT)).toBe('    - ')
+    expect(prefixMarkdown(NUMBERED + INDENT + INDENT)).toBe('        1. ')
+  })
+  it('outdenting a prefix takes off a level, or the item at the first level', () => {
+    expect(outdentPrefix(BULLET + INDENT + INDENT)).toBe(BULLET + INDENT)
+    expect(outdentPrefix(BULLET)).toBe('')
+    expect(outdentPrefix(headingPrefix(2))).toBe('')
+  })
+
+  describe('indentLines', () => {
+    const indent = (text: string, first: number, last: number, by: 1 | -1) => {
+      const out = indentLines(text.split('\n').map((l) => l.replace(/[^\uFDD0-\uFDEF].*$/, '')), first, last, by)
+      return out && out.map((p, i) => p + text.split('\n')[i].replace(/^[\uFDD0-\uFDEF]*/, '')).join('\n')
+    }
+    const flat = [b(0, 'A'), b(0, 'B'), b(1, 'C'), b(0, 'D')].join('\n')
+    it('indents an item under the one before, with its own items', () => {
+      expect(indent(flat, 1, 1, 1)).toBe([b(0, 'A'), b(1, 'B'), b(2, 'C'), b(0, 'D')].join('\n'))
+    })
+    it('does nothing to the first item of a list, or one that is already the first in its level', () => {
+      expect(indent(flat, 0, 0, 1)).toBeNull()
+      expect(indent(flat, 2, 2, 1)).toBeNull()
+      expect(indent(`Intro.\n${b(0, 'A')}`, 1, 1, 1)).toBeNull()
+    })
+    it('indents every item selected, and leaves lines that aren\'t items', () => {
+      expect(indent([b(0, 'A'), b(0, 'B'), 'P', b(0, 'C'), b(0, 'D')].join('\n'), 1, 4, 1)).toBeNull()
+      expect(indent([b(0, 'A'), b(0, 'B'), b(0, 'C')].join('\n'), 1, 2, 1)).toBe([b(0, 'A'), b(1, 'B'), b(1, 'C')].join('\n'))
+    })
+    it('outdents an item with its own items, and does nothing at the first level', () => {
+      expect(indent([b(0, 'A'), b(1, 'B'), b(2, 'C'), b(1, 'D')].join('\n'), 1, 1, -1)).toBe(
+        [b(0, 'A'), b(0, 'B'), b(1, 'C'), b(1, 'D')].join('\n'),
+      )
+      expect(indent(flat, 0, 1, -1)).toBeNull()
+    })
+    it('keeps an item\'s kind', () => {
+      expect(indent([n(0, 'A'), n(0, 'B')].join('\n'), 1, 1, 1)).toBe([n(0, 'A'), n(1, 'B')].join('\n'))
+    })
   })
 })
