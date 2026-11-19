@@ -2,7 +2,7 @@
 title: 'GE-5: TypeScript package: pure logic, git probe, gate and quiescence controller'
 date: 2026-11-18
 description: 'Implements in the shared TypeScript package the same classifier, arrival rule, startup rule, registry operations, git probe, and gate controller that the Rust crate has, driven by the same fixtures and golden docs.'
-status: approved
+status: done
 depends-on: [ge-1]
 lane: A
 epic: ../2026-11-18-git-epochs-epic.md
@@ -111,42 +111,42 @@ Written first, seen failing for the right reason (a missing module, then a wrong
 
 ## Checklist
 
-- [ ] Confirm GE-1 is complete: the skeleton, `fixtures/`, the spec, and the golden docs exist, and `npm test -w
+- [x] Confirm GE-1 is complete: the skeleton, `fixtures/`, the spec, and the golden docs exist, and `npm test -w
   @quarto/quarto-git-epochs` passes its fixture-validation test. Write down the exact action and input names the
   fixtures use.
-- [ ] Write the fixture runner for each module and the golden-doc test; run them and see them fail because the
+- [x] Write the fixture runner for each module and the golden-doc test; run them and see them fail because the
   modules do not exist.
-- [ ] `classify`: implement G2; the classifier rows pass.
-- [ ] `registry`: implement canonical ordering (retired entries skipped), `nextGeneration` (maximum over the path plus one),
+- [x] `classify`: implement G2; the classifier rows pass.
+- [x] `registry`: implement canonical ordering (retired entries skipped), `nextGeneration` (maximum over the path plus one),
   `register` (put-if-absent), `moveForward` (one `A.change`), `retire`, `repair`, the
   collision check, and the live-elsewhere check; the registry rows and the golden-doc test pass; commit the doc this
   package writes as a fixture for the cross-implementation check in GE-14 (under `fixtures/golden/`, named for this
   plan); nothing in GE-2 reads it.
-- [ ] `arrival`: implement the five steps for text, then binary (byte hash), then the `ReadOnly` variant, including
+- [x] `arrival`: implement the five steps for text, then binary (byte hash), then the `ReadOnly` variant, including
   the unavailable canonical doc and the live-elsewhere fork; the arrival rows pass.
-- [ ] `startup`: implement the three cases; the startup rows pass.
-- [ ] `probe` interface and a fake probe used by the controller tests. The interface also has the repo identity
+- [x] `startup`: implement the three cases; the startup rows pass.
+- [x] `probe` interface and a fake probe used by the controller tests. The interface also has the repo identity
   queries (G4): `rootCommits()` (`rev-list --max-parents=0 HEAD`), `isShallow()` (`rev-parse
   --is-shallow-repository`), and `showPrefix()`; GE-10 uses them for the attach check and GE-12 for the `repo` entry. The interface also has `cheapState()`, which
   stats the marker paths and the reflog file with no subprocess, for `check()`; a missing reflog file (no `.git/logs`
   directory when `core.logAllRefUpdates=false`) means "no reflog", not an error, and a test pins that.
   Real-repo tests: a repo with two root commits, and a `--depth 1` clone made through a `file://` URL (a plain local
   path ignores `--depth`).
-- [ ] `controller`: write the fake-probe and fake-clock tests, see them fail, then implement the state machine with the
+- [x] `controller`: write the fake-probe and fake-clock tests, see them fail, then implement the state machine with the
   numbers from G32, the synchronous `check()`, and an `isOwnWrite(path)` option for the quiet window; they pass with no real timers and no sleeps.
-- [ ] `probe` subprocess implementation: spawn `git` without a shell, with `GIT_OPTIONAL_LOCKS=0`, a per-call timeout,
+- [x] `probe` subprocess implementation: spawn `git` without a shell, with `GIT_OPTIONAL_LOCKS=0`, a per-call timeout,
   a path that finds `git.exe` on Windows, `cat-file --batch`, `ls-tree -r -z` limited to the project prefix, markers
   resolved once with `--git-path`, jj\'s `.jj/working_copy/working_copy.lock`, and forward-slash output; a missing or
   refused git yields the off state with one message.
-- [ ] Run the scenario step lists against real temp repos (jj skipped when absent) and compare the classifier output
+- [x] Run the scenario step lists against real temp repos (jj skipped when absent) and compare the classifier output
   after every step; keep the repos under the OS temp directory and remove them in the test teardown.
-- [ ] Add the `\r\n` and Windows-path rows; confirm they run on macOS and Linux.
-- [ ] Export the public surface from `src/index.ts` (browser-safe: no `node:` import) and the probe from the
+- [x] Add the `\r\n` and Windows-path rows; confirm they run on macOS and Linux.
+- [x] Export the public surface from `src/index.ts` (browser-safe: no `node:` import) and the probe from the
   node-only `./probe` entry that GE-1 declared, and write the package README: the module map, how to run the
   fixtures, and the rule that names come from the contract.
-- [ ] Reconcile the fixtures: if a row cannot be satisfied, stop and raise it against GE-1\'s contract rather than
+- [x] Reconcile the fixtures: if a row cannot be satisfied, stop and raise it against GE-1\'s contract rather than
   editing the row (the Rust twin reads the same row).
-- [ ] Update this plan\'s checkboxes and fill in the notes below.
+- [x] Update this plan\'s checkboxes and fill in the notes below.
 
 ## Gates
 
@@ -183,4 +183,71 @@ output was inspected. Nothing here runs under VS Code; that is GE-9.
 
 ## Notes from the run
 
-Not started.
+**What ran.** Tests first for each module; each failed because the module did not exist, then passed.
+`npm test -w @quarto/quarto-git-epochs`: 10 test files, 179 tests, all passing (the Gate 0 files from GE-1
+included). `npm run typecheck` and `npm run build` are green. `cargo xtask lint`: "All checks passed! (1736 files checked)".
+Modules: `classify`, `arrival`, `startup`, `registry`, `controller`, `paths`, `vocabulary`,
+`probe-types` (browser-safe types), and `probe` (node only, `createGitProbe` and `contentKey`).
+
+**Names the fixtures use** (written down as the first checklist item required): classify rows
+`{peer, reflog, changed[{path,disk,synced,blob}]} -> 'commit'|'checkout'`; arrival inputs `peer, policy, kind,
+disk, doc, blob, attached, retiredByOther, jj, canonicalUnavailable, liveUnderOtherPath, forkSyncs,
+caseCollision` and outputs `step, action, event, discarded`; startup rows `{record, head} -> case`; registry ops
+`union, canonical, create, moveForward, putDelete, retire, repair`. No row was edited. Startup rows name only the
+overall case, so the runner derives the current blobs from the record (the first file changed when HEAD changed).
+
+**Details chosen while implementing** (the plan left them open; the Rust twin must agree, so GE-2 should read this):
+
+- `classify`: commit-type when every changed file has disk equal to synced; otherwise commit-type only when the
+  reflog span is non-empty and every subject is `commit:`, `commit (amend):`, or `commit (initial):`. An empty
+  reflog span counts as no reflog. `commit (merge)` is not a plain commit.
+- `arrive`: a doc `attached: other` that nobody retired runs the ordinary steps 3 to 5. Under colocated jj only
+  steps 3, 4, and 5 are rewritten to the step 5 behavior; step 1 (no doc) and 2a/2b are not. `ReadOnly` rewrites
+  steps 4 and 5 to `create-from-disk` with event `seeded` for both peers, and wins over jj for the action name.
+  `discarded` is 1 for step 2b per file.
+- `registry`: `retire` copies the generation from the entry (0 when the entry is absent). `moveForward` with no old
+  entry uses `max + 1`. `registryKey` throws on a backslash. `readIndexFields` reads both string forms.
+- `startup`: per-file results are `reconcile | arrive | stay-detached`; a file the record has not seen arrives; a
+  detached file whose blob is unchanged stays detached.
+- Reflog marks are `{sha, lines?}`: with `lines` the match is exact, without it the last entry with that sha is
+  used; an absent sha returns every entry with `markFound: false`. The probe reads `logs/HEAD` directly (resolved
+  once with `--git-path`) rather than running `git reflog`.
+- Controller: a new HEAD restarts the quiet window once; the 30 s cap counts from the resume after a marker clears
+  (a state marker cannot be capped); a lock judged stale restarts the quiet window and that tick never decides. An
+  unborn repository is `off` with reason `unborn` and recovers without a decision after the first commit. The idle
+  tick is 5000 ms (option). The jj lock is a `lock` marker, so a lock file that persists between operations goes
+  stale after 60 s and stops holding the gate.
+- The probe needs `ready()` before `cheapState()` (it resolves the paths once).
+
+**Surprises.** (1) `git ls-tree -r -z HEAD` run from the project directory already limits and relativizes paths, so
+no pathspec is needed. (2) The scenario `file-added-and-removed-by-checkout` requires the peer to treat a file that
+left the tree as a changed file (its disk is gone, its doc is not); the runner does, and GE-9/GE-10 must too.
+(3) `npm install --offline` pruned cross-platform optional packages from `package-lock.json`, so the lockfile was
+restored and the one new dependency (`@automerge/automerge` ^3.5.0 for the package) was added by hand: a 3-line
+diff, and `npm ci --dry-run` accepts it.
+
+**Not run / exceptions.** The real colocated-jj test is skipped when `jj` is absent (`it.skipIf`); the always-on jj
+test creates the `.jj/working_copy` directory by hand. The only real timer outside the injected clock is the probe's
+per-call subprocess timeout (it kills a hung `git`); the controller and the pure modules have none. The Rust
+crate's reading of `fixtures/golden/ge05-registry-ops.bin` is GE-14's check. Windows runs are GE-15 to GE-17.
+
+**End to end.** The package has no binary, so the end to end is the real-repo scenario run:
+
+```bash
+SCENARIO_TRACE=1 npx vitest run --root ts-packages/quarto-git-epochs scenarios --reporter=verbose
+```
+
+12 scenarios (the 11 scenario files plus the "finds the scenarios" check) ran against real temp repos with git
+2.55.0; every `expect` in every step list held. I read the output. Excerpts of the classifier verdict after each step:
+
+```text
+switch-and-back: ["switch","main"] -> checkout [checkout: moving from side to main] changed=a.qmd
+switch-and-back: ["switch","side"] -> checkout [checkout: moving from main to side] changed=a.qmd
+commit: ["commit","-m","two"] -> commit [commit: two] changed=a.qmd
+amend: ["commit","--amend","-m","two again"] -> commit [commit (amend): two again] changed=
+reset-hard: ["reset","--hard"] -> checkout [reset: moving to HEAD] changed=a.qmd
+stash-and-pop: ["stash"] -> checkout [reset: moving to HEAD] changed=a.qmd
+stash-and-pop: ["stash","pop"] -> none
+rebase-stopped: ["rebase","main"] -> none
+```
+

@@ -22,13 +22,19 @@
       "import": "./dist/probe.js"
     }
   },
-  "files": ["dist", "fixtures"],
+  "files": [
+    "dist",
+    "fixtures"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@automerge/automerge": "^3.5.0"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
