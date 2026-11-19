@@ -2,7 +2,7 @@
 title: 'GE-4: Hub surface: the git flag, status route, startup warning'
 date: 2026-11-18
 description: 'Adds the experimental git flag to q2 preview, the git-status route that reports tracking, paused, and pending, and a startup warning when an extension has bound the project directory.'
-status: approved
+status: done
 depends-on: [ge-3]
 lane: B
 epic: ../2026-11-18-git-epochs-epic.md
@@ -83,33 +83,33 @@ order:
 
 ## Checklist
 
-- [ ] Read GE-1\'s contract (status response shape) and GE-3\'s notes (the `HubConfig` option and the status
+- [x] Read GE-1\'s contract (status response shape) and GE-3\'s notes (the `HubConfig` option and the status
   accessor). Record both names in "Notes from the run".
-- [ ] Write the parse tests (item 1) and run them: `cargo nextest run -p quarto preview_git`. They fail because the
+- [x] Write the parse tests (item 1) and run them: `cargo nextest run -p quarto preview_git`. They fail because the
   flag does not exist.
-- [ ] Write the library tests (item 2) and the route test (item 3), registered in
+- [x] Write the library tests (item 2) and the route test (item 3), registered in
   `crates/quarto-preview/tests/integration/main.rs` in alphabetical order. They fail to compile or fail.
-- [ ] Write the warning tests (item 4). They fail.
-- [ ] Add `PreviewGit` (`Ignore` default, `Track`) to `quarto-preview` next to `PreviewUi`, and `PreviewConfig::git`.
+- [x] Write the warning tests (item 4). They fail.
+- [x] Add `PreviewGit` (`Ignore` default, `Track`) to `quarto-preview` next to `PreviewUi`, and `PreviewConfig::git`.
   Update every literal `PreviewConfig {` site (recount with the grep above) with `git: Default::default()`.
-- [ ] Add `PreviewGitArg` and the `--git` argument in `main.rs`: `value_enum`, `default_value_t = PreviewGitArg::Ignore`,
+- [x] Add `PreviewGitArg` and the `--git` argument in `main.rs`: `value_enum`, `default_value_t = PreviewGitArg::Ignore`,
   no `default_missing_value`. Add `git` to the three conflict lists. Write the help text: what `track` does (this
   preview owns the project\'s pointer: it keeps docs in step with git checkouts), that `ignore` is today\'s behavior,
   "(experimental)", and that colocated jj repos work.
-- [ ] Carry `args.git` through `PreviewArgs` and into `PreviewConfig`; in `build_hub_config` set the GE-3 hub option
+- [x] Carry `args.git` through `PreviewArgs` and into `PreviewConfig`; in `build_hub_config` set the GE-3 hub option
   from it.
-- [ ] Add `GET /api/preview/git-status` to `extend_with_preview`, its handler reading the GE-3 accessor through
+- [x] Add `GET /api/preview/git-status` to `extend_with_preview`, its handler reading the GE-3 accessor through
   `State<SharedContext>`. Return exactly the GE-1 shape; add no field.
-- [ ] Add `extension_bound` and call it once after the project root is resolved in `commands/preview.rs`
+- [x] Add `extension_bound` and call it once after the project root is resolved in `commands/preview.rs`
   (`:286-300`), emitting `tracing::warn!` with the text: this directory is bound to a Quarto Hub folder
   (`.quarto-hub/project.json`), so running a hub here syncs the same files twice. Warn only. `extension_bound` is false when `project.json` says `mode: editor-only` (G28). Not run for
   `--no-project`, single-file mode, or `--hub-url` (no directory is served). No new Q error code, so no error
   catalog or `docs/errors` work.
-- [ ] `--no-project` with `--git track` runs without git logic and logs one line saying so (detail chosen by the plan
+- [x] `--no-project` with `--git track` runs without git logic and logs one line saying so (detail chosen by the plan
   author; confirm). G33 lists no conflict for it.
-- [ ] Run the tests until green; run the Gates below.
-- [ ] End-to-end verification (below); record the invocation and output.
-- [ ] Update this checklist and fill "Notes from the run".
+- [x] Run the tests until green; run the Gates below.
+- [x] End-to-end verification (below); record the invocation and output.
+- [x] Update this checklist and fill "Notes from the run".
 
 ## Gates
 
@@ -154,4 +154,43 @@ The flag is user visible, so tests alone do not finish this plan (`AGENTS.md`).
 
 ## Notes from the run
 
-Not started.
+**Names consumed.** GE-1's status shape is `{ tracking, paused, pending, markers, decisions }`; GE-3 provides
+`HubConfig::git_tracking: GitTracking { Ignore, Track }` and `HubContext::git_status() -> GitStatus`
+(`DecisionRecord { kind, time_ms, files, step, discarded }`). The route serializes `GitStatus` directly, so it adds
+no field (the decision fields keep their Rust names, `time_ms` included).
+
+**What landed.**
+
+- `quarto-preview`: `PreviewGit { Ignore (default), Track }`, `PreviewConfig::git`, `build_hub_config` maps it to
+  `GitTracking`, and `GET /api/preview/git-status` (`git_status_handler`). All 20 `PreviewConfig {` literals in the
+  integration tests and `lib.rs` carry `git: Default::default()`.
+- `quarto`: `PreviewGitArg` and `--git` (`value_enum`, default `ignore`, no `default_missing_value`; conflicts with
+  `join`, `static_mode`, `hub_url`), `PreviewArgs::git`, `extension_bound`, and the startup warning.
+- Tests: 9 parse tests (`preview_git_*`), 2 library tests, 4 route tests (`git_status.rs`), 1 unit test for
+  `extension_bound`, 2 binary tests (`preview_git_cli.rs`).
+
+**Details chosen (confirm).** `--no-project` with `--git track` logs one `info!` line and runs with `Ignore`. The
+warning runs only when a project root is resolved (so not for `--no-project` or `--hub-url`); a `project.json` that
+does not parse counts as bound. Test order: the parse, library, and route tests were seen failing for the right
+reason (missing type, missing flag, SPA HTML instead of JSON). The binary warning tests first failed in the harness
+(the boot URL carries `?page=`), not on the missing warning; the `extension_bound` unit test was the red proof for
+that item.
+
+**Gates.** `cargo clippy -p quarto -p quarto-preview -p quarto-hub --all-targets -- -D warnings`: clean.
+`cargo xtask lint`: clean. `cargo nextest run -p quarto -p quarto-preview -p quarto-hub --no-fail-fast`: 1889 run,
+1887 passed, 2 failed, both Julia engine tests
+(`julia_plain_render_is_presented_from_a_record`, `typst_plain_and_recorded_agree`; a different Julia test failed in
+the first run): `QuartoNotebookRunner` raises `ArgumentError: startpath must be non-empty` in `relpath`. No
+Julia code is touched here; the same two fail when run alone. Treat as environmental and pre-existing. The Windows
+cross-clippy cannot run from macOS (`aws-lc-sys` C build fails); GE-15 covers it natively.
+
+**End to end** (binary `target/debug/q2`, output inspected): temp repo with a committed `index.qmd`;
+`q2 preview --no-browser --git track <dir>` printed the banner `→ http://127.0.0.1:51040/?page=index.qmd`.
+`curl /api/preview/git-status` gave `{"tracking":true,"paused":false,"pending":false,"markers":[],"decisions":[]}`;
+with `index.lock` touched, `{"tracking":true,"paused":true,"pending":true,"markers":["index.lock"],...}`; after
+removal `paused` was false again. Without `--git`: `{"tracking":false,"paused":false,"pending":false,...}`. A bare
+`--git`: `error: a value is required for '--git <GIT>' but none was supplied [possible values: ignore, track]`.
+`--git track --join x`: `error: the argument '--git <GIT>' cannot be used with '--join <TICKET>'`. With
+`.quarto-hub/project.json` (`{}`) and `RUST_LOG=warn`: `WARN q2::commands::preview: this directory is bound to a
+Quarto Hub folder (.quarto-hub/project.json), so running a hub here syncs the same files twice`, and the server
+started and shut down cleanly on Ctrl-C.
