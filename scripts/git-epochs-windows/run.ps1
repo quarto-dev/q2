@@ -149,6 +149,22 @@ function Test-Tool {
     return $line
 }
 
+# winget installs NASM (and sometimes CMake) without putting them on PATH, and a terminal opened before the
+# install never sees PATH changes. Look in the usual folders and add what exists for this run only.
+foreach ($cand in @(
+        @{ Exe = 'nasm.exe';  Dirs = @((Join-Path $env:ProgramFiles 'NASM'), (Join-Path ${env:ProgramFiles(x86)} 'NASM'), (Join-Path $env:LOCALAPPDATA 'bin\NASM')) },
+        @{ Exe = 'cmake.exe'; Dirs = @((Join-Path $env:ProgramFiles 'CMake\bin'), (Join-Path ${env:ProgramFiles(x86)} 'CMake\bin')) })) {
+    if (-not (Get-Command $cand.Exe -ErrorAction SilentlyContinue)) {
+        foreach ($d in $cand.Dirs) {
+            if ($d -and (Test-Path (Join-Path $d $cand.Exe))) {
+                $env:PATH = $d + ';' + $env:PATH
+                Write-Host ('  added to PATH for this run: ' + $d)
+                break
+            }
+        }
+    }
+}
+
 Write-Host "== Toolchain ($runId) =="
 $tools = @()
 $tools += Test-Tool 'git'    'yes' 'winget install Git.Git   (Git for Windows; the probe is tested against it)'
