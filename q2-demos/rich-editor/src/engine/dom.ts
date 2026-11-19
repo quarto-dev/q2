@@ -366,22 +366,42 @@ export function writeSelection(root: HTMLElement, selection: Selection): void {
 }
 
 /**
+ * Marks what a line's `wrap` adds around its element (a figure's image
+ * around its caption) as the line's (see `LineElement.wrap`).
+ */
+export const WRAP_ATTR = 'data-qe-wrap'
+
+/** Whether a DOM point is in what a line's `wrap` adds, outside the line's own element. */
+function inWrap(root: HTMLElement, node: Node): boolean {
+  const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
+  const wrap = element?.closest(`[${WRAP_ATTR}]`)
+  return Boolean(wrap && root.contains(wrap) && !element?.closest(FIELD))
+}
+
+/**
  * The page's selection after a mouse gesture, in model terms: an end
  * outside the fields snaps toward the other end, so a drag from the title
  * into the author grid selects to the end of the last field it crossed.
- * Null when `root` isn't focused or both ends are outside the fields.
+ * An end in what a line's `wrap` adds (a figure's image) snaps away from
+ * the other end instead, so a drag onto an image takes it in: down onto
+ * it, to the start of its caption's text; up onto it, to the end of the
+ * line before. Null when `root` isn't focused or both ends are outside
+ * the fields.
  */
 export function readMouseSelection(root: HTMLElement): Selection | null {
   const doc = root.ownerDocument
   const selection = doc.getSelection()
   if (doc.activeElement !== root || !selection || !selection.anchorNode || !selection.focusNode) return null
-  if (selectionOutside(root) === 'all') return null
   const { anchorNode, anchorOffset, focusNode, focusOffset } = selection
+  const wrapped = !selection.isCollapsed && (inWrap(root, anchorNode) || inWrap(root, focusNode))
+  if (selectionOutside(root) === 'all' && !wrapped) return null
   const point = doc.createRange()
   point.setStart(anchorNode, anchorOffset)
   const focusAfter = point.comparePoint(focusNode, focusOffset) > 0
-  const anchor = positionAt(root, anchorNode, anchorOffset, focusAfter ? 'forward' : 'backward')
-  const focus = positionAt(root, focusNode, focusOffset, focusAfter ? 'backward' : 'forward')
+  const away = (node: Node, toward: 'forward' | 'backward') =>
+    !selection.isCollapsed && inWrap(root, node) ? (toward === 'forward' ? 'backward' : 'forward') : toward
+  const anchor = positionAt(root, anchorNode, anchorOffset, away(anchorNode, focusAfter ? 'forward' : 'backward'))
+  const focus = positionAt(root, focusNode, focusOffset, away(focusNode, focusAfter ? 'backward' : 'forward'))
   return anchor && focus ? { anchor, focus } : null
 }
 
