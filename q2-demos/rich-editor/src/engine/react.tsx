@@ -207,6 +207,12 @@ export interface LineElement {
    */
   wrap?: (line: ReactNode) => ReactNode
   /**
+   * The line has no text to edit, and is only what `wrap` puts around
+   * nothing (a figure with no caption, which is its image alone): it has
+   * no element of its own, so it holds no caret (see `Schema.voidWhenEmpty`).
+   */
+  textless?: boolean
+  /**
    * The elements to put the line in, outermost first, in place of
    * `parent`: lines next to each other share each of them, from the
    * outermost, while they're `shared` and the same (a nested list's items
@@ -249,6 +255,10 @@ export function Lines({ name, text, className, as = 'p', lineElement, renderAtom
     }
     const prefix = linePrefix(line, 0)
     const element = prefix === '' ? undefined : lineElement?.(prefix, i)
+    if (element?.textless) {
+      put(<Fragment key={i}>{element.wrap?.(null)}</Fragment>, [], i)
+      return
+    }
     const textStart = at + prefix.length
     const here = caret !== undefined && caret >= textStart && caret <= at + line.length ? caret - textStart : undefined
     const field = (

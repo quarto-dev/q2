@@ -163,7 +163,8 @@ const TITLE_BLOCK = ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[
  * level, as Backspace at the start of its text does. `---` there makes a horizontal rule, which is copied as `---`.
  * A figure's caption is a line too, which holds its image (see
  * `editing/body.ts`): Enter in its middle moves the rest of it to a
- * paragraph, and it's copied as its text alone.
+ * paragraph, and it's copied as its text alone. A figure with no caption
+ * is its image alone, which can be removed but not edited, as a rule can.
  * The body's lines can be formatted (bold, italic, underline,
  * strikethrough, highlight, code and links: see `editing/inlines.ts`), and
  * markdown typed out and closed there becomes formatting. Code has a
@@ -177,6 +178,7 @@ const SCHEMA: Schema = {
   prefixText: prefixMarkdown,
   continued: isItem,
   splitPrefix: (prefix) => (isFigure(prefix) ? '' : prefix),
+  voidWhenEmpty: isFigure,
   outdent: outdentPrefix,
   voidText: '---',
   keepEmpty: TITLE_BLOCK,
@@ -373,6 +375,8 @@ export function VisualEditor({ file, devTools }: VisualEditorProps) {
         return {
           as: 'figcaption',
           attrs: hasOwnAlt(image.attr) ? undefined : { 'aria-hidden': 'true' },
+          // A figure with no caption is its image alone, with no line to type in.
+          textless: caption === '',
           wrap: (line: ReactNode) => (
             <FigureFrame id={id} classes={[]} src={image.src} imageAttr={['', classes, image.attr[2]]} caption={caption}>
               {line}

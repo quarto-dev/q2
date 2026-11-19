@@ -352,6 +352,48 @@ describe('lines that can be removed but not edited', () => {
   })
 })
 
+describe('empty lines the schema makes ones that can be removed but not edited', () => {
+  // A line with the prefix F (and data after it, as a figure's image) is
+  // one when it has no text.
+  const F = '﷚﷡'
+  const lines: Schema = {
+    order: ['title', 'body'],
+    multiline: ['body'],
+    voidWhenEmpty: (prefix) => prefix.startsWith('﷚'),
+  }
+  const body = (selection: State['selection'], value: string): State => state({ title: 'T', body: value }, selection)
+
+  it('emptying one moves the caret to the end of the line before', () => {
+    const next = deleteBackward(lines, body(caret('body', 9), `First\n${F}C\nSecond`))
+    expect(next.fields.body).toBe(`First\n${F}\nSecond`)
+    expect(next.selection).toEqual(caret('body', 5))
+  })
+
+  it('or, with no line before that can be edited, to the start of the text of the line after', () => {
+    const next = deleteBackward(lines, body(caret('body', 3), `${F}C\n${F}\n﷒Second`))
+    expect(next.fields.body).toBe(`${F}\n${F}\n﷒Second`)
+    expect(next.selection).toEqual(caret('body', 7))
+  })
+
+  it('Backspace at the start of the line after one removes it, prefix and all', () => {
+    const next = deleteBackward(lines, body(caret('body', 9), `First\n${F}\nSecond`))
+    expect(next.fields.body).toBe('First\nSecond')
+    expect(next.selection).toEqual(caret('body', 6))
+  })
+
+  it('Delete at the end of the line before one removes it', () => {
+    const next = deleteForward(lines, body(caret('body', 5), `First\n${F}\nSecond`))
+    expect(next.fields.body).toBe('First\nSecond')
+    expect(next.selection).toEqual(caret('body', 5))
+  })
+
+  it('a line with the prefix and text is edited as any other', () => {
+    const next = deleteBackward(lines, body(caret('body', 10), `First\n${F}Ca\nSecond`))
+    expect(next.fields.body).toBe(`First\n${F}C\nSecond`)
+    expect(next.selection).toEqual(caret('body', 9))
+  })
+})
+
 describe('setLinePrefixes', () => {
   const H = '\ufdd1'
   const Q = '\ufdd7'

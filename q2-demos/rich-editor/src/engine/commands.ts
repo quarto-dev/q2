@@ -18,10 +18,13 @@
  * - A line that can't be edited (`ATOM`) stays as it is, on a line of its
  *   own: a deletion that covers it keeps it, and one that would join it
  *   to another line does nothing.
- * - A line that can't be edited but can be removed (`VOID`) is on a line of
- *   its own too, but a deletion that covers it removes it, and so does
- *   Backspace at the start of the line after it, or Delete at the end of
- *   the line before it.
+ * - A line that can't be edited but can be removed (`VOID`, or an empty
+ *   line the schema makes one: see `isVoidLine`) is on a line of its own
+ *   too, but a deletion that covers it removes it, and so does Backspace
+ *   at the start of the line after it, or Delete at the end of the line
+ *   before it. The caret is never on it: an edit that leaves it there (one
+ *   that empties such a line) moves it to the end of the line before, or
+ *   else the start of the line after.
  * - A line's prefix (see `isPrefix`) is never typed, and the caret never
  *   goes before it. Backspace at the start of a line's text removes it,
  *   all of it, or leaves what `Schema.outdent` says. A line joined to the one before takes that line's
@@ -69,10 +72,13 @@ import {
   isMarked,
   isPrefix,
   isAlways,
+  isVoidLine,
   keepsEmpty,
   lineStartOf,
   linePrefix,
+  pastPrefix,
   pastPrefixes,
+  samePosition,
   VOID,
   withoutPrefixes,
   ordered,
@@ -358,9 +364,34 @@ export function setFieldPrefixes(
 export function select(schema: Schema, state: State, selection: Selection | null): State {
   const canonical = canonicalMarks(schema, removeEmpty(schema, state.fields, selection), pastPrefixes(state.fields, selection))
   const fields = canonical.fields
-  selection = pastPrefixes(fields, canonical.selection)
+  selection = offVoidLines(schema, fields, pastPrefixes(fields, canonical.selection))
   if (fields === state.fields && sameSelection(selection, state.selection)) return state
   return { fields, selection }
+}
+
+/**
+ * `selection` with each end that's on an empty line the schema makes one
+ * that can't be edited (`Schema.voidWhenEmpty`, which holds no caret)
+ * moved to the end of the nearest line before it that can be edited, or
+ * else the start of the nearest one after it (none: it stays). (Where the
+ * caret goes around a `VOID` line is up to the edit that makes it.)
+ */
+function offVoidLines(schema: Schema, fields: Fields, selection: Selection | null): Selection | null {
+  if (!selection || !schema.voidWhenEmpty) return selection
+  const off = (position: Position): Position => {
+    const text = fields[position.field] ?? ''
+    const lines = text.split('\n')
+    const index = text.slice(0, position.offset).split('\n').length - 1
+    if (lines[index] === VOID || !isVoidLine(schema, lines[index])) return position
+    const editable = (i: number) => !isVoidLine(schema, lines[i]) && !lines[i].split('').some(isAtom)
+    const startOf = (i: number) => lines.slice(0, i).reduce((sum, line) => sum + line.length + 1, 0)
+    for (let i = index - 1; i >= 0; i--) if (editable(i)) return { field: position.field, offset: startOf(i) + lines[i].length }
+    for (let i = index + 1; i < lines.length; i++) if (editable(i)) return { field: position.field, offset: pastPrefix(fields, { field: position.field, offset: startOf(i) }).offset }
+    return position
+  }
+  const anchor = off(selection.anchor)
+  const focus = off(selection.focus)
+  return samePosition(anchor, selection.anchor) && samePosition(focus, selection.focus) ? selection : { anchor, focus }
 }
 
 /**
@@ -444,13 +475,13 @@ function deleteDirection(
   }
   if (start < end && withoutMarks(text.slice(start, end)) !== '') {
     // The browser's range.
-  } else if (backward && at.offset === lineStart && lineStart > 0 && lineAt(text, lineStart - 1) === VOID) {
+  } else if (backward && at.offset === lineStart && lineStart > 0 && isVoidLine(schema, lineAt(text, lineStart - 1))) {
     // The line before can be removed: remove it, and its line break.
-    start = lineStart - 1 - VOID.length
+    start = lineStart - 1 - lineAt(text, lineStart - 1).length
     end = lineStart
-  } else if (!backward && at.offset === lineEnd && lineEnd < text.length && lineAt(text, lineEnd + 1) === VOID) {
+  } else if (!backward && at.offset === lineEnd && lineEnd < text.length && isVoidLine(schema, lineAt(text, lineEnd + 1))) {
     start = lineEnd
-    end = lineEnd + 1 + VOID.length
+    end = lineEnd + 1 + lineAt(text, lineEnd + 1).length
   } else if (backward && atTextStart(text, lineStart, at.offset)) {
     // At the start of a line's text: its prefix goes, all of it (a run of
     // several characters, for a kind that holds data).

@@ -63,6 +63,17 @@ export function linePrefix(text: string, offset: number): string {
   return text.slice(start, end)
 }
 
+/**
+ * Whether a line of a multi-line field can be removed but not edited: a
+ * `VOID` line, or a line with no text whose prefix makes it one when it's
+ * empty (`Schema.voidWhenEmpty`).
+ */
+export function isVoidLine(schema: Schema, line: string): boolean {
+  if (line === VOID) return true
+  const prefix = linePrefix(line, 0)
+  return prefix !== '' && withoutMarks(line.slice(prefix.length)) === '' && (schema.voidWhenEmpty?.(prefix) ?? false)
+}
+
 /** Each field's text, or undefined when the field is absent. */
 export type Fields = Readonly<Record<string, string | undefined>>
 
@@ -146,6 +157,13 @@ export interface Schema {
   readonly prefixText?: (prefix: string) => string
   /** A `VOID` line as text, for the clipboard (none unless given). */
   readonly voidText?: string
+  /**
+   * Whether a line with this prefix and no text is like a `VOID` line (a
+   * figure with no caption, which is its image alone): it shows no text,
+   * the caret steps over it, and it's removed as a `VOID` line is (see
+   * `isVoidLine`). None is, unless given.
+   */
+  readonly voidWhenEmpty?: (prefix: string) => boolean
   /**
    * Fields that stay when they're empty, rather than disappearing once the
    * selection leaves them: being there, empty, means something (a title

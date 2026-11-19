@@ -7,9 +7,15 @@
  * text as a paragraph, joined to the line the selection started in, and
  * undo brings the figure back. Enter at the end of a caption starts a
  * paragraph after the figure, and in its middle moves the rest of the
- * caption to one. An emptied caption leaves the figure with no caption
- * (and no placeholder), written as an image alone on its line
- * (`![](tray.png)`).
+ * caption to one.
+ *
+ * A figure can have no caption, written as an image alone on its line
+ * (`![](tray.png)`): it's then its image alone, with no caption line, and
+ * it's like a horizontal rule (`rules.spec.ts`) in the text. The caret
+ * steps over it, and Backspace at the start of the line after it, Delete
+ * at the end of the line before it, or deleting a selection across it,
+ * removes it. Emptying a caption leaves its figure with none, and the
+ * caret at the end of the line before.
  */
 
 import { createDocument, expect, fixture, lineEnd, lineStart, openEditor, test } from './helpers.ts'
@@ -68,23 +74,6 @@ test.describe('captions', () => {
     await document.expectSource(figures.replace(sketch, '![A sketch of the trench](sketch.png){fig-alt="A pencil sketch of the trench"}'))
   })
 
-  test('an emptied caption leaves the figure with no caption, and typing gives it a caption again', async ({ page }) => {
-    const document = await createDocument(figures)
-    const editor = await document.open(page)
-    await editor.placeCaretInLine(2, 'The sample tray'.length)
-    await page.keyboard.press(`Shift+${lineStart}`)
-
-    await page.keyboard.press('Backspace')
-
-    await document.expectSource(figures.replace(tray, '![](tray.png){#tray .bordered}'))
-    await expect(editor.frame.locator('figure > img')).toHaveCount(3)
-    await expect(editor.frame.locator('figcaption.qe-field').nth(1)).not.toHaveAttribute('data-placeholder')
-
-    await page.keyboard.type('Trays')
-
-    await document.expectSource(figures.replace(tray, '![Trays](tray.png){#tray .bordered}'))
-  })
-
   test("a caption's line can't be given a style", async ({ page }) => {
     const editor = await openEditor(page, 'figures')
     await editor.placeCaretInLine(2, 4)
@@ -131,6 +120,102 @@ test.describe('Enter in a caption', () => {
 
     await document.expectSource(figures.replace(tray, '![The sample](tray.png){#tray .bordered}\n\ntray'))
     await editor.expectLineCaret(3, 0)
+  })
+})
+
+test.describe('a figure with no caption', () => {
+  const bare = '![](tray.png){#tray .bordered}'
+  const noCaption = figures.replace(tray, bare)
+
+  test('is its image alone, with no caption line', async ({ page }) => {
+    const document = await createDocument(noCaption)
+    const editor = await document.open(page)
+
+    expect(await editor.lines()).toEqual([
+      'p: Before the figures.',
+      'figcaption: A wide view of the site',
+      'figcaption: A sketch',
+      'p: After the figures.',
+    ])
+    await expect(editor.frame.locator('figure > img')).toHaveCount(3)
+    await expect(editor.frame.locator('figure')).toHaveCount(3)
+    await expect(editor.frame.locator('figcaption')).toHaveCount(2)
+  })
+
+  test('emptying a caption removes its line, the figure stays, and the caret goes to the end of the line before', async ({ page }) => {
+    const document = await createDocument(figures)
+    const editor = await document.open(page)
+    await editor.placeCaretInLine(2, 'The sample tray'.length)
+    await page.keyboard.press(`Shift+${lineStart}`)
+
+    await page.keyboard.press('Backspace')
+
+    await document.expectSource(noCaption)
+    await expect(editor.frame.locator('figure > img')).toHaveCount(3)
+    await expect(editor.frame.locator('figcaption')).toHaveCount(2)
+    await editor.expectLineCaret(1, 'A wide view of the site'.length)
+
+    await page.keyboard.press(`${mod}+z`)
+
+    await document.expectSource(figures)
+    await expect(editor.frame.locator('figcaption')).toHaveCount(3)
+  })
+
+  test('Right and Left step over it', async ({ page }) => {
+    const document = await createDocument(noCaption)
+    const editor = await document.open(page)
+    await editor.placeCaretInLine(1, 'A wide view of the site'.length)
+
+    await page.keyboard.press('ArrowRight')
+    await editor.expectLineCaret(2, 0)
+
+    await page.keyboard.press('ArrowLeft')
+    await editor.expectLineCaret(1, 'A wide view of the site'.length)
+  })
+
+  test('Backspace at the start of the line after it removes it', async ({ page }) => {
+    const document = await createDocument(figures.replace(sketch, '![](sketch.png)'))
+    const editor = await document.open(page)
+    await editor.placeCaretInLine(3, 0)
+
+    await page.keyboard.press('Backspace')
+
+    await document.expectSource(figures.replace(`${sketch}
+
+`, ''))
+    await expect(editor.frame.locator('figure > img')).toHaveCount(2)
+    await editor.expectLineCaret(3, 0)
+  })
+
+  test('Delete at the end of the line before it removes it', async ({ page }) => {
+    const document = await createDocument(noCaption)
+    const editor = await document.open(page)
+    await editor.placeCaretInLine(1, 'A wide view of the site'.length)
+
+    await page.keyboard.press('Delete')
+
+    await document.expectSource(figures.replace(`${tray}
+
+`, ''))
+    await expect(editor.frame.locator('figure > img')).toHaveCount(2)
+    await editor.expectLineCaret(1, 'A wide view of the site'.length)
+  })
+
+  test('deleting a selection across it removes it', async ({ page }) => {
+    const document = await createDocument(noCaption)
+    const editor = await document.open(page)
+    await editor.placeCaretInLine(1, 'A wide view of the site'.length)
+    // Over the figure (one step) and the next caption's "A".
+    for (let i = 0; i < 2; i++) await page.keyboard.press('Shift+ArrowRight')
+
+    await page.keyboard.press('Backspace')
+
+    await document.expectSource(figures.replace(`${wide}
+
+${tray}
+
+${sketch}`, '![A *wide* view of the site sketch](site.png)'))
+    await expect(editor.frame.locator('figure > img')).toHaveCount(1)
   })
 })
 

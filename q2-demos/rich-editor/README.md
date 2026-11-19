@@ -119,9 +119,12 @@ whole and as much of the caption as it covers. Deleting the image
 takes it in) leaves the caption's text as a paragraph, joined to the line
 the selection started in. Enter at the end of a caption starts a
 paragraph after the figure, and in its middle moves the rest of the
-caption to one. An emptied caption leaves the figure with no caption
-(and no placeholder), written as an image alone on its line
-(`![](tray.png)`), which reads back as a figure with no caption. Its design is
+caption to one. A figure with no caption, written as an image alone on
+its line (`![](tray.png)`), is its image alone, with no caption line: it
+can be removed but not edited, as a horizontal rule can, and the caret
+steps over it. Emptying a caption leaves its figure with none, and the
+caret at the end of the line before. (Adding a caption back is for a
+Caption button, not built yet.) Its design is
 `mockups/figure.html`, of which only this much is built. Copy takes the
 caption's text alone. The qmd writer writes every attribute's value
 quoted when it writes a figure again (`width="50%"`; a fixme in
@@ -145,7 +148,10 @@ edited is a line holding one placeholder character (`ATOM`), which the
 engine never removes, joins to another line or lets text onto, and which
 is rendered as the block it stands for (`src/editing/body.ts`). A
 horizontal rule is a line holding another (`VOID`), which the engine keeps
-on a line of its own too, but removes as an edit says. Each line that can
+on a line of its own too, but removes as an edit says. So is a figure
+with no caption: the schema makes an empty line with the figure prefix
+one of these (`Schema.voidWhenEmpty`), with no element of its own, and an
+edit that empties a caption moves the caret off it. Each line that can
 be edited is an element of its own (`Lines`).
 
 A line can start with a prefix, a run of characters the engine keeps out
