@@ -44,13 +44,23 @@ function isInside(root: string, target: string): boolean {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
+/**
+ * True when `e` says the path does not exist. Any other failure (EMFILE, EBUSY, EPERM under load) says nothing about
+ * existence: reading it as "missing" walked up to the drive root and called the path unsafe (GE-17 c1 on Windows).
+ */
+function isMissing(e: unknown): boolean {
+  const code = (e as { code?: string } | null)?.code;
+  return code === 'ENOENT' || code === 'ENOTDIR';
+}
+
 /** The real path of the deepest ancestor of `target` that exists. */
 async function realpathOfExistingAncestor(target: string): Promise<string> {
   let current = target;
   for (;;) {
     try {
       return await fs.realpath(current);
-    } catch {
+    } catch (e) {
+      if (!isMissing(e)) throw e;
       const parent = path.dirname(current);
       if (parent === current) return current;
       current = parent;
@@ -63,7 +73,8 @@ async function realNativeOfExistingAncestor(target: string): Promise<string> {
   for (;;) {
     try {
       return realpathSync.native(current);
-    } catch {
+    } catch (e) {
+      if (!isMissing(e)) throw e;
       const parent = path.dirname(current);
       if (parent === current) return current;
       current = parent;
@@ -96,7 +107,10 @@ export async function safeJoin(root: string, rel: string): Promise<string> {
 
   const target = path.join(root, ...norm.split('/'));
   if (!isInside(root, target)) throw new UnsafePathError(rel, 'escapes the project root');
-  const realRoot = await fs.realpath(root).catch(() => root);
+  const realRoot = await fs.realpath(root).catch((e: unknown) => {
+    if (!isMissing(e)) throw e;
+    return root;
+  });
   const realAncestor = await realpathOfExistingAncestor(target);
   if (!isInside(realRoot, realAncestor)) throw new UnsafePathError(rel, 'resolves outside the project root');
   if (process.platform === 'win32') {
@@ -105,8 +119,9 @@ export async function safeJoin(root: string, rel: string): Promise<string> {
     let nativeRoot = root;
     try {
       nativeRoot = realpathSync.native(root);
-    } catch {
+    } catch (e) {
       // the root does not exist yet: compare against the plain root
+      if (!isMissing(e)) throw e;
     }
     const nativeAncestor = await realNativeOfExistingAncestor(target);
     const below = path.relative(nativeRoot, nativeAncestor);
