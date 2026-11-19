@@ -2,6 +2,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { META_DIR } from './ignore';
+import type { RepoIdentity } from './clone/attach';
 
 export const META_FILE = 'project.json';
 export const DEFAULT_SYNC_SERVER = 'wss://sync.automerge.org';
@@ -22,6 +23,8 @@ export interface ProjectMeta {
   createdAt: string;
   /** Always set on a read: a file with no mode is a mirror. */
   mode?: ProjectMode;
+  /** Clone mode: the repository identity verified at attach and re-verified at every startup (G19, G21). */
+  repo?: RepoIdentity;
 }
 
 /** `project.json` parses but says something this version does not understand. */
