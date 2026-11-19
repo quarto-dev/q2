@@ -224,7 +224,8 @@ rules of `.claude/rules/hub-client-tests.md` apply to every end-to-end test; no 
 
 **Phase 0: research**
 
-- [ ] Run research items 1 to 7 and record each answer in the notes.
+- [x] Run research items 1 to 7 and record each answer in the notes. (Items 1 to 6 answered; item 7 needs the
+  `hubless` preset and is answered in Phase 3.)
 
 **Phase 1: tests first**
 
@@ -297,4 +298,35 @@ they were inspected.
 
 ## Notes from the run
 
-Not started.
+### Phase 0: research answers (2026-11-19)
+
+1. **node-pty 1.1.0** installs under Node 24.5.0 on macOS arm64 from its prebuilds (no compiler). **Finding:** the
+   packaged `prebuilds/darwin-arm64/spawn-helper` has no execute bit, so `pty.spawn` fails with `posix_spawnp failed`
+   until `chmod +x` is applied. The terminal server therefore sets the bit on that file at start (idempotent) before
+   spawning. No fork needed. xterm.js is `@xterm/xterm` 6.0.0 with `@xterm/addon-fit` 0.11.0; `ws` 8.23.0.
+2. **xterm.js** renders italic and dim (`\x1b[2;3m` sets `isItalic()` and `isDim()` on the cell), and `term.write`
+   produces no `onData`, so a display message never reaches the PTY.
+3. **Window placement (browser):** CDP `Browser.setWindowBounds` placed a headed Chromium window at left 0, top 30,
+   960 x 938, and `getWindowBounds` and `screenX/screenY/outerWidth/outerHeight` all agree: **no offset**. The main
+   monitor is 1920 x 1280 with a visible frame of 1920 x 1250 (menu bar 30 points); a second monitor sits at x = 1920.
+   VS Code placement (`BrowserWindow.setBounds`) is checked when the layout is built (Phase 2).
+4. **R through rv:** `rv init --add ...` defaults to a university CRAN mirror; the committed `rproject.toml` sets the
+   Posit Package Manager repository (`https://packagemanager.posit.co/cran/latest`). `rv sync` installs binaries in
+   about 3 to 5 seconds into `rv/library/4.3/arm64` (relative to `rproject.toml`; `rv library` prints it relative, so the
+   launcher makes it absolute). With the hub started with `R_LIBS_USER` set to that path, a `{r}` ggplot2 chunk in a
+   journal outside the rv project renders in the preview (a 672 px image appeared within 2.5 s).
+5. **Python through uv:** `uv sync` (about 2 s warm) builds `.venv` with plotnine and ipykernel, whose kernelspec
+   `python3` has `argv: ["python", ...]`. It is found with `JUPYTER_PATH=<journal>/.venv/share/jupyter`, and `python`
+   resolves because the hub also gets `<journal>/.venv/bin` first on `PATH` and `VIRTUAL_ENV`. The kernel started and
+   was ready in 1.6 s, and the plotnine chart rendered (screenshot inspected). `.venv/` is gitignored in the journal.
+6. **Engines across a flip:** `preview.engine: auto`, `git switch feature` with a changed R model: the R paper's chart
+   blob URL changed within 2 s of the switch and no stale marker was present at 2-second sampling, so the guest sees
+   the re-executed chart almost at once on this small chunk. (A heavier model will take longer; the story's check
+   retries.) `_quarto.yml` should also declare `quarto-required` to avoid the Q-5-53 banner in the editor.
+7. **Live chunks in `hubless`:** not run yet. It needs the `hubless` preset; the answer is recorded when that preset
+   is built, and the story is adjusted then.
+
+Setup gotchas: macOS `sed -i` needs a suffix argument, so scripts use `perl -pi -e`; a cold `cargo build --bin q2` plus
+the WASM chain took about 10 minutes in this worktree.
+
+Phase 1 and later: not started.
