@@ -80,4 +80,30 @@ describe('safeJoin rejects (G36)', () => {
     }
     expect(await safeJoin(root, 'alias/x.qmd')).toBe(path.join(root, 'alias', 'x.qmd'));
   });
+
+  it('a path over 260 characters is accepted and can be written (long paths)', async () => {
+    // Over MAX_PATH on Windows. Node uses the extended-length form itself, so
+    // this works without core.longpaths; the test pins that safeJoin and a
+    // write through its result keep working for deep keys.
+    const rel = `${'d'.repeat(60)}/${'e'.repeat(60)}/${'f'.repeat(60)}/${'g'.repeat(60)}/${'h'.repeat(60)}/x.qmd`;
+    expect(rel.length).toBeGreaterThan(260);
+    const target = await safeJoin(root, rel);
+    expect(target).toBe(path.join(root, ...rel.split('/')));
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(target, 'x');
+    expect(await fs.readFile(target, 'utf8')).toBe('x');
+  });
+
+  it('an 8.3 short name of .git is rejected where the volume has short names (windows only)', async (ctx) => {
+    if (process.platform !== 'win32') ctx.skip();
+    await fs.mkdir(path.join(root, '.git'));
+    let resolved = '';
+    try {
+      resolved = await fs.realpath.native(path.join(root, 'GIT~1'));
+    } catch {
+      ctx.skip(); // the volume has no 8.3 names
+    }
+    if (path.basename(resolved) !== '.git') ctx.skip();
+    await expect(safeJoin(root, 'GIT~1/hooks/pre-commit')).rejects.toBeInstanceOf(UnsafePathError);
+  });
 });
