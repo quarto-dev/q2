@@ -1,0 +1,95 @@
+﻿{
+    "run_id":  "20261119-150923-GWWIN",
+    "branch":  "windows/git-epochs",
+    "commit":  "4f3c6c433f2394cdce8959f418dfacae7b47ccb1",
+    "base":  "current tip of origin/windows/git-epochs",
+    "host_triple":  "x86_64-pc-windows-msvc",
+    "os":  "Microsoft Windows 11 Pro",
+    "git":  "git version 2.47.1.windows.1",
+    "node":  "v24.21.0",
+    "autocrlf":  "true",
+    "longpaths":  "(unset)",
+    "tools":  [
+                  {
+                      "tool":  "git",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Git.Git   (Git for Windows; the probe is tested against it)"
+                  },
+                  {
+                      "tool":  "rustc",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "winget install Rustlang.Rustup   (then: rustup default stable-x86_64-pc-windows-msvc)"
+                  },
+                  {
+                      "tool":  "cargo",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "comes with rustup"
+                  },
+                  {
+                      "tool":  "cargo-nextest",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "cargo install cargo-nextest --locked"
+                  },
+                  {
+                      "tool":  "uv",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "winget install astral-sh.uv   (runs make_large_tree.py and extract_failures.py)"
+                  },
+                  {
+                      "tool":  "nasm",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "winget install NASM.NASM   (the aws-lc-sys crates in quarto-hub need it)"
+                  },
+                  {
+                      "tool":  "cmake",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "winget install Kitware.CMake   (the aws-lc-sys crates in quarto-hub need it)"
+                  },
+                  {
+                      "tool":  "link",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "Visual Studio Build Tools, \"Desktop development with C++\" (cargo finds link.exe itself, so absent from PATH is normal; install only if the build says \"linker not found\")"
+                  },
+                  {
+                      "tool":  "node",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "fnm/nvm; Node major per .nvmrc (items b1 to b7)"
+                  },
+                  {
+                      "tool":  "npm",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "comes with Node"
+                  },
+                  {
+                      "tool":  "jj",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "optional: winget install jj-vcs.jj (the jj scenarios of b1 skip without it)"
+                  }
+              ],
+    "items":  [
+                  {
+                      "id":  "c1",
+                      "catalog":  "W9",
+                      "title":  "scripted end-to-end scenario against q2.exe and git.exe",
+                      "status":  "PASS",
+                      "reason":  "1 passed, 1 skipped; transcript c1-transcript-20261119-150923-GWWIN.json",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The whole feature works end to end on Windows through the real q2.exe and git.exe on a generated repo in %TEMP% (about 4,000 tracked files): the gate pauses during a real git switch, the classifier treats a commit as a move-forward and a switch as a flip, a changed file flips, a removed file is unlisted, an added file is listed, a binary changes, arrival re-attaches the earlier docs without a fork, reset --hard keeps the dirty text in the retired doc, and a hub stopped during a switch skips the flush and leaves no conflict markers.",
+                      "does_not_prove":  "jj on Windows; other Git builds; a long soak; the browser (c2 covers the editor surfaces).",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-150923-GWWIN\\c1-scenario.log"
+                  }
+              ]
+}

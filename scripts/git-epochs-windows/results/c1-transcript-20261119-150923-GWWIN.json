@@ -1,0 +1,155 @@
+{
+  "platform": "win32",
+  "node": "v24.21.0",
+  "q2": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2",
+  "files": 4000,
+  "differing": 800,
+  "steps": [
+    {
+      "step": "1 generate the repo",
+      "ok": true,
+      "observed": {
+        "tracked": 4005
+      }
+    },
+    {
+      "step": "1 tracked files",
+      "ok": true,
+      "observed": 4005
+    },
+    {
+      "step": "invoke",
+      "ok": true,
+      "observed": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2 preview --no-browser --data-dir C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-data-8Gy3U6 --allow-edit --ui editor --git track --host 127.0.0.1 --port 59370 C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-hub-BXkYtP"
+    },
+    {
+      "step": "2 start the hub",
+      "ok": true,
+      "observed": {
+        "port": 59370,
+        "indexDocId": "UBoJJwQDMxWnC8jFken8ZEY5suD"
+      }
+    },
+    {
+      "step": "progress: the mirror holds the last bulk file",
+      "ok": true,
+      "observed": {
+        "files": 4005,
+        "seconds": 0,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "3 peers attached and the clone edits a.qmd",
+      "ok": true,
+      "observed": {
+        "hubId": "UBoJJwQDMxWnC8jFken8ZEY5suD"
+      }
+    },
+    {
+      "step": "4 commit on main while the peer edits: no flip, the edit intact",
+      "ok": true,
+      "observed": {
+        "decisions": [
+          "moved-forward"
+        ],
+        "aDoc": [
+          "4BRJxU8LrULdM6ou2sHRhB6xkLdx"
+        ]
+      }
+    },
+    {
+      "step": "5 git switch feature: the gate pauses, then the flip",
+      "ok": true,
+      "observed": {
+        "switchMs": 1447,
+        "sawLock": true,
+        "sawPaused": true,
+        "markers": [
+          "index.lock"
+        ],
+        "decisions": [
+          "moved-forward",
+          "flipped"
+        ]
+      }
+    },
+    {
+      "step": "6 git switch main: arrival re-attaches the registered docs, disk equals the doc",
+      "ok": true,
+      "observed": {
+        "aDoc": [
+          "4BRJxU8LrULdM6ou2sHRhB6xkLdx"
+        ],
+        "decisions": [
+          "moved-forward",
+          "flipped",
+          "flipped"
+        ]
+      }
+    },
+    {
+      "step": "7 save and commit inside the debounce window: a commit, not a flip",
+      "ok": true,
+      "observed": {
+        "flipsBefore": 2,
+        "decisions": [
+          "moved-forward",
+          "flipped",
+          "flipped",
+          "moved-forward"
+        ]
+      }
+    },
+    {
+      "step": "8 git reset --hard after a dirty edit: a new doc equal to HEAD, the dirty text stays in the retired doc",
+      "ok": true,
+      "observed": {
+        "newDoc": [
+          "QFB3uHv26WEFw34YNYfmdQ44WEi"
+        ],
+        "atHead": [
+          "4BRJxU8LrULdM6ou2sHRhB6xkLdx",
+          "QFB3uHv26WEFw34YNYfmdQ44WEi"
+        ],
+        "retired": [
+          "4BRJxU8LrULdM6ou2sHRhB6xkLdx"
+        ],
+        "decisions": [
+          "retired(discarded=1)"
+        ]
+      }
+    },
+    {
+      "step": "invoke",
+      "ok": true,
+      "observed": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2 preview --no-browser --data-dir C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-data9-pvJTMW --allow-edit --ui editor --git track --host 127.0.0.1 --port 61197 C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-hub9-l387qU"
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4005,
+        "seconds": 0,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "9 ctrl-c helper",
+      "ok": false,
+      "observed": {
+        "status": 2,
+        "stderr": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\c1\\ctrl-c.ps1 : \r\nAttachConsole failed: 6\r\n    + CategoryInfo          : NotSpecified: (:) [Write-Error], \r\nWriteErrorException\r\n    + FullyQualifiedErrorId : \r\nMicrosoft.PowerShell.Commands.WriteErrorException,ctrl-c.ps1\r\n \r\n"
+      }
+    },
+    {
+      "step": "9 stop the hub during the switch",
+      "ok": true,
+      "observed": {
+        "markerSeen": true,
+        "delivered": false,
+        "note": "not run on this machine: Ctrl+C could not be delivered (GE-3 stands in)"
+      }
+    }
+  ]
+}

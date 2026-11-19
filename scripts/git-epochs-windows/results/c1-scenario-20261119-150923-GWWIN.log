@@ -1,0 +1,25 @@
+
+Running 2 tests using 1 worker
+
+[c1] ok   1 generate the repo: {"tracked":4005}
+[c1] ok   1 tracked files: 4005
+[c1] ok   invoke: "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2 preview --no-browser --data-dir C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-data-8Gy3U6 --allow-edit --ui editor --git track --host 127.0.0.1 --port 59370 C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-hub-BXkYtP"
+[c1] ok   2 start the hub: {"port":59370,"indexDocId":"UBoJJwQDMxWnC8jFken8ZEY5suD"}
+[c1] ok   progress: the mirror holds the last bulk file: {"files":4005,"seconds":0,"hubAlive":true}
+[c1] ok   3 peers attached and the clone edits a.qmd: {"hubId":"UBoJJwQDMxWnC8jFken8ZEY5suD"}
+[c1] ok   4 commit on main while the peer edits: no flip, the edit intact: {"decisions":["moved-forward"],"aDoc":["4BRJxU8LrULdM6ou2sHRhB6xkLdx"]}
+[c1] ok   5 git switch feature: the gate pauses, then the flip: {"switchMs":1447,"sawLock":true,"sawPaused":true,"markers":["index.lock"],"decisions":["moved-forward","flipped"]}
+[c1] ok   6 git switch main: arrival re-attaches the registered docs, disk equals the doc: {"aDoc":["4BRJxU8LrULdM6ou2sHRhB6xkLdx"],"decisions":["moved-forward","flipped","flipped"]}
+[c1] ok   7 save and commit inside the debounce window: a commit, not a flip: {"flipsBefore":2,"decisions":["moved-forward","flipped","flipped","moved-forward"]}
+[c1] ok   8 git reset --hard after a dirty edit: a new doc equal to HEAD, the dirty text stays in the retired doc: {"newDoc":["QFB3uHv26WEFw34YNYfmdQ44WEi"],"atHead":["4BRJxU8LrULdM6ou2sHRhB6xkLdx","QFB3uHv26WEFw34YNYfmdQ44WEi"],"retired":["4BRJxU8LrULdM6ou2sHRhB6xkLdx"],"decisions":["retired(discarded=1)"]}
+  ✓  1 scripts\git-epochs-windows\c1\windows-scenario.e2e.ts:270:1 › c1 steps 1-8: gate, classifier, registry, flips, unlists, a binary file (10.0m)
+[c1] ok   invoke: "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2 preview --no-browser --data-dir C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-data9-pvJTMW --allow-edit --ui editor --git track --host 127.0.0.1 --port 61197 C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-hub9-l387qU"
+[c1] ok   progress: the mirror holds every file: {"files":4005,"seconds":0,"hubAlive":true}
+[c1] FAIL 9 ctrl-c helper: {"status":2,"stderr":"C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\c1\\ctrl-c.ps1 : \r\nAttachConsole failed: 6\r\n    + CategoryInfo          : NotSpecified: (:) [Write-Error], \r\nWriteErrorException\r\n    + FullyQualifiedErrorId : \r\nMicrosoft.PowerShell.Commands.WriteErrorException,ctrl-c.ps1\r\n \r\n"}
+[c1] ok   9 stop the hub during the switch: {"markerSeen":true,"delivered":false,"note":"not run on this machine: Ctrl+C could not be delivered (GE-3 stands in)"}
+  -  2 scripts\git-epochs-windows\c1\windows-scenario.e2e.ts:456:1 › c1 step 9: stopping the hub during a git switch skips the flush and leaves no conflict markers
+
+  Slow test file: scripts\git-epochs-windows\c1\windows-scenario.e2e.ts (12.3m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  1 skipped
+  1 passed (12.3m)
