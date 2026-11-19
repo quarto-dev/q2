@@ -314,7 +314,11 @@ export function useAutomergeSync({
       const edits = diffToMonacoEdits(monacoContent, automergeContent);
       if (edits.length > 0 && editorRef.current) {
         applyingRemoteRef.current = true;
-        editorRef.current.executeEdits('remote-sync', edits);
+        // executeEdits returns false on a read-only editor. The editor is frozen while the project owner replaces its
+        // file (GE-7), and the new doc's text arrives before it is writable again, so fall back to the model.
+        if (editorRef.current.executeEdits('remote-sync', edits) === false) {
+          editorRef.current.getModel()?.applyEdits(edits);
+        }
         applyingRemoteRef.current = false;
       }
     }

@@ -145,6 +145,37 @@ describe('useAutomergeSync', () => {
       expect(mockEditor.executeEdits).toHaveBeenCalledWith('remote-sync', fakeEdits);
     });
 
+    it('still applies the diff when the editor is read-only, where executeEdits refuses (GE-7)', () => {
+      // Monaco's executeEdits returns false on a read-only editor. The file swap freezes the editor while it is pending,
+      // and the new doc's text arrives before the editor is writable again, so the reconcile must not depend on it.
+      let content = '# Old';
+      const applyEdits = vi.fn((edits: Array<{ text: string }>) => {
+        content = edits[0].text;
+      });
+      const readOnlyEditor = {
+        getModel: () => ({ getValue: () => content, applyEdits }),
+        executeEdits: vi.fn(() => false),
+      };
+      const fakeEdits = [{ range: {}, text: '# New', forceMoveMarkers: true }];
+      mockDiffToMonacoEdits.mockReturnValue(fakeEdits as never);
+      mockGetFileContent.mockReturnValue('# Old');
+
+      const { result, rerender } = renderHook(
+        (props) => useAutomergeSync(props),
+        { initialProps: defaultOptions({ fileContents: new Map([['test.qmd', '# Old']]) }) },
+      );
+      act(() => {
+        result.current.onEditorMount(readOnlyEditor as never);
+      });
+
+      mockGetFileContent.mockReturnValue('# New');
+      rerender(defaultOptions({ fileContents: new Map([['test.qmd', '# New']]) }));
+
+      expect(readOnlyEditor.executeEdits).toHaveBeenCalled();
+      expect(applyEdits).toHaveBeenCalledWith(fakeEdits);
+      expect(content).toBe('# New');
+    });
+
     it('should skip sync during replay mode', () => {
       mockGetFileContent.mockReturnValue('# Remote');
 
