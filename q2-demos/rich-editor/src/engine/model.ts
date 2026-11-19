@@ -130,6 +130,12 @@ export interface Schema {
    * instead. (None is, unless given.)
    */
   readonly continued?: (prefix: string) => boolean
+  /**
+   * The prefix the second half of a line split by Enter in its middle
+   * gets, given the line's (the same prefix, unless given): none, for a
+   * kind only one line can be (a figure's caption, which has its image).
+   */
+  readonly splitPrefix?: (prefix: string) => string
   /** A line prefix as text, for the clipboard (none unless given). */
   readonly prefixText?: (prefix: string) => string
   /** A `VOID` line as text, for the clipboard (none unless given). */

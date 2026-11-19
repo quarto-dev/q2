@@ -10,6 +10,12 @@
  * after the numbered prefix (`NUMBERED`): an edit keeps its start number
  * and delimiter, and a new one is numbered `1.` from 1. A
  * horizontal rule is a line that can be removed but not edited (`VOID`).
+ * A figure of one image, with a caption of plain text (or an image alone
+ * in a paragraph, a figure with no caption yet), is a line of its caption,
+ * after the figure prefix (`FIGURE`) and its image, as more prefix
+ * characters (`figurePrefix`): the image goes wherever the line does, so
+ * undo and collaborators' edits bring it back with its caption, and it's
+ * gone when the line is joined to the one before.
  * "Plain text" here can be formatted: bold, italic, underline,
  * strikethrough, highlight, code and links are marks in the line's text
  * (see `inlines.ts`). Every other block (a paragraph or heading with math,
@@ -54,6 +60,44 @@ export const BULLET = '\ufdd8'
 /** The line prefix of a numbered list's item. */
 export const NUMBERED = '\ufdd9'
 
+/** The line prefix of a figure's caption, followed by its image (see `figurePrefix`). */
+export const FIGURE = '\ufdda'
+
+/** A figure's image: its address, title, and attributes (the figure's id among them). */
+export interface FigureImage {
+  src: string
+  title: string
+  attr: Attr
+}
+
+/**
+ * The line prefix of a caption of a figure of `image`: `FIGURE`, then the
+ * image as JSON, its UTF-8 bytes as hex digits written U+FDE0 to U+FDEF.
+ */
+export function figurePrefix(image: FigureImage): string {
+  const bytes = new TextEncoder().encode(JSON.stringify([image.src, image.title, image.attr]))
+  let out = FIGURE
+  for (const byte of bytes) out += String.fromCharCode(0xfde0 + (byte >> 4), 0xfde0 + (byte & 15))
+  return out
+}
+
+/** The image a figure's caption line (or its prefix) holds, or undefined for any other line. */
+export function figureImage(line: string): FigureImage | undefined {
+  if (!isFigure(line)) return undefined
+  const prefix = linePrefix(line)
+  const bytes = new Uint8Array((prefix.length - 1) >> 1)
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = ((prefix.charCodeAt(1 + 2 * i) - 0xfde0) << 4) | (prefix.charCodeAt(2 + 2 * i) - 0xfde0)
+  }
+  const [src, title, attr] = JSON.parse(new TextDecoder().decode(bytes)) as [string, string, Attr]
+  return { src, title, attr }
+}
+
+/** Whether a line of the body's text is a figure's caption. */
+export function isFigure(line: string): boolean {
+  return line.startsWith(FIGURE)
+}
+
 /** Whether a line of the body's text is a block quote. */
 export function isQuote(line: string): boolean {
   return line.startsWith(QUOTE)
@@ -97,6 +141,8 @@ function lineText(line: string): string {
  * be edited as one line (a list is a line per item: see `bodyLines`).
  */
 export function lineOf(block: Node): string | undefined {
+  const figure = figureLine(block)
+  if (figure !== undefined) return figure
   if (block.t === 'Para') return plainParagraph(block)
   if (block.t === 'HorizontalRule') return VOID
   if (block.t === 'BlockQuote') {
@@ -109,6 +155,53 @@ export function lineOf(block: Node): string | undefined {
   const text = inlineText(inlines)
   if (text === undefined || level < 1 || level > 6) return undefined
   return headingPrefix(level) + text
+}
+
+/**
+ * The line of a figure of one image whose caption is plain text, or of an
+ * image alone in a paragraph with no alt text (a figure with no caption
+ * yet); undefined for any other block. The image's attributes take in the
+ * figure's id, which qmd writes on the image.
+ */
+function figureLine(block: Node): string | undefined {
+  let image: Node
+  let caption: Node[]
+  let id = ''
+  if (block.t === 'Para') {
+    const inlines = block.c as Node[]
+    if (inlines.length !== 1 || inlines[0].t !== 'Image' || (inlines[0].c as [Attr, Node[]])[1].length > 0) return undefined
+    image = inlines[0]
+    caption = []
+  } else if (block.t === 'Figure') {
+    const [[figureId], [, captionBlocks], content] = block.c as [Attr, [unknown, Node[]], Node[]]
+    if (content.length !== 1 || content[0].t !== 'Plain') return undefined
+    const inlines = content[0].c as Node[]
+    if (inlines.length !== 1 || inlines[0].t !== 'Image') return undefined
+    if (captionBlocks.length > 1 || (captionBlocks.length === 1 && captionBlocks[0].t !== 'Plain')) return undefined
+    image = inlines[0]
+    caption = captionBlocks.length === 1 ? (captionBlocks[0].c as Node[]) : []
+    id = figureId
+  } else return undefined
+  const [[imageId, classes, kvs], , [src, title]] = image.c as [Attr, Node[], [string, string]]
+  const text = caption.length === 0 ? '' : inlineText(caption)
+  if (text === undefined) return undefined
+  return figurePrefix({ src, title, attr: [id || imageId, classes, kvs] }) + text
+}
+
+/**
+ * A figure of `image` with the caption `text` (formatted, as a line's
+ * text is), or, with no caption, the image alone in a paragraph, as qmd
+ * has a figure without one. The caption is the image's alt text too.
+ */
+function figure(image: FigureImage, text: string, wrapped: (offset: number) => boolean): Node {
+  const [id, classes, kvs] = image.attr
+  const target = [image.src, image.title]
+  if (text === '') return { t: 'Para', c: [{ t: 'Image', c: [[id, classes, kvs], [], target] }] }
+  const caption = inlinesOf(text, wrapped)
+  return {
+    t: 'Figure',
+    c: [[id, [], []], [null, [{ t: 'Plain', c: caption }]], [{ t: 'Plain', c: [{ t: 'Image', c: [['', classes, kvs], caption, target] }] }]],
+  }
 }
 
 /**
@@ -238,6 +331,7 @@ export function prefixMarkdown(prefix: string): string {
   if (isQuote(prefix)) return '> '
   if (isBullet(prefix)) return '- '
   if (isNumbered(prefix)) return '1. '
+  if (isFigure(prefix)) return ''
   const level = headingLevel(prefix)
   return level > 0 ? `${'#'.repeat(level)} ` : ''
 }
@@ -324,6 +418,7 @@ export function editBody(blocks: readonly Node[], text: string): Node[] | null {
     if (line === ATOM) edited.push(readOnly[atoms++])
     else if (match[i] >= 0) edited.push(blocks[units[match[i]].block])
     else if (line === VOID) edited.push({ t: 'HorizontalRule' })
+    else if (isFigure(line)) edited.push(figure(figureImage(line)!, text, wraps))
     else if (headingLevel(line) > 0) {
       const was = replaced[i] >= 0 ? blocks[units[replaced[i]].block] : undefined
       edited.push(heading(headingLevel(line), text, was))

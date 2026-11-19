@@ -105,6 +105,8 @@ export interface FieldProps {
   /** For one line of a field: where the line starts in the field's text. */
   start?: number
   id?: string
+  /** More attributes for the element (`aria-hidden`, say). */
+  attrs?: Record<string, string>
   /** How formatted text is shown (see `marks.ts`); without it, the field's text is shown as it is. */
   view?: MarkView
   /** A collapsed caret in the field's (or line's) text, where it is in it. */
@@ -126,7 +128,7 @@ export interface FieldProps {
  * between the title and the body, say). So an empty field isn't `:empty`;
  * it has `data-empty`, for styling its placeholder.
  */
-export function Field({ name, text, placeholder, className, as = 'span', start, id, view, caret }: FieldProps) {
+export function Field({ name, text, placeholder, className, as = 'span', start, id, attrs, view, caret }: FieldProps) {
   const ref = useRef<HTMLElement | null>(null)
   useLayoutEffect(() => {
     const el = ref.current
@@ -137,6 +139,7 @@ export function Field({ name, text, placeholder, className, as = 'span', start, 
   }, [text, start, as, view, caret])
   if (text === undefined) return null
   return createElement(as, {
+    ...attrs,
     ref,
     id,
     className,
@@ -185,6 +188,15 @@ export interface LineElement {
    * one (a list's items), which has the first's `attrs`.
    */
   parent?: { as: string; className?: string; shared?: boolean; attrs?: Record<string, string> }
+  /** More attributes for the line's element. */
+  attrs?: Record<string, string>
+  /** Shown, faintly, while the line has no text (as the field's own placeholder is). */
+  placeholder?: string
+  /**
+   * What the line's element is shown in, with whatever else goes around it
+   * (a figure's caption under its image). What it adds can't be edited.
+   */
+  wrap?: (line: ReactNode) => ReactNode
 }
 
 /**
@@ -219,11 +231,16 @@ export function Lines({ name, text, className, as = 'p', lineElement, renderAtom
         as={element?.as ?? as}
         start={textStart}
         id={element?.id}
+        attrs={element?.attrs}
         view={view}
         caret={here}
-        placeholder={text === '' ? placeholder : undefined}
+        placeholder={text === '' ? placeholder : element?.placeholder}
       />
     )
+    if (element?.wrap) {
+      groups.push({ key: i, nodes: [<Fragment key={i}>{element.wrap(field)}</Fragment>] })
+      return
+    }
     const parent = element?.parent
     const last = groups[groups.length - 1]
     const shares = parent?.shared && last?.parent?.shared && last.parent.as === parent.as && last.parent.className === parent.className

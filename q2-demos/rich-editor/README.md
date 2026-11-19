@@ -96,11 +96,29 @@ elsewhere).
 The rest of the body (paragraphs, headings, quotes and lists with math,
 a citation, a note, an image or a span of another kind in their text,
 quotes of more than one paragraph, lists with blank lines
-between items or lists in items, example lists (`(@)`), code, figures) is shown by
+between items or lists in items, example lists (`(@)`), code, figures of
+more than one image) is shown by
 `src/ReadOnlyBlock.tsx` and can't be edited yet; no edit removes it or
-changes its source. A figure of one image is shown as `q2 render` shows it,
-with its caption under it (a `#fig-` label's number isn't shown yet); the
-rest of the figure widget in `mockups/figure.html` is still to come. The document is one
+changes its source.
+
+A figure of one image is shown as `q2 render` shows it, with its caption
+under it (a `#fig-` label's number isn't shown yet), and is edited as in
+Google Docs: the image is one unit in the text, and the caption a line of
+text under it, typed and formatted in place. A selection takes the image
+whole and as much of the caption as it covers. Deleting the image
+(Backspace at the start of the caption, or deleting a selection that
+takes it in) leaves the caption's text as a paragraph, joined to the line
+the selection started in. Enter at the end of a caption starts a
+paragraph after the figure, and in its middle moves the rest of the
+caption to one. An emptied caption leaves the figure, with "Add a
+caption", written as an image alone on its line (`![](tray.png)`), which
+reads back as a figure with no caption. Its design is
+`mockups/figure.html`, of which only this much is built. Copy takes the
+caption's text alone. The qmd writer writes every attribute's value
+quoted when it writes a figure again (`width="50%"`; a fixme in
+`figures.spec.ts`).
+
+The document is one
 `contenteditable` surface run by a small editing engine in `src/engine/`:
 the browser moves the caret and selection (so selections can span fields),
 and the engine intercepts every edit, applies it to a model of text
@@ -123,13 +141,18 @@ be edited is an element of its own (`Lines`).
 
 A line can start with a prefix, a run of characters the engine keeps out
 of the text (the Unicode noncharacters U+FDD0 to U+FDEF), which gives the
-line a kind: in the body, a heading's level, a quote, or a bullet or
-numbered list's item. A change of kind is then a
+line a kind: in the body, a heading's level, a quote, a bullet or
+numbered list's item, or a figure's caption. A prefix can carry data: a
+caption's is the figure prefix and then its image, as JSON written in
+hex digits that are prefix characters too, so the image goes wherever its
+caption's line goes. A change of kind is then a
 text edit like any other, so undo, collaborators' edits and the caret all
 handle it without knowing about headings. The engine's rules for prefixes
-are generic (one can't be typed; the caret never goes before one; a joined
+are generic (one can't be typed; the caret never goes before one;
+Backspace at the start of a line's text removes all of it; a joined
 line takes the kind of the line it joins; Enter in the middle of a line
-keeps the kind on both halves, and at the end starts a line without one,
+keeps the kind on both halves, unless the schema gives the second half
+another (`Schema.splitPrefix`, none for a caption), and at the end starts a line without one,
 unless it's a kind Enter carries on (`Schema.continued`, an item's),
 which it takes off an empty line instead);
 what a prefix means, how it's rendered, what typing makes one
@@ -137,7 +160,9 @@ what a prefix means, how it's rendered, what typing makes one
 `src/VisualEditor.tsx` and `src/editing/body.ts`; a line can be rendered
 inside an element of its own, as a quote's paragraph is in a
 `blockquote`, or share one with the lines next to it, as a list's items
-are in one `ul` (or `ol`, with the list's start number). An edited heading keeps
+are in one `ul` (or `ol`, with the list's start number), or inside more
+markup that can't be edited, as a caption is in its figure, under its
+image (`LineElement.wrap`). An edited heading keeps
 its written attributes (`{#id .class}`), and only its text is rewritten in
 the source.
 
@@ -340,7 +365,7 @@ reason.
 
 The specs are: `title-block.spec.ts`, `cross-field.spec.ts`,
 `body.spec.ts`, `headings.spec.ts`, `quotes.spec.ts`, `lists.spec.ts`,
-`numbered-lists.spec.ts`, `rules.spec.ts`, `inlines.spec.ts` (formatting)
+`numbered-lists.spec.ts`, `rules.spec.ts`, `figures.spec.ts`, `inlines.spec.ts` (formatting)
 and `links.spec.ts` (links, their popover and form)
 (editing),
 `title-block-widget.spec.ts` (adding and removing title-block fields),

@@ -5,7 +5,8 @@
  * quote that can be edited (`quotes.spec.ts`), and a bullet or numbered
  * list of items of one line of plain text a list that can be edited
  * (`lists.spec.ts`, `numbered-lists.spec.ts`). A figure is its image
- * with its caption under it, and can't be edited yet. Every other block the
+ * with its caption under it, which can be edited (`figures.spec.ts`).
+ * Every other block the
  * editor knows is shown as `q2 render` would show it, roughly (no syntax
  * highlighting, no rendered math), and can't be edited. A block it doesn't know is a box
  * with the name of its kind.
@@ -160,13 +161,6 @@ test.describe('other blocks', () => {
     const image = (await figure.locator('img').boundingBox())!
     expect(image.width).toBeLessThan(column.width / 2)
     expect(Math.abs(image.x + image.width / 2 - (column.x + column.width / 2))).toBeLessThan(2)
-  })
-
-  test("a figure can't be edited yet", async ({ page }) => {
-    const editor = await openEditor(page, 'figures')
-
-    expect(await editor.paragraphs()).toEqual(['Before the figures.', 'After the figures.'])
-    await expect(shown(editor, 'div.quarto-figure .qe-field')).toHaveCount(0)
   })
 
   test('a block the editor doesn\'t know (a table) is a box with the name of its kind', async ({ page }) => {

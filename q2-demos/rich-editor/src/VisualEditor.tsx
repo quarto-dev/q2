@@ -27,7 +27,7 @@
  * are `LinkPopover`.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { PreviewTitleBlock, type TitleBlockField } from '@quarto/preview-renderer/title-block'
 import { compileDefaultThemeCss, deriveTitleBlockMeta } from './quarto-synced-file/index.ts'
@@ -41,9 +41,11 @@ import {
   BULLET,
   blocksOfLines,
   bodyInputRule,
+  figureImage,
   headingAttr,
   headingLevel,
   isBullet,
+  isFigure,
   isItem,
   isNumbered,
   isQuote,
@@ -56,7 +58,8 @@ import {
 import { createMetaFieldSource, type QmdFile } from './editing/fieldSource.ts'
 import { canChoose, canList, canQuote, caretLine, chooseStyle, toggleList, toggleQuote } from './editing/lineStyles.ts'
 import { setMetaText, type Meta } from './editing/meta.ts'
-import { ReadOnlyBlock } from './ReadOnlyBlock.tsx'
+import { FigureFrame, hasOwnAlt, ReadOnlyBlock } from './ReadOnlyBlock.tsx'
+import { withoutMarks } from './engine/marks.ts'
 import { TitleBlockWidget, type WidgetFocus } from './TitleBlockWidget.tsx'
 import { Toolbar } from './Toolbar.tsx'
 import { matches, SHORTCUTS, styleShortcut } from './shortcuts.ts'
@@ -152,6 +155,9 @@ const TITLE_BLOCK = ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[
  * `> ` a quote, `- ` a list item and `1. ` a numbered one, and they're
  * copied with their `#`s, `>`, `-` and `1.`. Enter in an item starts
  * another, and on an empty one ends the list. `---` there makes a horizontal rule, which is copied as `---`.
+ * A figure's caption is a line too, which holds its image (see
+ * `editing/body.ts`): Enter in its middle moves the rest of it to a
+ * paragraph, and it's copied as its text alone.
  * The body's lines can be formatted (bold, italic, underline,
  * strikethrough, highlight, code and links: see `editing/inlines.ts`), and
  * markdown typed out and closed there becomes formatting. Code has a
@@ -164,6 +170,7 @@ const SCHEMA: Schema = {
   inputRule: (field, line) => (field === 'body' ? bodyInputRule(line) : null),
   prefixText: prefixMarkdown,
   continued: isItem,
+  splitPrefix: (prefix) => (isFigure(prefix) ? '' : prefix),
   voidText: '---',
   keepEmpty: TITLE_BLOCK,
   always: ['body'],
@@ -303,15 +310,32 @@ export function VisualEditor({ file, devTools }: VisualEditorProps) {
   )
 
   // A heading line is an `h1`-`h6`, with its block's id and classes, a
-  // quote line a paragraph in a `blockquote`, and the lines of a list's
+  // quote line a paragraph in a `blockquote`, the lines of a list's
   // items `li`s in one `ul`, or in one `ol` from the list's start number,
-  // as `q2 render` shows them.
+  // and a caption line a `figcaption` under its image, as `q2 render`
+  // shows them.
   const lineBlocks = useMemo(
     () => (ast && state.fields.body !== undefined ? blocksOfLines(ast.blocks as Node[], state.fields.body) : []),
     [ast, state.fields.body],
   )
+  const bodyLines = useMemo(() => state.fields.body?.split('\n') ?? [], [state.fields.body])
   const lineElement = useCallback(
     (prefix: string, index: number) => {
+      const image = figureImage(prefix)
+      if (image) {
+        const [id, classes] = image.attr
+        const caption = withoutMarks(bodyLines[index]?.slice(prefix.length) ?? '')
+        return {
+          as: 'figcaption',
+          attrs: hasOwnAlt(image.attr) ? undefined : { 'aria-hidden': 'true' },
+          placeholder: 'Add a caption',
+          wrap: (line: ReactNode) => (
+            <FigureFrame id={id} classes={[]} src={image.src} imageAttr={['', classes, image.attr[2]]} caption={caption}>
+              {line}
+            </FigureFrame>
+          ),
+        }
+      }
       if (isQuote(prefix)) return { as: 'p', parent: { as: 'blockquote' } }
       if (isBullet(prefix)) return { as: 'li', parent: { as: 'ul', shared: true } }
       if (isNumbered(prefix)) {
@@ -323,7 +347,7 @@ export function VisualEditor({ file, devTools }: VisualEditorProps) {
       const { id, classes } = headingAttr(lineBlocks[index])
       return { as: `h${level || 6}`, className: classes.length > 0 ? classes.join(' ') : undefined, id }
     },
-    [lineBlocks],
+    [lineBlocks, bodyLines],
   )
 
   const renderField = useCallback(

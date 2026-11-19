@@ -191,9 +191,10 @@ export function Toolbar({
 
   // The caret's line in the body (null: the caret isn't in the body).
   const line = caretLine(state, writable)
-  const disabled = line === null
+  // A caption has no style to choose (see `canChoose`).
+  const disabled = line === null || line.caption
   const level = line?.level ?? 0
-  const style = level > 0 ? `Heading ${level}` : 'Paragraph'
+  const style = line?.caption ? 'Caption' : level > 0 ? `Heading ${level}` : 'Paragraph'
 
   useEffect(() => {
     if (disabled) setOpen(false)

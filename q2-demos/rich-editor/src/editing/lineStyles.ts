@@ -7,10 +7,11 @@
  *
  * A heading can't be in a quote or a list item yet, so a quote or an item
  * can't be made a heading, nor a heading quoted or made an item; and a
- * quote can't be an item.
+ * quote can't be an item. A figure's caption takes no style: it holds its
+ * image, which a paragraph, a heading, a quote or an item can't.
  */
 
-import { BULLET, headingLevel, headingPrefix, isBullet, isItem, isNumbered, isQuote, NUMBERED, QUOTE } from './body.ts'
+import { BULLET, headingLevel, headingPrefix, isBullet, isFigure, isItem, isNumbered, isQuote, NUMBERED, QUOTE } from './body.ts'
 import { linePrefix, type State } from '../engine/model.ts'
 
 /** The style of the caret's line in the body. */
@@ -20,6 +21,8 @@ export interface CaretLine {
   quoted: boolean
   bulleted: boolean
   numbered: boolean
+  /** A figure's caption. */
+  caption: boolean
 }
 
 /** The caret's line in the body (null: the caret isn't in the body, or the document can't be edited). */
@@ -27,25 +30,31 @@ export function caretLine(state: State, writable: boolean): CaretLine | null {
   const focus = state.selection?.focus
   if (!writable || focus?.field !== 'body') return null
   const prefix = linePrefix(state.fields.body ?? '', focus.offset)
-  return { level: headingLevel(prefix), quoted: isQuote(prefix), bulleted: isBullet(prefix), numbered: isNumbered(prefix) }
+  return {
+    level: headingLevel(prefix),
+    quoted: isQuote(prefix),
+    bulleted: isBullet(prefix),
+    numbered: isNumbered(prefix),
+    caption: isFigure(prefix),
+  }
 }
 
 /** Whether the line can take the style `level` (0: Paragraph). */
 export function canChoose(line: CaretLine, level: number): boolean {
-  return level === 0 || !(line.quoted || line.bulleted || line.numbered)
+  return !line.caption && (level === 0 || !(line.quoted || line.bulleted || line.numbered))
 }
 
 export function canList(line: CaretLine): boolean {
-  return line.level === 0 && !line.quoted
+  return line.level === 0 && !line.quoted && !line.caption
 }
 
 export function canQuote(line: CaretLine): boolean {
-  return line.level === 0 && !line.bulleted && !line.numbered
+  return line.level === 0 && !line.bulleted && !line.numbered && !line.caption
 }
 
-/** Give the lines the style `level` (0: Paragraph); a quote's or an item's line stays as it is. */
+/** Give the lines the style `level` (0: Paragraph); a quote's, an item's or a caption's line stays as it is. */
 export function chooseStyle(level: number): (prefix: string) => string {
-  return (p) => (isQuote(p) || isItem(p) ? p : level > 0 ? headingPrefix(level) : '')
+  return (p) => (isQuote(p) || isItem(p) || isFigure(p) ? p : level > 0 ? headingPrefix(level) : '')
 }
 
 /**

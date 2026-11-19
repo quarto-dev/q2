@@ -43,12 +43,13 @@ const SELECTORS: Record<Field, string> = {
 /** The body's editable paragraphs. */
 const PARAGRAPH = '#quarto-document-content > p.qe-field'
 
-/** The body's editable lines: paragraphs, headings, the paragraphs of quotes and list items. */
+/** The body's editable lines: paragraphs, headings, the paragraphs of quotes, list items and figures' captions. */
 const LINE = [
   '#quarto-document-content > .qe-field',
   '#quarto-document-content > blockquote > .qe-field',
   '#quarto-document-content > ul > .qe-field',
   '#quarto-document-content > ol > .qe-field',
+  '#quarto-document-content > .quarto-figure > figure > .qe-field',
 ].join(', ')
 
 /** The row of "+" items that add the title-block fields a document doesn't have. */
@@ -293,9 +294,9 @@ export class Editor {
   }
 
   /**
-   * The body's editable lines (paragraphs, headings, quotes and list
-   * items), each as `tag: text`, where a quote's tag is `blockquote` and
-   * a numbered list's item's is `ol`.
+   * The body's editable lines (paragraphs, headings, quotes, list items
+   * and figures' captions), each as `tag: text`, where a quote's tag is
+   * `blockquote` and a numbered list's item's is `ol`.
    */
   lines(): Promise<string[]> {
     return this.frame.evaluate(

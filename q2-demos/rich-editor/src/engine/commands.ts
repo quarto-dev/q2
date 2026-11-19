@@ -23,8 +23,10 @@
  *   Backspace at the start of the line after it, or Delete at the end of
  *   the line before it.
  * - A line's prefix (see `isPrefix`) is never typed, and the caret never
- *   goes before it. A line joined to the one before takes that line's
- *   prefix. Enter in the middle of a line keeps the prefix on both halves;
+ *   goes before it. Backspace at the start of a line's text removes it,
+ *   all of it. A line joined to the one before takes that line's
+ *   prefix. Enter in the middle of a line keeps the prefix on both halves
+ *   (or gives the second half the one `Schema.splitPrefix` says);
  *   at the end of the line the new line has none; and at the start of the
  *   line's text, the new line goes above, so the prefix stays with the
  *   text. A prefix the schema carries on (`Schema.continued`) is on the
@@ -201,8 +203,9 @@ function lineBreak(schema: Schema, state: State): State {
     fields[at.field] = text.slice(0, start) + above + '\n' + text.slice(start)
     return select(schema, { fields, selection: cleared.selection }, caret(at.field, at.offset + above.length + 1))
   }
-  fields[at.field] = text.slice(0, at.offset) + '\n' + prefix + text.slice(at.offset)
-  return select(schema, { fields, selection: cleared.selection }, caret(at.field, at.offset + 1 + prefix.length))
+  const second = schema.splitPrefix?.(prefix) ?? prefix
+  fields[at.field] = text.slice(0, at.offset) + '\n' + second + text.slice(at.offset)
+  return select(schema, { fields, selection: cleared.selection }, caret(at.field, at.offset + 1 + second.length))
 }
 
 /**
@@ -230,7 +233,7 @@ function formattedLineBreak(schema: Schema, state: State, line: LineAround): Sta
     fields[at.field] = text.slice(0, lineStart) + above + '\n' + text.slice(lineStart)
     return select(schema, { fields, selection: state.selection }, caret(at.field, at.offset + above.length + 1))
   }
-  const ownPrefix = !continued && stop.index === count && stop.index > 0 ? '' : prefix
+  const ownPrefix = !continued && stop.index === count && stop.index > 0 ? '' : (schema.splitPrefix?.(prefix) ?? prefix)
   const head = canonical(lineText.slice(0, stop.offset))
   const carried: Style = {
     marks: stop.style.marks & ~(schema.marks?.twoSided ?? 0),
@@ -407,6 +410,11 @@ function deleteDirection(
   } else if (!backward && at.offset === lineEnd && lineEnd < text.length && lineAt(text, lineEnd + 1) === VOID) {
     start = lineEnd
     end = lineEnd + 1 + VOID.length
+  } else if (backward && atTextStart(text, lineStart, at.offset)) {
+    // At the start of a line's text: its prefix goes, all of it (a run of
+    // several characters, for a kind that holds data).
+    start = lineStart
+    end = lineStart + linePrefix(text, lineStart).length
   } else if (line && !visibleEdge) {
     // A grapheme of the line's visible text.
     const visible = line.scanned.chars.map((c) => c.char).join('')
@@ -449,6 +457,12 @@ function naturalCaret(schema: Schema, state: State): State {
   const style = naturalStyle(line.scanned, line.stop.index, schema.marks?.twoSided ?? 0, 'before')
   const stop = bestStop(line.scanned, line.stop.index, style, schema.marks?.twoSided ?? 0)
   return select(schema, state, caret(selection.focus.field, line.at(stop.offset).offset))
+}
+
+/** Whether `offset` is at the start of the text of a line with a prefix, before any of its visible text. */
+function atTextStart(text: string, lineStart: number, offset: number): boolean {
+  const textStart = lineStart + linePrefix(text, lineStart).length
+  return textStart > lineStart && offset >= textStart && withoutMarks(text.slice(textStart, offset)) === ''
 }
 
 /** The line of `text` that `offset` is on. */

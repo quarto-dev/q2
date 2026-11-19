@@ -196,7 +196,7 @@ async function expectRenderParity(page: Page, name: string) {
  * element a field renders in place of its text, the `<br>` that keeps an
  * empty field a line tall, `contenteditable`, inline styles), with each element's
  * attributes in alphabetical order, and with whitespace collapsed as the
- * browser displays it.
+ * browser displays it (none at the start or end of a block of text).
  *
  * Runs in the page; it must not refer to anything outside itself.
  */
@@ -225,6 +225,9 @@ function snapshot(body: HTMLElement) {
     html: clone.innerHTML
       .replace(/\s+/g, ' ')
       .replace(/> </g, '><')
+      // A space at the start or end of a block of text isn't shown.
+      .replace(/(<(?:p|li|figcaption|h[1-6])(?: [^>]*)?>) /g, '$1')
+      .replace(/ (<\/(?:p|li|figcaption|h[1-6])>)/g, '$1')
       .trim()
       .replace(/></g, '>\n<')
       .split('\n'),

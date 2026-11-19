@@ -179,3 +179,26 @@ describe('a collaborator\'s change', () => {
     expect(rebaseState(schema, body(before.body, caret('body', 5)), before, after).selection).toEqual(caret('body', 4))
   })
 })
+
+describe('a prefix of several characters (a kind that holds data)', () => {
+  /** A prefix and its data, as a figure's caption holds its image. */
+  const D = '﷚﷡﷢'
+
+  it('goes all at once with Backspace at the start of its line\'s text', () => {
+    const next = deleteBackward(schema, body(`One\n${D}Two`, caret('body', 4 + D.length)))
+    expect(next.fields.body).toBe('One\nTwo')
+    expect(next.selection).toEqual(caret('body', 4))
+  })
+  it('goes all at once when its line is joined to the one before', () => {
+    const next = deleteBackward(schema, body(`One\n${D}Two`, range('body', 2, 'body', 4 + D.length + 1)))
+    expect(next.fields.body).toBe('Onwo')
+  })
+  it('is given to the second half of a line split by Enter as the schema says', () => {
+    const splitting: Schema = { ...schema, splitPrefix: (prefix) => (prefix === D ? '' : prefix) }
+    const next = enter(splitting, body(`${D}Two`, caret('body', D.length + 1)))
+    expect(next.fields.body).toBe(`${D}T\nwo`)
+    expect(next.selection).toEqual(caret('body', D.length + 2))
+    // Without it, both halves keep it.
+    expect(enter(schema, body(`${D}Two`, caret('body', D.length + 1))).fields.body).toBe(`${D}T\n${D}wo`)
+  })
+})

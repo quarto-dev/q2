@@ -8,7 +8,7 @@
 import { createElement, type ReactNode } from 'react'
 
 type Node = { t: string; c?: unknown }
-type Attr = [string, string[], [string, string][]]
+export type Attr = [string, string[], [string, string][]]
 
 export function ReadOnlyBlock({ block }: { block: Node }) {
   return renderBlock(block)
@@ -76,7 +76,39 @@ function renderBlock(block: Node): ReactNode {
 function renderFigure([[id, classes], [, caption], content]: [Attr, [unknown, Node[]], Node[]]): ReactNode {
   const image = content.length === 1 && content[0].t === 'Plain' ? (content[0].c as Node[]) : []
   if (image.length !== 1 || image[0].t !== 'Image') return null
-  const [[, imageClasses, keyvals], alt, [src]] = image[0].c as [Attr, Node[], [string, string]]
+  const [attr, alt, [src]] = image[0].c as [Attr, Node[], [string, string]]
+  return (
+    <FigureFrame id={id} classes={classes} src={src} imageAttr={attr} caption={plainText(alt)}>
+      <figcaption aria-hidden={hasOwnAlt(attr) ? undefined : 'true'}>{renderBlocks(caption)}</figcaption>
+    </FigureFrame>
+  )
+}
+
+/** Whether an image has alt text of its own (`fig-alt`), rather than its caption. */
+export function hasOwnAlt([, , keyvals]: Attr): boolean {
+  return keyvals.some(([key]) => key === 'fig-alt')
+}
+
+/**
+ * A figure, as `q2 render` writes one, around its caption (`children`):
+ * the figure's id and classes, and its image, whose alt text is its own
+ * (`fig-alt`) or else the caption's plain text.
+ */
+export function FigureFrame({
+  id,
+  classes,
+  src,
+  imageAttr: [, imageClasses, keyvals],
+  caption,
+  children,
+}: {
+  id: string
+  classes: string[]
+  src: string
+  imageAttr: Attr
+  caption: string
+  children: ReactNode
+}) {
   const figAlt = keyvals.find(([key]) => key === 'fig-alt')?.[1]
   // The rest are the image's attributes (`width=50%`). Not `style`, which
   // React takes only as an object.
@@ -87,18 +119,8 @@ function renderFigure([[id, classes], [, caption], content]: [Attr, [unknown, No
       className={['quarto-figure', 'quarto-figure-center', ...classes, ...(id ? ['anchored'] : [])].join(' ')}
     >
       <figure>
-        <img
-          src={src}
-          alt={figAlt ?? plainText(alt)}
-          className={[...imageClasses, 'img-fluid'].join(' ')}
-          {...attributes}
-        />
-        {/* With the line breaks `q2 render` writes around a caption. */}
-        <figcaption aria-hidden={figAlt === undefined ? 'true' : undefined}>
-          {'\n'}
-          {renderBlocks(caption)}
-          {'\n'}
-        </figcaption>
+        <img src={src} alt={figAlt ?? caption} className={[...imageClasses, 'img-fluid'].join(' ')} {...attributes} />
+        {children}
       </figure>
     </div>
   )
