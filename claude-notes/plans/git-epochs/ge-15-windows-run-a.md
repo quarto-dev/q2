@@ -2,7 +2,7 @@
 title: 'GE-15: Windows run A: the Rust and hub items'
 date: 2026-11-18
 description: 'Runs only the new Rust and hub tests of the git epochs epic on a real Windows machine, from a temporary tooling branch that never lands, with specific items and a record of what each one proves.'
-status: approved
+status: done
 depends-on: [ge-4]
 lane: B
 epic: ../2026-11-18-git-epochs-epic.md
@@ -140,18 +140,18 @@ The tooling is code, so it is tested before it ships, on macOS, in this order:
 - [x] Run every item\'s command on macOS where it applies and list the failures there as known unrelated. Estimate the
   Windows cost (a cold build of four crates and their test binaries is plausibly 15 to 30 minutes and 10 to 20 GB;
   an estimate, not measured).
-- [ ] **Gordon:** say go. The agent pushes with an explicit refspec,
+- [x] **Gordon:** say go. The agent pushes with an explicit refspec,
   `git push origin windows/git-epochs:windows/git-epochs`, never silenced, and confirms the remote tip with
   `git ls-remote origin windows/git-epochs` equal to `git rev-parse windows/git-epochs`.
-- [ ] **Gordon:** on the Windows machine, clone with `core.autocrlf=true`, switch to the branch, and run
+- [x] **Gordon:** on the Windows machine, clone with `core.autocrlf=true`, switch to the branch, and run
   `powershell -ExecutionPolicy Bypass -File scripts\git-epochs-windows\run.ps1 -WithTools -Publish`.
-- [ ] **Gordon:** tell the agent "results are pushed".
-- [ ] The agent fetches the branch, parses the JSON, and records each item as PASS, FAIL, or SKIP in the notes with
+- [x] **Gordon:** tell the agent "results are pushed".
+- [x] The agent fetches the branch, parses the JSON, and records each item as PASS, FAIL, or SKIP in the notes with
   the base commit, the machine description, and the `core.autocrlf` value. If anything failed, run the extractor
   and add its summary.
-- [ ] List every finding with its output. Do not change product code in this plan: propose a fix plan for each
+- [x] List every finding with its output. Do not change product code in this plan: propose a fix plan for each
   defect, to be inserted after this plan.
-- [ ] Land the notes on `feature/git-epochs` through `ge/15-windows-run-a`; the tooling is not merged. Verify with
+- [x] Land the notes on `feature/git-epochs` through `ge/15-windows-run-a`; the tooling is not merged. Verify with
   `git log feature/git-epochs -- scripts/git-epochs-windows`, which must be empty.
 
 ## Gates
@@ -241,7 +241,75 @@ branch only) renders with no error of its own under `q2 render --strict`; the on
 **Windows cost estimate (not measured).** A cold build of the four crates and their test binaries: 15 to 30 minutes and
 10 to 20 GB; the six-switch `a2` test adds a minute or two per switch on a slow disk; `a6` nextest is the longest part.
 
-**Waiting on Gordon.** Next checklist item: say go to push `windows/git-epochs` (explicit refspec
-`git push origin windows/git-epochs:windows/git-epochs`, then check `git ls-remote origin windows/git-epochs` equals
-`git rev-parse windows/git-epochs`). Then the Windows run, "results are pushed", and the recording of results. The plan
-lands only after those.
+**Push.** After Gordon said go: `git push origin windows/git-epochs:windows/git-epochs`, remote tip equal to the local
+tip (`b731fe058`). A second push (`d33c03064`) followed Gordon\'s first attempt: `nasm` was installed by winget but not on
+`PATH`, so `run.ps1` now looks in the usual NASM and CMake folders and adds them for the run. Gordon also asked what
+`-Publish` does: it commits only the run\'s `.json` and `.md` and pushes `HEAD` to `windows/git-epochs`.
+
+## Windows results
+
+Run `20261119-023206-GWWIN`, results commit `f83a4ec66` on `windows/git-epochs` (`scripts/git-epochs-windows/results/gea-20261119-023206-GWWIN.json` and `.md`; I read both). Base `d33c03064`, the current tip of the remote
+branch. Machine: Microsoft Windows 11 Pro, `x86_64-pc-windows-msvc`, Git for Windows 2.47.1, **`core.autocrlf=input`**
+(not `true`), `core.longpaths` unset. `run.ps1` ran on its first attempt with no syntax or logic error. Only the JSON
+and `.md` came back (no logs, no `extract_failures` output), so the per-test detail below is what the output tails in
+the JSON show.
+
+| Item | Catalog | Result | What it shows |
+|---|---|---|---|
+| `a0` | | PASS | The four crates build on Windows (NASM and CMake present). |
+| `a1` | W1 | **FAIL** (19 of 21 pass) | Two tests fail on a test-helper defect, finding F1. The probe parsing, `ls-tree`, symlink filter, `cat-file --batch`, reflog, markers, merge and rebase cases all pass on Git for Windows. |
+| `a2` | W2 | **FAIL** (1 of 2 pass) | The gate test passed: six real switches of the 4,000-file tree, gate seen closed for real markers, released after. The size-and-branches test failed on a race in the test setup, finding F2. |
+| `a3` | W3 | PASS (caveat) | 17 of 17. Caveat: the machine has `autocrlf=input`; the CRLF tests set `autocrlf=true` in their own temp repos, so the comparison was exercised, but not from the machine\'s own checkout. |
+| `a4` | W4 | PASS (caveat) | 16 of 16, including the 260-character-path round trip. Caveat: `core.longpaths` unset (no git operation on a long path in these tests). |
+| `a5` | W5 | PASS | 26 of 26: the hub gate with real repos, checkpoint ordering, the injected-`PermissionDenied` skip-never-delete test. |
+| `a6-clippy` | W10 | PASS | `cargo clippy -D warnings` is clean for the four crates on the Windows host target. |
+| `a6-nextest` | W10 | **FAIL** | 18 failing tests (list below). Two are F1. The other 16 are in code this epic did not change. |
+
+**`a6-nextest` failures.** Two are the F1 tests above. The other 16: `quarto` binary
+`render_dry_run::would_render_lines_are_project_relative`; `convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes`;
+`lmd_snapshots` (four); `render_scripts_cli` (`explicit_interpreter_command_line_with_args`, `list_form_runs_scripts_in_order`);
+`smoke_all::smoke_all`; `quarto-hub` `storage::tests::test_storage_manager_prevents_double_lock` and
+`..._standalone_prevents_double_lock`; `quarto-preview` `route_tests` (two), `book_downloads::a_chapters_recorded_plot_reaches_the_book`,
+`live_reexecute::the_cache_does_not_answer_a_re_execute_under_engine_only_sources`, `render_scripts_boot::pre_render_scripts_run_once_at_boot`.
+`git diff` of the epic against its merge base with `main` shows it did not touch `storage.rs`, `render_dry_run`, the
+smoke-all fixtures, or any of those test files; it added only the git-status route, the `--git` flag, and the
+`PreviewConfig::git` field to `quarto-preview` and `quarto`. **There is no Windows baseline of `main`**, so I cannot
+call these pre-existing, only unrelated by inspection of the diff. The `smoke_all` tail shows two causes: `great_tables`
+is not installed in the Python environment (an environment gap), and the `brand-monospace-*` typst files fail
+regex checks (cause not visible in the tail). On macOS the same four crates passed 1979 of 1979 at `48bd44f15`.
+
+## Findings and proposed fix plans
+
+No product code changed in this plan. Proposed, to be inserted after GE-15 (name them GE-15b and GE-15c when Gordon
+approves):
+
+- **F1 (test helper; a1).** `support::temp_dir()` canonicalizes the temp directory, which on Windows yields a
+  `\\?\C:\...` verbatim path. Git for Windows rejects it as a worktree or clone destination: `git worktree add
+  \\?\C:\...\wt` fails with "could not create leading directories of '//?/C:/.../wt/.git': Invalid argument", and
+  `git clone ... \\?\C:\...\clone` fails with "could not create work tree dir ... Invalid argument". It is the same
+  class of defect RFU-6 found in product code (`canonicalize` verbatim paths), but here only the test helper has it.
+  Fix plan: in `crates/quarto-git-epochs/tests/integration/support.rs`, return the plain path on Windows (strip the
+  `\\?\` prefix, or skip canonicalizing off macOS, where `/var` to `/private/var` is the only reason it exists);
+  check the hub\'s `git_epochs` test harness for the same pattern (a5 passed, so it does not hit it); rerun with
+  `run.ps1 -Only a1`. A product question to settle in that plan: does `SubprocessProbe` or the hub ever receive a
+  verbatim project root from `canonicalize` in the real binary? If so, the probe should hand git a plain path, because
+  `current_dir` accepts a verbatim path but any path argument does not.
+- **F2 (test setup; a2).** With `GIT_EPOCHS_LARGE_TREE_REPO` set, both `large_tree::` tests use one shared repository
+  and nextest runs them in parallel processes; the size test\'s `git switch -q a` hit the gate test\'s `index.lock`
+  ("File exists"). Fix plan: the size test must not switch branches (use `git ls-files`/`git diff` on refs, which take no
+  lock) or each test must copy the repo; then rerun `-Only a2`. The gate test\'s pass is real but ran beside the other
+  test on the same repository, so the clean rerun is the proper W2 evidence.
+- **F3 (not the epic; a6).** The 16 other failures, with no Windows baseline. Fix plan: run `main` at its merge base
+  (`f9936b08d`) once with the same script (`-Only a6`) to separate pre-existing failures from new ones; then file strands
+  for the pre-existing ones (they are outside the epic, so a strand is right), starting with the two
+  `test_storage_manager_prevents_double_lock` tests and the `smoke_all` `brand-monospace` mismatches. Install
+  `great_tables` in the run\'s Python environment, or gate those smoke tests on it.
+- **F4 (tooling).** The run needs `autocrlf=true` and `core.longpaths=true` set for the full a3 and a4 evidence, and
+  the machine had `input` and unset. The script reported both caveats correctly. Rerun with the clone made as the
+  instructions say if full evidence is wanted; the CRLF tests themselves already ran against `autocrlf=true` temp repos.
+
+## Reconciliation
+
+Checklist reconciled against what landed: tests and tooling as listed above; the push, the Windows run, and the
+results all happened as recorded. The tooling branch `windows/git-epochs` was never merged;
+`git log feature/git-epochs -- scripts/git-epochs-windows` is empty.
