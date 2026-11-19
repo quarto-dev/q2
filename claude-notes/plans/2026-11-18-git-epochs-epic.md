@@ -278,21 +278,55 @@ lane in its front matter (`lane:`) and its dependencies in `depends-on:`.
 
 ### The start prompt
 
-Gordon starts a session in a lane worktree and pastes the same text for every lane and every session:
+Gordon starts every session in the main repository (`/Users/gordon/src/q2`), not in a lane worktree, and pastes the
+prompt for the lane, the same text for every session of that lane. The worker moves into its lane worktree first. The
+main repository checkout is never edited, built, or switched.
+
+Lane A:
 
 ```text
-You are a lane worker for the git-epochs epic. Read
+You are the lane A worker for the git-epochs epic. Your worktree is /Users/gordon/src/q2/.worktrees/workspace-7. This
+session started in the main repository, so first run `cd /Users/gordon/src/q2/.worktrees/workspace-7` and check with
+`git rev-parse --show-toplevel` that you are there; do all work in that worktree, use absolute paths under it for file
+edits, and never edit, build, or switch branches in /Users/gordon/src/q2 itself. Then read
 /Users/gordon/src/q2/.worktrees/workspace-6/claude-notes/plans/2026-11-18-git-epochs-epic.md, section "Running the
-lanes", and follow it exactly: find your lane from this directory, resume or start your next plan, land it, and print the
-handoff. Do not write a handoff to disk and do not use subagents for development. Work unattended unless a stop
-condition in that section applies.
+lanes", and follow it exactly: resume or start your next plan, land it, and print the handoff. Do not write a handoff to
+disk and do not use subagents for development. Work unattended unless a stop condition in that section applies.
 ```
+
+Lane B:
+
+```text
+You are the lane B worker for the git-epochs epic. Your worktree is /Users/gordon/src/q2/.worktrees/workspace-8. This
+session started in the main repository, so first run `cd /Users/gordon/src/q2/.worktrees/workspace-8` and check with
+`git rev-parse --show-toplevel` that you are there; do all work in that worktree, use absolute paths under it for file
+edits, and never edit, build, or switch branches in /Users/gordon/src/q2 itself. Then read
+/Users/gordon/src/q2/.worktrees/workspace-6/claude-notes/plans/2026-11-18-git-epochs-epic.md, section "Running the
+lanes", and follow it exactly: resume or start your next plan, land it, and print the handoff. Do not write a handoff to
+disk and do not use subagents for development. Work unattended unless a stop condition in that section applies.
+```
+
+Lane C:
+
+```text
+You are the lane C worker for the git-epochs epic. Your worktree is /Users/gordon/src/q2/.worktrees/workspace-9. This
+session started in the main repository, so first run `cd /Users/gordon/src/q2/.worktrees/workspace-9` and check with
+`git rev-parse --show-toplevel` that you are there; do all work in that worktree, use absolute paths under it for file
+edits, and never edit, build, or switch branches in /Users/gordon/src/q2 itself. Then read
+/Users/gordon/src/q2/.worktrees/workspace-6/claude-notes/plans/2026-11-18-git-epochs-epic.md, section "Running the
+lanes", and follow it exactly: resume or start your next plan, land it, and print the handoff. Do not write a handoff to
+disk and do not use subagents for development. Work unattended unless a stop condition in that section applies.
+```
+
+Each shell command that has to run in the worktree starts with an explicit `cd` or uses `git -C <worktree>`, because a
+shell that ends outside the working directories resets to the main repository.
 
 ### A session, step by step
 
-1. **Lane.** The lane is the worktree: `pwd` ends in `workspace-7` (A), `workspace-8` (B), or `workspace-9` (C).
-   Anything else: stop. `git status --short` must be empty, or you must be on an unmerged `ge/*` plan branch of your own
-   that is resuming; otherwise stop (blocked: unknown work in the worktree).
+1. **Lane.** The prompt names the lane and its worktree: A is `workspace-7`, B is `workspace-8`, C is `workspace-9`.
+   `cd` there and check `git rev-parse --show-toplevel`; if it is not that worktree, stop. In the worktree,
+   `git status --short` must be empty, or you must be on an unmerged `ge/*` plan branch of your own that is resuming;
+   otherwise stop (blocked: unknown work in the worktree).
 2. **Resume or start.** If the current branch is an unmerged plan branch `ge/NN-…`, resume that plan: read its
    checklist and "Notes from the run", and `git log feature/git-epochs..HEAD`. Otherwise the next plan is the first
    plan in your lane\'s list whose file on `feature/git-epochs` lacks `status: done`
@@ -388,13 +422,13 @@ Left:    <what remains in this plan, if anything: the next unchecked item>
 Next:    GE-M for this lane; ready: <yes | no, waiting for GE-X (lane Y)>
 Others:  <anything another lane\'s plan needs that is not obvious from the plan notes, or "none">
 Gordon:  <what you need from Gordon, with your recommendation, or "nothing">
-Resume:  paste the start prompt in workspace-N
+Resume:  start a new session in the main repository and paste the lane <A|B|C> prompt
 ```
 
 ### Running the lanes, the first day
 
 Before the first session, Gordon makes sure the three lane worktrees are clean (they are on `parking/workspace-*` now)
-and that workspace-6 is clean and on `feature/git-epochs`. He starts lane A. Lanes B and C can start at the same time:
+and that workspace-6 is clean and on `feature/git-epochs`. He starts a session in the main repository with the lane A prompt. Lanes B and C can start at the same time:
 each prints a "waiting for GE-1" handoff and ends, and Gordon restarts them when lane A reports GE-1 landed.
 
 ## Running the epic
