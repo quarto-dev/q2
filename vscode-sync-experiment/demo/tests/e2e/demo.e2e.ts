@@ -12,7 +12,9 @@ test.afterEach(stopAll);
 
 const storyLog = (d: { events: { source: string; kind: string; summary: string }[] }) => d.events.filter((e) => e.source === 'story');
 
-for (const preset of ['hub-browser', 'hub-vscode-host', 'hub-vscode-clone'] as const) {
+const PRESETS = ['hub-browser', 'hub-vscode-host', 'hub-vscode-clone', 'hubless'] as const;
+
+for (const preset of PRESETS) {
   test(`E1: ${preset} story in --fast: every check passes and the step log equals the story`, async () => {
     const d = await startDemo({ preset, fast: true, typedHub: true });
     await playStory(d);
@@ -56,7 +58,7 @@ test('E4: fault injection: a conflict marker in a doc raises the red warning', a
   expect(d.events.some((e) => e.source === 'invariant' && e.kind === 'conflict-marker')).toBe(true);
 });
 
-test('E5: reset restores the journal and a fresh hub; the windows stay open and follow it', async () => {
+test('E5: hub-browser: reset restores the journal and a fresh hub; the windows stay open and follow it', async () => {
   const d = await startFreePlay();
   const firstId = d.projectId;
   d.git('switch', 'feature');
@@ -69,6 +71,23 @@ test('E5: reset restores the journal and a fresh hub; the windows stay open and 
   await expect(editorText(d.guestEditor!.page)).toContainText('Fusion', { timeout: 60_000 });
   expect(d.events.some((e) => e.source === 'demo' && e.kind === 'reset')).toBe(true);
 });
+
+for (const preset of ['hub-vscode-host', 'hub-vscode-clone', 'hubless'] as const) {
+  test(`E5: ${preset}: reset restores the journal and a fresh project; the editors come back on it`, async () => {
+    const d = await startFreePlay({ preset });
+    const firstId = d.projectId;
+    d.git('switch', 'feature');
+    await expect.poll(() => d.shown('host'), { timeout: 60_000 }).toContain('After reanalysis');
+    await d.reset();
+    expect(d.git('branch', '--show-current').trim()).toBe('main');
+    expect(d.projectId).not.toBe(firstId);
+    expect(d.terminalPages[0]!.page.isClosed()).toBe(false);
+    await expect.poll(() => d.shown('host'), { timeout: 90_000 }).toContain('Tip extension');
+    expect(await d.shown('host')).not.toContain('After reanalysis');
+    if (preset === 'hub-vscode-clone') await expect.poll(() => d.shown('guest'), { timeout: 90_000 }).toContain('Fusion');
+    expect(d.events.some((e) => e.source === 'demo' && e.kind === 'reset')).toBe(true);
+  });
+}
 
 for (const where of ['inline', 'strip', 'both', 'off'] as const) {
   test(`E6: captions=${where}`, async () => {
@@ -112,4 +131,15 @@ test('E8: control: against a hub that ignores git, the story fails at the switch
   );
   expect(err).toBeInstanceOf(StoryFailure);
   expect((err as StoryFailure).stepId).toBe('switch-feature');
+});
+
+test('E7b: layout: the VS Code windows report the bounds the layout computed (headed)', async () => {
+  const d = await startFreePlay({ preset: 'hub-vscode-clone', headless: false });
+  const b = await d.vscode.guest!.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.getBounds());
+  const r = d.layout.guestEditor;
+  expect(b).toEqual({ x: r.left, y: r.top, width: r.width, height: r.height });
+  const h = await startFreePlay({ preset: 'hubless', headless: false });
+  const hb = await h.vscode.host!.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.getBounds());
+  const hr = h.layout.hostEditor;
+  expect(hb).toEqual({ x: hr.left, y: hr.top, width: hr.width, height: hr.height });
 });

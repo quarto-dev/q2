@@ -2,6 +2,7 @@ import type { Demo } from '../src/demo';
 import type { Step } from '../src/driver';
 import { hubStory } from './hub';
 import { hubCloneStory } from './hub-clone';
+import { hublessStory } from './hubless';
 
 export function storyFor(d: Demo): Step[] {
   switch (d.o.preset) {
@@ -10,7 +11,7 @@ export function storyFor(d: Demo): Step[] {
       return hubStory(d);
     case 'hub-vscode-clone':
       return hubCloneStory(d);
-    default:
-      throw new Error(`preset ${d.o.preset} has no scripted story yet`);
+    case 'hubless':
+      return hublessStory(d);
   }
 }

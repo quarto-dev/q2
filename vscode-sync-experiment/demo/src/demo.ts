@@ -19,7 +19,8 @@ import { terminalAssets, terminalPageHtml, STRIP_LINES } from './terminal-page';
 import { launchVscode, type RunningVscode } from '../../e2e/helpers/launch';
 import { HeadlessPeer, ensureWasm } from '../../e2e/helpers/hub';
 import { bindFolder, deriveWsUrl } from '../../src/core/join';
-import { activeEditorText, openFile as openVscodeFile } from '../../e2e/helpers/palette';
+import { activeEditorText, fillInputBox, openFile as openVscodeFile, runCommand } from '../../e2e/helpers/palette';
+import net from 'node:net';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..', '..');
@@ -178,8 +179,13 @@ export class Demo {
       this.lastActivity = Date.now();
       this.record('terminal', 'command', line, { line });
     });
-    if (this.o.preset === 'hub-vscode-clone') {
-      this.cloneJournal();
+    if (this.o.preset === 'hub-vscode-clone' || this.o.preset === 'hubless') {
+      // Maurice's clone, or (hubless) an empty directory: his only tool there is the pasted `q2 preview` command.
+      if (this.o.preset === 'hubless') {
+        mkdirSync(this.guestDir, { recursive: true });
+        this.qhubPort = await Demo.freePort();
+      }
+      else this.cloneJournal();
       this.guestTerminal = await startTerminalServer({
         cwd: this.guestDir,
         env: this.env(),
@@ -314,6 +320,182 @@ export class Demo {
     await new Promise((r) => setTimeout(r, 800));
   }
 
+  // ---- hubless (DM6): a standalone q2 hub, a VS Code originator, and a pasted q2 preview command ------------------------
+
+  qhubPort = 0;
+  guestPreviewUrl = '';
+  shareCommand = '';
+  private qhubProc?: ChildProcess;
+  private guestPreviewProc?: ChildProcess;
+
+  get qhubWs(): string {
+    return `ws://127.0.0.1:${this.qhubPort}`;
+  }
+
+  private static freePort(): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const srv = net.createServer();
+      srv.once('error', reject);
+      srv.listen(0, '127.0.0.1', () => {
+        const { port } = srv.address() as net.AddressInfo;
+        srv.close(() => resolve(port));
+      });
+    });
+  }
+
+  /** The command line typed in the host terminal: a standalone sync server on loopback, its log in a file. */
+  qhubCommandLine(): string {
+    return `q2 hub --no-project --port ${this.qhubPort} --data-dir ../data-hub > ../logs/qhub.log 2>&1 &`;
+  }
+
+  async waitForQhub(timeoutMs = 60_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      try {
+        await fetch(`http://127.0.0.1:${this.qhubPort}/`);
+        return;
+      } catch {
+        if (Date.now() > deadline) throw new Error(`q2 hub did not answer on ${this.qhubPort}; see ${this.logs}/qhub.log`);
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    }
+  }
+
+  /** Free play and reset: the launcher starts the standalone hub itself. */
+  async startQhubProcess(): Promise<void> {
+    this.qhubPort ||= await Demo.freePort();
+    const log = path.join(this.logs, 'qhub.log');
+    writeFileSync(log, '');
+    const proc = spawn(Q2_BINARY, ['hub', '--no-project', '--port', String(this.qhubPort), '--data-dir', path.join(this.root, 'data-hub')], {
+      cwd: this.root,
+      env: { ...process.env, ...this.env() },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    proc.stdout?.on('data', (c) => appendFileSync(log, c));
+    proc.stderr?.on('data', (c) => appendFileSync(log, c));
+    this.qhubProc = proc;
+    await this.waitForQhub();
+  }
+
+  /** The originator's VS Code window on the journal, with Share this folder run up to the confirmation modal. */
+  async originateStart(): Promise<void> {
+    await ensureWasm();
+    const v = await launchVscode({ workspace: this.journal, env: { QUARTO_HUB_TEST_SYNC_SERVER: this.qhubWs }, settings: VSCODE_SETTINGS });
+    this.vscode.host = v;
+    this.computeLayout();
+    await this.placeVscode(v, this.layout.hostEditor);
+    await runCommand(v.page, 'Quarto Hub: Share this folder');
+    await fillInputBox(v.page, this.qhubWs);
+    await v.page.locator('.monaco-dialog-box').waitFor({ state: 'visible', timeout: 30_000 });
+  }
+
+  /** Confirm the modal, wait for the share panel, and take the `q2 preview` command it copies. */
+  async originateConfirm(): Promise<{ id: string; command: string }> {
+    const v = this.vscode.host!;
+    await v.page.locator('.monaco-dialog-box').getByRole('button', { name: 'Share' }).click();
+    await v.app.evaluate(({ clipboard: c }) => c.writeText(''));
+    const row = v.page.locator('.quick-input-list .monaco-list-row', { hasText: 'q2 preview command' });
+    await row.waitFor({ timeout: 60_000 });
+    await row.click();
+    const deadline = Date.now() + 30_000;
+    let command = '';
+    while (!command && Date.now() < deadline) {
+      command = await v.app.evaluate(({ clipboard: c }) => c.readText());
+      if (!command) await new Promise((r) => setTimeout(r, 150));
+    }
+    const m = /^q2 preview --hub-url (\S+) --project (\S+) --ui editor --allow-edit$/.exec(command);
+    if (!m) throw new Error(`the copied command is not a q2 preview command: ${command}`);
+    await v.page.keyboard.press('Escape');
+    this.shareCommand = command;
+    this.projectId = m[2]!;
+    return { id: m[2]!, command };
+  }
+
+  /** What the guest terminal types: the copied command, without a browser window, its log in a file. */
+  guestPreviewCommandLine(): string {
+    return `${this.shareCommand} --no-browser --data-dir ../data-guest > ../logs/guest-preview.log 2>&1 &`;
+  }
+
+  async waitForGuestPreview(timeoutMs = 60_000): Promise<string> {
+    const log = path.join(this.logs, 'guest-preview.log');
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const text = existsSync(log) ? readFileSync(log, 'utf8') : '';
+      const m = text.match(/→\s+(http:\/\/[^\s]+)/);
+      if (m) {
+        this.guestPreviewUrl = m[1]!;
+        return this.guestPreviewUrl;
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    throw new Error(`the guest preview printed no URL; see ${log}`);
+  }
+
+  /** Free play and reset: share silently, start the guest preview from the launcher, and open the guest's browser on it. */
+  async hublessAll(): Promise<void> {
+    await this.originateStart();
+    await this.originateConfirm();
+    await openVscodeFile(this.vscode.host!.page, R_PAPER);
+    const log = path.join(this.logs, 'guest-preview.log');
+    writeFileSync(log, '');
+    const parts = this.shareCommand.split(' ').slice(1);
+    const proc = spawn(Q2_BINARY, [...parts, '--no-browser', '--data-dir', path.join(this.root, 'data-guest')], {
+      cwd: this.guestDir,
+      env: { ...process.env, ...this.env() },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    proc.stdout?.on('data', (c) => appendFileSync(log, c));
+    proc.stderr?.on('data', (c) => appendFileSync(log, c));
+    this.guestPreviewProc = proc;
+    await this.waitForGuestPreview();
+    await this.openGuestBrowser(this.guestPreviewUrl);
+  }
+
+  async openGuestBrowser(url: string): Promise<void> {
+    this.computeLayout();
+    if (!this.guestEditor) {
+      const guest = await this.window();
+      await this.place(guest, this.layout.guestEditor);
+      this.guestEditor = guest;
+    }
+    const { openProject, openFile } = await import('../../../q2-preview-spa/e2e/helpers/editor');
+    await openProject(this.guestEditor.page, url);
+    await openFile(this.guestEditor.page, R_PAPER);
+  }
+
+  private async killProc(p: ChildProcess | undefined): Promise<void> {
+    if (!p || p.exitCode !== null) return;
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(() => {
+        p.kill('SIGKILL');
+        resolve();
+      }, 8000);
+      p.once('exit', () => {
+        clearTimeout(t);
+        resolve();
+      });
+      p.kill('SIGTERM');
+    });
+  }
+
+  /** Stop the standalone hub and the guest preview, whether the launcher or the terminal started them. */
+  async stopHubless(): Promise<void> {
+    await this.killProc(this.guestPreviewProc);
+    await this.killProc(this.qhubProc);
+    this.guestPreviewProc = this.qhubProc = undefined;
+    // Processes the terminal started are found by their listening ports (never by name: other demos may be running).
+    const ports = [this.qhubPort, this.guestPreviewUrl ? Number(new URL(this.guestPreviewUrl).port) : 0].filter(Boolean);
+    for (const port of ports) {
+      try {
+        const pids = execFileSync('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' }).split('\n').filter(Boolean);
+        for (const pid of pids) process.kill(Number(pid), 'SIGTERM');
+      } catch {
+        /* none listening */
+      }
+    }
+    await new Promise((r) => setTimeout(r, 800));
+  }
+
   // ---- windows -------------------------------------------------------------------------------------------------
 
   get headless(): boolean {
@@ -335,7 +517,7 @@ export class Demo {
   }
 
   computeLayout(): Layout {
-    this.layout = computeLayout(screenFrame(this.o.screen), { guestTerminal: this.o.preset === 'hub-vscode-clone' });
+    this.layout = computeLayout(screenFrame(this.o.screen), { guestTerminal: this.o.preset === 'hub-vscode-clone' || this.o.preset === 'hubless' });
     return this.layout;
   }
 
@@ -369,7 +551,8 @@ export class Demo {
 
   /** The kind of editor each side has in this preset. */
   get kinds(): { host: 'browser' | 'vscode'; guest: 'browser' | 'vscode' } {
-    return { host: this.o.preset === 'hub-vscode-host' ? 'vscode' : 'browser', guest: this.o.preset === 'hub-vscode-clone' ? 'vscode' : 'browser' };
+    const host = this.o.preset === 'hub-vscode-host' || this.o.preset === 'hubless' ? 'vscode' : 'browser';
+    return { host, guest: this.o.preset === 'hub-vscode-clone' ? 'vscode' : 'browser' };
   }
 
   get wsUrl(): string {
@@ -441,6 +624,13 @@ export class Demo {
     await page.keyboard.type(text);
   }
 
+  /** Scroll an editor to the top of its document (Monaco renders only the visible lines). */
+  async scrollTop(who: 'host' | 'guest'): Promise<void> {
+    const page = this.kinds[who] === 'vscode' ? this.vscode[who]!.page : (who === 'host' ? this.hostEditor : this.guestEditor)!.page;
+    await page.locator(this.kinds[who] === 'vscode' ? '.editor-instance .view-lines' : '.monaco-editor .view-lines').first().click();
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowUp' : 'Control+Home');
+  }
+
   /** The number of swap notices an editor shows (always 0 for VS Code, which shows notifications, not this banner). */
   async notices(who: 'host' | 'guest'): Promise<number> {
     if (this.kinds[who] === 'vscode') return 0;
@@ -496,24 +686,25 @@ export class Demo {
   }
 
   private async poll(): Promise<void> {
-    if (!this.hubHttp) return;
-    const next = await this.status();
+    // `hubless` has no tracking hub, so no status route: the observer then narrates files and checks invariants only.
+    if (!this.hubHttp && this.o.preset !== 'hubless') return;
+    const next: StatusBody | null = this.hubHttp ? await this.status() : null;
     const files = this.listFiles();
-    const events: DemoEvent[] = deriveEvents(this.prevStatus, next, { prevFiles: this.prevFiles, nextFiles: files });
+    const events: DemoEvent[] = next ? deriveEvents(this.prevStatus, next, { prevFiles: this.prevFiles, nextFiles: files }) : [];
     for (const e of events) {
       this.lastActivity = Date.now();
       const text = narrate(e);
       this.record('observer', e.kind, text, e.details);
       this.say('narration', text);
     }
-    this.prevStatus = next;
+    this.prevStatus = next ?? this.prevStatus;
     this.prevFiles = files;
     // Invariants, on the files of the hub's disk (the conflict-marker check reads every file the owner can see).
     const docs = files
       .filter((f) => f.endsWith('.qmd'))
       .map((f) => ({ path: f, text: readFileSync(path.join(this.journal, f), 'utf8') }));
     const snap: Snapshot = {
-      quiet: !next.pending && !next.paused && Date.now() - this.lastActivity > 2000,
+      quiet: !next?.pending && !next?.paused && Date.now() - this.lastActivity > 2000,
       docs,
       hubDisk: {},
       pointerDocs: {},
@@ -564,6 +755,7 @@ export class Demo {
           this.stopObserver();
           await this.closeVscode();
           await this.stopHub();
+          await this.stopHubless();
         },
         rebuildJournal: async () => {
           // The shell must not sit inside the directory while it is rebuilt.
@@ -571,7 +763,7 @@ export class Demo {
           await this.waitPrompt();
           this.writeJournal();
           // A fresh hub needs fresh state: the data directory keys the project id (G19).
-          rmSync(path.join(this.root, 'data'), { recursive: true, force: true });
+          for (const dir of ['data', 'data-hub', 'data-guest']) rmSync(path.join(this.root, dir), { recursive: true, force: true });
           mkdirSync(path.join(this.root, 'data'), { recursive: true });
         },
         rebuildGuestClone: async () => {
@@ -580,10 +772,17 @@ export class Demo {
           this.cloneJournal();
         },
         startHub: async () => {
-          await this.startHubProcess();
+          if (this.o.preset === 'hubless') {
+            // The project id exists only once the folder is shared again; everything follows from that.
+            await this.startQhubProcess();
+            await this.hublessAll();
+          } else {
+            await this.startHubProcess();
+          }
           return this.projectId;
         },
         navigateBrowsers: async () => {
+          if (this.o.preset === 'hubless') return;
           for (const w of [this.hostEditor, this.guestEditor]) {
             if (!w) continue;
             await w.page.goto(this.hubUrl);
@@ -594,6 +793,7 @@ export class Demo {
         // A fresh hub has a new project id (G19), so the VS Code windows are relaunched and rebound at the same place
         // (the plan's Join session route would need the share link; the relaunch is recorded as a deviation).
         rejoinVscode: async () => {
+          if (this.o.preset === 'hubless') return;
           if (this.kinds.host === 'vscode') await this.openVscodeHost();
           if (this.kinds.guest === 'vscode') await this.openVscodeGuest();
         },
@@ -621,6 +821,7 @@ export class Demo {
     await this.closeVscode();
     await this.browser?.close().catch(() => {});
     await this.stopHub();
+    await this.stopHubless();
     await this.hostTerminal.close().catch(() => {});
     await this.guestTerminal?.close().catch(() => {});
   }

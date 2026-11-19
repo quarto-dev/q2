@@ -18,14 +18,17 @@ export async function until(what: string, f: () => boolean | Promise<boolean>, t
 
 /** Wait for an editor to show (or stop showing) `needle`. Monaco renders only the visible lines: needles are near the top. */
 export async function shows(d: Demo, who: 'host' | 'guest', needle: string | RegExp, present = true): Promise<void> {
+  let last = '';
   await until(
     `${who} editor ${present ? 'shows' : 'does not show'} ${needle}`,
     async () => {
-      const t = await d.shown(who);
-      return (typeof needle === 'string' ? t.includes(needle) : needle.test(t)) === present;
+      last = await d.shown(who);
+      return (typeof needle === 'string' ? last.includes(needle) : needle.test(last)) === present;
     },
     T,
-  );
+  ).catch((e) => {
+    throw new Error(`${(e as Error).message}\nthe ${who} editor showed: ${last.slice(0, 300).replace(/\n/g, ' | ')}`);
+  });
 }
 
 export function hubStory(d: Demo): Step[] {

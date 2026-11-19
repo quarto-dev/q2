@@ -15,8 +15,13 @@ export async function startDemo(over: Partial<DemoOptions>): Promise<Demo> {
 /** Free play: the launcher starts the hub and opens both editors. */
 export async function startFreePlay(over: Partial<DemoOptions> = {}): Promise<Demo> {
   const d = await startDemo(over);
-  await d.startHubProcess();
-  await d.openEditors();
+  if (d.o.preset === 'hubless') {
+    await d.startQhubProcess();
+    await d.hublessAll();
+  } else {
+    await d.startHubProcess();
+    await d.openEditors();
+  }
   return d;
 }
 

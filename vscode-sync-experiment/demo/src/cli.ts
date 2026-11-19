@@ -52,7 +52,7 @@ async function main() {
   });
   if (v.help) return void console.log(USAGE);
   const preset = (v.preset ?? 'hub-browser') as Preset;
-  if (!['hub-browser', 'hub-vscode-host', 'hub-vscode-clone'].includes(preset)) throw new Error(`preset ${preset} is not built yet`);
+  if (!['hub-browser', 'hub-vscode-host', 'hub-vscode-clone', 'hubless'].includes(preset)) throw new Error(`preset ${preset} is not built yet`);
   const play = !!v.play || !!v.fast;
   const d = await Demo.create(
     defaultOptions({
@@ -71,8 +71,13 @@ async function main() {
   try {
     await d.openHostTerminal();
     if (!play) {
-      await d.startHubProcess();
-      await d.openEditors();
+      if (preset === 'hubless') {
+        await d.startQhubProcess();
+        await d.hublessAll();
+      } else {
+        await d.startHubProcess();
+        await d.openEditors();
+      }
     }
     d.startObserver();
     console.log(`demo root: ${d.root}\nevent log: ${d.logs}/events.jsonl\nhub: ${d.hubUrl || '(started by the story)'}`);

@@ -4,7 +4,7 @@ export interface Step {
   id: string;
   caption: string;
   /** Typed into a terminal at a human pace (the host's unless `who` says otherwise). */
-  command?: string;
+  command?: string | (() => string);
   who?: 'host' | 'guest';
   /** A non-terminal action (a click in an editor, a command palette entry). */
   action?: () => Promise<void>;
@@ -37,10 +37,11 @@ export class StoryFailure extends Error {
 
 export async function runStory(steps: Step[], env: DriverEnv, o: DriverOptions): Promise<void> {
   for (const s of steps) {
-    const entry = { id: s.id, caption: s.caption, command: s.command, at: new Date().toISOString() };
+    const command = typeof s.command === 'function' ? s.command() : s.command;
+    const entry = { id: s.id, caption: s.caption, command, at: new Date().toISOString() };
     if (!o.fast) env.caption(s.caption);
     try {
-      if (s.command !== undefined) await env.type(s.command, s.who ?? 'host');
+      if (command !== undefined) await env.type(command, s.who ?? 'host');
       if (s.action) await s.action();
       await s.check();
     } catch (e) {
