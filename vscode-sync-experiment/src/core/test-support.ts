@@ -3,6 +3,7 @@
  * notifier, and helpers that seed a project on an in-process test hub.
  * Not part of the extension bundle.
  */
+import { symlinkSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -16,6 +17,32 @@ import { MemoryLog, RecordingNotifier } from './recording';
 
 export { MemoryLog, RecordingNotifier };
 import { TextBindingCore, computeReplace, type TextDoc } from './text-binding';
+
+/**
+ * Makes a symlink, or returns false when the platform refuses it for lack of privilege: on Windows a file
+ * symlink needs Developer Mode or an elevated token, and `symlink` fails with `EPERM` (GE-16a `B2`). Callers
+ * skip the test with a stated reason. Any other failure is rethrown. Directory junctions need no privilege and
+ * do not go through this.
+ */
+export function trySymlinkWith(
+  impl: (target: string, link: string, type?: 'file' | 'dir' | 'junction') => void,
+  platform: NodeJS.Platform,
+  target: string,
+  link: string,
+  type?: 'file' | 'dir' | 'junction',
+): boolean {
+  try {
+    impl(target, link, type);
+    return true;
+  } catch (e) {
+    if (platform === 'win32' && (e as NodeJS.ErrnoException).code === 'EPERM') return false;
+    throw e;
+  }
+}
+
+export function trySymlink(target: string, link: string, type?: 'file' | 'dir' | 'junction'): boolean {
+  return trySymlinkWith(symlinkSync, process.platform, target, link, type);
+}
 
 export const identity: Identity = { userId: 'u-test', userName: 'Test', userColor: '#112233' };
 
