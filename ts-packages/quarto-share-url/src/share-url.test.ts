@@ -162,3 +162,19 @@ describe('serversMatch', () => {
     expect(serversMatch('not a url', 'other')).toBe(false);
   });
 });
+
+describe('round trips through the fragment', () => {
+  it.each([
+    ['wss://quarto-hub.com/ws', 'index.qmd', 'Plain'],
+    ['wss://sync.example.org/ws', 'a b/c&d.qmd', 'Name with & and = and ?'],
+    ['ws://127.0.0.1:1/ws', 'docs/日本語.qmd', '100% done #1'],
+  ])('%s %s', (server, file, name) => {
+    const url = buildShareUrl({ server, indexDocId: 'abc123', file, name });
+    expect(parseProjectRef(url)).toEqual({ project: 'abc123', server, file, name });
+  });
+
+  it('keeps the wss:// server of a hand-written fragment', () => {
+    const ref = parseProjectRef('#/share/xyz?server=wss://hub.example/ws&file=a.qmd&name=n');
+    expect(ref).toEqual({ project: 'xyz', server: 'wss://hub.example/ws', file: 'a.qmd', name: 'n' });
+  });
+});

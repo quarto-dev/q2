@@ -22,6 +22,7 @@
 //! 11. Run shared workspace-package tests (@quarto/preview-renderer +
 //!     @quarto/preview-runtime, both unit and integration)
 //! 12. Run hub MCP package tests (quarto-automerge-schema, quarto-git-epochs,
+//!     quarto-share-url,
 //!     quarto-sync-client + quarto-hub-mcp, including the q2-mcp bundle smoke test)
 //! 13. Build q2-preview-spa placeholder
 //! 14. q2-preview-spa Playwright E2E (only when --e2e is set)
@@ -786,10 +787,12 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
     let sync_client_dir = project_root.join("ts-packages/quarto-sync-client");
     let hub_mcp_dir = project_root.join("ts-packages/quarto-hub-mcp");
     let git_epochs_dir = project_root.join("ts-packages/quarto-git-epochs");
+    let share_url_dir = project_root.join("ts-packages/quarto-share-url");
     let have_hub_mcp = schema_dir.join("package.json").is_file()
         && sync_client_dir.join("package.json").is_file()
         && hub_mcp_dir.join("package.json").is_file()
-        && git_epochs_dir.join("package.json").is_file();
+        && git_epochs_dir.join("package.json").is_file()
+        && share_url_dir.join("package.json").is_file();
     if !config.skip_hub_mcp_tests && have_hub_mcp {
         println!(
             "\n━━━ Step 12/{}: Running hub MCP package tests ━━━\n",
@@ -798,6 +801,7 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
         for (dir, what) in [
             (&schema_dir, "quarto-automerge-schema build"),
             (&git_epochs_dir, "quarto-git-epochs build"),
+            (&share_url_dir, "quarto-share-url build"),
             (&sync_client_dir, "quarto-sync-client build"),
             (&hub_mcp_dir, "quarto-hub-mcp build"),
         ] {
@@ -824,6 +828,13 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
             &git_epochs_dir,
             None,
             "quarto-git-epochs tests failed",
+        )?;
+        run_command(
+            "npm",
+            &["test"],
+            &share_url_dir,
+            None,
+            "quarto-share-url tests failed",
         )?;
         run_command(
             "npm",

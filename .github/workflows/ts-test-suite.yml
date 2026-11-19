@@ -269,7 +269,7 @@ jobs:
         env:
           QUARTO_QMD_PARSER_REQUIRED: "1"
         run: |
-          npm run build --if-present -w ts-packages/quarto-sync-client -w ts-packages/quarto-automerge-schema -w ts-packages/quarto-git-epochs
+          npm run build --if-present -w ts-packages/quarto-sync-client -w ts-packages/quarto-automerge-schema -w ts-packages/quarto-git-epochs -w ts-packages/quarto-share-url
           cd ts-packages/quarto-hub-mcp
           npx vitest run src/qmd-ast.test.ts src/qmd-outline.test.ts src/qmd-sections.test.ts src/conformance.test.ts src/bundle.test.ts src/npm-pack.test.ts src/mcpb-pack.test.ts
 
@@ -387,6 +387,10 @@ jobs:
       - name: Run quarto-git-epochs tests
         shell: bash
         run: npm test -w ts-packages/quarto-git-epochs
+
+      - name: Run quarto-share-url tests
+        shell: bash
+        run: npm test -w ts-packages/quarto-share-url
 
       - name: Run annotated-qmd tests
         shell: bash
