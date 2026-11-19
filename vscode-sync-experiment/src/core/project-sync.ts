@@ -40,9 +40,10 @@ import type { BufferBinding, SyncHost } from './host';
 import { META_DIR, isIgnoredPath } from './ignore';
 import { META_FILE, type ProjectMeta, type ProjectMode } from './meta';
 import type { Identity } from './presence';
-import { movedNotice, normalizeText, type ControllerProbe } from '@quarto/quarto-git-epochs';
+import { asString, movedNotice, normalizeText, type ControllerProbe } from '@quarto/quarto-git-epochs';
 import { CloneRefusedError, CloneSync, docKey, type CloneEvent, type CloneState, type DiskContent } from './clone/clone-sync';
 import { NOOP_POINTER_WRITER, type PointerWriter } from './clone/pointer-writer';
+import { OwnerPointerWriter } from './origination/owner-writer';
 import { RegistryClient } from './clone/registry-client';
 import type { RegistryView } from '@quarto/quarto-git-epochs';
 import { findDoc, makeRepo, webSocketAdapter } from './repo';
@@ -191,7 +192,7 @@ export class ProjectSync {
       controllerProbe: this.options.clone?.probe,
       clock: this.options.clone?.clock ?? { now: () => Date.now(), setTimeout, clearTimeout },
       registry,
-      pointer: this.options.clone?.pointer ?? NOOP_POINTER_WRITER,
+      pointer: this.options.clone?.pointer ?? this.ownerPointerWriter(),
       isIgnored: (rel) => isIgnoredPath(rel, this.boundSubfolders),
     });
     try {
@@ -203,6 +204,16 @@ export class ProjectSync {
     }
     this.clone = clone;
     this.updateStatus();
+  }
+
+  /**
+   * The owner hook (GE-12, G16): only the folder whose `ownerId` equals the index's `owner` key writes the pointer. A
+   * hub-owned project has no `owner` key, and a second clone with the same user id has a different folder id.
+   */
+  private ownerPointerWriter(): PointerWriter {
+    const owner = (this.index.doc() as { owner?: unknown } | undefined)?.owner;
+    if (!this.meta.ownerId || owner == null || asString(owner) !== this.meta.ownerId) return NOOP_POINTER_WRITER;
+    return new OwnerPointerWriter({ repo: this.repo, index: this.index, log: (l) => this.log.appendLine(l) });
   }
 
   private cloneHost() {
