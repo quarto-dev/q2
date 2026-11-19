@@ -15,6 +15,11 @@
       "types": "./src/index.ts",
       "source": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./src/test-hub.ts",
+      "source": "./src/test-hub.ts",
+      "import": "./dist/test-hub.js"
     }
   },
   "files": [
