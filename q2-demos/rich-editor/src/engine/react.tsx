@@ -769,6 +769,19 @@ export function useFieldEditor(
         selection.setBaseAndExtent(from.node, from.offset, to.node, to.offset)
         return true
       }
+      if (granularity === 'paragraph') {
+        // The start or the end of the field, or, from there, of the field
+        // before or after. (The browser's own, with Shift, can stop partway
+        // into the next field.)
+        const there = key.forward
+          ? atEnd(origin, saved.focus.node, saved.focus.offset)
+          : atStart(origin, saved.focus.node, saved.focus.offset)
+        const field = (there && fields[fields.indexOf(origin) + (key.forward ? 1 : -1)]) || origin
+        const to = edge(field, key.forward ? 'end' : 'start')
+        const from = e.shiftKey ? saved.anchor : to
+        selection.setBaseAndExtent(from.node, from.offset, to.node, to.offset)
+        return true
+      }
       if (granularity === 'character' && !e.shiftKey && !selection.isCollapsed) {
         // Left and Right put the caret at that end of a selection.
         // (Firefox's `modify` would move it a character from the focus.)
@@ -794,6 +807,19 @@ export function useFieldEditor(
         return 'left'
       }
       selection.modify(e.shiftKey ? 'extend' : 'move', key.direction, granularity)
+      if (
+        e.shiftKey &&
+        granularity === 'line' &&
+        fieldOf(root, selection.focusNode) !== origin &&
+        !(key.forward ? atEnd : atStart)(origin, saved.focus.node, saved.focus.offset)
+      ) {
+        // Shift+Down on a field's last line selects to the end of its text
+        // before going on to the next field, and Shift+Up on its first line
+        // to the start.
+        const to = edge(origin, key.forward ? 'end' : 'start')
+        selection.setBaseAndExtent(saved.anchor.node, saved.anchor.offset, to.node, to.offset)
+        return true
+      }
       if (fieldOf(root, selection.focusNode)) return true
 
       const target = fields[fields.indexOf(origin) + (key.forward ? 1 : -1)]
@@ -861,11 +887,29 @@ export function useFieldEditor(
       // mouse selection there is the user's, and is left alone.
       if (selection && !byMouse && selectionOutside(root) !== 'none') writeSelection(root, selection)
     }
-    const onMouseDown = () => {
+    // Whether this drag's selection is extended here rather than by the
+    // browser (see `onMouseDown`).
+    let extending = false
+    const onMouseDown = (e: MouseEvent) => {
       dragging = true
       byMouse = true
+      // A double click past the end of a line's text: Firefox selects the
+      // whole line, and a drag from there extends nothing. Put the caret at
+      // the end of the text, as Chromium and WebKit do, and extend the
+      // selection from there as the mouse moves.
+      const end = e.detail === 2 ? pastLineEnd(root, e.clientX, e.clientY) : null
+      extending = end !== null
+      if (!end) return
+      e.preventDefault()
+      doc.getSelection()?.setBaseAndExtent(end.node, end.offset, end.node, end.offset)
+    }
+    const onMouseMove = (e: MouseEvent) => {
+      if (!extending || !(e.buttons & 1)) return
+      const at = doc.caretPositionFromPoint?.(e.clientX, e.clientY)
+      if (at && root.contains(at.offsetNode)) doc.getSelection()?.extend(at.offsetNode, at.offset)
     }
     const onMouseUp = () => {
+      extending = false
       if (!dragging) return
       dragging = false
       syncSelection()
@@ -891,6 +935,7 @@ export function useFieldEditor(
     root.addEventListener('focus', onFocus)
     root.addEventListener('keyup', syncSelection)
     root.addEventListener('mousedown', onMouseDown)
+    doc.addEventListener('mousemove', onMouseMove)
     doc.addEventListener('mouseup', onMouseUp)
     doc.addEventListener('keydown', onKeyDown)
     doc.addEventListener('selectionchange', syncSelection)
@@ -906,6 +951,7 @@ export function useFieldEditor(
       root.removeEventListener('focus', onFocus)
       root.removeEventListener('keyup', syncSelection)
       root.removeEventListener('mousedown', onMouseDown)
+      doc.removeEventListener('mousemove', onMouseMove)
       doc.removeEventListener('mouseup', onMouseUp)
       doc.removeEventListener('keydown', onKeyDown)
       doc.removeEventListener('selectionchange', syncSelection)
@@ -990,7 +1036,8 @@ function arrowGranularity(e: KeyboardEvent, vertical: boolean): string | null {
   const word = IS_MAC ? e.altKey && !e.metaKey && !e.ctrlKey : e.ctrlKey && !e.altKey && !e.metaKey
   const boundary = IS_MAC && e.metaKey && !e.altKey && !e.ctrlKey
   const plain = !e.altKey && !e.metaKey && !e.ctrlKey
-  if (vertical) return plain ? 'line' : boundary ? 'documentboundary' : null
+  // Option+Up / Option+Down on a Mac move by paragraph: here, by field.
+  if (vertical) return plain ? 'line' : boundary ? 'documentboundary' : IS_MAC && word ? 'paragraph' : null
   return plain ? 'character' : word ? 'word' : boundary ? 'lineboundary' : null
 }
 
@@ -999,6 +1046,30 @@ function atStart(field: HTMLElement, node: Node, offset: number): boolean {
   const range = field.ownerDocument.createRange()
   range.selectNodeContents(field)
   range.setEnd(node, offset)
+  return range.toString().replaceAll(HOLDER, '') === ''
+}
+
+/**
+ * The DOM point at the end of a field's text when (`x`, `y`) is past it,
+ * to the right of the text's last line; otherwise null.
+ */
+function pastLineEnd(root: HTMLElement, x: number, y: number): { node: Node; offset: number } | null {
+  const doc = root.ownerDocument
+  const at = doc.caretPositionFromPoint?.(x, y)
+  const field = at ? fieldOf(root, at.offsetNode) : null
+  if (!at || !field || !atEnd(field, at.offsetNode, at.offset)) return null
+  const end = edge(field, 'end')
+  const range = doc.createRange()
+  range.setStart(end.node, end.offset)
+  const caret = range.getClientRects()[0] ?? range.getBoundingClientRect()
+  return x > caret.right + 1 ? end : null
+}
+
+/** Whether a DOM point is at the very end of `field`'s text. */
+function atEnd(field: HTMLElement, node: Node, offset: number): boolean {
+  const range = field.ownerDocument.createRange()
+  range.selectNodeContents(field)
+  range.setStart(node, offset)
   return range.toString().replaceAll(HOLDER, '') === ''
 }
 

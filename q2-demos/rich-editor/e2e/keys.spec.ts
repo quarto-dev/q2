@@ -7,7 +7,7 @@
  * The word modifier is Option on a Mac and Ctrl elsewhere (`wordKey`).
  */
 
-import { expect, fixture, openEditor, test, wordKey, lineEnd } from './helpers.ts'
+import { createDocument, expect, fixture, openEditor, test, wordKey, lineEnd } from './helpers.ts'
 
 const mod = 'ControlOrMeta'
 const basic = fixture('basic')
@@ -194,6 +194,48 @@ test.describe('Left and Right with a selection', () => {
   })
 })
 
+test.describe('Shift+Up and Shift+Down', () => {
+  test('select to the end of the line\'s text before they go on to the next line', async ({ page }) => {
+    const document = await createDocument('---\ntitle: T\n---\n\n- One two\n- Three\n\nAfter.\n')
+    const editor = await document.open(page)
+    await editor.placeCaretInLine(0, 3)
+
+    await page.keyboard.press('Shift+ArrowDown')
+    expect(await editor.selectedText()).toBe(' two')
+    await page.keyboard.press('Shift+ArrowDown')
+    expect(await editor.selectedText()).toMatch(/^ two\s*Th/)
+  })
+
+  test('in a wrapped line, select a line at a time, then to the end of its text', async ({ page }) => {
+    const words = 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau'
+    const text = `${words} ${words} ${words}`
+    const document = await createDocument(`---\ntitle: T\n---\n\n- One\n- ${text}\n\nAfter the list.\n`)
+    const editor = await document.open(page)
+    await editor.placeCaretInLine(1, 6)
+
+    // Down the item's lines, never past its end.
+    let selected = ''
+    for (let i = 0; i < 6 && selected !== text.slice(6); i++) {
+      await page.keyboard.press('Shift+ArrowDown')
+      selected = await editor.selectedText()
+      expect(selected).not.toContain('After')
+    }
+    expect(selected).toBe(text.slice(6))
+  })
+
+  test('Shift+Up selects to the start of the line\'s text before it goes on to the line before', async ({ page }) => {
+    const document = await createDocument('---\ntitle: T\n---\n\nBefore.\n\n- One two\n')
+    const editor = await document.open(page)
+    await editor.placeCaretInLine(1, 3)
+
+    await page.keyboard.press('Shift+ArrowUp')
+    expect(await editor.selectedText()).toBe('One')
+    await page.keyboard.press('Shift+ArrowUp')
+    expect(await editor.selectedText()).toMatch(/\s*One$/)
+    expect((await editor.selectedText()).length).toBeGreaterThan(3)
+  })
+})
+
 test.describe('Page Up and Page Down', () => {
   test.skip(process.platform !== 'darwin', 'On a Mac they scroll; elsewhere they move the caret a page')
 
@@ -223,6 +265,33 @@ test.describe('macOS key bindings', () => {
     await editor.expectCaret('subtitle', 13)
     await page.keyboard.press('Alt+ArrowUp')
     await editor.expectCaret('subtitle', 0)
+  })
+
+  test('with Shift, they select to the start and the end of the field, then of the next', async ({ page, browserName }) => {
+    test.skip(browserName === 'firefox', "Playwright's Firefox ignores macOS key bindings")
+    const editor = await openEditor(page)
+    await editor.placeCaret('title', 4)
+
+    await page.keyboard.press('Alt+Shift+ArrowDown')
+    expect(await editor.selection()).toEqual({ anchor: { field: 'title', offset: 4 }, focus: { field: 'title', offset: 16 } })
+    await page.keyboard.press('Alt+Shift+ArrowDown')
+    expect(await editor.selection()).toEqual({ anchor: { field: 'title', offset: 4 }, focus: { field: 'subtitle', offset: 13 } })
+    await page.keyboard.press('Alt+Shift+ArrowUp')
+    expect(await editor.selection()).toEqual({ anchor: { field: 'title', offset: 4 }, focus: { field: 'subtitle', offset: 0 } })
+    await page.keyboard.press('Alt+Shift+ArrowUp')
+    expect(await editor.selection()).toEqual({ anchor: { field: 'title', offset: 4 }, focus: { field: 'title', offset: 0 } })
+  })
+
+  test('with Shift, in a wrapped list item, Option+Down selects to the end of the item', async ({ page, browserName }) => {
+    test.skip(browserName === 'firefox', "Playwright's Firefox ignores macOS key bindings")
+    const words = 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau'
+    const document = await createDocument(`---\ntitle: T\n---\n\n- One\n- ${words} ${words} ${words}\n\nAfter the list.\n`)
+    const editor = await document.open(page)
+    await editor.placeCaretInLine(1, 6)
+
+    await page.keyboard.press('Alt+Shift+ArrowDown')
+
+    expect(await editor.selectedText()).toBe(`${words} ${words} ${words}`.slice(6))
   })
 
   test('Ctrl+K deletes to the end of the line', async ({ page, browserName }) => {

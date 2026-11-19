@@ -173,6 +173,8 @@ test.describe('Tab and Shift+Tab', () => {
   test('with a selection, they indent and outdent every item it is on', async ({ page }) => {
     const editor = await openEditor(page, 'nested-lists')
     await editor.placeCaretInLine(5, 2)
+    // To the end of the line's text, then on to the next line.
+    await page.keyboard.press('Shift+ArrowDown')
     await page.keyboard.press('Shift+ArrowDown')
 
     await page.keyboard.press('Tab')
