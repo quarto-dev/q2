@@ -17,6 +17,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { connect } from 'node:net';
 import path from 'node:path';
+import { buildFixtureRepo, type FixtureBranches, type GitRepo } from './gitRepo';
 
 /**
  * Poll-connect a TCP port until it accepts. The CLI prints its URL
@@ -69,6 +70,8 @@ export interface PreviewServerHandle {
    * `share`, or prints none within the timeout.
    */
   joinTicket(timeoutMs?: number): Promise<string>;
+  /** The git repository of a `gitRepo: true` project (GE-13), bound to `projectDir`; absent otherwise. */
+  repo?: GitRepo & FixtureBranches;
   /** Stop the server and remove its temp dirs. */
   stop(): Promise<void>;
 }
@@ -214,6 +217,17 @@ export interface StartOptions {
    */
   extraEnv?: Record<string, string>;
   /**
+   * GE-13: pass `--git <value>` (`track` follows the owner's git operations; `ignore` is today's behavior). Absent
+   * passes no flag.
+   */
+  git?: 'track' | 'ignore';
+  /**
+   * GE-13: make the project a real git repository before the server starts, with the shared fixture (`main` holds
+   * `_quarto.yml`, `index.qmd`, `a.qmd`, `c.qmd`, and `img/logo.png`; `feature` changes `a.qmd` and the logo, removes
+   * `c.qmd`, and adds `b.qmd`), left on `main`. Replaces `fixtureFiles` and `copyFromDir`; pass neither. Exposed as `handle.repo`.
+   */
+  gitRepo?: boolean;
+  /**
    * bd-eip0naf4: launch `q2 preview --static --no-watch` instead of the
    * default hub/SPA preview — render the project to `_site/` through
    * the `q2 render` path and serve it as plain HTML. The SUT is then
@@ -268,7 +282,10 @@ async function copyDirRecursive(src: string, dst: string): Promise<void> {
  */
 export async function startPreviewServer(opts: StartOptions): Promise<PreviewServerHandle> {
   const inlineCount = opts.fixtureFiles?.length ?? 0;
-  if (inlineCount === 0 && !opts.copyFromDir) {
+  if (opts.gitRepo && (inlineCount > 0 || opts.copyFromDir)) {
+    throw new Error('startPreviewServer: gitRepo builds its own project; do not pass fixtureFiles or copyFromDir');
+  }
+  if (inlineCount === 0 && !opts.copyFromDir && !opts.gitRepo) {
     throw new Error(
       'startPreviewServer: provide fixtureFiles or copyFromDir',
     );
@@ -282,7 +299,10 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
   const projectDir = await mkdtemp(path.join(tmpdir(), 'q2-preview-e2e-proj-'));
   const dataDir = await mkdtemp(path.join(tmpdir(), 'q2-preview-e2e-data-'));
 
-  if (opts.copyFromDir) {
+  let repo: (GitRepo & FixtureBranches) | undefined;
+  if (opts.gitRepo) {
+    repo = buildFixtureRepo(projectDir);
+  } else if (opts.copyFromDir) {
     await copyDirRecursive(opts.copyFromDir, projectDir);
   } else {
     for (const file of opts.fixtureFiles!) {
@@ -316,6 +336,7 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
       ...(opts.allowEdit ? ['--allow-edit'] : []),
       ...(opts.ui === 'editor' ? ['--ui', 'editor'] : []),
       ...(opts.share ? ['--share'] : []),
+      ...(opts.git ? ['--git', opts.git] : []),
       // Single-file mode targets one file inside the temp project;
       // project mode targets the directory (the default).
       opts.targetFile ? path.join(projectDir, opts.targetFile) : projectDir,
@@ -367,6 +388,7 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
     port,
     projectDir,
     dataDir,
+    repo,
     serverLog: () => serverLog,
     joinTicket: (timeoutMs = 30_000) => ticketFrom(() => serverLog, opts.share === true, timeoutMs),
     async stop() {
