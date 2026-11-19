@@ -69,6 +69,12 @@ export class HeadlessOwner {
     return this.index.heads() as string[];
   }
 
+  /** The text of the doc currently listed at `path` as this owner sees it. */
+  textOf(path: string): string | undefined {
+    const docId = this.docIdOf(path);
+    return docId ? this.docs.get(docId)?.doc()?.text : undefined;
+  }
+
   docIdOf(path: string): string | undefined {
     return this.index.doc()?.files[path];
   }

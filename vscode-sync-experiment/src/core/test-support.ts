@@ -191,3 +191,66 @@ export class Seeder {
 export async function startHub(): Promise<TestHub> {
   return startTestHub();
 }
+
+/** A clock tests advance by hand; `advance` runs due timers in order and lets async work settle. */
+export class ManualClock {
+  t = 1_000_000;
+  private next = 1;
+  private readonly timers = new Map<number, { at: number; fn: () => void }>();
+  now(): number {
+    return this.t;
+  }
+  readonly setTimeout = ((fn: () => void, ms = 0) => {
+    const id = this.next++;
+    this.timers.set(id, { at: this.t + ms, fn });
+    return id as unknown as ReturnType<typeof setTimeout>;
+  }) as unknown as typeof setTimeout;
+  readonly clearTimeout = ((id: unknown) => void this.timers.delete(id as number)) as unknown as typeof clearTimeout;
+  private async settle(): Promise<void> {
+    for (let i = 0; i < 4; i++) await new Promise((r) => setImmediate(r));
+  }
+  async advance(ms: number): Promise<void> {
+    const target = this.t + ms;
+    for (;;) {
+      let due: [number, { at: number; fn: () => void }] | undefined;
+      for (const e of this.timers) if (e[1].at <= target && (!due || e[1].at < due[1].at)) due = e;
+      if (!due) break;
+      this.timers.delete(due[0]);
+      this.t = Math.max(this.t, due[1].at);
+      due[1].fn();
+      await this.settle();
+    }
+    this.t = target;
+    await this.settle();
+  }
+}
+
+/** A git probe with state the test sets: HEAD, gate markers, and the reflog. */
+export class FakeGitProbe {
+  head: string | null = 'h1';
+  markers: { name: string; kind: 'lock' | 'state'; mtimeMs: number }[] = [];
+  reflog: { size: number; mtimeMs: number } | null = { size: 100, mtimeMs: 1 };
+  subjects: string[] = [];
+  constructor(private readonly clock: { now(): number }) {}
+  async headSha(): Promise<string | null> {
+    return this.head;
+  }
+  cheapState() {
+    return { markers: [...this.markers], reflog: this.reflog };
+  }
+  async reflogSince() {
+    if (!this.reflog) return null;
+    return { subjects: [...this.subjects], tail: { sha: String(this.head), lines: 1 }, markFound: true };
+  }
+  /** git takes `index.lock`. */
+  lock(): void {
+    this.markers = [{ name: 'index.lock', kind: 'lock', mtimeMs: this.clock.now() }];
+  }
+  /** git releases the lock after writing a reflog entry. */
+  unlock(subject = 'checkout: moving from main to side', head = 'h2'): void {
+    this.markers = [];
+    this.head = head;
+    this.subjects.push(subject);
+    this.reflog = { size: (this.reflog?.size ?? 0) + 80, mtimeMs: (this.reflog?.mtimeMs ?? 0) + 1 };
+  }
+}

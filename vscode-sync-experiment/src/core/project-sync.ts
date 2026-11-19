@@ -33,12 +33,13 @@ import {
   type IndexDocument,
 } from '@quarto/quarto-automerge-schema';
 import { writeFileDoc, type FileDoc } from './create-folder';
+import { EditorGate, type GateBuffer, type GateClock } from './editor-gate';
 import { Follower, type Clock } from './follower';
 import type { BufferBinding, SyncHost } from './host';
 import { META_DIR, isIgnoredPath } from './ignore';
 import { META_FILE, type ProjectMeta, type ProjectMode } from './meta';
 import type { Identity } from './presence';
-import { movedNotice } from '@quarto/quarto-git-epochs';
+import { movedNotice, type ControllerProbe } from '@quarto/quarto-git-epochs';
 import { findDoc, makeRepo, webSocketAdapter } from './repo';
 import { UnsafePathError, safeJoin } from './safe-path';
 import type { TextDoc } from './text-binding';
@@ -49,11 +50,17 @@ export interface SyncOptions {
   swapTimeoutMs?: number;
   /** Timers for the swap coordinator; default: the real ones. */
   clock?: Clock;
+  /**
+   * Editor-only mode: the git gate's probe and clock. Default: a real git probe on the project
+   * directory (no gate when it is not inside a git repository) and the real clock.
+   */
+  gate?: { probe: ControllerProbe; clock: GateClock; flipWaitMs?: number };
 }
 
 export class ProjectSync {
   readonly mode: Exclude<ProjectMode, 'clone'>;
   private follower!: Follower;
+  private gate: EditorGate | null = null;
   private repo!: Repo;
   private index!: DocHandle<IndexDocument>;
   private readonly handles = new Map<string, DocHandle<FileDoc>>(); // rel path -> handle
@@ -113,6 +120,7 @@ export class ProjectSync {
         loadDoc: (docId, signal) => this.loadDoc(docId, signal),
         rebind: (rel, newHandle, oldHandle) => this.rebind(rel, newHandle, oldHandle),
         isOpen: (rel) => this.host.buffers.getText(this.absOf(rel)) !== null,
+        onSwapped: (rel) => this.gate?.noteSwapped(rel),
         notifier: this.host.notifier,
         log: (line) => this.log.appendLine(line),
         clock: this.options.clock ?? { setTimeout, clearTimeout },
@@ -120,6 +128,7 @@ export class ProjectSync {
       { swapTimeoutMs: this.options.swapTimeoutMs },
     );
     this.cleanups.push(() => this.follower.dispose());
+    if (this.mode === 'editor-only') await this.startGate();
 
     const { watcher, buffers } = this.host;
     if (this.writesDisk) {
@@ -223,6 +232,7 @@ export class ProjectSync {
       // The Binding keeps the handle it was created with; the base doc id tells the follower
       // whether an edit landed in a doc that is being, or has been, replaced.
       onLocalEdit: () => this.follower?.noteLocalEdit(rel, handle.documentId),
+      suspended: () => this.gate?.isClosed() ?? false,
       onMoved: (name) => this.host.notifier.status(movedNotice(name), 3000),
     });
     if (binding) this.bound.set(abs, binding);
@@ -337,6 +347,44 @@ export class ProjectSync {
       if (abs !== null) await fs.rmdir(abs).catch(() => {});
     }
     this.knownFolders = folders;
+  }
+
+  /** Editor-only: the git gate. No gate (always open) when the folder is not inside a git repository. */
+  private async startGate(): Promise<void> {
+    let gate = this.options.gate;
+    if (!gate) {
+      const { createGitProbe } = await import('@quarto/quarto-git-epochs/probe');
+      const probe = createGitProbe({ cwd: this.root });
+      await probe.ready().catch(() => {}); // not a repository: the controller goes off at init
+      gate = { probe, clock: { now: () => Date.now(), setTimeout, clearTimeout } };
+    }
+    this.gate = new EditorGate({
+      probe: gate.probe,
+      clock: gate.clock,
+      notifier: this.host.notifier,
+      log: (line) => this.log.appendLine(line),
+      flipWaitMs: gate.flipWaitMs,
+      inspect: () => this.inspectBuffers(),
+      reconcile: () => this.bound.forEach((b) => b.reconcile?.()),
+    });
+    await this.gate.start();
+    this.cleanups.push(() => this.gate?.dispose());
+  }
+
+  private inspectBuffers(): GateBuffer[] {
+    const out: GateBuffer[] = [];
+    for (const abs of this.bound.keys()) {
+      const rel = this.relOf(abs);
+      if (!rel) continue;
+      const doc = this.handles.get(rel)?.doc();
+      out.push({
+        rel,
+        text: this.host.buffers.getText(abs),
+        docText: isTextDocument(doc) ? doc.text : undefined,
+        dirty: this.host.buffers.isDirty(abs),
+      });
+    }
+    return out;
   }
 
   /**
