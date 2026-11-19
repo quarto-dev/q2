@@ -90,6 +90,7 @@ describe('detach (spec 8)', () => {
     expect(await readDisk(e, 'a.qmd')).toBe('A2 shared\n');
     expect(e.sync.cloneState()!.detached).toEqual([]);
     expect(docIdOf(e, 'a.qmd')).toBe(other);
+    expect((await events(e)).map((x) => x.event)).toEqual(expect.arrayContaining(['switched', 'detached', 'reattached']));
   });
 
   it('re-attaches automatically when the contents become equal', async () => {
@@ -340,5 +341,27 @@ describe('hostile keys (spec 16)', () => {
     expect(await fs.stat(path.join(e.clone, '..', 'escaped.qmd')).then(() => true, () => false)).toBe(false);
     expect(await fs.stat(path.join(e.clone, '.vscode', 'tasks.json')).then(() => true, () => false)).toBe(false);
     expect(Object.keys(e.sync.cloneState()!.attached)).toEqual(['a.qmd']);
+  });
+});
+
+describe('a doc live under one path only (G12)', () => {
+  it('a canonical doc that is also registered under another path is forked, not shared', async () => {
+    const e = await env({ 'a.qmd': 'A\n', 'b.qmd': 'B\n' }, sideBranch);
+    const bDoc = docIdOf(e, 'b.qmd')!;
+    // b.qmd's doc is also registered as the doc for a.qmd's side blob: one doc under two paths.
+    await e.other.registerExisting('a.qmd', blobOf(e, 'a.qmd', 'side'), bDoc, 5);
+    await waitFor(() => e.sync.registryView().entries.some((x) => x.path === 'a.qmd' && x.doc === bDoc), 'the shared registration');
+    await e.other.edit(bDoc, 'A2\n'); // the shared doc's text now equals what `side` puts in a.qmd (step 3 would attach it)
+    const aBefore = docIdOf(e, 'a.qmd');
+    await waitFor(async () => (await readDisk(e, 'b.qmd')) === 'A2\n', 'the edit on b.qmd');
+    git(e.clone, 'switch', '-q', 'side');
+    await e.settle(() => docIdOf(e, 'a.qmd') !== aBefore);
+    const forked = docIdOf(e, 'a.qmd')!;
+    expect(forked).not.toBe(bDoc);
+    expect(e.sync.docText('a.qmd')).toBe('A2\n');
+    expect(docIdOf(e, 'b.qmd')).toBe(bDoc);
+    await e.other.edit(bDoc, 'B changed later\n');
+    await sleep(300);
+    expect(e.sync.docText('a.qmd')).toBe('A2\n'); // the fork diverges independently
   });
 });

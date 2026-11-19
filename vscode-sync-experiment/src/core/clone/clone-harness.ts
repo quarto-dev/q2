@@ -54,6 +54,11 @@ export class OtherPeer {
     await this.flush();
     return h.documentId;
   }
+  /** Register an existing doc under another `(path, blob)`: the same doc live under two paths. */
+  async registerExisting(p: string, blob: string, doc: string, gen: number): Promise<void> {
+    this.registry.register({ path: p, blob, doc, gen });
+    await this.flush();
+  }
   async registerBinary(p: string, blob: string, content: Uint8Array, hash: string): Promise<string> {
     const h = this.repo.create<unknown>({ content, mimeType: 'image/png', hash });
     this.registry.register({ path: p, blob, doc: h.documentId, gen: this.registry.nextGeneration(p) });
