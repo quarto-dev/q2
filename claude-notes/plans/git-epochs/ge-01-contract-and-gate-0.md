@@ -95,7 +95,7 @@ the run as ran, read, or not done. **Stop rule:** if any check except 12 fails, 
 GE-5, GE-6, or GE-8, and bring it to Gordon (D21). Do not degrade silently. Items 3, 11, and 13 are the exceptions that
 record an answer instead of passing or failing (see part two).
 
-- [ ] **6.** In Automerge (JS and Rust, two actors), with the flat registry: concurrent creation of one key, and of
+- [x] **6.** In Automerge (JS and Rust, two actors), with the flat registry: concurrent creation of one key, and of
   different keys under a new path, both survive (the nested form loses one side; the second review reproduced it, so
   write these tests first and watch a nested variant fail); a concurrent delete and put of one key leaves the put; a
   retired entry is never removed. A NUL byte in a key and an integer generation survive a save and load in both
@@ -109,11 +109,11 @@ record an answer instead of passing or failing (see part two).
   identical reflog subject (`reset: moving to HEAD`), that a repo with `core.logAllRefUpdates=false` has no `.git/logs`
   directory at all, and that `git rev-parse --git-path` gives per-worktree paths in a linked worktree; confirm each
   here and write them into the classify fixtures.
-- [ ] **8.** JS doc forking in automerge-repo `2.6.0-alpha.5`: `repo.clone(handle)` exists (`Repo.d.ts:82`) and the
+- [x] **8.** JS doc forking in automerge-repo `2.6.0-alpha.5`: `repo.clone(handle)` exists (`Repo.d.ts:82`) and the
   second review saw a new doc id with the history length kept on both sides; confirm that the fork keeps history, can
   diverge, and syncs through the test hub. If it does not sync, the fallback is a doc created from the content with no
   history; write that into the contract as the fork fallback (G12) and into the arrival fixtures.
-- [ ] **9.** A registry doc in the flat form for 5,000 and 15,000 entries with three moves each, and one for a repo
+- [x] **9.** A registry doc in the flat form for 5,000 and 15,000 entries with three moves each, and one for a repo
   with many large binary files: saved size and load time in JS and Rust. The second review measured about 110 KB and
   37 ms at 5,000 entries and 331 KB and 91 ms at 15,000 in JS, with no binary-heavy case; the binary-heavy case is the
   open part. Write the soft limit into the contract.
@@ -305,4 +305,24 @@ The logic itself (GE-2, GE-5), the swap module and the notice texts (GE-6), adop
   writes the reflog, and G1's 500 ms mtime skip applies. For `reset --hard` the branch ref write follows the reflog
   by about 0.1 ms; `switch` writes no branch ref (only HEAD). `pull --ff-only` was a near-instant no-op in my run, so
   its ordering is not measured.
-- Not started: Gate 0 items 6, 8, 9 and part two; the contract, package, schemas, fixtures. No code changed.
+- Gate 0 item 6, JS side, ran (`@automerge/automerge` 3.5.0, two actors, scratch script, 9 checks, all as expected):
+  two docs for one path and blob both survive; identical keys from both sides merge to one; different keys under a new
+  path both survive in the flat form while the nested form loses one side (demonstrated); a concurrent delete and put
+  of one key leaves the put, in both merge orders; a retired key survives a concurrent unrelated delete; a NUL byte in
+  a key and an `Int` generation survive save and load (an `Int` and a plain integer both read back as a JS number).
+  **Contract consequence:** the `entries` and `retired` maps themselves must be created exactly once, by the writer
+  that creates the sidecar doc (my first draft of the test created the base twice and reproduced the nested loss at
+  the map level). The Rust side of item 6 becomes permanent tests in `quarto-hub` and the TypeScript side permanent
+  tests in the package; neither is written yet, so item 6 is **half done** (JS ran, Rust not).
+- Gate 0 item 8 ran (automerge-repo `2.6.0-alpha.5`, two client repos and a websocket hub in one process):
+  `repo.clone(handle)` returns a new doc id and the full history (3 changes on both sides); the fork and the original
+  diverge independently; a second client finds the fork over the network, sees its content and history, and an edit
+  from that client reaches the first client's fork without touching the original. No fallback is needed.
+- Gate 0 item 9 ran in JS only (`save`/`load`, random git blob ids, 50 directories, `.qmd` and `.png` paths): 5,000
+  entries 231 KB (no moves), 648 KB after three moves each, save 30 ms, load 38 ms; 15,000 entries after three
+  moves 1,947 KB, save 96 ms, load 98 ms (64-hex ids: 1,965 KB, 103 ms); 2,000 entries 259 KB, 13 ms. These are
+  larger than the second review\'s figures (110 KB at 5,000) because my keys carry incompressible random ids. A
+  repo with many large binaries costs the same as one with many small files, since a key holds the blob id and not
+  the content; only the number of tracked paths matters. Proposed soft limit for the contract: 15,000 tracked paths
+  (about 2 MB and 100 ms load); above it the sidecar warns and still works. Rust timing was not measured.
+- Not started: Gate 0 part two; the contract, package, schemas, fixtures. No repository code changed yet.
