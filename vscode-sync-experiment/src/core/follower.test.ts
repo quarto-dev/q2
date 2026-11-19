@@ -159,3 +159,53 @@ describe('notices (G26)', () => {
     expect(messages()[0]).not.toContain('stayed with the previous version');
   });
 });
+
+describe('moved message, event log, and legacy folders', () => {
+  it('sends the moved message on the old binding before disposing it (G25)', async () => {
+    const { root } = await mirrorOf({ 'a.qmd': 'A1\n' });
+    const abs = path.join(root, 'a.qmd');
+    host.buffers.open(abs, 'A1\n');
+    await waitFor(() => host.buffers.bindings.has(abs), 'the buffer binding');
+    owner.flipPath('a.qmd', owner.createDocFor('a.qmd', 'A2\n'));
+    await owner.flush();
+    await waitFor(() => host.buffers.texts.get(abs) === 'A2\n', 'the swap');
+    expect(host.buffers.bindingEvents).toEqual([`moved:${abs}`, `dispose:${abs}`]);
+    expect(host.buffers.bindings.has(abs)).toBe(true); // rebound to the new doc
+  });
+
+  it('logs a flipped event with the old and new doc ids', async () => {
+    const { root } = await mirrorOf({ 'a.qmd': 'A1\n' });
+    const oldDoc = owner.docIdOf('a.qmd')!;
+    const newDoc = owner.createDocFor('a.qmd', 'A2\n');
+    owner.flipPath('a.qmd', newDoc);
+    await owner.flush();
+    await waitFor(async () => (await readText(path.join(root, 'a.qmd'))) === 'A2\n', 'the swap');
+    const lines = (await readText(path.join(root, '.quarto-hub', 'events.jsonl')))!.split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    expect(lines.find((e) => e.event === 'flipped')).toMatchObject({ path: 'a.qmd', source: 'hub', from: oldDoc, to: newDoc });
+  });
+
+  it('a folder created before the mode existed starts as a mirror and follows a flip', async () => {
+    owner = await HeadlessOwner.create(hub, { 'a.qmd': 'A1\n' });
+    const root = await createProjectFolder(owner.indexDocId, parent, host.log, { syncServer: hub.url });
+    // Rewrite project.json the way an older extension wrote it: no `mode`.
+    const metaPath = path.join(root, '.quarto-hub', 'project.json');
+    const old = JSON.parse((await readText(metaPath))!);
+    delete old.mode;
+    await fs.writeFile(metaPath, JSON.stringify(old));
+    const meta = await readProjectMeta(root);
+    expect(meta?.mode).toBe('mirror');
+    const sync = new ProjectSync(root, meta!, identity, host);
+    syncs.push(sync);
+    await sync.start();
+    expect(sync.mode).toBe('mirror');
+    owner.flipPath('a.qmd', owner.createDocFor('a.qmd', 'A2\n'));
+    await owner.flush();
+    await waitFor(async () => (await readText(path.join(root, 'a.qmd'))) === 'A2\n', 'the flip on disk');
+  });
+
+  it('createProjectFolder writes mode: mirror', async () => {
+    owner = await HeadlessOwner.create(hub, { 'a.qmd': 'A1\n' });
+    const root = await createProjectFolder(owner.indexDocId, parent, host.log, { syncServer: hub.url });
+    expect(JSON.parse((await readText(path.join(root, '.quarto-hub', 'project.json')))!).mode).toBe('mirror');
+  });
+});
