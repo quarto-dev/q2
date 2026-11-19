@@ -76,21 +76,21 @@ Known failures to ignore: none at the start. Copy any from GE-15\'s notes that a
 
 Items marked (agent) run on macOS; items marked (Gordon) need the Windows machine.
 
-- [ ] (agent) Confirm GE-11, GE-12, and GE-15 are complete, and read GE-15\'s notes for the tooling file names.
-- [ ] (agent) Add any missing test for `b2` or `b3` on `ge/16-windows-run-b` first (tests only, no product code; they
+- [x] (agent) Confirm GE-11, GE-12, and GE-15 are complete, and read GE-15\'s notes for the tooling file names.
+- [x] (agent) Add any missing test for `b2` or `b3` on `ge/16-windows-run-b` first (tests only, no product code; they
   also run on macOS), land it by rebase and fast-forward, and note the commit.
-- [ ] (agent) Bring the tooling branch up to the current tip by merging, never by rebasing a pushed branch:
+- [x] (agent) Bring the tooling branch up to the current tip by merging, never by rebasing a pushed branch:
   `git merge feature/git-epochs` run inside the tooling worktree GE-15 created,
   `/Users/gordon/src/q2/.worktrees/windows-git-epochs` (the branch is checked out there, so no lane worktree can switch
   to it; do all tooling work in that worktree, and keep this plan\'s own notes on `ge/16-windows-run-b` in your lane
   worktree). Record the base commit hash in the notes.
-- [ ] (agent) Extend `scripts/git-epochs-windows/run.ps1` with items `b1` to `b7`. Each uses `Invoke-Logged` and
+- [x] (agent) Extend `scripts/git-epochs-windows/run.ps1` with items `b1` to `b7`. Each uses `Invoke-Logged` and
   `Add-Result`, fills `proves` and `does_not_prove`, and runs alone with `-Only`.
-- [ ] (agent) Extend the instructions page on the tooling branch, `claude-notes/plans/git-epochs/windows-run-instructions.md`
+- [x] (agent) Extend the instructions page on the tooling branch, `claude-notes/plans/git-epochs/windows-run-instructions.md`
   (detail chosen by the plan author; confirm it is the path GE-15 uses): Node at the `.nvmrc` major, a clean clone with
   `core.autocrlf=true` and `core.longpaths=true`, optional `jj`, `-SkipBuild` when GE-15\'s build is still in `target\`,
   and the table above.
-- [ ] (agent) Gate the tooling before handoff: syntax-check the script with `pwsh` if installed (parse only, run
+- [x] (agent) Gate the tooling before handoff: syntax-check the script with `pwsh` if installed (parse only, run
   nothing); `uv run scripts/git-epochs-windows/extract_failures.py --help`; `q2 render --strict` the instructions page.
 - [ ] (agent) Ask Gordon to say go. Then push the tooling branch with the explicit refspec, unsilenced:
   `git push origin windows/git-epochs:windows/git-epochs`, and check that `git ls-remote origin windows/git-epochs`
@@ -133,4 +133,61 @@ which were not run.
 
 ## Notes from the run
 
-Not started.
+**Session 1 (paused at the first Gordon step: say go before the push).**
+
+**Preconditions.** GE-11, GE-12, and GE-15 were `status: done` on `feature/git-epochs` (tip `60e8955c1`) when the session
+started; GE-15\'s notes name the tooling files: `scripts/git-epochs-windows/{run.ps1,items.json,extract_failures.py,
+make_large_tree.py}`, `results/`, and the instructions page `claude-notes/plans/git-epochs/windows-run-instructions.md`
+(the path this plan guessed was right).
+
+**Deviation: the tooling worktree path.** The plan says `/Users/gordon/src/q2/.worktrees/windows-git-epochs`; GE-15
+created it inside lane B\'s worktree, at `/Users/gordon/src/q2/.worktrees/workspace-8/.worktrees/windows-git-epochs`
+(branch `windows/git-epochs`). It was clean, so I did the tooling work there and nowhere else in lane B\'s worktree.
+
+**Tests added on `ge/16-windows-run-b`** (tests only, no product code; commits `b16d26e56`, `2304805e1`, `58dd9cda0`).
+Everything the catalog names for `b2` and `b3` already had a macOS test except the rows below, so only these were added:
+
+- `safe-path.test.ts`: a key over 260 characters is accepted by `safeJoin` and a file can be written through the result
+  (it passes on macOS, by design: Node uses the extended-length form itself on Windows); and an 8.3 `GIT~1` row that
+  creates `.git`, asks the volume for the short name, and expects `safeJoin(root, 'GIT~1/hooks/pre-commit')` to be
+  rejected. **That row skips on macOS, so I never saw it fail or pass.** Reading `safeJoin`, I expect it to fail on a
+  volume with short names: the segment check does not know `GIT~1`, and the `realpath` check only asks whether the
+  resolved ancestor stays inside the root, which `.git` does. If the Windows run shows that failure, it is a product
+  defect (a proposed fix plan, not a fix here).
+- `record.test.ts`: the atomic write of `git-epochs.json` retries a rename refused with `EPERM` (two refusals, then
+  success, no temp file left) and gives up after repeated `EBUSY` leaving the old record and no temp file. These ran red
+  against a mutated `record.ts` (`attempt < 0`), then green. They inject the error through a `vi.mock` of
+  `node:fs/promises`, because a `vi.spyOn` on the namespace does not intercept the module\'s own import. The rebind
+  deletion (no `EBUSY`) already had `clone-modes.test.ts`.
+- Not added, because covered: case collisions (`registry.test.ts`), CRLF through the content rule and arrival
+  (`paths.test.ts`, `arrival.test.ts`, the `autocrlf-checkout` scenario, the clone `arrival.test.ts` step 3), junctions
+  and `.git.`, trailing space, and `::$INDEX_ALLOCATION` (`safe-path.test.ts`).
+- Gates: `npm run typecheck -w quarto-hub-vscode` clean (an early commit had a type error, `fs.promises.realpath` has no
+  `.native`; fixed in `2304805e1`), and the extension\'s vitest files I touched pass (29 passed, 1 skipped in
+  `safe-path`; 4 in `record`).
+
+**Tooling branch** (`windows/git-epochs`, still local only, nothing pushed). I merged `feature/git-epochs` (`60e8955c1`)
+into it, then `ge/16-windows-run-b`, so the base the Windows machine will run includes the new tests. Commit `12031c1db`
+("GE-16 tooling: Windows run B items b1 to b7 ...", temporary, never lands) is the tip.
+`run.ps1` gained items `b1` to `b7`, each through `Invoke-Logged` and `Add-Result` with `proves` and `does_not_prove`,
+runnable alone with `-Only`. `b7` runs first: a clean root `npm ci`, then the extension typecheck and esbuild bundle and
+the build of every `ts-packages` workspace; the other items skip if that install fails (they reuse `node_modules` when
+`b7` is not selected). A `b`-only run no longer requires Rust, NASM, or CMake. The script also records the Node version
+and warns when its major differs from `.nvmrc`. Each item has a `min_tests` guard set below the macOS count (guard,
+macOS count): `b1` 150 (205); `b2` 80 (94, one skipped on macOS); `b3` 70 (91); `b4` 100 (129); `b5` 45 (58); `b6` 50 (64).
+`b4` through `b6` run the extension\'s vitest files named in the instructions page.
+Differences from the plan\'s table, stated plainly: `b6` runs the existing headless owner, publish, and origination
+tests, which use an **in-process** hub, not a separate `q2 hub` process; `b5` does not script the optional real `--share`
+and `--join` pair (the instructions page lists it as a by-hand step); `b1` has no separate jj switch (the jj scenarios
+skip when `jj` is absent).
+
+**Gates run on this host.** `uv run scripts/git-epochs-windows/extract_failures.py --help` prints usage. `q2 render --strict`
+of the instructions page shows no error of its own; the one error is the pre-existing Q-2-7 in
+`2026-09-21-book-projects-P0-number-sections.md`. **`pwsh` is not installed on this host, so `run.ps1` was reviewed by
+reading only; it has never been parsed or run.** Expect a first-run syntax or logic fix from the Windows machine (GE-15\'s
+script ran first time, but this change is large). The macOS counts above come from running each item\'s vitest files here.
+
+**Where it stopped.** The next step is Gordon\'s: say go, then
+`git push origin windows/git-epochs:windows/git-epochs` from the tooling worktree and check `git ls-remote origin
+windows/git-epochs` against `git rev-parse HEAD`. The plan is **not landed**; it stays on `ge/16-windows-run-b`.
+Checklist items still open: the push, the Windows run, recording the results, classifying failures, and the final landing.
