@@ -16,12 +16,14 @@ import {
   from as automergeFrom,
   save as automergeSerialize,
   getChanges as automergeGetChanges,
+  getChangesSince as automergeGetChangesSince,
   decodeChange as automergeDecodeChange,
   getActorId as automergeGetActorId,
   getBackend as automergeGetBackend,
 } from '@automerge/automerge';
 import type { NetworkAdapter } from '@automerge/automerge-repo/slim';
 
+import { createSwapCoordinator, type SwapCoordinator } from '@quarto/quarto-git-epochs';
 import { StoppableWebSocketClientAdapter } from './StoppableWebSocketClientAdapter.js';
 
 import { buildStorageAdapter } from './storage-adapter.js';
@@ -106,6 +108,11 @@ const DEFAULT_REQUIRE_ONLINE_TIMEOUT_MS = 15_000;
 function normalizeDocId(docId: string): string {
   const docIdStr = String(docId);
   return docIdStr.startsWith('automerge:') ? docIdStr : `automerge:${docIdStr}`;
+}
+
+/** The bare document id (no `automerge:` prefix), the form `DocHandle.documentId` uses. */
+function bareDocId(docId: string): string {
+  return normalizeDocId(docId).slice('automerge:'.length);
 }
 
 /**
@@ -528,6 +535,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
   // AST cache: last successful parse per file (for round-tripping)
   const astCache = new Map<string, { source: string; ast: unknown }>();
+
+  // The swap coordinator (GE-7, G26): follows the project owner's flip of `files[path]` to a different doc. Built on
+  // connect and disposed on disconnect, because its host closes over the connection's repo.
+  let swap: SwapCoordinator<DocHandle<FileDocument>> | null = null;
 
   // Resolved file filter
   const astFileFilter = astOptions?.fileFilter ?? defaultFileFilter;
@@ -1277,12 +1288,14 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
           type: 'binary',
           data: normalized.content,
           mimeType: normalized.mimeType,
+          docId: handle.documentId,
         });
       } else if (docType === 'text' && isTextDocument(doc)) {
         const text = doc.text || '';
         callbacks.onFileAdded(path, {
           type: 'text',
           text,
+          docId: handle.documentId,
         });
         tryParseAndNotify(path, text);
       } else {
@@ -1291,7 +1304,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
           console.warn(`Document at ${path} has invalid structure but binary extension, skipping`);
         } else {
           console.warn(`Document at ${path} has invalid structure, treating as empty text`);
-          callbacks.onFileAdded(path, { type: 'text', text: '' });
+          callbacks.onFileAdded(path, { type: 'text', text: '', docId: handle.documentId });
         }
       }
     }
@@ -1419,6 +1432,12 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     const entries = Array.from(state.unavailableFiles.entries());
     await Promise.all(
       entries.map(async ([path, docId]) => {
+        if (state.fileHandles.has(path)) {
+          // A flipped path whose new doc was unavailable: the old doc is still bound, so the retry is a swap, not a
+          // fresh subscription. The marker stays until the swap completes (rebind clears it).
+          swap?.indexChanged(path, bareDocId(docId));
+          return;
+        }
         try {
           const handle = await findDoc<FileDocument>(normalizeDocId(docId) as DocumentId);
           state.unavailableFiles.delete(path);
@@ -1459,10 +1478,89 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     }
   }
 
+  // Rejects when `signal` aborts; the wrapped promise keeps running but its result is ignored.
+  function abortable<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new Error('aborted'));
+        return;
+      }
+      signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      p.then(resolve, reject);
+    });
+  }
+
+  /**
+   * How many of this peer's edits to `handle` no storage-backed peer has confirmed yet (typed while offline, for
+   * example). Counted as stranded when a swap starts, because they are already in the old doc and never pass through
+   * `resolveWriteTarget` (GE-6's `unconfirmedLocalEdits`). With a confirmed baseline this is the number of changes
+   * since it; with none it is 1 when the doc has a local change that was never delivered.
+   */
+  function unconfirmedLocalEdits(handle: DocHandle<FileDocument>): number {
+    try {
+      if (isDelivered(handle as unknown as DocHandle<unknown>)) return 0;
+      const doc = handle.doc();
+      for (const storageId of new Set(state.peerStorageIds.values())) {
+        const info = handle.getSyncInfo(storageId as StorageId);
+        if (info) return automergeGetChangesSince(doc as never, [...info.lastHeads]).length;
+      }
+      const activity = getDocSyncActivityWithPersisted(String(handle.documentId));
+      return activity.lastLocalChangeAt &&
+        (activity.lastLocalDeliveredAt ?? 0) < activity.lastLocalChangeAt
+        ? 1
+        : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  // Build the swap coordinator for a new connection (GE-7). Its host rebinds a path in place: the old handle's
+  // change handler is detached, the caches for the path are dropped, and `subscribeToFile` rebinds and re-fires
+  // `onFileAdded` with the new doc.
+  function startSwap(): void {
+    swap?.dispose();
+    swap = createSwapCoordinator<DocHandle<FileDocument>>({
+      currentDocId: (path) => {
+        const h = state.fileHandles.get(path);
+        return h === undefined ? undefined : String(h.documentId);
+      },
+      currentHandle: (path) => state.fileHandles.get(path),
+      loadDoc: (docId, signal) =>
+        abortable(findDoc<FileDocument>(normalizeDocId(docId) as DocumentId), signal),
+      rebind: async (path, _newDocId, newHandle, oldHandle) => {
+        if (oldHandle) detachFileChangeHandler(oldHandle.documentId);
+        state.binaryFiles.delete(path);
+        astCache.delete(path);
+        state.unavailableFiles.delete(path);
+        await subscribeToFile(path, newHandle);
+      },
+      unconfirmedLocalEdits: (_path, oldHandle) => unconfirmedLocalEdits(oldHandle),
+      onReplaced: (event) => {
+        if (event.phase === 'unavailable') {
+          markFileUnavailable(event.path, event.newDocId);
+          startUnavailableRetry();
+        }
+        callbacks.onFileReplaced?.(event);
+      },
+      clock: { setTimeout, clearTimeout },
+    });
+  }
+
   // Helper: sync files with index changes
   async function syncWithFiles(newFiles: FileEntry[]): Promise<void> {
     const newPaths = new Set(newFiles.map(f => f.path));
     const currentPaths = new Set(state.fileHandles.keys());
+
+    // A path we already hold whose index entry now names a different doc: the project owner flipped it (GE-7).
+    // The swap runs on its own promise chain per path, so it is deliberately not awaited here.
+    for (const file of newFiles) {
+      if (!currentPaths.has(file.path) || !state.repo || !swap) continue;
+      const rawDocId = String(file.docId);
+      const bound = state.fileHandles.get(file.path)?.documentId;
+      if (bound === undefined || normalizeDocId(rawDocId) === normalizeDocId(String(bound))) continue;
+      if (state.unavailableFiles.get(file.path) === rawDocId) continue;
+      swap.indexChanged(file.path, bareDocId(rawDocId));
+    }
 
     // Find new files
     for (const file of newFiles) {
@@ -1542,6 +1640,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
     // Disconnect from any existing connection
     await disconnect();
+    startSwap();
 
     recordConnectionEvent('connect', syncServerUrl);
     try {
@@ -1833,6 +1932,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       }
     }
     // Clean up subscriptions
+    swap?.dispose();
+    swap = null;
     for (const cleanup of state.cleanupFns) {
       cleanup();
     }
@@ -1938,14 +2039,33 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
+   * The handle a write by path must go to (GE-7). With no `baseDocId` this is the path's live handle, exactly as
+   * before. With one, the write is bound to the doc the caller read: if the path has since been swapped, the write
+   * goes to that (retired) doc and is counted as stranded; an id the path never had is dropped with a warning.
+   */
+  function resolveWriteHandle(path: string, baseDocId?: string): DocHandle<FileDocument> | undefined {
+    if (baseDocId === undefined) {
+      const handle = state.fileHandles.get(path);
+      if (!handle) console.warn(`No handle found for file: ${path}`);
+      return handle;
+    }
+    const bare = bareDocId(baseDocId);
+    const target = swap
+      ? swap.resolveWriteTarget(path, bare)
+      : ({ kind: 'drop', reason: `not connected; no doc bound to ${path}` } as const);
+    if (target.kind === 'drop') {
+      console.warn(`[quarto-sync-client] write to ${path} dropped: ${target.reason}`);
+      return undefined;
+    }
+    return target.handle;
+  }
+
+  /**
    * Update text file content using incremental updates.
    */
-  function updateFileContent(path: string, content: string): void {
-    const handle = state.fileHandles.get(path);
-    if (!handle) {
-      console.warn(`No handle found for file: ${path}`);
-      return;
-    }
+  function updateFileContent(path: string, content: string, baseDocId?: string): void {
+    const handle = resolveWriteHandle(path, baseDocId);
+    if (!handle) return;
 
     handle.change(doc => {
       updateText(doc, ['text'], content);
@@ -1966,14 +2086,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
    * end-to-beginning (Monaco's documented ordering) so earlier offsets
    * remain valid as later changes are applied.
    */
-  function applyEditorOperations(path: string, changes: EditorContentChange[]): void {
+  function applyEditorOperations(path: string, changes: EditorContentChange[], baseDocId?: string): void {
     if (changes.length === 0) return;
 
-    const handle = state.fileHandles.get(path);
-    if (!handle) {
-      console.warn(`No handle found for file: ${path}`);
-      return;
-    }
+    const handle = resolveWriteHandle(path, baseDocId);
+    if (!handle) return;
 
     handle.change((doc) => {
       const textDoc = doc as unknown as { text: string };
@@ -2003,7 +2120,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     });
 
     await subscribeToFileInternal(path, handle as unknown as DocHandle<FileDocument>);
-    callbacks.onFileAdded(path, { type: 'text', text: content });
+    callbacks.onFileAdded(path, { type: 'text', text: content, docId: handle.documentId });
     tryParseAndNotify(path, content);
   }
 
@@ -2046,7 +2163,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
     // Same follow-up as createFile.
     await subscribeToFileInternal(path, handle as unknown as DocHandle<FileDocument>);
-    callbacks.onFileAdded(path, { type: 'text', text: content });
+    callbacks.onFileAdded(path, { type: 'text', text: content, docId: handle.documentId });
     tryParseAndNotify(path, content);
     return { created: true, docId };
   }
@@ -2108,7 +2225,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
     state.binaryFiles.add(path);
     await subscribeToFileInternal(path, handle as unknown as DocHandle<FileDocument>);
-    callbacks.onFileAdded(path, { type: 'binary', data: content, mimeType });
+    callbacks.onFileAdded(path, { type: 'binary', data: content, mimeType, docId: handle.documentId });
 
     return { docId, path, deduplicated: false };
   }
@@ -2298,10 +2415,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     callbacks.onFileRemoved(oldPath);
     const content = getFileContent(newPath);
     const binary = getBinaryFileContent(newPath);
+    const renamedDocId = state.fileHandles.get(newPath)?.documentId;
     if (binary) {
-      callbacks.onFileAdded(newPath, { type: 'binary', data: binary.content, mimeType: binary.mimeType });
+      callbacks.onFileAdded(newPath, { type: 'binary', data: binary.content, mimeType: binary.mimeType, docId: renamedDocId });
     } else if (content !== null) {
-      callbacks.onFileAdded(newPath, { type: 'text', text: content });
+      callbacks.onFileAdded(newPath, { type: 'text', text: content, docId: renamedDocId });
     }
   }
 
@@ -2510,6 +2628,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     resolveAuthorId?: (indexDocId: string) => Promise<string | null | undefined>,
   ): Promise<CreateProjectResult> {
     await disconnect();
+    startSwap();
 
     try {
       const localOnly = options.network === 'none';
@@ -2602,7 +2721,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
           state.binaryFiles.add(file.path);
           await subscribeToFileInternal(file.path, handle as unknown as DocHandle<FileDocument>);
-          callbacks.onFileAdded(file.path, { type: 'binary', data: binaryContent, mimeType });
+          callbacks.onFileAdded(file.path, { type: 'binary', data: binaryContent, mimeType, docId });
           createdFiles.push({ path: file.path, docId });
         } else {
           const handle = createDoc<TextDocumentContent>();
@@ -2616,7 +2735,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
           });
 
           await subscribeToFileInternal(file.path, handle as unknown as DocHandle<FileDocument>);
-          callbacks.onFileAdded(file.path, { type: 'text', text: file.content });
+          callbacks.onFileAdded(file.path, { type: 'text', text: file.content, docId });
           createdFiles.push({ path: file.path, docId });
         }
       }

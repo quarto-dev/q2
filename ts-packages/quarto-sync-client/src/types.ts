@@ -8,6 +8,11 @@ import type { NetworkAdapter } from '@automerge/automerge-repo/slim';
 import type { Patch } from '@automerge/automerge-repo';
 import type { FileEntry, ActorIdentity, CaptureRef } from '@quarto/quarto-automerge-schema';
 
+import type { ReplacedEvent } from '@quarto/quarto-git-epochs';
+
+// Re-export the swap event types so consumers don't need a second import (GE-7)
+export type { ReplacedEvent, SwapPhase } from '@quarto/quarto-git-epochs';
+
 // Re-export so consumers don't need a second import for the capture sidecar shape
 export type { CaptureRef };
 
@@ -44,6 +49,12 @@ export interface EditorContentChange {
 export interface TextFilePayload {
   type: 'text';
   text: string;
+  /**
+   * The bare id of the document that backs this file (GE-7). Optional so that every existing producer stays valid;
+   * the sync client sets it wherever it fires `onFileAdded`. Consumers pass it back as `baseDocId` on writes so a
+   * write made against a replaced doc stays with that doc.
+   */
+  docId?: string;
 }
 
 /**
@@ -53,6 +64,8 @@ export interface BinaryFilePayload {
   type: 'binary';
   data: Uint8Array;
   mimeType: string;
+  /** The bare id of the backing document (see {@link TextFilePayload.docId}). */
+  docId?: string;
 }
 
 /**
@@ -160,6 +173,13 @@ export interface SyncClientCallbacks {
    * Called when an error occurs (optional).
    */
   onError?: (error: Error) => void;
+
+  /**
+   * Called with the phases of a swap when the project owner flips `files[path]` to a different doc (optional, GE-7):
+   * `pending` (freeze the editor), then `done` or `unavailable`. `done` is preceded by a fresh `onFileAdded` for the
+   * path carrying the new text and `docId`.
+   */
+  onFileReplaced?: (event: ReplacedEvent) => void;
 
   /**
    * Called when a QMD file's AST changes (optional).
