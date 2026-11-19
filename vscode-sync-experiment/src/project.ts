@@ -35,6 +35,7 @@ import {
 import { Binding, bindings, type TextDoc } from './binding';
 import type { Identity } from './presence';
 import { META_DIR, isIgnoredPath } from './core/ignore';
+import { UnsafePathError, safeJoin } from './core/safe-path';
 
 export { META_DIR };
 const META_FILE = 'project.json';
@@ -70,7 +71,7 @@ async function findDoc<T>(repo: Repo, docId: string): Promise<DocHandle<T>> {
 }
 
 async function writeFileDoc(root: string, rel: string, doc: FileDoc): Promise<void> {
-  const abs = path.join(root, rel);
+  const abs = await safeJoin(root, rel); // G36: rel comes from a doc
   await fs.mkdir(path.dirname(abs), { recursive: true });
   if (isTextDocument(doc)) await fs.writeFile(abs, doc.text, 'utf8');
   else if (isBinaryDocument(doc)) await fs.writeFile(abs, doc.content);
@@ -117,13 +118,25 @@ export async function createProjectFolder(indexDocId: string, parentDir: string,
     const meta: ProjectMeta = { indexDocId, syncServer: SYNC_SERVER, createdAt: new Date().toISOString() };
     await fs.writeFile(path.join(tmpRoot, META_DIR, META_FILE), JSON.stringify(meta, null, 2) + '\n');
     for (const [rel, docId] of Object.entries(files)) {
+      try {
+        await safeJoin(tmpRoot, rel);
+      } catch (err) {
+        if (!(err instanceof UnsafePathError)) throw err;
+        log.appendLine(`skipped index key: ${err.message}`);
+        continue;
+      }
       const handle = await findDoc<FileDoc>(repo, docId);
       const doc = handle.doc();
       if (doc) await writeFileDoc(tmpRoot, rel, doc);
       log.appendLine(`wrote ${rel}`);
     }
     for (const folder of Object.keys(index.doc()?.folders ?? {})) {
-      await fs.mkdir(path.join(tmpRoot, folder), { recursive: true });
+      try {
+        await fs.mkdir(await safeJoin(tmpRoot, folder), { recursive: true });
+      } catch (err) {
+        if (!(err instanceof UnsafePathError)) throw err;
+        log.appendLine(`skipped index folder: ${err.message}`);
+      }
     }
     // Open files are written by VS Code's autosave (see ownership rule above);
     // a formatter would broadcast its reflow to every collaborator.
@@ -168,6 +181,7 @@ export class ProjectSync {
     this.repo = makeRepo(this.root, false);
     this.index = await findDoc<IndexDocument>(this.repo, this.meta.indexDocId);
     for (const [rel, docId] of Object.entries(this.index.doc()?.files ?? {})) {
+      if ((await this.safePath(rel)) === null) continue;
       this.track(rel, await findDoc<FileDoc>(this.repo, docId));
     }
     await this.reconcileDisk();
@@ -234,11 +248,26 @@ export class ProjectSync {
     bindings.get(this.uriOf(rel))?.dispose();
   }
 
+  /**
+   * Validate a doc-derived path (G36). A rejected key is skipped and logged
+   * (an event line and the output channel), never thrown.
+   */
+  private async safePath(rel: string): Promise<string | null> {
+    try {
+      return await safeJoin(this.root, rel);
+    } catch (err) {
+      if (!(err instanceof UnsafePathError)) throw err;
+      this.log.appendLine(`skipped index key: ${err.message}`);
+      await this.logEvent('rejected', rel, 'hub');
+      return null;
+    }
+  }
+
   private uriOf(rel: string): string {
     return vscode.Uri.file(path.join(this.root, rel)).toString();
   }
 
-  private async logEvent(event: 'created' | 'deleted' | 'edited-offline', rel: string, source: 'hub' | 'local'): Promise<void> {
+  private async logEvent(event: 'created' | 'deleted' | 'edited-offline' | 'rejected', rel: string, source: 'hub' | 'local'): Promise<void> {
     const line = JSON.stringify({ at: new Date().toISOString(), event, path: rel, source }) + '\n';
     await fs.appendFile(path.join(this.root, META_DIR, 'events.jsonl'), line).catch(() => {});
     this.log.appendLine(`${source}: ${event} ${rel}`);
@@ -309,11 +338,13 @@ export class ProjectSync {
     for (const rel of [...this.handles.keys()]) {
       if (!(rel in files)) {
         this.untrack(rel);
-        await fs.rm(path.join(this.root, rel), { force: true });
+        const abs = await this.safePath(rel);
+        if (abs !== null) await fs.rm(abs, { force: true });
         await this.logEvent('deleted', rel, 'hub');
       }
     }
     for (const [rel, docId] of Object.entries(files)) {
+      if ((await this.safePath(rel)) === null) continue;
       const existing = this.handles.get(rel);
       if (existing && existing.documentId === docId) continue;
       if (existing) this.untrack(rel); // path now points at a different document
@@ -325,11 +356,15 @@ export class ProjectSync {
     }
     const folders = new Set(Object.keys(this.index.doc()?.folders ?? {}));
     for (const folder of folders) {
-      if (!this.knownFolders.has(folder)) await fs.mkdir(path.join(this.root, folder), { recursive: true }).catch(() => {});
+      if (this.knownFolders.has(folder)) continue;
+      const abs = await this.safePath(folder);
+      if (abs !== null) await fs.mkdir(abs, { recursive: true }).catch(() => {});
     }
     for (const folder of this.knownFolders) {
       // Only remove if still empty: a folder with files is implied by them.
-      if (!folders.has(folder)) await fs.rmdir(path.join(this.root, folder)).catch(() => {});
+      if (folders.has(folder)) continue;
+      const abs = await this.safePath(folder);
+      if (abs !== null) await fs.rmdir(abs).catch(() => {});
     }
     this.knownFolders = folders;
   }

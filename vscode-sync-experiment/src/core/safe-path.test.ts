@@ -1,0 +1,83 @@
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { UnsafePathError, safeJoin } from './safe-path';
+
+let root: string;
+let outside: string;
+
+beforeEach(async () => {
+  const base = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'ge-safe-')));
+  root = path.join(base, 'root');
+  outside = path.join(base, 'outside');
+  await fs.mkdir(root);
+  await fs.mkdir(outside);
+});
+
+afterEach(async () => {
+  await fs.rm(path.dirname(root), { recursive: true, force: true });
+});
+
+describe('safeJoin accepts (G36)', () => {
+  it.each([
+    ['a.qmd', 'a.qmd'],
+    ['dir/a.qmd', path.join('dir', 'a.qmd')],
+    ['dir/../a.qmd', 'a.qmd'],
+    ['a/b/c/d.png', path.join('a', 'b', 'c', 'd.png')],
+    ['.gitignore', '.gitignore'],
+    ['x.git/y', path.join('x.git', 'y')],
+  ])('%s', async (rel, expected) => {
+    expect(await safeJoin(root, rel)).toBe(path.join(root, expected));
+  });
+});
+
+describe('safeJoin rejects (G36)', () => {
+  const hostile: [string, string][] = [
+    ['parent traversal', '../x'],
+    ['deep traversal', 'a/../../x'],
+    ['an absolute path', '/abs'],
+    ['a drive path', 'C:\\x'],
+    ['a UNC path', '\\\\server\\share\\x'],
+    ['a backslash in a key', 'a\\b'],
+    ['a NUL byte', 'a\u0000b.qmd'],
+    ['a .git hook', '.git/hooks/h'],
+    ['.git in another case', '.GIT/x'],
+    ['a nested .quarto-hub', 'sub/.quarto-hub/x'],
+    ['.vscode tasks', '.vscode/tasks.json'],
+    ['.git with a trailing dot', '.git./x'],
+    ['.git with a trailing space', '.git /x'],
+    ['.git with an alternate data stream', '.git::$INDEX_ALLOCATION/x'],
+    ['a colon in a segment', 'a/b:c.qmd'],
+    ['a segment ending in a dot', 'a/b./c'],
+    ['a segment ending in a space', 'a/b /c'],
+    ['an empty key', ''],
+    ['the root itself', '.'],
+    ['a traversal that lands on .git', 'dir/../.git/config'],
+  ];
+  it.each(hostile)('%s', async (_name, rel) => {
+    await expect(safeJoin(root, rel)).rejects.toBeInstanceOf(UnsafePathError);
+  });
+
+  it('a symlinked parent directory that points outside the root', async (ctx) => {
+    try {
+      // 'junction' needs no privilege on Windows and is ignored elsewhere.
+      await fs.symlink(outside, path.join(root, 'link'), 'junction');
+    } catch {
+      ctx.skip();
+    }
+    await expect(safeJoin(root, 'link/x.qmd')).rejects.toBeInstanceOf(UnsafePathError);
+    // A path below a not-yet-existing child of the link is rejected too.
+    await expect(safeJoin(root, 'link/new/dir/x.qmd')).rejects.toBeInstanceOf(UnsafePathError);
+  });
+
+  it('allows a symlinked directory that stays inside the root', async (ctx) => {
+    await fs.mkdir(path.join(root, 'real'));
+    try {
+      await fs.symlink(path.join(root, 'real'), path.join(root, 'alias'), 'junction');
+    } catch {
+      ctx.skip();
+    }
+    expect(await safeJoin(root, 'alias/x.qmd')).toBe(path.join(root, 'alias', 'x.qmd'));
+  });
+});
