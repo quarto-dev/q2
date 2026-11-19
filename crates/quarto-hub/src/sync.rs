@@ -1410,6 +1410,93 @@ mod tests {
         assert!(contained_join_checked(&root, "new/dir/x.qmd").is_some());
     }
 
+    /// Index keys as paths: forward slashes, drive and UNC forms, long paths, case (Windows run item a4, W4).
+    mod path_keys {
+        use super::*;
+        use quarto_git_epochs::registry::{self, Entry, RegistryView};
+
+        fn key_of(root: &Path, joined: &Path) -> String {
+            joined
+                .strip_prefix(root)
+                .unwrap()
+                .components()
+                .map(|c| c.as_os_str().to_str().unwrap().to_string())
+                .collect::<Vec<_>>()
+                .join("/")
+        }
+
+        #[test]
+        fn drive_letter_and_unc_forms_are_rejected_on_every_platform() {
+            let tmp = TempDir::new().unwrap();
+            for rel in [
+                "C:/x.qmd",
+                "c:x.qmd",
+                r"C:\x.qmd",
+                "//server/share/x.qmd",
+                r"\\server\share\x.qmd",
+                r"\\?\C:\x.qmd",
+                "a/C:/x.qmd",
+            ] {
+                assert_eq!(contained_join(tmp.path(), rel), None, "{rel}");
+                assert_eq!(contained_join_checked(tmp.path(), rel), None, "{rel}");
+            }
+        }
+
+        #[test]
+        fn a_native_root_with_a_drive_or_unc_prefix_joins_keys_with_forward_slashes() {
+            // The root is whatever the platform's temp directory is: `C:\...` on Windows, `/var/...` elsewhere.
+            let tmp = TempDir::new().unwrap();
+            let root = tmp.path().canonicalize().unwrap();
+            let joined = contained_join_checked(&root, "chapters/part one/intro.qmd").unwrap();
+            assert!(joined.starts_with(&root));
+            assert_eq!(key_of(&root, &joined), "chapters/part one/intro.qmd");
+            // The key never carries a native separator, even where `join` produced one.
+            assert!(!key_of(&root, &joined).contains('\\'));
+        }
+
+        #[test]
+        fn a_path_longer_than_260_characters_round_trips_through_disk() {
+            let tmp = TempDir::new().unwrap();
+            let root = tmp.path().canonicalize().unwrap();
+            let seg = "s".repeat(60);
+            let rel = format!("{seg}/{seg}/{seg}/{seg}/{seg}/leaf.qmd");
+            assert!(rel.len() > 260, "{}", rel.len());
+            let joined = contained_join_checked(&root, &rel).unwrap();
+            assert!(joined.as_os_str().len() > 260);
+            std::fs::create_dir_all(joined.parent().unwrap()).unwrap();
+            std::fs::write(&joined, b"long\n").unwrap();
+            assert_eq!(std::fs::read(&joined).unwrap(), b"long\n");
+            assert_eq!(key_of(&root, &joined), rel);
+        }
+
+        #[test]
+        fn keys_keep_their_case_and_a_case_pair_is_flagged_as_a_collision() {
+            let tmp = TempDir::new().unwrap();
+            let upper = contained_join(tmp.path(), "Notes/A.qmd").unwrap();
+            let lower = contained_join(tmp.path(), "notes/a.qmd").unwrap();
+            // The join does not fold case, so on a case-insensitive file system these name one file; the
+            // registry rule (G12) is what keeps them from being treated as two live documents.
+            assert_ne!(upper, lower);
+            let entry = |path: &str, doc: &str| Entry {
+                path: path.into(),
+                blob: "b".into(),
+                doc: doc.into(),
+                generation: 0,
+            };
+            let view = RegistryView {
+                entries: vec![entry("Notes/A.qmd", "d1"), entry("notes/a.qmd", "d2")],
+                retired: vec![],
+            };
+            let flagged = registry::case_collisions(&view);
+            assert!(flagged.contains("Notes/A.qmd") && flagged.contains("notes/a.qmd"));
+            let unrelated = RegistryView {
+                entries: vec![entry("a.qmd", "d1"), entry("b.qmd", "d2")],
+                retired: vec![],
+            };
+            assert!(registry::case_collisions(&unrelated).is_empty());
+        }
+    }
+
     /// Helper to create a test repo
     async fn create_test_repo() -> Repo {
         Repo::build_tokio()

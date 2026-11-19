@@ -93,3 +93,28 @@ fn no_reflog_or_an_empty_span_uses_the_content_rule_alone() {
         assert_eq!(classify(&clean), Verdict::Commit);
     }
 }
+
+#[test]
+fn crlf_checkout_is_not_an_edit_after_normalization() {
+    use quarto_git_epochs::arrival::normalize_text;
+    let (_t, dir) = crate::support::temp_dir();
+    let blob = "one\ntwo\n";
+    let disk = crate::support::crlf_checkout(&dir, "a.qmd", blob.as_bytes());
+    let disk = String::from_utf8(disk).unwrap();
+    assert!(disk.contains("\r\n"), "autocrlf=true wrote CRLF");
+
+    // Synced content is the LF text; the disk holds CRLF. Normalized, disk equals synced: commit by content.
+    let normalized = ClassifyInput {
+        peer: Peer::Hub,
+        reflog: None,
+        changed: changed(&normalize_text(&disk), blob),
+    };
+    assert_eq!(classify(&normalized), Verdict::Commit);
+    // Raw, the CRLF text would differ from synced and, with no commit tiebreaker, read as a checkout.
+    let raw = ClassifyInput {
+        peer: Peer::Hub,
+        reflog: None,
+        changed: changed(&disk, blob),
+    };
+    assert_eq!(classify(&raw), Verdict::Checkout);
+}

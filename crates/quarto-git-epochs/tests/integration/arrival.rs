@@ -104,3 +104,46 @@ fn a_doc_attached_to_another_doc_that_nobody_retired_runs_the_ordinary_steps() {
     i.disk = "T".into();
     assert_eq!(arrive(&i).step, ArrivalStep::S3);
 }
+
+fn hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+#[test]
+fn crlf_checkout_text_attaches_silently_after_normalization() {
+    let (_t, dir) = crate::support::temp_dir();
+    let blob = "title: a\n\nline two\n";
+    let disk = crate::support::crlf_checkout(&dir, "a.qmd", blob.as_bytes());
+    let disk = String::from_utf8(disk).unwrap();
+    assert!(disk.contains("\r\n"), "autocrlf=true wrote CRLF");
+
+    // Normalized disk equals the blob and the doc: ordinary silent attach (step 3).
+    let mut i = base(Peer::Hub);
+    i.disk = normalize_text(&disk);
+    i.doc = Some(blob.into());
+    i.blob = blob.into();
+    let out = arrive(&i);
+    assert_eq!(out.step, ArrivalStep::S3);
+    assert_eq!(out.action, ArrivalAction::AttachSilently);
+
+    // Without normalization the same file would look edited: the raw comparison is what the rule prevents.
+    let mut raw = i.clone();
+    raw.disk = disk;
+    assert_ne!(arrive(&raw).action, ArrivalAction::AttachSilently);
+}
+
+#[test]
+fn crlf_checkout_binary_compares_by_bytes() {
+    let (_t, dir) = crate::support::temp_dir();
+    // A NUL byte makes git treat the file as binary: no conversion, bytes survive unchanged.
+    let blob: &[u8] = b"\x89PNG\r\n\x1a\n\0\0data\r\nmore\n";
+    let disk = crate::support::crlf_checkout(&dir, "img.png", blob);
+    assert_eq!(disk, blob);
+
+    let mut i = base(Peer::Hub);
+    i.kind = Kind::Binary;
+    i.disk = hex(&disk);
+    i.doc = Some(hex(blob));
+    i.blob = hex(blob);
+    assert_eq!(arrive(&i).action, ArrivalAction::AttachSilently);
+}
