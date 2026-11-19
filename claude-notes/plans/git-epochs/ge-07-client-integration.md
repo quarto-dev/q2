@@ -2,7 +2,7 @@
 title: 'GE-7: Browser clients: sync client swap, consumers, indicator, MCP'
 date: 2026-11-18
 description: 'Wires the swap module into quarto-sync-client and every consumer that holds a file handle or writes by path, adds the replaced-file notice and the paused-for-git banner to the web surfaces, and covers the branch service and the MCP edit tool.'
-status: approved
+status: done
 depends-on: [ge-6]
 lane: C
 epic: ../2026-11-18-git-epochs-epic.md
@@ -105,67 +105,67 @@ on the state asserted, and before a second client reads what the first wrote, wa
 
 ### Sync client
 
-- [ ] Write test spec 8 (offline reconnect, two tabs, late joiner) first; where today\'s behavior already satisfies a
+- [x] Write test spec 8 (offline reconnect, two tabs, late joiner) first; where today\'s behavior already satisfies a
   clause, say so in the notes; make the rest pass with the swap module.
-- [ ] Confirm GE-6 is complete; add `@quarto/quarto-git-epochs` as a dependency of `quarto-sync-client` and check the
+- [x] Confirm GE-6 is complete; add `@quarto/quarto-git-epochs` as a dependency of `quarto-sync-client` and check the
   build order of the workspaces (detail chosen by the plan author; confirm). Import only the package\'s browser-safe
   `.` entry, never `./probe`.
-- [ ] Write tests 1 and 2; see them fail.
-- [ ] `types.ts`: add an optional `docId?: string` (the bare doc id) to `TextFilePayload` and `BinaryFilePayload`, an
+- [x] Write tests 1 and 2; see them fail.
+- [x] `types.ts`: add an optional `docId?: string` (the bare doc id) to `TextFilePayload` and `BinaryFilePayload`, an
   optional `onFileReplaced?: (event: ReplacedEvent) => void` to `SyncClientCallbacks`, and an optional `baseDocId`
   parameter to the `SyncClient` signatures of `updateFileContent` and `applyEditorOperations`.
-- [ ] Set `docId` at every `onFileAdded` site: `subscribeToFile` (`client.ts:1205-1223`), file creation (`:1944`,
+- [x] Set `docId` at every `onFileAdded` site: `subscribeToFile` (`client.ts:1205-1223`), file creation (`:1944`,
   `:1987`, `:2049`), rename (`:2240-2242`), and `createNewProject` (`:2553`, `:2567`).
-- [ ] Create the coordinator in `createSyncClient` with a `SwapHost`: `currentDocId` from `state.fileHandles`;
+- [x] Create the coordinator in `createSyncClient` with a `SwapHost`: `currentDocId` from `state.fileHandles`;
   `loadDoc` from `findDoc`; `rebind` detaches the old change handler, replaces `state.fileHandles`, drops `astCache` and
   `binaryFiles` entries, and calls `subscribeToFile` so `onFileAdded` re-fires; `onReplaced` calls `onFileReplaced`;
   on `unavailable` call `markFileUnavailable` and `startUnavailableRetry`. `disconnect` calls `dispose`.
-- [ ] In `syncWithFiles`, for an existing path whose index docId differs from the bound handle, call `indexChanged`
+- [x] In `syncWithFiles`, for an existing path whose index docId differs from the bound handle, call `indexChanged`
   and do not await it; new paths keep the inline path; the repair of an unavailable entry stays separate.
-- [ ] Route `updateFileContent` and `applyEditorOperations` through `resolveWriteTarget(path, baseDocId)`.
-- [ ] Implement the host\'s `unconfirmedLocalEdits(path, oldHandle)` from GE-6 on the sync client: the number of this
+- [x] Route `updateFileContent` and `applyEditorOperations` through `resolveWriteTarget(path, baseDocId)`.
+- [x] Implement the host\'s `unconfirmedLocalEdits(path, oldHandle)` from GE-6 on the sync client: the number of this
   peer\'s changes to the old doc whose heads the server has not yet confirmed (from the sync info and `remote-heads`
   state the client already tracks for `drainOutbound`, `client.ts:~1665`), so that an edit typed while offline is
   counted as stranded when the flip arrives (GE-13 S3). Add a test: go offline, edit, flip, reconnect; the `done`
   event carries `stranded` of at least 1.
-- [ ] Tests 1 and 2 pass; the whole sync-client suite passes.
+- [x] Tests 1 and 2 pass; the whole sync-client suite passes.
 
 ### Preview runtime and the preview SPA
 
-- [ ] `preview-runtime/src/automergeSync.ts`: pass `docId`, `baseDocId`, and `onFileReplaced` through; expose a notice
+- [x] `preview-runtime/src/automergeSync.ts`: pass `docId`, `baseDocId`, and `onFileReplaced` through; expose a notice
   subscription built on `NoticeAggregator` (detail chosen by the plan author; confirm). Update `mockSyncClient.ts` to
   the new signatures.
-- [ ] `PreviewApp.tsx` block editor under `--allow-edit`: capture the docId at the time the diff base is read
+- [x] `PreviewApp.tsx` block editor under `--allow-edit`: capture the docId at the time the diff base is read
   (`:660-675`) and pass it as `baseDocId`; freeze the editor on `pending` (skip the write path and show the editor as
   read-only); render the aggregate notice in a `role="status"` region. The default viewer renders no notice.
 
 ### hub-client
 
-- [ ] `App.tsx` and `Editor.tsx`: pass `baseDocId` from `handleContentOperations`; on `pending` set the editor read-only
+- [x] `App.tsx` and `Editor.tsx`: pass `baseDocId` from `handleContentOperations`; on `pending` set the editor read-only
   with the mechanism replay already uses (`Editor.tsx:662-663`); on `done` restore it; show the aggregate notice
   (editing surfaces only) with `role="status"` and `aria-live="polite"`.
-- [ ] `hooks/useReplayMode.ts`: close any replay session on the path when a swap completes (the session holds its
+- [x] `hooks/useReplayMode.ts`: close any replay session on the path when a swap completes (the session holds its
   handle).
-- [ ] `services/presenceService.ts`: add an explicit rebind entry point that broadcasts the moved message on the old
+- [x] `services/presenceService.ts`: add an explicit rebind entry point that broadcasts the moved message on the old
   handle, stops listening, clears remote presences for the path, and listens on the new handle; call it from
   `done`. Receivers handle the shared `MovedMessage` from GE-6 (`src/moved.ts`, the same type the extension sends; do
   not add a reason to `leave`) and show \"this person switched versions\" for a short time. `hooks/usePresence.ts` re-resolves the doc after the rebind.
-- [ ] `services/attribution-store.ts`: reset the cached incremental state (and any run list) when the path\'s docId
+- [x] `services/attribution-store.ts`: reset the cached incremental state (and any run list) when the path\'s docId
   changes, because histories are unrelated.
-- [ ] `pandoc/downloadAttribution.ts`, `services/debugAutomerge.ts`, `components/SyncStatusBadge.tsx`,
+- [x] `pandoc/downloadAttribution.ts`, `services/debugAutomerge.ts`, `components/SyncStatusBadge.tsx`,
   `components/ConnectionStatusDialog.tsx`: confirm each resolves the handle at call time; add a test that each returns
   the new handle after `done`; fix any that caches.
-- [ ] Tests 3 and 4 pass.
+- [x] Tests 3 and 4 pass.
 
 ### Branch service
 
-- [ ] Flag-on tests (test 5) first. On `done`, `setActiveBranch(path, null)`; `applyBranchEdits` gains
+- [x] Flag-on tests (test 5) first. On `done`, `setActiveBranch(path, null)`; `applyBranchEdits` gains
   `baseDocId` and uses the branch doc of that docId, warning (not returning silently) when none exists; if the path had
   branches, add one line to the notice, the `BRANCHES_STAY` constant from GE-6 (from D16). No orphan UI.
 
 ### Paused indicator
 
-- [ ] Test 6 first. Poll `GET /api/preview/git-status` every 2 s only while the response says `tracking` is true; stop
+- [x] Test 6 first. Poll `GET /api/preview/git-status` every 2 s only while the response says `tracking` is true; stop
   polling on a 404 (detail chosen by the plan author; confirm). Show a banner, the `PAUSED_BANNER` constant from GE-6,
   in `role="status"`. The response shape is the one in GE-1\'s contract.
   The surfaces: the preview SPA and the hub-client when served by a preview. No read-only mode. Style the banner and
@@ -173,20 +173,20 @@ on the state asserted, and before a second client reads what the first wrote, wa
 
 ### MCP and rebuilds
 
-- [ ] Test 7 first: after a swap the MCP `edit` tool with the stale `expected_hash` is refused. Run it before the bundle
+- [x] Test 7 first: after a swap the MCP `edit` tool with the stale `expected_hash` is refused. Run it before the bundle
   step.
-- [ ] `cargo xtask build-hub-mcp-bundle`; check `q2 mcp --launcher-info` after `cargo build --bin q2`.
-- [ ] Preview SPA chain: `cargo xtask build-q2-preview-spa`, `cargo xtask build-hub-client-embed` (the `--ui editor`
+- [x] `cargo xtask build-hub-mcp-bundle`; check `q2 mcp --launcher-info` after `cargo build --bin q2`.
+- [x] Preview SPA chain: `cargo xtask build-q2-preview-spa`, `cargo xtask build-hub-client-embed` (the `--ui editor`
   end-to-end check needs it), then `cargo build --bin q2` (run
   `cd hub-client && npm run build:wasm` only if the WASM artifact is missing or stale; no Rust changes here).
 
 ### Changelog and wrap-up
 
-- [ ] Do this last, after the final rebase onto `feature/git-epochs`, because a rebase rewrites the hash: commit the
+- [x] Do this last, after the final rebase onto `feature/git-epochs`, because a rebase rewrites the hash: commit the
   hub-client changes, then a second commit adding the entry to `hub-client/changelog.md` under today\'s date, with the
   first commit\'s hash (the hub-client two-commit workflow in `AGENTS.md`). One sentence, user-facing: a replaced file
   shows a notice, and a paused banner appears while the owner is mid-operation.
-- [ ] Update this plan\'s checkboxes and fill in the notes below.
+- [x] Update this plan\'s checkboxes and fill in the notes below.
 
 ## Gates
 
@@ -231,4 +231,87 @@ record that it re-rendered with no notice. Say that the output was inspected. If
 
 ## Notes from the run
 
-Not started.
+**Session 1 (lane C, 2026-11-19).** The worktree had two untracked directories (`vscode-sync-experiment/.vscode-test/`,
+383 MB of a downloaded VS Code, and `test-results/`); both are generated by GE-8's Playwright runs and neither is work,
+so I left them alone and went on.
+
+- **Sync client.** `swap.test.ts` (10 tests, two real clients through the test hub) and `swap-resilience.test.ts` (3)
+  were written and run red before the code. Order differs from the checklist: test specification 8 was written after
+  tests 1 and 2, because it needs the new API to exist. What today's behavior already satisfied: a late joiner
+  (a fresh connect reads the index as it is, so there is nothing to replace). The sync client builds a coordinator per
+  connection (`startSwap`, called after `disconnect()` in `connect` and `createNewProject`), `syncWithFiles` hands a
+  changed docId to it without awaiting, the host rebinds through `subscribeToFile` (so `onFileAdded` re-fires with
+  `docId`), and `retryUnavailableFilesOnce` retries a flipped path through the coordinator instead of a fresh
+  subscription. `unconfirmedLocalEdits` counts the changes since the sync info's confirmed heads, or 1 when the doc
+  has an undelivered local change and no baseline; my first version passed URL-encoded heads to Automerge raw and
+  counted 0 (red test found it; `decodeHeads` fixed it). The stranded-edit test cuts only the old doc's outbound
+  traffic (a gate on the guest's network adapter), because cutting all outbound traffic also stops the guest loading
+  the new doc. The offline test cuts both directions, edits, flips twice on the hub, restores and forces a reconnect
+  with the window `online` event; it asserts the final doc and that the offline edit stays in the old doc, and
+  deliberately not the stranded count (whether the offline edit syncs before the swap starts is a race).
+- **Dependency and build order** (detail chosen by the plan author; confirm; took it). `@quarto/quarto-git-epochs` is a
+  dependency of `quarto-sync-client`, `preview-runtime`, `q2-preview-spa`, and `hub-client`; the lockfile got one line
+  per package by hand (the `npm install` pruning incident in GE-1's notes happened again: it deleted about 260 lines of
+  platform entries, which I restored). Only the browser-safe `.` entry is imported. Workspace builds run in
+  alphabetical order, so `quarto-git-epochs` builds before `quarto-sync-client`; vitest in the dependents resolves the
+  package's built `dist/`, so it must be built first (CI already builds it first).
+- **Preview runtime** (detail chosen by the plan author; confirm; took it). The notice subscription is
+  `createSwapStatusStore` (`swapStatus.ts`): frozen paths, one aggregate notice per batch published after a 150 ms
+  quiet window, `appendToNextNotice` for extra lines, a `noticeSeq` so an identical notice is announced again.
+  `automergeSync` feeds a singleton and also exposes the raw event through `setSyncHandlers({ onFileReplaced })`.
+  `createGitStatusPoller` (`gitStatus.ts`) polls the route every 2 s while `tracking` is true and stops on a 404, on
+  `tracking: false`, and on a 200 that is not JSON (an older preview answers every path with its page; found in the
+  end-to-end run, because the route did not exist yet when I started: GE-4 landed mid-run).
+- **Preview SPA.** The block-editor write captures `getFileHandle(path).documentId` with the diff base and passes it
+  as `baseDocId`; the iframe's editing surface is disabled while the path is pending and a stray edit is dropped;
+  `SwapNotice` renders on `--allow-edit` only; `PausedBanner` renders everywhere. `SwapNotice.tsx` and `PausedBanner.tsx`
+  were written before their tests (an order slip), the tests then passed at once. The four strict runtime mocks in the
+  SPA tests spread `test-utils/swapMock.ts`; my first mock returned a new snapshot object per call and looped
+  `useSyncExternalStore`.
+- **hub-client.** `services/swapEvents.ts` is a small bus; `App` forwards `onFileReplaced` to it and
+  `services/swapConsumers.ts` subscribes: presence `rebindCurrentFile` (broadcasts the shared `MovedMessage` on the old
+  handle, rebinds, clears remote cursors; receivers get `onPeerMoved` and show `movedNotice` in a 4 s toast), the branch
+  service `handleDocSwapped` (back to main, returns how many branches stay, which becomes the `BRANCHES_STAY` line),
+  `useReplayMode` closes its own session, and `AttributionStore` drops its state when the path resolves to a different
+  doc id (the existing code already threw `HistoryCompactedError` for an unrelated doc; the explicit check also covers
+  a fork that extends the old history). `applyBranchEdits` takes `baseDocId` and warns instead of returning silently.
+  The editor is read-only while its file is pending, `handleContentOperations` and the branch edit path pass
+  `baseDocId`. `SwapNotices` (tier-2 notification, `aria-live`) and `PausedForGitBanner` (tier-3 banner, preview
+  sessions only, `previewSession` non-null) use the existing notification tiers and tokens. Handle resolvers
+  (`SyncStatusBadge`, `ConnectionStatusDialog`, `downloadAttribution`, `debugAutomerge`): each already resolved at call
+  time; a test per resolver confirms the new handle after a swap; no fix was needed. `usePresence` re-resolves the doc
+  in its layout effect, which re-runs when the rebind notifies.
+- **MCP.** Needed no code: after a swap `onFileAdded` updates the connection manager's file map and the existing
+  compare-and-swap refuses the pre-swap hash with the current content and hash (`quarto-hub-mcp/src/swap.test.ts`,
+  3 tests; they depend on the sync client change, since without it `files[path]` never changes). The bundle was rebuilt
+  (`cargo xtask build-hub-mcp-bundle`, `q2 mcp --launcher-info` reports a bundle-hash and 19 files).
+- **Two bugs the end-to-end run found, that no test had.** (1) The coordinator calls `clock.setTimeout(...)`, which
+  makes the clock object `this`; `window.setTimeout` throws `Illegal invocation` then, so no swap ever started in a
+  browser. The sync client, `swapStatus`, and the poller now pass arrow wrappers (regression tests stub the global timers
+  to refuse any `this` but the global). GE-6's `swap.ts` is correct for hosts that pass wrappers, but its README tells
+  hosts to pass the bare globals; the README line should change (not done here; see the handoff). (2) Monaco's
+  `executeEdits` returns false on a read-only editor, so the new text never reached the frozen editor; the reconcile
+  effect now falls back to `model.applyEdits` (test first).
+- **End to end** (real binary, `target/debug/q2` built from this branch after `build-q2-preview-spa`,
+  `build-hub-client-embed`, `cargo build --bin q2`; Google Chrome through Playwright, because the cached Playwright
+  chromium was the wrong revision; the driver is a scratch script, not committed). Invocation:
+  `q2 preview --ui editor --allow-edit --no-browser --port 4821 <fixture>` (index.qmd "Version A"), then a script acting as
+  the owner (sync client on `/ws`; types text in the browser; flips `files["index.qmd"]` to a doc that does not exist
+  yet, creates it 1.5 s later, and flips again). Observed, with the output inspected: before, the editor showed
+  `title: Version A`; after, `title: Version B` with the notice text "This file was replaced because the project
+  owner's checked-out version changed." in `[data-testid=swap-notice]`. Not observed: the read-only state during
+  `pending` (the attribute I queried is absent in this Monaco; the unit test on `updateOptions` covers it), and the old
+  doc holding the edit typed before the flip (the sync-client tests cover it: a write with the old `baseDocId` lands in
+  the retired doc). Default viewer: `q2 preview --no-browser --port 4822 <fixture>`; with an immediate flip the
+  rendered page changed from "Version A" to "Version V" within 1 s and no notice element exists. (The first driver run
+  against the viewer, with the delayed second doc, still showed "Version A" after 4 s on a machine at load average
+  100; the immediate-flip run is the one I rely on.)
+- **Not done.** The paused banner was exercised only against stubs; `/api/preview/git-status` landed from GE-4
+  while this plan ran, and I did not run `--git track` end to end. Windows cross-check: no Rust or platform API in this
+  plan. A late joiner shows no notice; the docs statement is GE-18's.
+- **Gates.** `npm test`: sync-client 211 passed (4 skipped), preview-runtime 112, hub-mcp 633 of 634 on a full run with
+  a 60 s timeout (the one miss, `exit-drain`, passes alone; the default 5 s timeouts fail about a dozen edit tests when
+  the machine's load average is near 100, and each passes alone), q2-preview-spa 95 plus 106 integration;
+  hub-client unit and integration pass, `test:wasm` 481 passed (28 skipped) after `build:all` rebuilt the stale WASM,
+  `build:all` succeeds, `lint:css` clean, root `npm run typecheck` clean after the second rebase, `cargo xtask lint`
+  clean.
