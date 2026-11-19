@@ -16,6 +16,7 @@ import { ManualClock, identity, makeFakeHost, sleep, waitFor, type FakeHost } fr
 import type { TextDoc } from '../text-binding';
 import { attachFolder } from './attach-flow';
 import { cloneRepo, git, repoWith } from './git-fixtures';
+import { registryKey } from '@quarto/quarto-git-epochs';
 import { RegistryClient } from './registry-client';
 
 export interface CloneEnv {
@@ -29,6 +30,8 @@ export interface CloneEnv {
   other: OtherPeer;
   /** Advance the manual clock until the controller has decided on the current HEAD (or `condition` holds). */
   settle(condition?: () => boolean | Promise<boolean>): Promise<void>;
+  /** Stop the extension and start a new one on the same folder (a window reload). */
+  restart(): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -57,6 +60,16 @@ export class OtherPeer {
     await this.flush();
     return h.documentId;
   }
+  retire(p: string, blob: string, doc: string): Promise<void> {
+    this.registry.retire({ path: p, blob, doc });
+    return this.flush();
+  }
+  /** Remove a registry entry outright (test only: no real peer does this), to exercise the repair rule. */
+  async dropEntry(p: string, blob: string, doc: string): Promise<void> {
+    const sidecar = await this.registry.ensure();
+    sidecar.change((d) => void delete d.entries[registryKey(p, blob, doc)]);
+    await this.flush();
+  }
   async edit(docId: string, text: string): Promise<void> {
     const h = await findDoc<TextDoc>(this.repo, docId);
     h.change((d) => void (d.text = text));
@@ -82,12 +95,14 @@ export interface EnvOptions {
   prepare?: (clone: string, origin: string) => void | Promise<void>;
   /** Do not start the sync; the caller does. */
   noStart?: boolean;
+  /** Publish with no registry sidecar (a project whose first git-aware peer creates it). */
+  noRegistry?: boolean;
   options?: SyncOptions;
 }
 
 export async function makeCloneEnv(hub: TestHub, files: Record<string, string | Buffer>, opts: EnvOptions = {}): Promise<CloneEnv> {
   const origin = repoWith(files);
-  const pub = await publishGit(origin, hub.url, hub);
+  const pub = await publishGit(origin, hub.url, hub, { registry: !opts.noRegistry });
   const clone = cloneRepo(origin);
   await opts.prepare?.(clone, origin);
   const attached = await attachFolder({ dir: clone, serverUrl: hub.url, indexDocId: pub.indexDocId });
@@ -120,8 +135,14 @@ export async function makeCloneEnv(hub: TestHub, files: Record<string, string | 
         20_000,
       );
     },
+    async restart() {
+      await env.sync.dispose().catch(() => {});
+      env.host.notifier.messages.length = 0;
+      env.sync = new ProjectSync(clone, (await readProjectMeta(clone))!, identity, host, { clone: { clock }, ...opts.options });
+      await env.sync.start();
+    },
     async stop() {
-      await sync.dispose().catch(() => {});
+      await env.sync.dispose().catch(() => {});
       await other.stop();
       await pub.stop();
     },

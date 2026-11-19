@@ -24,7 +24,8 @@ export interface GitPublication {
 }
 
 /** Publish the tracked files of the repository at `dir` (a directory inside it: the project is that directory). */
-export async function publishGit(dir: string, serverUrl: string, hub?: HubLike): Promise<GitPublication> {
+export async function publishGit(dir: string, serverUrl: string, hub?: HubLike, opts: { registry?: boolean } = {}): Promise<GitPublication> {
+  const withRegistry = opts.registry !== false;
   await ensureWasm();
   const probe = createGitProbe({ cwd: dir });
   await probe.ready();
@@ -32,7 +33,7 @@ export async function publishGit(dir: string, serverUrl: string, hub?: HubLike):
   const repo = new Repo({ network: [webSocketAdapter(serverUrl)] });
   const index = repo.create<IndexDocument>(createIndexDocumentContent());
   const registry = new RegistryClient(repo, index);
-  await registry.ensure();
+  if (withRegistry) await registry.ensure();
   const docs: GitPublication['docs'] = {};
   const handles: DocHandle<unknown>[] = [index as DocHandle<unknown>];
   for (const f of tracked) {
@@ -45,13 +46,13 @@ export async function publishGit(dir: string, serverUrl: string, hub?: HubLike):
     handles.push(handle as DocHandle<unknown>);
     docs[f.path] = { docId: handle.documentId, blob: f.blob };
     index.change((d) => void (d.files[f.path] = handle.documentId));
-    registry.register({ path: f.path, blob: f.blob, doc: handle.documentId, gen: 0 });
+    if (withRegistry) registry.register({ path: f.path, blob: f.blob, doc: handle.documentId, gen: 0 });
   }
   index.change((d) => {
     (d as { repo?: unknown }).repo = { roots, prefix };
   });
-  const sidecar = await registry.ensure();
-  handles.push(sidecar as DocHandle<unknown>);
+  const sidecar = withRegistry ? await registry.ensure() : null;
+  if (sidecar) handles.push(sidecar as DocHandle<unknown>);
   if (hub) {
     for (const h of handles) {
       if (!(await hub.hubHasHeads(h.documentId, h.heads() as string[], 15_000))) throw new Error(`hub never received ${h.documentId}`);
@@ -61,7 +62,7 @@ export async function publishGit(dir: string, serverUrl: string, hub?: HubLike):
   }
   return {
     indexDocId: index.documentId,
-    sidecarId: sidecar.documentId,
+    sidecarId: sidecar?.documentId ?? '',
     docs,
     async stop() {
       registry.dispose();

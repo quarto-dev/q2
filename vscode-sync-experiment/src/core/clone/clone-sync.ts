@@ -68,6 +68,8 @@ export interface CloneHost {
   followPointer(untracked: (rel: string) => boolean): Promise<void>;
   loadDoc(docId: string, signal: AbortSignal): Promise<DocHandle<FileDoc>>;
   logEvent(event: CloneEvent, rel: string, extra: { from?: string; to?: string; reason?: string }): Promise<void>;
+  /** The detached or superseded set changed: refresh the status bar. */
+  stateChanged?(): void;
 }
 
 export interface CloneSyncOptions {
@@ -212,7 +214,7 @@ export class CloneSync {
       if (!v.ok) throw new CloneRefusedError(`${v.message} Rebind the folder to start over.`);
     }
     this.o.registry.onSidecarSwitched = () => void this.onSidecarSwitched();
-    this.unsubscribes.push(this.o.registry.onChange(() => void this.reevaluate()));
+    this.unsubscribes.push(this.o.registry.onChange(() => void this.reevaluate()), this.o.registry.follow());
 
     const tree = await this.participating();
     const record = await readRecord(this.h.root);
@@ -322,6 +324,7 @@ export class CloneSync {
       const head = action.head;
       const jj = this.probe.isColocatedJj();
       const changed = new Set<string>(action.held);
+      for (const rel of action.held) await this.h.logEvent('held', rel, { reason: 'disk differed from the synced content when git started' });
       for (const [rel, blob] of Object.entries(tree)) if (this.blobs[rel] !== blob) changed.add(rel);
       for (const rel of this.h.attachedPaths()) {
         if (this.detached.has(rel) || !(rel in tree)) continue;
@@ -457,7 +460,8 @@ export class CloneSync {
         await this.h.switchTo(rel, fresh, { writeDisk: false });
         this.attachedClean(rel);
         batch.resets.push({ path: rel, retiredDocId: old.documentId, newDocId: fresh.documentId, discarded: out.discarded ?? 0 });
-        await this.h.logEvent('retired', rel, { from: old.documentId, to: fresh.documentId, reason });
+        await this.h.logEvent('retired', rel, { from: old.documentId, reason });
+        await this.h.logEvent('reset', rel, { from: old.documentId, to: fresh.documentId, reason });
         return;
       }
       case 'create-from-disk':
@@ -649,6 +653,7 @@ export class CloneSync {
   }
 
   async persist(): Promise<void> {
+    this.h.stateChanged?.();
     if (this.head === null) return;
     await writeRecord(this.h.root, { head: this.head, blobs: this.blobs, detached: [...this.detached] }).catch((e) =>
       this.h.log(`could not write ${META_DIR}/git-epochs.json: ${String(e)}`),

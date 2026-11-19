@@ -200,7 +200,7 @@ export class ProjectSync {
       throw err;
     }
     this.clone = clone;
-    this.cleanups.push(() => void 0);
+    this.updateStatus();
   }
 
   private cloneHost() {
@@ -255,9 +255,19 @@ export class ProjectSync {
         }
       },
       loadDoc: (docId: string, signal: AbortSignal) => this.loadDoc(docId, signal),
+      stateChanged: () => this.updateStatus(),
       logEvent: (event: CloneEvent, rel: string, extra: { from?: string; to?: string; reason?: string }) =>
         this.logEvent(event, rel, 'local', extra),
     };
+  }
+
+  /** The persistent status bar item: the mode, plus the clone's detached and superseded counts. */
+  private updateStatus(): void {
+    const st = this.clone?.state();
+    const parts: string[] = [MODE_LABEL[this.mode]];
+    if (st && st.detached.length > 0) parts.push(`${st.detached.length} detached`);
+    if (st && st.superseded.length > 0) parts.push(`${st.superseded.length} superseded`);
+    this.host.notifier.status(parts.join(' · '));
   }
 
   /** Clone mode: HEAD, the gate, the attached docs, and the detached and superseded files. Null in other modes. */

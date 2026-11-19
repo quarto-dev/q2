@@ -74,6 +74,13 @@ export class RegistryClient {
     h.on('change', this.onSidecarChange);
   }
 
+  /** Re-read the index key whenever the index changes, so a lost sidecar race is noticed (G6). Returns the unsubscribe. */
+  follow(): () => void {
+    const onIndex = () => void this.refresh().catch(() => {});
+    this.index.on('change', onIndex);
+    return () => this.index.off('change', onIndex);
+  }
+
   /** Subscribe to sidecar changes (local and remote). Returns the unsubscribe. */
   onChange(cb: () => void): () => void {
     this.changeListeners.add(cb);
