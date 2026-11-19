@@ -1,5 +1,6 @@
 /** The launcher (`npm run demo -w quarto-hub-vscode -- --preset hub-browser [options]`). */
 import { parseArgs } from 'node:util';
+import { createInterface } from 'node:readline';
 import { Demo, defaultOptions, type Preset } from './demo';
 import { runStory, StoryFailure, type DriverEnv } from './driver';
 import { storyFor } from '../stories';
@@ -89,8 +90,17 @@ async function main() {
       console.log('story finished');
     }
     if (!v.fast) {
-      console.log('running; Ctrl-C to stop');
+      console.log('running; type reset and Enter to restore the starting state, Ctrl-C to stop');
+      const rl = createInterface({ input: process.stdin });
+      rl.on('line', (line) => {
+        if (line.trim() !== 'reset') return;
+        void d.reset().then(
+          () => console.log('the journal has been restored to its starting state'),
+          (e) => console.error('reset failed:', e),
+        );
+      });
       await new Promise<void>((r) => process.once('SIGINT', () => r()));
+      rl.close();
     }
   } catch (e) {
     code = 1;
