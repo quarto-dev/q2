@@ -90,7 +90,10 @@ Items marked (agent) run on macOS; items marked (Gordon) need the Windows machin
 - [ ] (agent) Confirm GE-14, GE-15, GE-16, and GE-16a are complete, and read the notes of all four. GE-16a carries three
   Windows steps to this plan: the baseline run of `main` at its merge base (`run.ps1 -Only a6`, GE-15 F3; each
   pre-existing failure becomes a braid strand), one run on a machine with Developer Mode on so that the two skipped
-  symlink tests run (GE-16a `B2`), and the follow-up for `B4` if GE-16a recorded it as waiting for the `c3` evidence.
+  symlink tests run (GE-16a `B2`), and the `B4` evidence: run the `b4` item with `QUARTO_HUB_DEBUG=1` in the environment
+  (GE-16a added it; it logs each watcher event\'s path form, its relative key, and the clone gate state to the log and
+  to stderr), and if `clone-modes.test.ts` "each decision writes its event to events.jsonl" still fails, read those
+  `debug: disk` lines first. A follow-up fix plan for it, if needed, is inserted at the end of this plan.
 - [ ] (agent) In the tooling worktree `/Users/gordon/src/q2/.worktrees/workspace-8/.worktrees/windows-git-epochs` (GE-15 created it inside lane B\'s worktree; the branch
   is checked out there, so do all tooling work in it), merge the final `feature/git-epochs` tip into
   `windows/git-epochs` (never rebase the pushed branch) and
