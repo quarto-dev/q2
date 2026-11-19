@@ -2,7 +2,7 @@
 title: 'GE-12: Origination: Share this folder'
 date: 2026-11-18
 description: A VS Code folder can start a project on a sync server, becoming its owner and the writer of the pointer, with a confirm that says what is published and a share panel shown only after the server has the data.
-status: approved
+status: done
 depends-on: [ge-10]
 lane: C
 epic: ../2026-11-18-git-epochs-epic.md
@@ -152,20 +152,20 @@ In the vscode-free core, written and seen failing first.
 
 ## Checklist
 
-- [ ] Write test specifications 1 to 3 and 9 and watch them fail; implement the selection, dirty detection, confirm
+- [x] Write test specifications 1 to 3 and 9 and watch them fail; implement the selection, dirty detection, confirm
   builder, and refusals in the core.
-- [ ] Write test specifications 4 to 6 and 8; implement the offline build, the registry bootstrap, the sidecar creation
+- [x] Write test specifications 4 to 6 and 8; implement the offline build, the registry bootstrap, the sidecar creation
   and adoption, the heads wait, and resume.
-- [ ] Write test specification 7; implement GE-10\'s `PointerWriter.applyDecision(batch)` (one index change per call:
+- [x] Write test specification 7; implement GE-10\'s `PointerWriter.applyDecision(batch)` (one index change per call:
   the batch\'s flips, removals, relists, additions, and resets) and the `ownerId` match. Spec 7 uses GE-10\'s
   `joinAsClone` and `joinAsMirror` helpers and GE-9\'s headless owner.
-- [ ] Add `quartoHub.shareFolder` and `quartoHub.showShare` to `package.json`; implement the VS Code layer (folder
+- [x] Add `quartoHub.shareFolder` and `quartoHub.showShare` to `package.json`; implement the VS Code layer (folder
   pick, server prompt, modal, panel, clipboard).
-- [ ] Store `name`, `file`, and `ownerId` in `project.json` (additive fields) and remember the server in workspace
+- [x] Store `name`, `file`, and `ownerId` in `project.json` (additive fields) and remember the server in workspace
   state.
-- [ ] Write the Playwright spec in test specification 10 on the GE-8 harness; mark it permanent.
-- [ ] Update the extension README: the command, the three forms, the owner, the public-server warning.
-- [ ] `cargo xtask lint`; `q2 render --strict` on this file after editing its checkboxes.
+- [x] Write the Playwright spec in test specification 10 on the GE-8 harness; mark it permanent.
+- [x] Update the extension README: the command, the three forms, the owner, the public-server warning.
+- [x] `cargo xtask lint`; `q2 render --strict` on this file after editing its checkboxes.
 
 ## Gates
 
@@ -197,4 +197,78 @@ selection of what to publish, and single-file mode.
 
 ## Notes from the run
 
-Not started.
+Worked by the lane C worker in `workspace-9` on `ge/12-origination`, unattended, test first.
+
+**Gates.** `npm run typecheck -w quarto-hub-vscode` (extension and `e2e/`), `npm run build -w quarto-hub-vscode`: clean.
+`npm run test -w quarto-hub-vscode`: 25 files, 243 tests passing (239 before the share-panel tests; 184 at the start of the plan).
+The package suites were not touched, so `@quarto/quarto-git-epochs` and `@quarto/quarto-automerge-schema` were not re-run.
+`cargo xtask lint`: clean. `npm run test:e2e -w quarto-hub-vscode`: 14 tests, 13 passing in the full run; the failing one was the
+new share test, which read a stale system clipboard from an earlier run (fixed: the test now empties the clipboard first), then
+2 of 2 passing on a re-run of `share-folder` alone. No Rust changed, so no clippy run.
+
+**New modules** (all in `src/core/origination/`, none imports `vscode`): `select` (G24 file set and the 10 MB cap), `dirty`,
+`confirm` (the modal text), `refusals` (bound folder, unborn repo, git missing, folder pick), `originate` (steps 1 to 4),
+`wait-heads` (`waitForServerHeads`), `owner-writer` (`OwnerPointerWriter`), `share-panel` (the three forms). `ProjectSync` picks
+the owner writer only when `project.json`\'s `ownerId` equals the index's `owner`. `ProjectMeta` gained `ownerId`, `name`, `file`.
+`HeadlessPeer.open(dir)` reopens a bound folder (spec 8).
+
+**Test-first record.** Specs 1 to 3 and 9, then 4 to 6 and 8, each ran red on the missing modules. Spec 7's folder tests ran red
+(5 of 5) with the owner wiring replaced by the no-op writer, then green with it restored; the two writer-alone tests and the
+non-owner test pass either way, as they should.
+
+**Details chosen** (the plan's "confirm" marks; all taken as written): the git-unavailable text, the plain-folder confirm, the
+secret-looking line (up to three names), the 30 s heads wait (`PUBLISH_WAIT_MS`), the 10 s owner wait (`OWNER_WAIT_MS`), the share
+URL `name` and `file`. Specifics beyond the plan:
+
+- *The controller already does the doc work.* In the owner folder the clone controller creates the doc for a git-added file,
+  registers it, and retires on a reset, as in GE-10. The owner writer therefore only points `files` at the batch's doc ids, removes
+  entries, and re-lists; it never creates a doc. "Publishes git-added files" is the flip the controller reports plus the heads wait.
+- *Timeout of the owner wait writes anyway* and logs it; a follower treats an unavailable doc as a notice (GE-6).
+- *Sidecar entries are written in the second change.* `repo.create` with `A.Int` values stored `NaN`, so the maps are created in the
+  first change and all entries follow in one change (the contract's "both maps in one change by one writer" holds).
+- *A tracked file deleted on disk* is not published and not listed as dirty. *A symlink inside a plain folder* is skipped by the walk.
+- *A bound folder with an unreadable `project.json`* counts as already shared.
+- *Spec 6* is covered twice: GE-10's two-clone test (`clone-modes.test.ts`, "two peers creating the sidecar at once") and a new test
+  with two `RegistryClient`s created offline on one index, merged through the hub, where the loser re-registers its entries.
+  An originated project never races, because its sidecar key exists before anyone sees the index.
+- *Modal.* The confirm is `showInformationMessage(..., { modal: true, detail })`. The detail is plain text, so the column alignment
+  of the plan's sketch is not guaranteed; the Playwright run (custom dialog style) read it with the labels and values on one line each.
+- *Test seams* as GE-8 and GE-9 did: `QUARTO_HUB_TEST_SYNC_SERVER` is the default server in the prompt;
+  `QUARTO_HUB_TEST_PUBLISH_WAIT_MS` shortens the heads wait.
+
+**End to end (real VS Code 1.101.2, macOS arm64, a local hub on loopback; nobody watched the window).** Invocation:
+`npm run test:e2e -w quarto-hub-vscode -- share-folder` after `npm run build -w quarto-hub-vscode`, with `target/debug/q2` built
+from this worktree (`q2 preview --help` lists `--hub-url`; the `q2` on PATH is older and does not). Observed, abridged:
+
+```text
+confirm title: Share this folder on ws://127.0.0.1:61541/ws?
+confirm body: This publishes a copy of your project to that server. Anyone with access to that server and the project link can read and edit it.
+  Project: Shared Site (git repo, branch main) / Files: 3 tracked files, 1 KB / Uncommitted: 1 file will be shared as it is on disk: guides/a.qmd
+copied: q2 preview --hub-url ws://127.0.0.1:61541/ws --project 2x6H1mvyGSknCng6QSTZAD3Z6cZf --ui editor --allow-edit
+GET / -> 1324 bytes, starts: <!doctype html> <html lang="en"> <head> <meta charset="UTF-8" /> <link
+a.qmd pointer flipped to a doc holding: "A on side\n"
+```
+
+Test 1 read the modal, confirmed, got the panel, copied the command, read `project.json` (`mode: clone`, `ownerId`, `name: Shared Site`,
+`file: index.qmd`), and had a headless clone attach (all three files, `head` equal to the repository's) and a headless mirror
+join (the dirty file's on-disk text arrived). Test 2 ran that copied command against `target/debug/q2`: it served the editor shell on
+the port, and after `git switch side` in the originating folder the index's `a.qmd` pointed at a doc holding the side branch text.
+
+**Not run, and why.**
+
+- *Editing in a browser and reading the originator's disk.* No browser was available to this session. The same path is covered
+  without one: a browser edit is a doc change, which `follower-modes` and spec 7's reset test (a peer edits the owner's doc and the
+  owner's disk follows) exercise.
+- *The public server* (`wss://sync.automerge.org`): a manual run with throwaway content, left to Gordon. The modal's public-server
+  wording is covered by the confirm unit test only.
+- *Interrupted publish through VS Code.* Resume is tested at the core (spec 8: stop after the offline step, `HeadlessPeer.open`,
+  the hub ends with every doc); **Show share information** after a resume is not driven in the window.
+- *Windows*: not run. No platform-specific API was added; `select` and `refusals` use `path` and the probe, and the tests build
+  expected paths with `/` project-relative names. GE-16 is the Windows check.
+- *Linux CI for Playwright*: not run (the workflow is still manual).
+- The first full-suite run of `share-folder` once sat in `afterEach` for the whole 180 s test timeout; it did not reproduce in
+  three later runs (11 s, 6 s, 7 s), and the cleanup steps finish in under 400 ms. Unexplained; worth watching in GE-14.
+
+**For other plans.** GE-14 and GE-16 can originate a project with `originate()` from the core (or the command in a window) instead
+of `publishGit`; `buildOffline()` plus `HeadlessPeer.open()` is the resume path. The permanent-subset candidate is
+`share-folder.e2e.ts` (both tests; the second skips without a built `q2`).

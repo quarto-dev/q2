@@ -53,8 +53,16 @@ fails with `WebSocket is not defined`, although `engines.vscode` says `^1.90.0`.
 
 "Quarto Hub: Create Folder from Project" hard-wires the public sync server. For the
 tests, the VS Code layer (not the core) reads `QUARTO_HUB_TEST_SYNC_SERVER` and passes
-it as the server. Users see no change; GE-11 replaces it with the real per-folder
-binding.
+it as the server. Users see no change. Join Session (GE-11) takes its server from what
+the user pastes; the seam remains for Create Folder and Attach Folder, and as the fallback
+for a share link without `server=`.
+
+## GE-11 tests
+
+`tests/join.e2e.ts` runs Join Session and Leave Session against a real `q2 preview --allow-edit`
+on loopback (`helpers/q2-hub.ts`; run `cargo build --bin q2` first, or set `Q2_BINARY`). The
+ticket case sets `quartoHub.q2Path` to a stub `q2` (`src/core/stub-q2.ts`) that forwards TCP to
+that hub. A real `--share` and `--join` pair needs the network and is exploratory only.
 
 ## GE-9 tests and the timing script
 

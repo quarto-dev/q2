@@ -160,6 +160,12 @@ export class HeadlessPeer {
     return HeadlessPeer.start(dir, identity);
   }
 
+  /** Open the bound folder `dir` (an originated project, or any bound folder): the normal sync from local storage. */
+  static async open(dir: string, identity: Identity = IDENTITY): Promise<HeadlessPeer> {
+    await ensureWasm();
+    return HeadlessPeer.start(dir, identity);
+  }
+
   private static async start(dir: string, identity: Identity): Promise<HeadlessPeer> {
     const meta = (await readProjectMeta(dir)) as ProjectMeta;
     const host = { log: new MemoryLog(), watcher: new NodeFileWatcher(dir), buffers: new NoBuffers(), notifier: new RecordingNotifier() };

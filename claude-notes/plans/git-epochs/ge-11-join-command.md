@@ -2,7 +2,7 @@
 title: 'GE-11: The Join session command'
 date: 2026-11-18
 description: One command turns a ticket, a URL, or a share link into a bound and syncing extension folder in the right mode, with a way to leave, and spawns a local join proxy for remote hubs.
-status: approved
+status: done
 depends-on: [ge-10]
 lane: A
 epic: ../2026-11-18-git-epochs-epic.md
@@ -158,25 +158,25 @@ All in the vscode-free core from GE-8 unless marked. Each is written and seen fa
 
 ## Checklist
 
-- [ ] Write test specifications 1 to 4 and 7 to 9 and watch them fail.
-- [ ] Implement `classifyJoinInput`, `deriveWsUrl`, `healthUrlFor`, `projectRootMatches`, `offeredModes`, and the health
+- [x] Write test specifications 1 to 4 and 7 to 9 and watch them fail.
+- [x] Implement `classifyJoinInput`, `deriveWsUrl`, `healthUrlFor`, `projectRootMatches`, `offeredModes`, and the health
   and index inspectors in the core.
-- [ ] Make `createProjectFolder` and `makeRepo` take the sync server; keep single-file mode on its constant.
-- [ ] Write the stub `q2` helper and test specifications 5 and 6; implement the proxy manager (free port, readiness
+- [x] Make `createProjectFolder` and `makeRepo` take the sync server; keep single-file mode on its constant.
+- [x] Write the stub `q2` helper and test specifications 5 and 6; implement the proxy manager (free port, readiness
   poll, redaction, tree kill).
-- [ ] Rust, in `crates/quarto/src/main.rs` and the join entry point it calls (added by the second reviewer; confirm
+- [x] Rust, in `crates/quarto/src/main.rs` and the join entry point it calls (added by the second reviewer; confirm
   the plan home): add `--exit-on-stdin-close` to `q2 preview` with `requires = "join"`; the proxy\'s shutdown future
   also waits for EOF on stdin; the help text warns that stdin attached to `/dev/null` exits at once. Parse tests
   follow GE-4\'s pattern (the flag requires `--join`; it combines with `--port`, `--host`, and `--no-browser`), plus
   a test that the proxy exits when its stdin closes. Gates: clippy and nextest for `quarto` and `quarto-preview`.
-- [ ] Add `quartoHub.joinSession`, `quartoHub.leaveSession`, and the `quartoHub.q2Path` setting (scope `machine`; a
+- [x] Add `quartoHub.joinSession`, `quartoHub.leaveSession`, and the `quartoHub.q2Path` setting (scope `machine`; a
   test shows a workspace value is ignored) to `package.json`;
   implement the VS Code layer (input box, QuickPick, confirms, notifications, status bar, deactivation cleanup).
-- [ ] Route a bound folder to GE-10\'s rebind and Attach to GE-10\'s attach; route Editor only to GE-9\'s binding.
-- [ ] Write the Playwright specs in test specification 10 against the harness from GE-8; add the permanent ones to its
+- [x] Route a bound folder to GE-10\'s rebind and Attach to GE-10\'s attach; route Editor only to GE-9\'s binding.
+- [x] Write the Playwright specs in test specification 10 against the harness from GE-8; add the permanent ones to its
   run script.
-- [ ] Update the extension README: the two commands, the setting, the modes, the ticket and its exposure.
-- [ ] `cargo xtask lint`; `q2 render --strict` on this file after editing its checkboxes.
+- [x] Update the extension README: the two commands, the setting, the modes, the ticket and its exposure.
+- [x] `cargo xtask lint`; `q2 render --strict` on this file after editing its checkboxes.
 
 ## Gates
 
@@ -207,4 +207,58 @@ ticket, and any change to the clone or follower logic.
 
 ## Notes from the run
 
-Not started.
+Branch `ge/11-join-command`, two commits: `b540639c3` (Rust flag) and `48f641271` (extension).
+
+**What ran.**
+
+- Rust: `cargo clippy -p quarto -p quarto-preview --all-targets -- -D warnings` clean;
+  `cargo nextest run -p quarto -p quarto-preview` 1357 passed, 3 skipped. The new tests are three parse tests
+  (`preview_exit_on_stdin_close_*`) and `stdin_closed_waits_for_eof`.
+- TypeScript: `npm run typecheck`, `npm test` (244 tests), `npm run build` in `quarto-hub-vscode`.
+  `cargo xtask lint` passes.
+- Playwright (`node e2e/run.mjs join.e2e`, VS Code 1.101.2, against `target/debug/q2`): all four specs pass
+  ((a) own directory by `http` address, (b) `ws` URL from another folder, (c) and (e) ticket through a stub proxy then
+  Leave, (d) bound folder offered rebind).
+- The plan\'s test specs were written together with their implementation rather than strictly red first for the TypeScript
+  core: the first vitest run failed only on the missing module. The Rust parse tests were seen failing (the field did not
+  exist).
+
+**Details taken from the plan as written** (all marked "confirm"): the `/ws` URL derived from an `http(s)` address; attach
+stays available for a remote-looking match; **Create Folder from Project** is unchanged; the `--exit-on-stdin-close`
+home in `crates/quarto`.
+
+**Surprises and deviations.**
+
+- `bindFolder` seeds the local store. Non-clone modes start offline from `.quarto-hub/automerge`
+  (`project-sync.ts`, Phase 1), so an editor-only folder bound with only a `project.json` found "Document unavailable"
+  and never dialed the hub. The first Playwright run showed it. `bindFolder` now connects, pulls the index and file docs
+  into the store without writing a file, and throws (writing nothing) when the project cannot be read.
+- Mirror joins with a window open add the mirror with `updateWorkspaceFolders` rather than `vscode.openFolder`, so the
+  extension host, and a ticket\'s proxy, survive. With no folder open it falls back to `openFolder`; a proxy then ends
+  with the reload and the folder goes stale, as the plan accepts.
+- The stdin watcher runs on a plain thread, not `spawn_blocking`, so a blocked read cannot delay the runtime\'s shutdown
+  when Ctrl-C wins. It needed tokio\'s `sync` feature (`oneshot`) in `crates/quarto/Cargo.toml`.
+- The proxy tests use short real timeouts (700 ms, 8 s) instead of a fake clock: the child is a real process.
+- The `.cmd` branch is covered by `needsShell` with an injected platform; running a real `q2.cmd` is GE-16.
+- Flakes under a parallel `npm test`: GE-10\'s `clone-modes.test.ts` fails intermittently (a different test each run;
+  none pass or fail alone), and `createProjectFolder records the server` failed once at 277 ms and then passed in
+  eight further runs. Not diagnosed. The proxy test "Leave kills a proxy that ignores stdin EOF" was flaky until `stop`
+  waited for the child\'s exit event (a zombie still answered `kill(pid, 0)`).
+
+**End to end.** Real binary, real hub, real ticket (network available):
+
+```text
+q2 preview <dir> --allow-edit --share --no-browser --port 39880      # printed: q2 preview --join q2previewaaa5qr3…
+startJoinProxy({ q2Path: target/debug/q2, ticket })   # spawns:
+  q2 preview --join <ticket> --host 127.0.0.1 --port 63667 --no-browser --exit-on-stdin-close
+PROXY ws://127.0.0.1:63667/ws  {"indexDocId":"2dGrSqijdgbfdtMnrMyckTFhWrwC","projectRoot":".../hubdir2"}
+LOG   ticket redacted (5 lines)
+AFTER STOP  health null     # the proxy exited after stdin was closed
+```
+
+I inspected the output: `/health` through the proxy returned the host\'s index doc id and project root, the output
+log held `<ticket>` and never the ticket, and the proxy was gone after `stop()`. The VS Code layer was exercised with a
+real VS Code and a real `q2 preview --allow-edit` hub (Playwright specs above): `project.json` showed
+`{"mode":"editor-only","indexDocId":<hub>,"syncServer":"ws://127.0.0.1:<port>/ws"}` and the status bar read
+"Quarto Hub: editor only". Not run: a real VS Code joined through a real `--share` ticket (the ticket case used a stub
+`q2` that forwards TCP to the hub; the real proxy was exercised through `startJoinProxy` only).

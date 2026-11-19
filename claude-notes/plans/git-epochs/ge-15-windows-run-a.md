@@ -2,7 +2,7 @@
 title: 'GE-15: Windows run A: the Rust and hub items'
 date: 2026-11-18
 description: 'Runs only the new Rust and hub tests of the git epochs epic on a real Windows machine, from a temporary tooling branch that never lands, with specific items and a record of what each one proves.'
-status: approved
+status: done
 depends-on: [ge-4]
 lane: B
 epic: ../2026-11-18-git-epochs-epic.md
@@ -113,45 +113,45 @@ The tooling is code, so it is tested before it ships, on macOS, in this order:
 
 ## Checklist
 
-- [ ] Confirm GE-2, GE-3, and GE-4 are complete; read their notes for the real module and test names. Replace the
+- [x] Confirm GE-2, GE-3, and GE-4 are complete; read their notes for the real module and test names. Replace the
   placeholders above and record the final filters in "Notes from the run".
-- [ ] Add the tests the filters need and no earlier plan wrote (tests only, no product code, on `ge/15-windows-run-a`
+- [x] Add the tests the filters need and no earlier plan wrote (tests only, no product code, on `ge/15-windows-run-a`
   before the tooling): a `large_tree` module in `quarto-git-epochs` (creates a few thousand files in a temp repo and
   switches branches while the controller runs), a `path_keys` module in `quarto-hub` (drive letters, UNC prefixes, long
   paths, case-insensitive key collisions), and a CRLF case in `arrival::` and `classify::`. Each must run on macOS too;
   list each filter with `cargo nextest list -E` to confirm it matches the `MinTests` guard.
-- [ ] Write the tooling tests first (items 1 to 3 above) and watch them fail.
-- [ ] Create the tooling branch and its worktree: `git worktree add -b windows/git-epochs
+- [x] Write the tooling tests first (items 1 to 3 above) and watch them fail.
+- [x] Create the tooling branch and its worktree: `git worktree add -b windows/git-epochs
   .worktrees/windows-git-epochs feature/git-epochs`. Commit the tooling in small commits, each message ending
   "(temporary, never lands)".
-- [ ] Write `scripts/git-epochs-windows/run.ps1`, adapted from RFU-6 (not copied blindly): items `a1` to `a6`,
+- [x] Write `scripts/git-epochs-windows/run.ps1`, adapted from RFU-6 (not copied blindly): items `a1` to `a6`,
   a build item named `a0` (RFU-6 calls it `b0`, which would clash with run B), the preflight that prints the install
   command for anything missing (`uv` is required here, not optional as in RFU-6; NASM and CMake for the `aws-lc`
   crates; Git for Windows; Rust MSVC), `-WithTools`, the
   `core.autocrlf` check and caveat, the base-commit check, JSON and markdown results.
-- [ ] Write `scripts/git-epochs-windows/extract_failures.py` (standard library only, run with `uv run`),
+- [x] Write `scripts/git-epochs-windows/extract_failures.py` (standard library only, run with `uv run`),
   `scripts/git-epochs-windows/make_large_tree.py`, and the results `.gitignore`.
-- [ ] Write the instructions page `claude-notes/plans/git-epochs/windows-run-instructions.md`, on the tooling branch
+- [x] Write the instructions page `claude-notes/plans/git-epochs/windows-run-instructions.md`, on the tooling branch
   only: one-time setup (git, Rust MSVC, `cargo-nextest`, `git config --global core.longpaths true`, Node at `.nvmrc`,
   uv, the Visual Studio C++ build tools); cloning with `-c core.autocrlf=true`; the run command; sending results
   back; a table of what each item proves and does not prove; known failures to ignore; how to explain failures; and
   how to refresh the branch (merge `feature/git-epochs` into it; never rebase a pushed branch). Render-check it with
   `q2 render --strict`.
-- [ ] Run every item\'s command on macOS where it applies and list the failures there as known unrelated. Estimate the
+- [x] Run every item\'s command on macOS where it applies and list the failures there as known unrelated. Estimate the
   Windows cost (a cold build of four crates and their test binaries is plausibly 15 to 30 minutes and 10 to 20 GB;
   an estimate, not measured).
-- [ ] **Gordon:** say go. The agent pushes with an explicit refspec,
+- [x] **Gordon:** say go. The agent pushes with an explicit refspec,
   `git push origin windows/git-epochs:windows/git-epochs`, never silenced, and confirms the remote tip with
   `git ls-remote origin windows/git-epochs` equal to `git rev-parse windows/git-epochs`.
-- [ ] **Gordon:** on the Windows machine, clone with `core.autocrlf=true`, switch to the branch, and run
+- [x] **Gordon:** on the Windows machine, clone with `core.autocrlf=true`, switch to the branch, and run
   `powershell -ExecutionPolicy Bypass -File scripts\git-epochs-windows\run.ps1 -WithTools -Publish`.
-- [ ] **Gordon:** tell the agent "results are pushed".
-- [ ] The agent fetches the branch, parses the JSON, and records each item as PASS, FAIL, or SKIP in the notes with
+- [x] **Gordon:** tell the agent "results are pushed".
+- [x] The agent fetches the branch, parses the JSON, and records each item as PASS, FAIL, or SKIP in the notes with
   the base commit, the machine description, and the `core.autocrlf` value. If anything failed, run the extractor
   and add its summary.
-- [ ] List every finding with its output. Do not change product code in this plan: propose a fix plan for each
+- [x] List every finding with its output. Do not change product code in this plan: propose a fix plan for each
   defect, to be inserted after this plan.
-- [ ] Land the notes on `feature/git-epochs` through `ge/15-windows-run-a`; the tooling is not merged. Verify with
+- [x] Land the notes on `feature/git-epochs` through `ge/15-windows-run-a`; the tooling is not merged. Verify with
   `git log feature/git-epochs -- scripts/git-epochs-windows`, which must be empty.
 
 ## Gates
@@ -182,4 +182,134 @@ the items it reports go in the notes, and the notes say the output was read.
 
 ## Notes from the run
 
-Not started.
+**Session 1 (paused at the first Gordon step: say go before the push).**
+
+**Final filters** (GE-2 and GE-3 fixed the real module names; the placeholders matched, so none changed). They live in
+`scripts/git-epochs-windows/items.json` on the tooling branch, which `run.ps1` and `check_filters.sh` both read.
+`check_filters.sh` lists each on macOS with the `-p` packages of the item (without `-p`, `nextest list` builds the
+whole workspace); listed counts against the `min_tests` guard:
+
+| Item | Filter | Listed | Guard |
+|---|---|---:|---:|
+| `a1` | `package(quarto-git-epochs) & test(probe_real_repo::)` | 21 | 10 |
+| `a2` | `package(quarto-git-epochs) & binary(integration) & test(large_tree::)` | 2 | 2 |
+| `a3` | `package(quarto-git-epochs) & (test(classify::) \| test(arrival::))` | 17 | 15 |
+| `a4` | `(package(quarto-git-epochs) & test(registry::)) \| (package(quarto-hub) & test(path_keys::))` | 16 | 8 |
+| `a5` | `package(quarto-hub) & binary(integration) & test(git_epochs::)` | 26 | 20 |
+
+`a6` runs clippy, then nextest, for `quarto-git-epochs`, `quarto-hub`, `quarto-preview`, and `quarto`.
+
+**Tests added on `ge/15-windows-run-a`** (tests only, no product code; commit `48bd44f15`). They passed on first run,
+since the code under test already existed, so there was no red phase for these; each asserts something a wrong
+implementation would break (the CRLF tests also assert that the raw, unnormalized comparison gives the other answer):
+
+- `large_tree::` (crate `quarto-git-epochs`, 2 tests): builds a 4,000-file repository with branches `a` and `b`
+  (1,200 files differ), or uses the one named by `GIT_EPOCHS_LARGE_TREE_REPO` (what `run.ps1` passes after
+  `make_large_tree.py`). Six real `git switch` runs while the real probe and controller poll; asserts the gate was seen
+  closed at least once, only for known marker names, then a decision for the new HEAD with a `checkout:` reflog entry,
+  then open and idle. The claim is over the six runs, because one fast switch can finish between two polls.
+- `crlf_checkout_text_attaches_silently_after_normalization`, `crlf_checkout_binary_compares_by_bytes` (`arrival::`) and
+  `crlf_checkout_is_not_an_edit_after_normalization` (`classify::`): a real `git checkout` under `core.autocrlf=true`
+  writes CRLF (asserted), and the comparison goes through `normalize_text`; a NUL-bearing file stays byte-identical.
+  They set `autocrlf` in their own temp repos, so they run on macOS too; `run.ps1` still marks the `a3` caveat when the
+  machine\'s own setting is not `true`.
+- `sync::tests::path_keys::` (crate `quarto-hub`, 4 unit tests, because `contained_join` is private): drive-letter and
+  UNC forms rejected on every platform, a native root joins to forward-slash keys, a path over 260 characters
+  round-trips through disk, and a case pair is flagged by `registry::case_collisions`.
+- `support::crlf_checkout` helper. `cargo clippy -p quarto-git-epochs --all-targets --target x86_64-pc-windows-msvc`
+  is clean; `quarto-hub` cannot cross-check from macOS (`aws-lc-sys`).
+
+**Tooling** (branch `windows/git-epochs`, worktree `.worktrees/windows-git-epochs` inside this lane worktree; commits
+end "(temporary, never lands)"; the branch is local only, nothing pushed). Tooling tests were committed first and seen
+failing (the scripts did not exist: three failures and one import error), then passed: `python3 -I -m unittest
+discover -s scripts/git-epochs-windows/tests` (4 tests for `make_large_tree.py`: same seed gives identical files and
+hash, the two branches differ in exactly `--differing` files, a different seed changes contents, a non-empty
+destination is refused; 4 for `extract_failures.py` against a committed nextest-log fixture: grouping, per-module
+counts, and the end-of-run repeat lines adding no blocks). `run.ps1` follows RFU-6 (`Invoke-Logged` through `cmd.exe`,
+`MinTests` guard, `proves` and `does_not_prove`, JSON and markdown results) with the lessons built in: it records the
+base commit and warns loudly when it is not the tip of `origin/windows/git-epochs`, reads `core.autocrlf` and
+`core.longpaths` and prints a caveat, and requires `uv`, NASM, and CMake. `pwsh` is not installed on this host, so
+**`run.ps1` was reviewed by reading only; it has never been parsed or run.** Expect a first-run syntax or logic fix
+from the Windows machine. The instructions page `claude-notes/plans/git-epochs/windows-run-instructions.md` (tooling
+branch only) renders with no error of its own under `q2 render --strict`; the only error is the pre-existing Q-2-7 in
+`2026-09-21-book-projects-P0-number-sections.md`.
+
+**macOS baseline** (this host, git 2.55.0, base `48bd44f15`): `cargo clippy -p quarto-git-epochs -p quarto-hub
+-p quarto-preview -p quarto --all-targets -- -D warnings` clean; `cargo nextest run` for the same four crates: 1979 run,
+1979 passed (1 slow), 3 skipped. No known-unrelated failures this time (the two Julia tests GE-4 saw failing passed).
+
+**Windows cost estimate (not measured).** A cold build of the four crates and their test binaries: 15 to 30 minutes and
+10 to 20 GB; the six-switch `a2` test adds a minute or two per switch on a slow disk; `a6` nextest is the longest part.
+
+**Push.** After Gordon said go: `git push origin windows/git-epochs:windows/git-epochs`, remote tip equal to the local
+tip (`b731fe058`). A second push (`d33c03064`) followed Gordon\'s first attempt: `nasm` was installed by winget but not on
+`PATH`, so `run.ps1` now looks in the usual NASM and CMake folders and adds them for the run. Gordon also asked what
+`-Publish` does: it commits only the run\'s `.json` and `.md` and pushes `HEAD` to `windows/git-epochs`.
+
+## Windows results
+
+Run `20261119-023206-GWWIN`, results commit `f83a4ec66` on `windows/git-epochs` (`scripts/git-epochs-windows/results/gea-20261119-023206-GWWIN.json` and `.md`; I read both). Base `d33c03064`, the current tip of the remote
+branch. Machine: Microsoft Windows 11 Pro, `x86_64-pc-windows-msvc`, Git for Windows 2.47.1, **`core.autocrlf=input`**
+(not `true`), `core.longpaths` unset. `run.ps1` ran on its first attempt with no syntax or logic error. Only the JSON
+and `.md` came back (no logs, no `extract_failures` output), so the per-test detail below is what the output tails in
+the JSON show.
+
+| Item | Catalog | Result | What it shows |
+|---|---|---|---|
+| `a0` | | PASS | The four crates build on Windows (NASM and CMake present). |
+| `a1` | W1 | **FAIL** (19 of 21 pass) | Two tests fail on a test-helper defect, finding F1. The probe parsing, `ls-tree`, symlink filter, `cat-file --batch`, reflog, markers, merge and rebase cases all pass on Git for Windows. |
+| `a2` | W2 | **FAIL** (1 of 2 pass) | The gate test passed: six real switches of the 4,000-file tree, gate seen closed for real markers, released after. The size-and-branches test failed on a race in the test setup, finding F2. |
+| `a3` | W3 | PASS (caveat) | 17 of 17. Caveat: the machine has `autocrlf=input`; the CRLF tests set `autocrlf=true` in their own temp repos, so the comparison was exercised, but not from the machine\'s own checkout. |
+| `a4` | W4 | PASS (caveat) | 16 of 16, including the 260-character-path round trip. Caveat: `core.longpaths` unset (no git operation on a long path in these tests). |
+| `a5` | W5 | PASS | 26 of 26: the hub gate with real repos, checkpoint ordering, the injected-`PermissionDenied` skip-never-delete test. |
+| `a6-clippy` | W10 | PASS | `cargo clippy -D warnings` is clean for the four crates on the Windows host target. |
+| `a6-nextest` | W10 | **FAIL** | 18 failing tests (list below). Two are F1. The other 16 are in code this epic did not change. |
+
+**`a6-nextest` failures.** Two are the F1 tests above. The other 16: `quarto` binary
+`render_dry_run::would_render_lines_are_project_relative`; `convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes`;
+`lmd_snapshots` (four); `render_scripts_cli` (`explicit_interpreter_command_line_with_args`, `list_form_runs_scripts_in_order`);
+`smoke_all::smoke_all`; `quarto-hub` `storage::tests::test_storage_manager_prevents_double_lock` and
+`..._standalone_prevents_double_lock`; `quarto-preview` `route_tests` (two), `book_downloads::a_chapters_recorded_plot_reaches_the_book`,
+`live_reexecute::the_cache_does_not_answer_a_re_execute_under_engine_only_sources`, `render_scripts_boot::pre_render_scripts_run_once_at_boot`.
+`git diff` of the epic against its merge base with `main` shows it did not touch `storage.rs`, `render_dry_run`, the
+smoke-all fixtures, or any of those test files; it added only the git-status route, the `--git` flag, and the
+`PreviewConfig::git` field to `quarto-preview` and `quarto`. **There is no Windows baseline of `main`**, so I cannot
+call these pre-existing, only unrelated by inspection of the diff. The `smoke_all` tail shows two causes: `great_tables`
+is not installed in the Python environment (an environment gap), and the `brand-monospace-*` typst files fail
+regex checks (cause not visible in the tail). On macOS the same four crates passed 1979 of 1979 at `48bd44f15`.
+
+## Findings and proposed fix plans
+
+No product code changed in this plan. Proposed, to be inserted after GE-15 (name them GE-15b and GE-15c when Gordon
+approves):
+
+- **F1 (test helper; a1).** `support::temp_dir()` canonicalizes the temp directory, which on Windows yields a
+  `\\?\C:\...` verbatim path. Git for Windows rejects it as a worktree or clone destination: `git worktree add
+  \\?\C:\...\wt` fails with "could not create leading directories of '//?/C:/.../wt/.git': Invalid argument", and
+  `git clone ... \\?\C:\...\clone` fails with "could not create work tree dir ... Invalid argument". It is the same
+  class of defect RFU-6 found in product code (`canonicalize` verbatim paths), but here only the test helper has it.
+  Fix plan: in `crates/quarto-git-epochs/tests/integration/support.rs`, return the plain path on Windows (strip the
+  `\\?\` prefix, or skip canonicalizing off macOS, where `/var` to `/private/var` is the only reason it exists);
+  check the hub\'s `git_epochs` test harness for the same pattern (a5 passed, so it does not hit it); rerun with
+  `run.ps1 -Only a1`. A product question to settle in that plan: does `SubprocessProbe` or the hub ever receive a
+  verbatim project root from `canonicalize` in the real binary? If so, the probe should hand git a plain path, because
+  `current_dir` accepts a verbatim path but any path argument does not.
+- **F2 (test setup; a2).** With `GIT_EPOCHS_LARGE_TREE_REPO` set, both `large_tree::` tests use one shared repository
+  and nextest runs them in parallel processes; the size test\'s `git switch -q a` hit the gate test\'s `index.lock`
+  ("File exists"). Fix plan: the size test must not switch branches (use `git ls-files`/`git diff` on refs, which take no
+  lock) or each test must copy the repo; then rerun `-Only a2`. The gate test\'s pass is real but ran beside the other
+  test on the same repository, so the clean rerun is the proper W2 evidence.
+- **F3 (not the epic; a6).** The 16 other failures, with no Windows baseline. Fix plan: run `main` at its merge base
+  (`f9936b08d`) once with the same script (`-Only a6`) to separate pre-existing failures from new ones; then file strands
+  for the pre-existing ones (they are outside the epic, so a strand is right), starting with the two
+  `test_storage_manager_prevents_double_lock` tests and the `smoke_all` `brand-monospace` mismatches. Install
+  `great_tables` in the run\'s Python environment, or gate those smoke tests on it.
+- **F4 (tooling).** The run needs `autocrlf=true` and `core.longpaths=true` set for the full a3 and a4 evidence, and
+  the machine had `input` and unset. The script reported both caveats correctly. Rerun with the clone made as the
+  instructions say if full evidence is wanted; the CRLF tests themselves already ran against `autocrlf=true` temp repos.
+
+## Reconciliation
+
+Checklist reconciled against what landed: tests and tooling as listed above; the push, the Windows run, and the
+results all happened as recorded. The tooling branch `windows/git-epochs` was never merged;
+`git log feature/git-epochs -- scripts/git-epochs-windows` is empty.
