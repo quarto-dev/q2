@@ -108,6 +108,11 @@ export class ProjectSync {
     await this.repo.shutdown().catch(() => {});
   }
 
+  /** The index and every tracked file doc with their current heads (URL-encoded). */
+  inventory(): { docId: string; heads: string[] }[] {
+    return [this.index, ...this.handles.values()].map((h) => ({ docId: h.documentId, heads: h.heads() as string[] }));
+  }
+
   // --- helpers -----------------------------------------------------------
 
   /** Relative slash path if `abs` is a non-ignored file inside this project, else null. */

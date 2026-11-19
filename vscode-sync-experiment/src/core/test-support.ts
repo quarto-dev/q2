@@ -12,6 +12,9 @@ import { createIndexDocumentContent, type IndexDocument } from '@quarto/quarto-a
 import { startTestHub, type TestHub } from '@quarto/quarto-sync-client/testing';
 import type { BufferBinding, BufferHost, FileWatcher, Logger, Notifier, SyncHost } from './host';
 import type { Identity } from './presence';
+import { MemoryLog, RecordingNotifier } from './recording';
+
+export { MemoryLog, RecordingNotifier };
 import { TextBindingCore, computeReplace, type TextDoc } from './text-binding';
 
 export const identity: Identity = { userId: 'u-test', userName: 'Test', userColor: '#112233' };
@@ -87,33 +90,6 @@ export class FakeBufferHost implements BufferHost {
     const r = computeReplace(cur, newText);
     this.texts.set(absPath, newText);
     if (r) this.bindings.get(absPath)?.onLocalEdit([{ rangeOffset: r.start, rangeLength: r.end - r.start, text: r.text }]);
-  }
-}
-
-export class RecordingNotifier implements Notifier {
-  readonly messages: { level: string; message: string }[] = [];
-  readonly statuses: (string | null)[] = [];
-  async info(message: string): Promise<undefined> {
-    this.messages.push({ level: 'info', message });
-    return undefined;
-  }
-  async warn(message: string): Promise<undefined> {
-    this.messages.push({ level: 'warn', message });
-    return undefined;
-  }
-  async error(message: string): Promise<undefined> {
-    this.messages.push({ level: 'error', message });
-    return undefined;
-  }
-  status(text: string | null): void {
-    this.statuses.push(text);
-  }
-}
-
-export class MemoryLog implements Logger {
-  readonly lines: string[] = [];
-  appendLine(line: string): void {
-    this.lines.push(line);
   }
 }
 

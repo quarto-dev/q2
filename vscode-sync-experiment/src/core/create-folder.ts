@@ -45,6 +45,36 @@ async function projectFolderName(repo: Repo, files: Record<string, string>, inde
   return cleaned || `quarto-hub-${indexDocId.slice(0, 8)}`;
 }
 
+/**
+ * Write every file and explicit folder of the project's index under `root`.
+ * Each key comes from a doc, so it is validated (G36): a rejected key is
+ * skipped and logged, and the other keys are still written.
+ */
+export async function writeProjectFiles(repo: Repo, root: string, index: IndexDocument | undefined, log: Logger): Promise<void> {
+  const files = index?.files ?? {};
+  for (const [rel, docId] of Object.entries(files)) {
+    try {
+      await safeJoin(root, rel);
+    } catch (err) {
+      if (!(err instanceof UnsafePathError)) throw err;
+      log.appendLine(`skipped index key: ${err.message}`);
+      continue;
+    }
+    const handle = await findDoc<FileDoc>(repo, docId);
+    const doc = handle.doc();
+    if (doc) await writeFileDoc(root, rel, doc);
+    log.appendLine(`wrote ${rel}`);
+  }
+  for (const folder of Object.keys(index?.folders ?? {})) {
+    try {
+      await fs.mkdir(await safeJoin(root, folder), { recursive: true });
+    } catch (err) {
+      if (!(err instanceof UnsafePathError)) throw err;
+      log.appendLine(`skipped index folder: ${err.message}`);
+    }
+  }
+}
+
 export interface CreateFolderOptions {
   /** The sync server to dial and to record in `project.json`. */
   syncServer?: string;
@@ -72,27 +102,7 @@ export async function createProjectFolder(
     for (let n = 2; await fs.stat(root).then(() => true, () => false); n++) root = path.join(parentDir, `${base}-${n}`);
     const meta: ProjectMeta = { indexDocId, syncServer, createdAt: new Date().toISOString() };
     await writeProjectMeta(tmpRoot, meta);
-    for (const [rel, docId] of Object.entries(files)) {
-      try {
-        await safeJoin(tmpRoot, rel);
-      } catch (err) {
-        if (!(err instanceof UnsafePathError)) throw err;
-        log.appendLine(`skipped index key: ${err.message}`);
-        continue;
-      }
-      const handle = await findDoc<FileDoc>(repo, docId);
-      const doc = handle.doc();
-      if (doc) await writeFileDoc(tmpRoot, rel, doc);
-      log.appendLine(`wrote ${rel}`);
-    }
-    for (const folder of Object.keys(index.doc()?.folders ?? {})) {
-      try {
-        await fs.mkdir(await safeJoin(tmpRoot, folder), { recursive: true });
-      } catch (err) {
-        if (!(err instanceof UnsafePathError)) throw err;
-        log.appendLine(`skipped index folder: ${err.message}`);
-      }
-    }
+    await writeProjectFiles(repo, tmpRoot, index.doc(), log);
     // Open files are written by VS Code's autosave (see ownership rule in
     // project-sync.ts); a formatter would broadcast its reflow to every collaborator.
     await fs.mkdir(path.join(tmpRoot, '.vscode'), { recursive: true });
