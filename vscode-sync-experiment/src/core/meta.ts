@@ -25,6 +25,11 @@ export interface ProjectMeta {
   mode?: ProjectMode;
   /** Clone mode: the repository identity verified at attach and re-verified at every startup (G19, G21). */
   repo?: RepoIdentity;
+  /** Set only in the folder that originated the project (GE-12, G16); it must equal the index's `owner` key to write the pointer. */
+  ownerId?: string;
+  /** Originating folder: the project name and the file a share link opens (GE-12). */
+  name?: string;
+  file?: string;
 }
 
 /** `project.json` parses but says something this version does not understand. */
