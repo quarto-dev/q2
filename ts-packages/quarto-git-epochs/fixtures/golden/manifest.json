@@ -100,5 +100,27 @@
       }
     ],
     "retired": []
+  },
+  "ge05-registry-ops.bin": {
+    "entries": [
+      {
+        "key": "a.qmd\u0000b2\u0000docA",
+        "gen": 0
+      },
+      {
+        "key": "b.qmd\u0000c1\u0000docB",
+        "gen": 0
+      },
+      {
+        "key": "b.qmd\u0000c1\u0000docC",
+        "gen": 1
+      }
+    ],
+    "retired": [
+      {
+        "key": "b.qmd\u0000c1\u0000docB",
+        "gen": 0
+      }
+    ]
   }
 }
