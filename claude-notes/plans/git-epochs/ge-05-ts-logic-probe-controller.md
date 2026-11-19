@@ -25,17 +25,22 @@ peer (GE-8) are the consumers.
 
 See the [epic decisions](../2026-11-18-git-epochs-epic.md#decisions). The ones this plan carries:
 
-- **G2** classifier: content rule first, reflog subject as the tiebreaker; jj and reflog-less repos use content alone.
+- **G2** classifier: content rule first, reflog subject as the tiebreaker (any non-commit entry in the reflog span
+  means checkout-type); jj and reflog-less repos use content alone.
 - **G3, G4** gate markers and subprocess hygiene: plumbing only, `GIT_OPTIONAL_LOCKS=0`, no `hash-object`, `cat-file
   --batch` for blob content, timeouts, an off switch, colocated jj lock, forward-slash paths.
-- **G7, G8, G11, G12** registry: canonical doc is the lowest `(generation, docId)`; a commit moves the doc forward in one
+- **G7, G8, G11, G12** registry (flat keys, a retired set, a narrow repair rule): canonical doc is the lowest `(generation, docId)` that is not retired; a commit moves the doc forward in one
   change; an unavailable canonical doc is treated as absent after 5 s; a doc is live under at most one path; a
   case-insensitive key collision falls back to ordinary sync; an unborn repo is refused.
-- **G9** arrival, the five steps, text and binary (byte hash), `ReadOnly` and `WriteBack` variants.
+- **G9** arrival, the five steps and the `reset --hard` retire step, text and binary (byte hash), `ReadOnly` and
+  `WriteBack` variants, and the step 5 fallback under jj.
 - **G10** the startup rule over a persisted `{head, blobs}` record and the detached set.
 - **G14** per-file mode: tracked files take part, untracked files follow the pointer.
 - **G29** two implementations, one fixture set; the pure core takes and returns plain JSON-able data.
-- **G32** the numbers: quiet window 1 s, decision cap 30 s, stale lock 60 s, unavailable canonical doc 5 s.
+- **G1** the controller\'s synchronous `check()`, the hold of every file whose disk differs from its last synced
+  content, and the quiet window that ignores the peer\'s own writes.
+- **G32** the numbers: quiet window 1 s, decision cap 30 s, stale lock 60 s, unavailable canonical doc 5 s, controller
+  tick while a decision is pending 250 ms.
 
 ## Context
 
@@ -61,9 +66,9 @@ Module map. The names are the contract\'s module map (GE-1), the same as the Rus
 | `classify` | `classify(input)` returns a verdict, commit or checkout (G2) |
 | `arrival` | `arrive(input)` returns one action for a file (G9, G14); text and binary; both policies |
 | `startup` | `startupDecision(input)` returns the per-file plan for the three cases (G10) |
-| `registry` | `canonical`, `nextGeneration`, `register`, `moveForward`, `entriesFor`, `keyCollision`, `liveElsewhere`; reads and writes the sidecar over `@automerge/automerge` docs |
+| `registry` | `canonical`, `nextGeneration`, `register`, `moveForward`, `retire`, `repair`, `entriesFor`, `keyCollision`, `liveElsewhere`; reads and writes the sidecar (flat keys) over `@automerge/automerge` docs |
 | `probe` | the `GitProbe` interface and `createGitProbe` (the subprocess implementation) |
-| `controller` | `createController(probe, options, clock)` and the tick-driven state machine |
+| `controller` | `createController(probe, options, clock)`, the tick-driven state machine, and `check()`, the synchronous entry every sync path calls first |
 
 Boundaries. Pure functions take plain JSON-able data and return plain data; the action and field names are exactly the
 ones in GE-1\'s fixtures and spec, and a rename is a change to the contract, not to this plan. The only Automerge use is
@@ -78,19 +83,21 @@ Written first, seen failing for the right reason (a missing module, then a wrong
    expected output. Rows marked for a role this module does not implement are skipped by name, never by position.
 2. **Classifier rows:** a plain commit; amend; a merge commit and a cherry-pick commit (content rule handles them); a
    checkout; a reset with an unchanged blob; save-then-commit (a plain `commit` subject with a differing disk is the
-   author\'s edit); jj and no reflog (content only).
+   author\'s edit); a reflog span of `switch` then `commit` (checkout-type); `git stash` push; jj and no reflog (content only).
 3. **Arrival rows,** both policies, text and binary: no registered doc; already attached; disk equals the doc; clean
    but drifted (join with a notice); dirty (detach); `ReadOnly` with a differing disk (create from disk); a doc live
-   under another path (fork); an unavailable canonical doc (create after the timeout).
-4. **Registry rows and golden docs:** canonical by lowest `(generation, docId)`; a creation race (set union); a later
-   creator gets generation max-seen plus one; move forward is one change and carries the generation; two tips;
+   under another path (fork); an unavailable canonical doc (create after the timeout); already attached with S equal to B and T different (retire,
+   create, register, flip); a doc another peer retired; every changed file under colocated jj (step 5 fallback).
+4. **Registry rows and golden docs:** canonical by lowest `(generation, docId)`; a creation race on one key and on a new path (flat union); a later
+   creator gets generation max over the path plus one; retire skips the doc and repair never re-registers it; move forward is one change and carries the generation; two tips;
    case-insensitive collision; unborn repo refused. The package reads each golden doc and checks its logical entries;
    it applies the operation and checks that the result decodes to the golden \"after\" entries. Reading this package\'s
    docs with the Rust crate is not checked here; GE-14, the first plan that waits for both, does that.
 5. **Startup rows:** HEAD unchanged (reconcile as today); HEAD changed with some blobs differing; no record (arrival for
    every file, never a merge); detached paths survive a restart.
 6. **Controller with a fake probe and a fake clock, no sleeps:** gate closes on each marker; pending on a HEAD or
-   reflog-tail change; hold of changed files; decision only after 1 s of quiet and stable state; the 30 s cap; lock
+   reflog-tail change; hold of every file whose disk differs from its last synced content; `check()` sees a changed reflog tail before any
+   tick; the peer\'s own writes do not restart the quiet window; decision only after 1 s of quiet and stable state; the 30 s cap; lock
    files stale after 60 s (resume with a warning); state markers pause indefinitely; an unresolvable HEAD means no
    change and keeps re-checking; resume; `off` when the probe reports git missing or refused.
 7. **Probe against real temp repos** (the scenario step lists): HEAD and unborn HEAD; `--git-path` for a linked
@@ -108,7 +115,8 @@ Written first, seen failing for the right reason (a missing module, then a wrong
 - [ ] Write the fixture runner for each module and the golden-doc test; run them and see them fail because the
   modules do not exist.
 - [ ] `classify`: implement G2; the classifier rows pass.
-- [ ] `registry`: implement canonical ordering, `nextGeneration`, `register`, `moveForward` (one `A.change`), the
+- [ ] `registry`: implement canonical ordering (retired entries skipped), `nextGeneration` (maximum over the path plus one),
+  `register` (put-if-absent), `moveForward` (one `A.change`), `retire`, `repair`, the
   collision check, and the live-elsewhere check; the registry rows and the golden-doc test pass; commit the doc this
   package writes as a fixture for the cross-implementation check in GE-14 (under `fixtures/golden/`, named for this
   plan); nothing in GE-2 reads it.
@@ -117,11 +125,12 @@ Written first, seen failing for the right reason (a missing module, then a wrong
 - [ ] `startup`: implement the three cases; the startup rows pass.
 - [ ] `probe` interface and a fake probe used by the controller tests. The interface also has the repo identity
   queries (G4): `rootCommits()` (`rev-list --max-parents=0 HEAD`), `isShallow()` (`rev-parse
-  --is-shallow-repository`), and `showPrefix()`; GE-10 uses them for the attach check and GE-12 for the `repo` entry.
+  --is-shallow-repository`), and `showPrefix()`; GE-10 uses them for the attach check and GE-12 for the `repo` entry. The interface also has `cheapState()`, which
+  stats the marker paths and the reflog file with no subprocess, for `check()`.
   Real-repo tests: a repo with two root commits, and a `--depth 1` clone made through a `file://` URL (a plain local
   path ignores `--depth`).
 - [ ] `controller`: write the fake-probe and fake-clock tests, see them fail, then implement the state machine with the
-  numbers from G32; they pass with no real timers and no sleeps.
+  numbers from G32, the synchronous `check()`, and an `isOwnWrite(path)` option for the quiet window; they pass with no real timers and no sleeps.
 - [ ] `probe` subprocess implementation: spawn `git` without a shell, with `GIT_OPTIONAL_LOCKS=0`, a per-call timeout,
   a path that finds `git.exe` on Windows, `cat-file --batch`, `ls-tree -r -z` limited to the project prefix, markers
   resolved once with `--git-path`, jj\'s `.jj/working_copy/working_copy.lock`, and forward-slash output; a missing or
@@ -129,7 +138,8 @@ Written first, seen failing for the right reason (a missing module, then a wrong
 - [ ] Run the scenario step lists against real temp repos (jj skipped when absent) and compare the classifier output
   after every step; keep the repos under the OS temp directory and remove them in the test teardown.
 - [ ] Add the `\r\n` and Windows-path rows; confirm they run on macOS and Linux.
-- [ ] Export the public surface from `src/index.ts` and write the package README: the module map, how to run the
+- [ ] Export the public surface from `src/index.ts` (browser-safe: no `node:` import) and the probe from the
+  node-only `./probe` entry that GE-1 declared, and write the package README: the module map, how to run the
   fixtures, and the rule that names come from the contract.
 - [ ] Reconcile the fixtures: if a row cannot be satisfied, stop and raise it against GE-1\'s contract rather than
   editing the row (the Rust twin reads the same row).

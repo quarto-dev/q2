@@ -57,7 +57,8 @@ sent to the old doc as an edit.
   GE-6 provides `createSwapCoordinator`, `NoticeAggregator`, and the moved message type in
   `@quarto/quarto-git-epochs`. GE-5 provides the gate (the marker probe and the quiet window) in the same package.
 - **No hub plan is needed here.** A headless peer from GE-8 plays the owner against the test hub: it writes
-  `files[path]` flips using the registry and pointer helpers of the GE-5 package.
+  `files[path]` flips with a plain Automerge change on the index and registers docs with the GE-5 registry
+  operations.
 
 ## Test specifications
 
@@ -74,14 +75,16 @@ Written first and seen failing.
    flips before the first swap finishes skip to the final state; an unavailable new doc fires `unavailable` after
    5 s, the file stays on the old doc, and a retry swaps once the doc arrives; the owner removing an entry deletes the
    mirror\'s file; the owner adding an entry creates it.
-4. **Notices.** One aggregate message per batch, using the shared wording ("The project owner\'s checked-out version
-   changed."), with the stranded sentence appended only when the counter is nonzero.
+4. **Notices.** One aggregate message per batch, using the strings GE-6 exports (never restated here), with
+   the stranded sentence appended only when the counter is nonzero.
 5. **Editor-only follower:** it never calls `fs` write or remove, even when a flip changes a bound file; the file
    watcher and `reconcileDisk` are not started; a flip rebinds the open buffer to the new doc.
 6. **Editor-only gate** (fake probe and clock): while a marker exists no outbound edit is sent from any bound buffer;
    after the markers clear the quiet window must pass; if every bound buffer equals its current doc, editing resumes
    at once (a plain commit); otherwise it waits up to 10 s for a flip, rebinds on a flip, and on timeout stays
-   suspended and warns; it never writes the old doc\'s text into the buffer.
+   suspended and warns; it never writes the old doc\'s text into the buffer; one "Edits made during a git operation were
+   not kept." warning per gate episode appears when a bound buffer was dirty as the gate closed, and none when no
+   buffer was dirty.
 7. **Moved message:** a swap that completes sends it on the old handle before the old Binding is disposed; receiving
    it shows the transient status text naming the sender, and a missing or malformed message is ignored.
 8. **Legacy folder:** an existing folder created before this change starts as a mirror and behaves as in GE-8\'s
@@ -113,13 +116,16 @@ Written first and seen failing.
   `onDisk*` handlers. Wire the gate from the GE-5 package: its marker probe, resolved once with
   `git rev-parse --git-path` for the workspace repository; when the workspace is not inside a git repo the gate
   stays open (detail chosen by the plan author; confirm). While the gate is closed every bound Binding is
-  suspended (its `onLocalEdit` drops edits; `applyRemote` still runs only for remote flips after resume).
+  suspended (its `onLocalEdit` drops edits; `applyRemote` still runs only for remote flips after resume). In a git repo it also adds `.quarto-hub/` to
+  `.git/info/exclude` once (found with `git rev-parse --git-path info/exclude`; detail chosen by the second reviewer;
+  confirm).
 - [ ] Resume rule: after the markers clear and the 1 s quiet window passes, compare each bound buffer with its
   current doc text; if all are equal, resume; otherwise wait up to 10 s for `indexChanged` to rebind (the swap
   coordinator\'s `done` ends the wait); on timeout show `Notifier.warn` with the actions "Keep waiting" (re-arm
   10 s) and "Dismiss", and stay suspended. A buffer that still differs from the new doc after the rebind is replaced
   by the doc text, as `Binding` already does at bind time; keystrokes typed while the gate was closed are dropped
-  (detail chosen by the plan author; confirm). Timeouts are options of the core so tests can shorten them.
+  (detail chosen by the plan author; confirm), and when a bound buffer was dirty at the moment the gate closed one
+  `Notifier.warn` per gate episode says "Edits made during a git operation were not kept." (G20). Timeouts are options of the core so tests can shorten them.
 - [ ] Write test spec 7. Add the moved message: in the follower\'s `rebind`, call `oldHandle.broadcast(moved)` before
   the old Binding is disposed; extend `Presence.receive` to accept the `moved` type and surface it through
   `Notifier.status` for about 3 s ("NAME switched versions"; text chosen by the plan author; confirm).
@@ -135,7 +141,10 @@ Written first and seen failing.
   disk and editor content after `done`); an editor-only folder inside a temp git repo: create `.git/index.lock`,
   rewrite the open file on disk the way git would, assert that no splice reached the hub doc, remove the lock, then
   have the owner flip and assert the buffer shows the new doc; the same without a flip, assert the timeout warning
-  (with the shortened option); the moved message appears in a second window; a legacy folder opens as a mirror.
+  (with the shortened option); the moved message appears in a second window; a legacy folder opens as a mirror; and a timing test, the permanent
+  form of Gate 0 item 12: on a checkout of a few thousand files, the last buffer reload event arrives within the
+  quiet window after `index.lock` is released (the test records the measured gap and fails above the window, which
+  triggers the experimental fallback in G20).
 - [ ] Mark which of these Playwright tests are candidates for the permanent subset (no network, deterministic) in a
   comment at the top of each file; GE-14 decides.
 - [ ] Reconcile this checklist with what landed, update "Notes from the run", and commit.

@@ -101,22 +101,25 @@ author; confirm). Editor only always asks "This looks like the hub\'s own projec
 by the parameter). The existing **Create Folder from Project** command stays as it is (detail chosen by the plan
 author; confirm).
 
-**The spawned proxy.** The command is `q2 preview --join <ticket> --host 127.0.0.1 --port N --no-browser`, with `q2`
-from a new setting `quartoHub.q2Path` (default `q2`, found on `PATH`). The extension picks N by binding port 0 and
+**The spawned proxy.** The command is `q2 preview --join <ticket> --host 127.0.0.1 --port N --no-browser --exit-on-stdin-close`, with stdin piped, so the
+proxy exits when the extension host dies, and with `q2` from a new setting `quartoHub.q2Path` (default `q2`, found on
+`PATH`; declared with machine scope in `package.json`, so a workspace `settings.json` cannot set it). The extension picks N by binding port 0 and
 closing it. It polls `/health` every 250 ms for up to 15 s. Stderr goes to the Quarto Hub output channel with the
 ticket redacted. The ticket is held in memory only. Its appearance in the process argument list is visible to other
-local users; that is accepted at demo quality.
+local users; that is accepted at demo quality. On Windows the supported spawn is `q2.exe` directly. Node 20.12 and
+later refuses to spawn a `.cmd` or `.bat` without a shell (it throws EINVAL), so the proxy manager sets `shell: true`
+only for those two extensions and shows the real error in "Could not run q2".
 
 | Failure | Message |
 |---|---|
 | `q2` not found | "Could not run q2. Set quartoHub.q2Path." |
 | The proxy exits early | The last lines of its stderr |
-| Bad ticket, or a `q2` too old for `--join` | The same stderr |
+| Bad ticket, or a `q2` too old for `--join` or `--exit-on-stdin-close` | The same stderr |
 | Not ready in 15 s | "The join proxy did not become ready." (the child is killed) |
 | `/health` unreachable and no id | A prompt for the doc id |
 | A `ws://` URL that does not connect | A connection error; nothing is written to `project.json` |
 
-**Leave session** stops the folder\'s sync, kills the spawned `q2` (POSIX: a detached process group, SIGTERM then
+**Leave session** stops the folder\'s sync, closes the spawned `q2`\'s stdin so the proxy exits, then kills it if needed (POSIX: a detached process group, SIGTERM then
 SIGKILL after 3 s; Windows: `taskkill /T /F`; best effort), and clears the status bar. The folder stays bound.
 Deactivation kills any spawned proxy too.
 
@@ -132,11 +135,12 @@ All in the vscode-free core from GE-8 unless marked. Each is written and seen fa
    `win32` (platform injected), `C:\` against `c:/`.
 4. `offeredModes`: every row of the table above, plus no workspace folder and an already-bound folder.
 5. Ticket hygiene: run each flow with a known ticket and assert it appears in no log line, no thrown message, and no
-   `project.json`.
+   `project.json`; the exploratory run with the real `q2` checks its real stderr too.
 6. The proxy manager with a stub `q2` (a cross-platform helper that writes a `q2` shell script on POSIX and a `q2.cmd`
    on Windows, each running a small Node stub): success (the stub receives `--join`, `--port N`, `--no-browser`; ready
    within 15 s on a fake clock), early exit with stderr, a bad ticket, `ENOENT`, readiness timeout kills the child,
-   and tree kill (the stub spawns a grandchild; after Leave neither lives).
+   and tree kill (the stub spawns a grandchild; after Leave neither lives); stdin close (the stub exits when its stdin
+   closes, and Leave closes it first); and the `.cmd` branch on Windows (spawned with `shell: true`).
 7. Health: JSON with and without `project_root`; a 401, a non-JSON body, and a timeout all count as unreachable.
 8. Index inspection against the test hub: with a `repo` entry the share is git-enabled; without it, not; an unknown id
    is "not found" after 5 s.
@@ -156,7 +160,13 @@ All in the vscode-free core from GE-8 unless marked. Each is written and seen fa
 - [ ] Make `createProjectFolder` and `makeRepo` take the sync server; keep single-file mode on its constant.
 - [ ] Write the stub `q2` helper and test specifications 5 and 6; implement the proxy manager (free port, readiness
   poll, redaction, tree kill).
-- [ ] Add `quartoHub.joinSession`, `quartoHub.leaveSession`, and the `quartoHub.q2Path` setting to `package.json`;
+- [ ] Rust, in `crates/quarto/src/main.rs` and the join entry point it calls (added by the second reviewer; confirm
+  the plan home): add `--exit-on-stdin-close` to `q2 preview` with `requires = "join"`; the proxy\'s shutdown future
+  also waits for EOF on stdin; the help text warns that stdin attached to `/dev/null` exits at once. Parse tests
+  follow GE-4\'s pattern (the flag requires `--join`; it combines with `--port`, `--host`, and `--no-browser`), plus
+  a test that the proxy exits when its stdin closes. Gates: clippy and nextest for `quarto` and `quarto-preview`.
+- [ ] Add `quartoHub.joinSession`, `quartoHub.leaveSession`, and the `quartoHub.q2Path` setting (scope `machine`; a
+  test shows a workspace value is ignored) to `package.json`;
   implement the VS Code layer (input box, QuickPick, confirms, notifications, status bar, deactivation cleanup).
 - [ ] Route a bound folder to GE-10\'s rebind and Attach to GE-10\'s attach; route Editor only to GE-9\'s binding.
 - [ ] Write the Playwright specs in test specification 10 against the harness from GE-8; add the permanent ones to its
@@ -168,6 +178,8 @@ All in the vscode-free core from GE-8 unless marked. Each is written and seen fa
 
 - `npm run typecheck -w quarto-hub-vscode`, `npm run test -w quarto-hub-vscode`, `npm run build -w quarto-hub-vscode`.
 - The Playwright VS Code run script from GE-8 (the permanent subset), after `cargo build --bin q2`.
+- `cargo clippy -p quarto -p quarto-preview --all-targets -- -D warnings` and
+  `cargo nextest run -p quarto -p quarto-preview` (the `--exit-on-stdin-close` flag).
 - `cargo xtask lint`.
 
 ## End-to-end verification

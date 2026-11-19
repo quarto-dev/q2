@@ -62,7 +62,7 @@ Script item ids are named by run: `a1` to `a6` here, `b1` to `b7` in [GE-16](ge-
 The catalog is shared across the runs: this run holds W1 to W5 and W10, run B holds W6 and W7 and the TypeScript halves
 of W3 and W4, run C holds W8 and W9.
 
-- **`a1` (W1), the git probe on Git for Windows.** Filter: `package(quarto-git-epochs) & test(probe::)`.
+- **`a1` (W1), the git probe on Git for Windows.** Filter: `package(quarto-git-epochs) & test(probe_real_repo::)`.
   - Proves: `rev-parse --git-path` output with a drive letter (`C:/...`) and from a linked worktree parses; `ls-tree -r
     -z` with a project prefix returns the right paths; symlink entries (mode 120000) are filtered; `cat-file --batch`
     frames binary content correctly; reflog subjects parse.
@@ -111,12 +111,19 @@ The tooling is code, so it is tested before it ships, on macOS, in this order:
 
 - [ ] Confirm GE-2, GE-3, and GE-4 are complete; read their notes for the real module and test names. Replace the
   placeholders above and record the final filters in "Notes from the run".
+- [ ] Add the tests the filters need and no earlier plan wrote (tests only, no product code, on `ge/15-windows-run-a`
+  before the tooling): a `large_tree` module in `quarto-git-epochs` (creates a few thousand files in a temp repo and
+  switches branches while the controller runs), a `path_keys` module in `quarto-hub` (drive letters, UNC prefixes, long
+  paths, case-insensitive key collisions), and a CRLF case in `arrival::` and `classify::`. Each must run on macOS too;
+  list each filter with `cargo nextest list -E` to confirm it matches the `MinTests` guard.
 - [ ] Write the tooling tests first (items 1 to 3 above) and watch them fail.
 - [ ] Create the tooling branch and its worktree: `git worktree add -b windows/git-epochs
   .worktrees/windows-git-epochs feature/git-epochs`. Commit the tooling in small commits, each message ending
   "(temporary, never lands)".
 - [ ] Write `scripts/git-epochs-windows/run.ps1`, adapted from RFU-6 (not copied blindly): items `a1` to `a6`,
-  a build item, the preflight that prints the install command for anything missing, `-WithTools`, the
+  a build item named `a0` (RFU-6 calls it `b0`, which would clash with run B), the preflight that prints the install
+  command for anything missing (`uv` is required here, not optional as in RFU-6; NASM and CMake for the `aws-lc`
+  crates; Git for Windows; Rust MSVC), `-WithTools`, the
   `core.autocrlf` check and caveat, the base-commit check, JSON and markdown results.
 - [ ] Write `scripts/git-epochs-windows/extract_failures.py` (standard library only, run with `uv run`),
   `scripts/git-epochs-windows/make_large_tree.py`, and the results `.gitignore`.

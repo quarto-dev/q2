@@ -126,9 +126,11 @@ count is nonzero.
 | N files | N files were replaced because the project owner\'s checked-out version changed. |
 | Any, with N stranded edits | Append: N of your recent edits stayed with the previous version. |
 
-`unavailable` events are not counted in the notice; the host shows the unavailable marker it already has.
+`unavailable` events are not counted in the notice; the host shows the unavailable marker it already has. The strings
+are exported constants: GE-7, GE-9, and GE-10 import them and never restate them.
 
-The moved message (G25) is a type and a text helper only: `MovedMessage` re-exported from the contract, and
+The moved message (G25) is a type and a text helper only: `MovedMessage` re-exported from the contract (the one message type for every client, with no reason field on
+`leave`), and
 `movedNotice(name?: string): string` returning `"<name> switched versions"`, or \"This person switched versions\" when
 there is no name (detail chosen by the plan author; confirm). Sending and showing it is GE-7 for browsers and
 GE-9 and GE-10 for the extension.

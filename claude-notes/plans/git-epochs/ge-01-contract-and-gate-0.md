@@ -1,7 +1,7 @@
 ---
 title: 'GE-1: Contract and Gate 0'
 date: 2026-11-18
-description: 'Writes the normative registry and index contract, adds the version 4 index schema in TypeScript and Rust, creates the shared fixtures and the quarto-git-epochs package skeleton, and runs the eleven Gate 0 checks that decide whether the epic proceeds.'
+description: 'Writes the normative registry and index contract, adds the version 4 index schema in TypeScript and Rust, creates the shared fixtures and the quarto-git-epochs package skeleton, and runs the thirteen Gate 0 checks that decide how the epic proceeds.'
 status: approved
 depends-on: []
 epic: ../2026-11-18-git-epochs-epic.md
@@ -25,7 +25,8 @@ source files and never touch shared wiring.
 
 ## Decisions implemented
 
-- **G6, G7, G8, G11, G12:** the registry schema and its operations, as a contract plus golden documents.
+- **G6, G7, G8, G11, G12:** the registry schema (flat keys, the retired set, the repair rule) and its operations, as a
+  contract plus golden documents.
 - **G9, G10, G2:** arrival, startup, and classifier cases as decision tables (the logic itself is GE-2 and GE-5).
 - **G18:** index version 4, with the sidecar pointer, `owner`, and `repo` keys.
 - **G25, G26, G32, G33:** the moved-message type, the swap events and notice strings, the numbers table, and the
@@ -62,7 +63,7 @@ Written first and seen failing for the right reason.
   (the new keys and an invented `future_key`), runs every public mutator and accessor of `IndexDocument`, and asserts
   that the unknown keys are byte-for-byte unchanged afterward.
 - **Fixtures:** a vitest file `fixtures.test.ts` loads every decision table, scenario, and golden document and
-  validates its structure; it fails if a case lacks an id, a peer, a policy where the epic requires one, or an
+  validates each row against the row schema in the contract; it fails if a case lacks an id, a peer, a policy where the epic requires one, or an
   expected value.
 - **Golden documents:** each golden binary document loads with `@automerge/automerge` and its decoded entries equal the
   expected JSON in `fixtures/golden/manifest.json`.
@@ -72,21 +73,31 @@ Written first and seen failing for the right reason.
 ### Contract
 
 - [ ] Write `claude-notes/designs/git-epoch-registry-contract.md` (qmd; render-check it), normative, with these
-  sections. **Sidecar doc:** a `version` field (1) and `entries`, a map of path to blob id to docId to generation
-  (an integer); the key set is a union, so concurrent adds both survive (detail chosen by the plan author; confirm).
+  sections. **Sidecar doc:** a `version` field (1); `entries`, a flat map from the key `path`, NUL, blob id, NUL, docId to
+  the generation (an integer); and `retired`, a flat map with the same keys that only grows. Every entry is its own
+  key, so concurrent adds union (G6; a nested map loses one side of a concurrent creation).
   **Index version 4 keys:** the sidecar pointer (proposed name `epochs`, holding the sidecar docId), `owner` (the
   originating folder\'s random `ownerId`, absent for hub-owned projects), and `repo` (`roots`, a list of root commit
   hashes, and `prefix`, the project path inside the repo). **Operations:** register, move forward (add the new blob
   carrying the doc\'s generation and remove the old blob in one change), canonical selection (lowest generation, then
-  docId), creation (generation is max seen plus one), the fork rule for the rename invariant, the case-collision
-  fallback. **Arrival:** inputs (disk text or bytes, doc text or bytes, blob content, attached, policy, peer) and the
-  outputs for the five steps and the ReadOnly variant. **Surfaces:** the response of
-  `GET /api/preview/git-status`, `{ tracking, paused, pending }`; the swap events (`pending`, `done`, `unavailable`)
-  and the notice strings; the moved message type; the numbers table from the epic (G32).
+  docId bytewise, skipping retired entries), creation (generation is the maximum over the path on any blob, plus
+  one), register as put-if-absent, retire (the `reset --hard` step), the narrow repair rule (re-register a doc that
+  has no entry on any blob and is not retired), the fork rule for the rename invariant, the case-collision
+  fallback (compare the lowercased path part of the key). **Arrival:** inputs (disk text or bytes, doc text or bytes, blob content, attached, policy, peer) and the
+  outputs for the five steps, the `reset --hard` retire step, the hub\'s step 4 and step 5 behavior, the jj fallback,
+  and the ReadOnly variant. **Surfaces:** the response of
+  `GET /api/preview/git-status`, `{ tracking, paused, pending, markers, decisions }` (the marker names holding the gate, and the last 20 decisions as
+  kind, time, files, and G9 step); the event vocabulary shared by the hub\'s decision ring and the extension\'s
+  `events.jsonl` (`flipped`, `switched`, `detached`, `reattached`, `held`, `reset`, `retired`); the swap events (`pending`, `done`, `unavailable`)
+  and the notice strings (exported constants, the one source for every client); the single moved message type (no
+  reason field on `leave`); the numbers table from the epic (G32).
   **Module map:** the six modules the Rust crate (GE-2) and the TypeScript package (GE-5) both build, with one line
   each and the entry-point function names of the pure core and its plain-data inputs and outputs: `classify`,
   `arrival`, `startup`, `registry`, `probe` (including the repo identity queries: root commits, shallow check, path
-  prefix), and `controller`. The two plans run in parallel and take their names from this map, not from each other.
+  prefix, and a cheap-state read), and `controller` (the tick-driven machine and the synchronous `check()`). The two
+  plans run in parallel and take their names from this map, not from each other. **Row schemas:** the input and
+  expected fields of every decision-table row, the step format of a scenario, and the golden manifest, so that GE-2
+  and GE-5 parse the same rows.
 - [ ] Verify the epic\'s "What became of D1 to D36" table against the contract and fix any row that is wrong; record
   each change in Notes from the run.
 
@@ -111,9 +122,13 @@ Written first and seen failing for the right reason.
 
 - [ ] Create `ts-packages/quarto-git-epochs` modeled on `quarto-automerge-schema`: `package.json` named
   `@quarto/quarto-git-epochs` (private, `type: module`, scripts `build`, `typecheck`, `test`), `tsconfig.json`,
-  `vitest.config.ts`, `src/index.ts` exporting only a version constant, and the `fixtures.test.ts` above.
+  `vitest.config.ts`, `src/index.ts` exporting only a version constant, an `exports` map with a browser-safe entry (`.`: the pure logic and
+  the swap module) and a node-only `./probe` entry (the probe uses `node:child_process`; hub-client and the browser
+  clients import only `.`), and the `fixtures.test.ts` above.
 - [ ] Add a step `npm test -w ts-packages/quarto-git-epochs` to `.github/workflows/ts-test-suite.yml` next to the
-  schema step, in the same commit as the package, and run `cargo xtask lint` to see `ci-test-suite-unwired` pass.
+  schema step, in the same commit as the package, add the package to the build step at `.github/workflows/ts-test-suite.yml:272` (it builds only the sync client and the
+  schema, and GE-7 makes the sync client depend on this package), check the build lists in `crates/xtask/src/verify.rs`,
+  and run `cargo xtask lint` to see `ci-test-suite-unwired` pass.
 - [ ] Run `npm install` from the repository root (never from the package) and confirm the root `npm run typecheck`
   and `npm run build` still pass.
 
@@ -121,26 +136,30 @@ Written first and seen failing for the right reason.
 
 - [ ] `fixtures/decision-tables/classify.json`: commit, amend, checkout, pull, `reset --hard` with an unchanged blob,
   a merge commit, a conflict-resolution commit, save-then-commit (plain `commit` reflog with a differing disk),
-  colocated jj (content rule only).
-- [ ] `fixtures/decision-tables/arrival.json`: the five steps for text and for binary, the already-attached case,
+  colocated jj (content rule only), a reflog span of `switch` then `commit` (checkout-type), and `git stash` push (a
+  reflog entry with HEAD and blob unchanged).
+- [ ] `fixtures/decision-tables/arrival.json`: the steps for text and for binary (the already-attached case split into re-baseline and the `reset --hard` retire
+  step),
   the ReadOnly variant (attach only when disk equals the doc; otherwise seed from disk), the unavailable canonical
-  doc, the rename-invariant fork, a case-insensitive collision. Each case carries `peer` (`hub` or `extension`) and,
+  doc, the rename-invariant fork, a case-insensitive collision, a doc another peer retired, the hub at steps 4 and 5, and
+  every changed file under colocated jj. Each case carries `peer` (`hub` or `extension`) and,
   where it matters, `policy` (`ReadOnly` or `WriteBack`).
-- [ ] `fixtures/decision-tables/startup.json` (the three cases) and `registry.json` (creation race with equal
-  generations, an established doc beating a latecomer, move forward carrying the generation, two tips after
-  `git add -p`, concurrent put and delete).
+- [ ] `fixtures/decision-tables/startup.json` (the three cases) and `registry.json` (creation race on one key and on
+  different keys under a new path, equal generations, an established doc beating a latecomer, move forward carrying
+  the generation and with an absent old entry, two tips after `git add -p`, concurrent put and delete, retire,
+  repair).
 - [ ] `fixtures/scenarios/*.json`: step lists of git commands and file writes (no shell scripts, so Windows can run
   them), each step with an optional expected classifier verdict: commit, amend, switch and switch back, pull,
-  rebase stopped for conflicts, `reset --hard`, save-then-commit, a file added and removed by a checkout, a binary
+  rebase stopped for conflicts, `reset --hard`, `git stash` and `stash pop`, save-then-commit, a file added and removed by a checkout, a binary
   changed by a checkout, `core.autocrlf` checkouts with `\r\n` content.
 - [ ] `fixtures/golden/`: binary sidecar documents generated by `scripts/make-golden.mjs` and committed (before and
-  after a move forward, a creation race merged from two actors, a concurrent put and delete), with
+  after a move forward, a creation race merged from two actors on one key and on a new path, a concurrent put and delete, a retire, a repair), with
   `index-v4.json` and a `manifest.json` of the expected decoded entries.
 
 ### Gate 0
 
 Each check is a scratch experiment outside the repository (use the session scratchpad); its result goes in Notes from
-the run as ran, read, or not done. **Stop rule:** if any check fails, stop, write the result, do not start GE-2, GE-5,
+the run as ran, read, or not done. **Stop rule:** if any check except 12 fails, stop, write the result, do not start GE-2, GE-5,
 GE-6, or GE-8, and bring it to Gordon (D21). Do not degrade silently.
 
 - [ ] **1.** A Node script using the extension\'s own adapter (`BrowserWebSocketClientAdapter`) connects to a
@@ -155,19 +174,32 @@ GE-6, or GE-8, and bring it to Gordon (D21). Do not degrade silently.
   later and re-point a file at it from the JS client and confirm a client of the mirror follows.
 - [ ] **5.** The Rust unknown-keys test passes (see Test specifications) and a read of `index.rs` finds no accessor that
   rebuilds the document.
-- [ ] **6.** In Automerge (JS and Rust, two actors): a concurrent put and delete of one registry key leaves a
-  deterministic result and the put survives; concurrent puts of different docIds under one blob both survive.
+- [ ] **6.** In Automerge (JS and Rust, two actors), with the flat registry: concurrent creation of one key, and of
+  different keys under a new path, both survive (the nested form loses one side; the second review reproduced it, so
+  write these tests first and watch a nested variant fail); a concurrent delete and put of one key leaves the put; a
+  retired entry is never removed.
 - [ ] **7.** In temp repos, record the reflog subjects of `cherry-pick`, `revert`, `commit --amend`, `reset --hard`,
-  `pull --ff-only`, and a stopped `rebase`; whether `sequencer/` and `BISECT_LOG` appear; and the order of lock, file
-  writes, and ref update for `reset --hard`, `pull`, and `rebase` on a 3,000-file tree. Record the git version.
+  `pull --ff-only`, `git stash` push, and a stopped `rebase`; whether `sequencer/` and `BISECT_LOG` appear; and the
+  order of lock, file writes, and ref update for `switch`, `reset --hard`, `pull`, and `rebase` on a 3,000-file tree
+  at millisecond resolution (a tight stat loop or `strace`/`dtruss`; the second review saw only 100 ms polling),
+  including whether git releases `index.lock` before it writes the reflog; if it does, G1\'s 500 ms mtime skip
+  applies. Record the git version.
 - [ ] **8.** JS doc forking in automerge-repo `2.6.0-alpha.5`: try `repo.clone`; if absent, an Automerge clone imported
   with `repo.import`. The fork keeps history and syncs through the test hub.
-- [ ] **9.** A registry doc for 5,000 and 15,000 entries with three moves each: saved size and load time in JS and
-  Rust. Write the soft limit into the contract.
-- [ ] **10.** `git` is on `PATH` where the extension runs, from a real extension host; the remote-development case is
-  noted as not done unless a remote is available.
+- [ ] **9.** A registry doc in the flat form for 5,000 and 15,000 entries with three moves each, and one for a repo
+  with many large binary files: saved size and load time in JS and Rust. Write the soft limit into the contract.
+- [ ] **10.** `git` is on `PATH` where the extension runs, from a real extension host (a scratch extension launched with
+  `@vscode/test-electron`, since GE-8\'s harness does not exist yet; item 12 uses the same one); the
+  remote-development case is noted as not done unless a remote is available.
 - [ ] **11.** Whether `q2 preview` without `--allow-edit` renders a doc edit made by a JS client in the browser (the
   preview may render from docs or from disk).
+- [ ] **12.** Editor-only timing: in a real VS Code with the scratch extension from item 10 (it logs
+  `onDidChangeTextDocument` times), run `git switch` on a tree of a few thousand files in the open folder and measure
+  the time from `index.lock` release to the last buffer reload event, on this host. This item has its own outcome: a
+  reload later than the 1 s quiet window does not stop the epic; record it, and editor-only ships as experimental
+  (G20). GE-16 and GE-17 measure it on Windows.
+- [ ] **13.** Whether a new `q2 preview` run on the same directory gets a new index doc id (the basis of G19): start
+  it twice and compare `/health`.
 
 ### Wrap-up
 
@@ -191,7 +223,7 @@ inspected output go in Notes from the run.
 ## Exit criteria
 
 The contract is written and render-clean; the schema, package, CI step, and fixtures are committed with green gates;
-all eleven Gate 0 results are recorded; none failed, or Gordon has decided what to do about each that did.
+all thirteen Gate 0 results are recorded; none failed, or Gordon has decided what to do about each that did.
 
 ## Out of scope
 

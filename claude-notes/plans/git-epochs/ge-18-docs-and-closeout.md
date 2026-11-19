@@ -24,11 +24,13 @@ summary and a pre-push recommendation. Gordon decides when to push and which hel
   conflicts with `--join`, `--static`, and `--hub-url`; `track` means this preview owns the project\'s pointer.
 - **G35:** the accepted gaps are stated in the docs, not hidden: the hub restart gap, a stale pointer while the owner is
   offline, extension builds older than this epic overwriting a working tree on a flip, two tips after `git add -p`,
-  `git stash` and `git restore` still looking like edits, nested repos and submodules, two sync agents on one
-  directory, and unknown retention on the public server.
+  `git stash pop` and `git restore` still looking like edits, nested repos and submodules, two sync agents on one
+  directory, unknown retention on the public server, file deletions on mirror folders of older builds, arrival under
+  colocated jj being unsupported, and peers staying split after a `reset --hard` or `git stash` by one peer.
 - **G13, G15, G19, G21, G22, G24:** the extension\'s user-facing behavior (modes, join, attach, share) is documented in
   its README and in a section of the live-share docs, marked experimental.
-- **G4:** colocated jj is documented as supported and non-colocated jj as off.
+- **G4:** colocated jj is documented as gate-only (no arrival: files take the step 5 fallback) and non-colocated jj
+  as off.
 - **Epic closeout rules:** the old plan is already marked superseded; the held items are reviewed, not opened;
   nothing is pushed.
 
@@ -85,6 +87,10 @@ and the review. Each states what it proves:
 - [ ] **Public server warning.** Put the warning (anyone with the link can read and edit; publishing cannot be undone)
   in the README, the docs section, and confirm the Share this folder dialog shows it.
 - [ ] Render the docs: `cargo run --bin q2 -- render docs/`. Fix anything it reports.
+- [ ] **Rebuild every embedded artifact** (the epic\'s rule; a plan that finished early may have left one stale):
+  `cargo xtask build-hub-mcp-bundle`, `cd hub-client && npm run build:wasm`, `cargo xtask build-q2-preview-spa`,
+  `cargo xtask build-hub-client-embed`, then `cargo build --bin q2`; check `q2 mcp --launcher-info`. The agents docs
+  come last, because staging renders with `q2`.
 - [ ] Rebuild the embed: `cargo xtask build-agents-docs`, then `cargo build --bin q2`; run `q2 docs llms --embed-info`
   and record the source commit, the dirty marker, and the page count. Staging fails on a remote subresource: fix the
   page, not the allowlist.
@@ -109,7 +115,7 @@ and the review. Each states what it proves:
   did. Ask each for severity (blocking, important, minor), evidence (file and line, or the exact command and output),
   a suggested change, and under 900 words. Verify every blocking or important claim yourself; drop or correct what
   you cannot confirm and say which. Fix confirmed defects with new tasks or plans; record the rest in the notes.
-- [ ] **Held items.** Present the epic\'s held items 1 to 11 to Gordon with what the epic learned about each. Create no
+- [ ] **Held items.** Present the epic\'s held items 1 to 12 to Gordon with what the epic learned about each. Create no
   braid strand without his say-so, and use `braid`, never `br`. Record his decisions in the notes.
 - [ ] **Windows tooling branch.** Confirm the results and the final statement are copied into the notes of GE-15 to
   GE-17, and that nothing from `scripts/git-epochs-windows/` is reachable from `feature/git-epochs`

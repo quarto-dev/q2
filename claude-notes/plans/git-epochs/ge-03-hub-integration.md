@@ -25,16 +25,25 @@ config option that defaults to off.
 
 ## Decisions implemented
 
-- **G5:** gate and hold inside `HubContext::sync_all` and `sync_file`; the shutdown flush and the initial sync skip
-  while a marker is set; markers are re-checked after the read and before the write, under the `sync_state` mutex.
+- **G5:** gate and hold inside `HubContext::sync_all` and `sync_file`, each entered through the controller\'s
+  synchronous `check()` (markers and reflog tail, no subprocess); the shutdown flush and the initial sync skip while a
+  marker is set, and `reconcile_files_with_index` is gated the same way; markers are re-checked after the read and
+  before the write, under the `sync_state` mutex. A skipped flush logs how many documents held unwritten edits.
 - **G17:** the hub adopts the registry and arrival rule; it creates the sidecar, writes `repo` when tracking is on,
-  registers every participating file at startup, writes the checkpoint before it flips, marks captures stale, and fires
-  the post-sync callback.
+  registers every participating file at startup (put-if-absent, only when disk equals the HEAD blob), writes the
+  checkpoint before it flips, marks captures stale, fires the post-sync callback, and keeps its last 20 decisions in
+  memory for the status route.
 - **G13:** unlist and relist tracked files; one index change per switch.
-- **G6, G9:** binary docs participate with byte hashes; ReadOnly and WriteBack arrival variants.
-- **G1:** files whose blob changed are held from the trigger to the decision.
+- **G6, G9:** binary docs participate with byte hashes; ReadOnly and WriteBack arrival variants; the `reset --hard`
+  retire step; the hub\'s step 4 (join, warn, record) and step 5 (new doc from disk, flip, unregistered) behavior,
+  which colocated jj also takes for every changed file.
+- **G1:** every file whose disk differs from its last synced content is held from the trigger to the decision (a
+  `reset --hard` changes no blob); the quiet window ignores the hub\'s own writes.
 - **G7, G11, G12:** generation on creation, the 5 s unavailable rule, the rename-invariant fork.
 - **D14 (kept):** a failed switch falls back to ordinary sync for that file.
+- **G7:** a sidecar change re-evaluates every attached file; a doc that is no longer canonical goes through the
+  arrival steps.
+- **G36:** `contained_join` also rejects `.git`, `.quarto-hub`, and `.vscode` segments.
 
 ## Context
 
@@ -54,6 +63,10 @@ config option that defaults to off.
 - The hub share policy (`context.rs:216`) is read-write with announce off: the hub cannot pull a doc from a client, so
   attaching a doc it has not received can time out; that is the G11 rule.
 - Precedent for hub-level tests: `crates/quarto-hub/tests/integration/upstream_mirror.rs` and `support.rs`.
+- `reconcile_files_with_index` runs before the initial sync (`context.rs:405-410`) and reads disk; `contained_join` is
+  `sync.rs:571`. The participating-file set comes from the discovery code (`crates/quarto-hub/src/discovery.rs` at
+  the base commit; on `origin/main` it moved to the `quarto-project-files` crate, so use the path that exists after
+  the rebase). The hub\'s periodic loop ticks every 5 s and its watcher debounce is 500 ms.
 
 ## Test specifications
 
@@ -62,7 +75,9 @@ with real temp git repos, a real `HubContext`, and real Automerge docs, in both 
 
 - **Gate:** with a marker present the periodic sync, a watcher event, the shutdown flush, and the initial sync all do
   nothing and write nothing; after the marker is removed they resume. A test hook makes a marker appear between the
-  file read and the write: the write is skipped and nothing merges.
+  file read and the write: the write is skipped and nothing merges. The initial sync\'s `reconcile_files_with_index`
+  is skipped the same way. A change to the reflog file alone, with no marker, makes `check()` report pending, and the
+  entry holds its files before any tick runs.
 - **Commit:** a plain commit moves the registry entry forward (new blob added with the same generation, old removed),
   changes no index entry, and creates no doc; clients\' view is unchanged.
 - **Checkout, new blob:** the hub creates a doc, writes the checkpoint before the index change (asserted through an
@@ -77,14 +92,34 @@ with real temp git repos, a real `HubContext`, and real Automerge docs, in both 
   old one.
 - **ReadOnly arrival:** when disk differs from the canonical doc the hub creates a doc from disk and never writes the
   disk. **WriteBack clean-but-drifted:** the hub joins the doc, writes its text to disk, then writes the checkpoint.
-- **Held files:** between the trigger and the decision ordinary sync skips a changed file.
+- **Held files:** between the trigger and the decision ordinary sync skips every file whose disk differs from its
+  last synced content, including a file a `reset --hard` restored to its blob.
 - **Failure injection:** if attaching the canonical doc fails or times out (5 s, with a short timeout in the test), the
   hub falls back to ordinary sync for that file and logs it; other files in the switch still apply.
-- **Startup registration:** with tracking on, the registry holds every participating file\'s doc under its blob, the
+- **Startup registration:** with tracking on, the registry holds the doc of every participating file whose disk blob equals the HEAD blob, under that blob (a
+  dirty file stays unregistered, and registration is put-if-absent), the
   sidecar pointer and `repo` entry exist, and there is no `owner` key; restarting with the same data directory adds no
   duplicates. With tracking off none of these keys are written.
-- **Generation and fork:** creating after another peer\'s entry gives generation max plus one; a doc already listed
-  under another path is forked, not reused.
+- **Generation and fork:** creating after another peer\'s entry gives generation max (over the path, any blob) plus
+  one; a doc already listed under another path is forked, not reused.
+- **`reset --hard` and `git stash`:** a browser edit lands in doc D and reaches disk; `git reset --hard` (and a
+  `git stash` push) restores the blob. The hub retires `(path, B, D)`, creates a doc from disk with generation max
+  plus one, registers it, and flips the pointer; guests end on the HEAD text, the dirty text stays in the retired
+  doc, and the decision appears in the status route. `stash pop` afterward arrives as an author edit in the new doc.
+- **Step 4 and step 5 at the hub:** a clean file whose canonical doc holds live uncommitted edits is joined, the hub
+  logs a warning, and the decision is recorded; a dirty file that differs from both the doc and the blob gets a new
+  doc from disk, a flip, and no registration, and a later commit registers it with generation max plus one.
+- **Colocated jj:** every changed file takes the step 5 behavior; nothing is registered by arrival.
+- **Retired and superseded:** canonical selection skips a retired doc; a peer\'s sidecar change that makes an attached
+  doc non-canonical runs the arrival steps for it, and a doc another peer retired is left attached.
+- **Quiet window and own writes:** a guest typing continuously (the hub writing disk every tick) does not keep the
+  decision waiting to the 30 s cap; the hub\'s own writes are recognized by the disk hash equal to the checkpoint
+  hash.
+- **Paths:** an index key naming `.git/hooks/h`, `.quarto-hub/x`, or `.vscode/tasks.json` is rejected and logged, like
+  `../x`.
+- **Status accessor:** `HubContext::git_status()` returns tracking, paused, pending, the marker names, and at most 20
+  decisions (kind, time, files, G9 step), using the shared event names; a held-decision test hook exists for GE-4
+  and GE-13.
 
 ## Checklist
 
@@ -94,20 +129,24 @@ with real temp git repos, a real `HubContext`, and real Automerge docs, in both 
   exposure is GE-4) and thread it to `HubContext`.
 - [ ] Tests first for the gate. Add a gate parameter (a small trait object) to `sync_file_by_path` and
   `sync_all_documents` so each re-checks the markers after reading a file and before any write, under the
-  `sync_state` mutex; update the call sites at `context.rs:420`, `:547`, and `:580`.
-- [ ] In `HubContext::sync_all` and `sync_file`, consult the controller from GE-2: skip held paths, skip everything
-  while the gate is closed. Skip the shutdown flush and the initial sync while a marker is set; the initial sync
+  `sync_state` mutex; update the call sites at `context.rs:420`, `:547`, and `:580`, and gate `reconcile_files_with_index` (`:405-410`) the
+  same way.
+- [ ] In `HubContext::sync_all` and `sync_file`, call the controller\'s synchronous `check()` from GE-2 first
+  (markers and reflog tail, no subprocess): skip held paths, skip everything while the gate is closed. Skip the shutdown flush and the initial sync while a marker is set; the initial sync
   retries on the first open tick.
-- [ ] Drive the controller from the existing loops in `server.rs` (the periodic tick at `:2281` and each watcher batch)
-  without adding a new timer.
+- [ ] Drive the controller from the existing loops in `server.rs` (the periodic tick at `:2281` and each watcher batch);
+  while the controller reports pending or paused, also tick it from a short internal timer (250 ms) that never syncs.
+  The 5 s sync loop is unchanged. If Gate 0 item 7 shows that git releases `index.lock` before it writes the reflog,
+  the periodic loop also skips any file modified in the last 500 ms.
 
 ### Registry and startup
 
 - [ ] A hub adapter module (`git_epochs.rs`) owns the controller, the sidecar handle, and the registry operations from
   the crate. Create the sidecar lazily, write its pointer key, and write `repo` (root commits and prefix from the
   probe) when tracking is on.
-- [ ] At startup register each participating file\'s doc under its blob at generation 0, text and binary, even when
-  disk is dirty (the dirty-seed case is accepted); skip files with no index entry.
+- [ ] At startup register each participating file\'s doc under its blob at generation 0 with put-if-absent, text and
+  binary, only when the disk blob equals the HEAD blob (a dirty file stays unregistered until a commit-type
+  decision registers it); skip files with no index entry.
 
 ### Arrival and the switch
 
@@ -120,6 +159,20 @@ with real temp git repos, a real `HubContext`, and real Automerge docs, in both 
 - [ ] Binary participation with byte hashes; blob ids of disk bytes computed directly, content from the probe.
 - [ ] The ReadOnly and WriteBack variants of arrival; the fork rule; the generation rule.
 - [ ] Failure injection hooks and the fallback to ordinary sync with a logged reason (D14).
+- [ ] The `reset --hard` retire step (G9 step 2 with S equal to B and T different): retire the entry in the sidecar\'s
+  `retired` map, create a doc from disk with generation max plus one, register it, flip the pointer, and keep the
+  discarded edits in the retired doc. `git stash` push takes the same path.
+- [ ] The hub\'s step 4 and step 5 behavior and the colocated jj fallback (see the tests): join and warn at step 4;
+  new doc from disk, flip, unregistered at step 5 and under jj; move forward with an absent old entry gets
+  generation max plus one.
+- [ ] After each sidecar sync, re-evaluate every attached file (G7) and run the narrow repair rule; a doc another
+  peer retired stays attached.
+- [ ] Ignore watcher events whose disk hash equals the hash the hub last wrote (the checkpoint content hash) when
+  waiting out the quiet window.
+- [ ] `contained_join` (`sync.rs:571`) also rejects `.git`, `.quarto-hub`, and `.vscode` segments
+  (case-insensitive); a rejected key is skipped and logged.
+- [ ] Add `HubContext::git_status()` (tracking, paused, pending, marker names, the last 20 decisions with the shared
+  event names) and a held-decision test hook; GE-4 and GE-13 consume both. Record both names in the notes.
 
 ### Verification
 

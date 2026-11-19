@@ -107,7 +107,8 @@ on the state asserted, and before a second client reads what the first wrote, wa
 - [ ] Write test spec 8 (offline reconnect, two tabs, late joiner) first; where today\'s behavior already satisfies a
   clause, say so in the notes; make the rest pass with the swap module.
 - [ ] Confirm GE-6 is complete; add `@quarto/quarto-git-epochs` as a dependency of `quarto-sync-client` and check the
-  build order of the workspaces (detail chosen by the plan author; confirm).
+  build order of the workspaces (detail chosen by the plan author; confirm). Import only the package\'s browser-safe
+  `.` entry, never `./probe`.
 - [ ] Write tests 1 and 2; see them fail.
 - [ ] `types.ts`: add an optional `docId?: string` (the bare doc id) to `TextFilePayload` and `BinaryFilePayload`, an
   optional `onFileReplaced?: (event: ReplacedEvent) => void` to `SyncClientCallbacks`, and an optional `baseDocId`
@@ -141,8 +142,8 @@ on the state asserted, and before a second client reads what the first wrote, wa
   handle).
 - [ ] `services/presenceService.ts`: add an explicit rebind entry point that broadcasts the moved message on the old
   handle, stops listening, clears remote presences for the path, and listens on the new handle; call it from
-  `done`. Extend the `leave` message with a reason so a receiver can show \"this person switched versions\" for a
-  short time. `hooks/usePresence.ts` re-resolves the doc after the rebind.
+  `done`. Receivers handle the shared `MovedMessage` from GE-6 (the same type the extension sends; do not add a reason
+  to `leave`) and show \"this person switched versions\" for a short time. `hooks/usePresence.ts` re-resolves the doc after the rebind.
 - [ ] `services/attribution-store.ts`: reset the cached incremental state (and any run list) when the path\'s docId
   changes, because histories are unrelated.
 - [ ] `pandoc/downloadAttribution.ts`, `services/debugAutomerge.ts`, `components/SyncStatusBadge.tsx`,
@@ -162,14 +163,16 @@ on the state asserted, and before a second client reads what the first wrote, wa
 - [ ] Test 6 first. Poll `GET /api/preview/git-status` every 2 s only while the response says `tracking` is true; stop
   polling on a 404 (detail chosen by the plan author; confirm). Show a banner, \"Paused for git: edits to files the
   project owner rewrites may be set aside\", in `role="status"`. The response shape is the one in GE-1\'s contract.
-  The surfaces: the preview SPA and the hub-client when served by a preview. No read-only mode.
+  The surfaces: the preview SPA and the hub-client when served by a preview. No read-only mode. Style the banner and
+  the notice with solid colors (`.claude/rules/hub-client-theme.md`) and run `npm run lint:css -w hub-client`.
 
 ### MCP and rebuilds
 
 - [ ] Test 7 first: after a swap the MCP `edit` tool with the stale `expected_hash` is refused. Run it before the bundle
   step.
 - [ ] `cargo xtask build-hub-mcp-bundle`; check `q2 mcp --launcher-info` after `cargo build --bin q2`.
-- [ ] Preview SPA chain: `cargo xtask build-q2-preview-spa`, then `cargo build --bin q2` (run
+- [ ] Preview SPA chain: `cargo xtask build-q2-preview-spa`, `cargo xtask build-hub-client-embed` (the `--ui editor`
+  end-to-end check needs it), then `cargo build --bin q2` (run
   `cd hub-client && npm run build:wasm` only if the WASM artifact is missing or stale; no Rust changes here).
 
 ### Changelog and wrap-up
@@ -189,6 +192,7 @@ npm test -w @quarto/hub-mcp
 npm test -w q2-preview-spa
 npm run test:integration -w q2-preview-spa
 npm run typecheck
+npm run lint:css -w hub-client
 cd hub-client && npm run test:ci && npm run build:all
 cargo xtask build-hub-mcp-bundle
 cargo xtask lint
@@ -208,7 +212,7 @@ record that it re-rendered with no notice. Say that the output was inspected. If
 
 ## Exit criteria
 
-- Tests 1 to 7 pass; the whole suites in the gates are green; `build:all` succeeds.
+- Tests 1 to 8 pass; the whole suites in the gates are green; `build:all` succeeds.
 - The consumers audit is complete: every handle holder is either rebound, reset, or shown to re-resolve.
 - The two end-to-end runs are recorded in the notes.
 - The MCP bundle and the preview SPA are rebuilt, and the changelog entry is committed.

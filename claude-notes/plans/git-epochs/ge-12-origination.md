@@ -85,7 +85,9 @@ This publishes a copy of your project to a public server. Anyone who gets the li
 
 A custom server shows "Anyone with access to that server and the project link can read and edit it." instead of the
 irrevocable line, and "Uncommitted: none" when clean. A plain folder shows "(plain folder)" and no Uncommitted line
-(detail chosen by the plan author; confirm). The server is any `ws` or `wss` URL, defaulting to
+(detail chosen by the plan author; confirm). When a published file name looks like a secret (`.env`, `.Renviron`,
+`*.pem`, `*secret*`, `*token*`), the confirm lists up to three of them under "Secret-looking files:" (added by the
+second reviewer; confirm). The server is any `ws` or `wss` URL, defaulting to
 `wss://sync.automerge.org`, remembered per folder in workspace state; the confirm appears every time.
 
 **Publish order.** (1) Bind first: write `.quarto-hub/project.json` and the `ownerId`. (2) Create everything offline in
@@ -106,7 +108,9 @@ published, else the first `.qmd`, else the first file; detail chosen by the plan
 **Owner behavior.** The folder runs in clone mode (a plain folder in mirror mode) with the owner hook filled: on each
 arrival that changes docs, in one index change, point the changed paths at their docs, remove the entries of tracked
 files git removed, re-list returned files at the registry\'s doc, and publish files git added (fresh doc, entry,
-registry entry). A folder whose `ownerId` does not match the index writes none of this, even with the same user id. A
+registry entry); a `reset --hard` is the new doc from disk and the retired entry of G9 step 2. Before it writes the
+index change it waits (up to 10 s) until the server holds the heads of the new docs, so followers never meet a
+pointer to a doc the server lacks (added by the second reviewer; confirm). A folder whose `ownerId` does not match the index writes none of this, even with the same user id. A
 hub-owned project has no `owner` key.
 
 **The sidecar race.** If two peers create the sidecar at once, the index key resolves to one winner. The loser adopts
@@ -120,7 +124,7 @@ In the vscode-free core, written and seen failing first.
    submodule links, an LFS pointer, text against binary, the 10 MB cap, a plain folder.
 2. Dirty detection, with CRLF checkouts: text normalized, binary by bytes.
 3. The confirm text builder: the exact strings for public and custom servers, clean and dirty, three names then "and
-   N more", a plain folder.
+   N more", a plain folder, and the secret-looking line.
 4. Publish order, with a recording fake network: no network call before the docs exist; the registry entries are in
    the sidecar before the link; the link function is not called until the heads are confirmed.
 5. Bootstrap content: the index at version 4 with the three keys, one registry entry per published doc under its HEAD
@@ -128,7 +132,8 @@ In the vscode-free core, written and seen failing first.
 6. The sidecar race: two peers create it offline, merge through the test hub, both converge on one pointer, and the
    loser\'s entries are present in the winner. No entry is lost.
 7. Owner behavior against real temp repos and the test hub, with headless peers: a checkout changes docs (one new
-   change on the index, counted), removals and returns, a git-added file published, a binary flip. A second clone with
+   change on the index, counted), removals and returns, a git-added file published, a binary flip, a `reset --hard` (a new doc from disk, the old entry
+   retired, one index change), and the index change written only after the new docs\' heads reached the server. A second clone with
    the same user id but its own folder, attached to the same project, writes nothing to `files`.
 8. Resume: stop after the offline step and before connect, reopen, and the server ends up with the index and every doc;
    a connection drop mid-sync resumes the same way.

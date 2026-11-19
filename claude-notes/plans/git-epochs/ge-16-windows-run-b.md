@@ -42,7 +42,8 @@ after this plan (the fix plans cannot be listed in advance).
   `Invoke-Logged` runs each command through `cmd.exe` and waits on that one process, because leaked grandchildren hold
   a PowerShell stdout pipe open for hours. Reuse GE-15\'s copies of these helpers; do not fork them.
 - **Lessons from RFU-6.** Its two runs used a base 175 commits behind the integration tip, so neither exercised the
-  finished work: rebase the tooling branch first and record the base commit in the results. Its machine had
+  finished work: merge the integration tip into the tooling branch first (never rebase a pushed branch) and record the
+  base commit in the results. Its machine had
   `core.autocrlf=input`, so the CRLF case was not exercised: clone with `core.autocrlf=true`, and have the script
   report any other value as a caveat.
 - **What GE-15 left on the tooling branch:** `scripts/git-epochs-windows/run.ps1`, the failure extractor, the results
@@ -64,7 +65,7 @@ Each item is independent: a failure never stops the others. Ids continue from GE
 | `b2` (W4, TypeScript) | The key and path tests: `/` keys, case-insensitive collisions, drive letters and UNC prefixes, nested `.quarto-hub` and `.git` segments, a path over 260 characters with `core.longpaths=true` | The TypeScript key normalization and ignore rules hold for Windows path forms | Filesystems other than NTFS; Dev Drive or OneDrive behavior |
 | `b3` (W3, TypeScript) | The `\r\n` fixtures through the content rule and arrival, in a clone made with `core.autocrlf=true` | A CRLF checkout does not look dirty, and comparisons normalize as the macOS tests assume | `.gitattributes` filters (LFS, ident); `autocrlf=input` |
 | `b4` | The vitest suites of the extension\'s vscode-free core and the headless peer | The engine runs on Windows: the injected watcher, writes to disk, no handle held across a directory rename | VS Code\'s own file watcher |
-| `b5` (W7) | The Join spawn module against a stub `q2.cmd`: the ticket in argv, a free port, the readiness poll of the stub\'s `/health`, kill of the whole process tree on Leave, stderr surfaced, no ticket in any log. Optional: a real `q2 preview --share` host and `--join` guest on this machine if the network allows | Spawn and kill semantics on Windows; the ticket stays out of logs | The iroh tunnel across real networks |
+| `b5` (W7) | The Join spawn module against a stub `q2.cmd` (spawned through a shell, as GE-11 specifies for `.cmd`; Node 20.12 and later refuses it otherwise): the ticket in argv, a free port, the readiness poll of the stub\'s `/health`, stdin close ending the stub, kill of the whole process tree on Leave, stderr surfaced, no ticket in any log. Optional: a real `q2 preview --share` host and `--join` guest on this machine if the network allows | Spawn and kill semantics on Windows; the ticket stays out of logs | The iroh tunnel across real networks |
 | `b6` | Origination against a local hub: a headless originator publishes a generated repo to a local `q2 hub`, the publish is killed halfway and resumed from local storage, a second headless peer joins and reads every file; the share link appears only after the heads are confirmed | Publish order and resume on NTFS paths and Node file handles | The public server; very large uploads |
 | `b7` | A clean root install: `npm ci`, `npm run typecheck`, `npm run build`, from the repo root at the pinned Node | The extension joined the workspaces cleanly and its bundle builds on Windows | `vsce package`; installing a `.vsix` |
 
@@ -77,8 +78,8 @@ Items marked (agent) run on macOS; items marked (Gordon) need the Windows machin
 - [ ] (agent) Confirm GE-11, GE-12, and GE-15 are complete, and read GE-15\'s notes for the tooling file names.
 - [ ] (agent) Add any missing test for `b2` or `b3` on `ge/16-windows-run-b` first (tests only, no product code; they
   also run on macOS), land it by rebase and fast-forward, and note the commit.
-- [ ] (agent) Rebase the tooling branch onto the current tip: `git switch windows/git-epochs` then
-  `git rebase feature/git-epochs`. Record the base commit hash in the notes.
+- [ ] (agent) Bring the tooling branch up to the current tip by merging, never by rebasing a pushed branch:
+  `git switch windows/git-epochs` then `git merge feature/git-epochs`. Record the base commit hash in the notes.
 - [ ] (agent) Extend `scripts/git-epochs-windows/run.ps1` with items `b1` to `b7`. Each uses `Invoke-Logged` and
   `Add-Result`, fills `proves` and `does_not_prove`, and runs alone with `-Only`.
 - [ ] (agent) Extend the instructions page on the tooling branch, `claude-notes/plans/git-epochs/windows-run-instructions.md`

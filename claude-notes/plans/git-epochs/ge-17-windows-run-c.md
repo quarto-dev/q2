@@ -43,7 +43,8 @@ landed since those runs. The deliverable is a final statement of what Windows do
 - **The model for the scenario** is GE-13\'s hub e2e (git helpers, the same steps) run through the real binary instead
   of a harness on macOS. The Windows version is a script that drives `q2.exe`, a headless peer, and `git.exe`.
 - **Process lessons from RFU-6.** Run each command through `cmd.exe` and wait on that one process (leaked processes hold
-  a pipe open); rebase the tooling branch onto the current tip first and record the base commit; clone with
+  a pipe open); merge the integration tip into the tooling branch first (never rebase a pushed branch) and record the
+  base commit; clone with
   `core.autocrlf=true` and report anything else.
 
 ## Test specifications
@@ -51,7 +52,8 @@ landed since those runs. The deliverable is a final statement of what Windows do
 | Item | How it is tested | A pass proves | It does not prove |
 |---|---|---|---|
 | `c1` (W9) | The scripted scenario below, against the real `q2.exe` and `git.exe` on a generated temp repo in `%TEMP%`; the script exits non-zero if any assertion fails and writes a JSON transcript of each step and the observed values | The feature works end to end on Windows: the gate, the classifier, the registry, the flips, the unlists, a binary file, and shutdown with a marker set | jj on Windows; other Git builds; long soak |
-| `c2` (W8) | The Playwright subset GE-14 marked permanent, with VS Code installed on the machine, launched the same way the Linux harness launches it | The extension\'s VS Code surfaces (commands, notifications, status bar, buffers) work with `Code.exe` | VS Code Insiders or other versions; the unmarked exploratory tests |
+| `c2` (W8) | The Playwright subset GE-14 marked permanent, with the pinned VS Code build that the harness downloads (`downloadAndUnzipVSCode`, the same version as on Linux),
+launched the same way the Linux harness launches it | The extension\'s VS Code surfaces (commands, notifications, status bar, buffers) work with `Code.exe` | VS Code Insiders or other versions; the unmarked exploratory tests |
 | `c3` | Every item from GE-15 (`a*`) and GE-16 (`b1` to `b7`), run in one invocation without `-Only`, on the final code | Nothing regressed on Windows after the fix plans; the whole set is green together | Anything the items did not already cover |
 
 **The scenario for `c1`** (each step asserts; the transcript records what it saw):
@@ -68,7 +70,9 @@ landed since those runs. The deliverable is a final statement of what Windows do
 6. `git switch main`: arrival re-attaches the registered docs (the pointer returns to the earlier docIds, no fork), and
    disk equals the doc.
 7. Save a file and commit inside the debounce window: handled as a commit (no flip).
-8. In a second run, send Ctrl-C to the hub during a `git switch` of the large tree: the shutdown flush is skipped
+8. `git reset --hard` after a dirty edit: the pointer moves to a new doc equal to the HEAD content, and the dirty text
+   stays in the retired doc.
+9. In a second run, send Ctrl-C to the hub during a `git switch` of the large tree: the shutdown flush is skipped
    while the marker exists, and no doc contains conflict markers or half-written text (detail chosen by the plan
    author; confirm).
 
@@ -78,13 +82,14 @@ Items marked (agent) run on macOS; items marked (Gordon) need the Windows machin
 
 - [ ] (agent) Confirm GE-14, GE-15, and GE-16 are complete, and read the notes of all three, including every fix plan
   inserted after the earlier Windows runs.
-- [ ] (agent) Rebase `windows/git-epochs` onto the final `feature/git-epochs` tip and record the base commit hash.
+- [ ] (agent) Merge the final `feature/git-epochs` tip into `windows/git-epochs` (never rebase the pushed branch) and
+  record the base commit hash.
 - [ ] (agent) Write the scenario script for `c1` on the tooling branch (a Node script that drives `q2.exe`, the headless
   peer, and `git.exe`, using GE-13\'s steps as the template). Dry-run its logic against the macOS `q2` binary to check
   the assertions before handoff.
 - [ ] (agent) Add items `c1`, `c2`, and `c3` to `run.ps1`; `c2` uses the command and config GE-14 recorded; `c3` runs
   every `a*` and `b*` item. Each fills `proves` and `does_not_prove`.
-- [ ] (agent) Update the instructions page on the tooling branch: VS Code installed (record the version), Node at the
+- [ ] (agent) Update the instructions page on the tooling branch: the pinned VS Code build the harness downloads (record the version), Node at the
   `.nvmrc` major, `core.autocrlf=true`, `core.longpaths=true`, optional `jj`, and the table above.
 - [ ] (agent) Gate the tooling: parse-only syntax check of the script with `pwsh` if installed; the extractor\'s help;
   `q2 render --strict` of the instructions page; the Playwright subset passes on macOS or Linux first.

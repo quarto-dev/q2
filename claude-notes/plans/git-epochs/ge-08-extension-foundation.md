@@ -25,6 +25,7 @@ flows (Connect to Document, Create Folder from Project, and auto-start of a fold
 - **G23** Ignore any path segment named `.git` or `.quarto-hub`, and skip a subfolder that has its own
   `.quarto-hub/project.json`. (Extends the earlier D35.)
 - **G29** The shared pieces the extension needs: the share-URL helpers move to a shared package.
+- **G36** Every path that comes from a doc is validated by one `safeJoin` before the extension touches disk.
 - **G30** A vscode-free core with injected watcher, buffer host, and notifier; a headless peer on the core; a
   Playwright harness that launches VS Code with the extension; the permanent subset is chosen later, in GE-14.
 - **D34** (kept) The extension rejoins the root npm workspaces, its README is corrected, and its tests are wired into
@@ -90,7 +91,12 @@ Written first, seen failing for the right reason, then the code that makes them 
    pass.
 5. **Headless peer:** peer A publishes three files to the test hub (waiting for the hub to hold A\'s heads); peer B
    joins by index id and sees them on its disk; an edit on A reaches B.
-6. **Playwright smoke tests** (below).
+6. **`safeJoin`** (table-driven, G36): it accepts `a.qmd`, `dir/a.qmd`, and `dir/../a.qmd` inside the root; it rejects
+   `../x`, `a/../../x`, `/abs`, `C:\x`, `\\server\share\x`, `a\b`, a path containing NUL, `.git/hooks/h`, `.GIT/x`,
+   `sub/.quarto-hub/x`, and `.vscode/tasks.json`; a symlinked parent directory that points outside the root is
+   rejected (the case is skipped where the platform cannot create symlinks); `syncIndex` and `createProjectFolder`
+   skip a rejected key, log it, and still apply the other keys.
+7. **Playwright smoke tests** (below).
 
 ## Checklist
 
@@ -106,11 +112,17 @@ Written first, seen failing for the right reason, then the code that makes them 
 - [ ] Fix the README: the "workspace member" line is true now (check each command in it runs from the root); leave
   the server and folder-placement text, which GE-11 changes.
 - [ ] Write test spec 1, run it red, then add `src/core/ignore.ts` with the G23 rule and make `project.ts` use it.
+- [ ] Write test spec 6 and see it fail. Add `src/core/safe-path.ts` with `safeJoin(root, rel)` (G36) and route every
+  doc-derived write, `rm`, `mkdir`, and `rmdir` through it: `writeFileDoc`, the removal and folder handling in
+  `syncIndex` (`project.ts:313-341`), and `createProjectFolder`. A rejected key is skipped and logged (an event line
+  and the output channel), never thrown. GE-16 `b2` runs the hostile-index fixture on Windows.
 - [ ] **Share-URL extraction.** Create a small package (`ts-packages/quarto-share-url`, name `@quarto/share-url`; detail
   chosen by the plan author; confirm), move `share-url.ts` and its unit tests into it, make
   `quarto-hub-mcp/src/share-url.ts` re-export it so every import and the MCP tests are unchanged, and add the package
   to the extension\'s dependencies. Run `npm run test -w @quarto/hub-mcp` (the share-URL and embed tests) and
-  `cargo xtask build-hub-mcp-bundle` to prove the bundle still builds.
+  `cargo xtask build-hub-mcp-bundle` to prove the bundle still builds. In the same commit add a step
+  `npm test -w ts-packages/quarto-share-url` to `.github/workflows/ts-test-suite.yml` (`ci-test-suite-unwired`), and add
+  the package to the build step at `:272`, because `quarto-hub-mcp` now depends on it.
 - [ ] Write test specs 3 and 4 as characterization tests against the current code (red against the not-yet-extracted
   core: the imports do not exist), then extract.
 - [ ] **Extract the core.** Create `src/core/` with: `host.ts` (the interfaces below), `project-sync.ts` (the engine
@@ -130,7 +142,7 @@ Written first, seen failing for the right reason, then the code that makes them 
   entry point; detail chosen by the plan author; confirm) that builds a `ProjectSync` on the core with a Node
   `FileWatcher` (`fs.watch` or a polling fallback), a `BufferHost` with no buffers, and a recording `Notifier`.
   It can `join(serverUrl, indexDocId, dir)` and `publish(dir, serverUrl)` (create the index and file docs, as
-  `createNewProject` in `quarto-sync-client` does, using the helpers GE-1 added to the schema package).
+  `createNewProject` in `quarto-sync-client` does, using the helpers GE-1 added to the schema package; plain projects only, GE-10 adds the git-enabled variant).
   Write test spec 5 first.
 - [ ] **Vitest for the extension.** Add `vitest` and a `test` script to `vscode-sync-experiment/package.json`; add the
   workflow step `npm run test -w quarto-hub-vscode` and a typecheck step to the "Workspace TS suites" job of
@@ -138,8 +150,10 @@ Written first, seen failing for the right reason, then the code that makes them 
 - [ ] **Playwright harness**, in `vscode-sync-experiment/e2e/`: `playwright.config.ts`; `helpers/launch.ts` that
   downloads a pinned VS Code with `@vscode/test-electron` (`downloadAndUnzipVSCode`, cached under `.vscode-test/`) and
   starts it with Playwright\'s `_electron.launch` using `--extensionDevelopmentPath`, throwaway `--user-data-dir` and
-  `--extensions-dir`, `--disable-workspace-trust`, `--skip-release-notes`, `--disable-updates`, and a workspace
-  folder (detail chosen by the plan author; confirm); `helpers/hub.ts` that starts the in-process test hub from
+  `--extensions-dir`, `--disable-workspace-trust`, `--skip-release-notes`, `--disable-updates`, `--no-sandbox` and
+  `--disable-gpu` (containers), a short `--user-data-dir` path (macOS socket paths are limited to about 100
+  characters), user settings with `"window.dialogStyle": "custom"` (Playwright cannot click native modal dialogs,
+  and GE-11 and GE-12 use modal confirms), and a workspace folder (details chosen by the second reviewer; confirm); `helpers/hub.ts` that starts the in-process test hub from
   `quarto-sync-client` (import by a relative path, or add a `./testing` export to that package; detail chosen by the
   plan author; confirm); `helpers/palette.ts` (run a command, fill an input box); fixtures for a published project and
   a temp git repo helper (shared with later plans).
@@ -179,7 +193,8 @@ from the run", and say that the output was inspected. A human has not watched th
 
 - The extension is a root workspace member; the root typecheck and build are green; a second `npm install` does not
   change the lockfile.
-- The ignore rule passes its table; nested `.git`, `.quarto-hub`, and bound subfolders are skipped.
+- The ignore rule passes its table; nested `.git`, `.quarto-hub`, and bound subfolders are skipped; `safeJoin`
+  passes its table, and a hostile index key is skipped and logged.
 - `src/core/` contains no `vscode` import (a test enforces it) and the characterization tests pass; the three
   existing flows behave as before.
 - The headless peer joins and publishes against the test hub; the Playwright smoke tests pass locally.

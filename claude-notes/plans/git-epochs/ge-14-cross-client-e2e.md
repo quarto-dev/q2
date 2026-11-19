@@ -73,7 +73,7 @@ Every assertion waits on the state it asserts, with retrying assertions, never a
 | H2 | The hub runs `git switch feature` | The browser swaps with the owner notice and shows the feature text; an edit typed just before the switch is counted as stayed with the previous version. The mirror\'s disk equals the feature file. Editor only suspends, waits for the flip, rebinds, and shows the feature text, writing nothing. The clone on `main` stays in its own doc and its disk is untouched. A second clone already on `feature` joins the hub\'s new doc |
 | H3 | A clone on `main`, same as the hub, types | The edit reaches the browser and the hub\'s disk; a browser edit reaches the clone\'s disk |
 | H4 | The clone runs `git switch feature` (one real VS Code run) | Arrival attaches the doc for that blob, or creates one; peers still in the old doc see the moved message; a clean file with live edits joins with the notice and the "use my checkout instead" action; the hub\'s pointer does not move |
-| H5 | The hub runs `git reset --hard` after a browser edit | No guest sees a revert merged in as an author edit; the pointer moves to a doc equal to disk; the browser edit stays in the old doc and is counted |
+| H5 | The hub runs `git reset --hard` after a browser edit | No guest sees a revert merged in as an author edit; the pointer moves to a new doc equal to disk; the browser edit stays in the retired doc and is counted; a clone on the same blob stays in the retired doc, and its status bar says "your doc was superseded" |
 | H6 | The hub switches to `feature` and back | `c.qmd` leaves the browser tree, the mirror\'s disk loses it, the clone on `main` keeps its own; `b.qmd` appears in the tree and in the mirror; on return `c.qmd` is listed again at its old doc and `b.qmd` is gone |
 | H7 | The hub switches and back, with `logo.png` differing | The browser shows the new image; the mirror\'s bytes equal the feature file; the clone on `main` keeps its own bytes (never overwritten) |
 | H8 | The hub starts a rebase that stops for conflicts, then continues | The status route reports paused; guests keep editing; no conflict marker reaches any doc; after the rebase one decision runs and guests swap once |
@@ -101,7 +101,8 @@ notes (detail chosen by the plan author; confirm).
 
 ## CI and verify
 
-- A new workflow `.github/workflows/vscode-extension-e2e.yml`, modeled on `q2-preview-spa-e2e.yml`: Rust nightly,
+- Extend the workflow `.github/workflows/vscode-extension-e2e.yml` that GE-8 created (`workflow_dispatch` only),
+  modeled on `q2-preview-spa-e2e.yml`: Rust nightly,
   clang, wasm-pack, wasm-bindgen-cli, Node 24, `npm ci`, the WASM, trace-viewer, SPA, and hub-client embed builds,
   `cargo build --bin q2`, the extension build, the VS Code download step of the GE-8 harness (cached), and the
   Playwright run under a virtual display (`xvfb-run`), with a report upload. Path-triggered on the extension, the hub
@@ -125,6 +126,9 @@ process and removes every temporary directory, and no async work outlives a test
   TypeScript package decodes a sidecar written by the hub (a golden doc dumped from a real hub run), and the Rust
   crate decodes the doc GE-5 committed under `fixtures/golden/`; both yield the same logical entries. A mismatch is
   a contract bug: stop and bring it to Gordon.
+- [ ] Extend `q2-preview-spa/e2e/helpers/previewServer.ts` with `hubUrl` and `project` options (`--hub-url`,
+  `--project`; `startPreviewServer` has neither today) and add a standalone-hub starter for L2 and L4 (GE-8\'s
+  `helpers/hub.ts` hub, or `q2 hub`; the relay hub must need no sign-in). These helpers are not in GE-13.
 - [ ] Build the orchestrator: start the hub, a browser page, a headless peer or a VS Code window, and a standalone
   local hub; tear everything down; log the exact invocations.
 - [ ] Write H1, H2, and H3 and watch them fail; make them pass.
@@ -133,7 +137,7 @@ process and removes every temporary directory, and no async work outlives a test
 - [ ] Write L1 to L4; write L5 (exploratory).
 - [ ] Record the manual transcripts: the public server run and the ticket pair, or say they could not be run.
 - [ ] Record the permanent and exploratory lists with reasons; tag the specs.
-- [ ] Add the `test:e2e` script for the VS Code subset, the new workflow, and the `cargo xtask verify` step in one
+- [ ] Add the `test:e2e` script for the VS Code subset, the workflow changes, and the `cargo xtask verify` step in one
   commit.
 - [ ] Run the rebuild chain before the final runs: `cd hub-client && npm run build:wasm`,
   `cargo xtask build-q2-preview-spa`, `cargo xtask build-hub-client-embed`, `cargo xtask build-hub-mcp-bundle` (the

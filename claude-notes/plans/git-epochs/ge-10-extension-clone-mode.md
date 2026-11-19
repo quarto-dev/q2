@@ -79,7 +79,9 @@ clock where timing matters.
 4. **Exclude file:** `.quarto-hub/` is added to `.git/info/exclude` found with `git rev-parse --git-path
    info/exclude` (also in a linked worktree), once, idempotently.
 5. **Arrival**, driven by `git switch` in a temp repo against a registry fixture: step 1 (no doc: created and
-   registered with the right generation); step 2 (already attached: disk not merged into the doc); step 3 (equal text,
+   registered with the right generation); step 2 (already attached: disk not merged into the doc; with S equal to B and T different, as after the clone\'s own
+   `git reset --hard`, the entry is retired and a doc is created from disk and registered, and the pointer is left to
+   the owner); step 3 (equal text,
    attached silently, including CRLF against LF); step 4 (clean, drifted doc: disk takes the doc text, one aggregate
    notice, and "use my checkout instead" restores the blob content with `cat-file` and detaches); step 5 (dirty and
    different: nothing overwritten, the file detached). The same for a binary file by hash. After each case the
@@ -99,8 +101,17 @@ clock where timing matters.
 10. **Rebind:** a bound folder rebinds to a new project after a confirm, which deletes the Automerge store and the
     record; for clone mode the repo identity is re-verified, and a mismatch refuses.
 11. **Sidecar creation race:** two peers create the sidecar at the same time; both end on the same doc and both
-    re-register their attached docs.
+    re-register their attached docs; a loser whose disk differs from the canonical doc detaches (G7 through G9
+    step 5) and a clean loser re-attaches.
 12. **Late reload:** while the gate is closed a whole-file rewrite of an open buffer is not spliced into the doc.
+13. **Retired and superseded:** canonical selection skips a retired doc; a file attached to a doc another peer retired
+    stays attached and live, and the status bar list says "your doc was superseded"; the repair rule re-registers a
+    doc that vanished from the registry and never a retired one.
+14. **Moved message:** when arrival leaves a doc, the shared moved message goes out on the old handle before the
+    Binding is disposed, and a second peer shows it.
+15. **jj:** under colocated jj every changed file takes step 5 (detach); nothing is attached or registered by
+    arrival.
+16. **Hostile keys:** an index key naming `../x` or `.vscode/tasks.json` is skipped through GE-8\'s `safeJoin`.
 
 ## Checklist
 
@@ -112,14 +123,23 @@ clock where timing matters.
   roots (or blob overlap when shallow) at every startup and refuse to start sync on a mismatch, with a message.
 - [ ] Write test specs 5 and 6. Implement `src/core/clone/registry-client.ts`: find the sidecar from the index key
   (create lazily; write the key; on a lost race adopt the winner and re-register), read and write entries with the
-  GE-5 registry operations, and write each move forward as one change.
+  GE-5 registry operations, and write each move forward as one change. After each sidecar change re-evaluate every
+  attached file (G7) and run the narrow repair rule: a clean file whose doc is no longer canonical re-attaches, a file
+  whose disk differs goes to step 5, and a file attached to a doc another peer retired stays in it.
 - [ ] Implement `src/core/clone/controller.ts`: build the GE-5 controller on the subprocess probe for the project\'s
   repository (project prefix applied); on its `hold` and gate events suspend outbound edits from every bound Binding
   (G27) and skip disk-to-doc and doc-to-disk sync for held paths; on its decision run `classify` (G2) and then, per
-  file, a move forward or `arrive`; resume sync for the held files. The controller runs only in clone mode.
-- [ ] Arrival side effects: a created doc is registered with generation max-seen plus one (zero when the set is empty);
+  file, a move forward or `arrive`; resume sync for the held files. The controller runs only in clone mode. It passes `isOwnWrite(path)` (the engine\'s last-written content hash) so the
+  engine\'s own disk writes do not restart the quiet window, and every file holds from the trigger if its disk differs
+  from its last synced content.
+- [ ] Arrival side effects: a created doc is registered with generation max over the path plus one (zero when the path has no entry); step 2 with
+  S equal to B and T different retires the entry and creates a doc from disk (the owner also flips the pointer;
+  GE-12);
   attach rebinds any open buffer to the chosen doc; step 4 writes the doc text to disk and queues the aggregate
-  join notice; step 5 detaches. A failure on one file falls back to ordinary sync for that file and is logged (D14).
+  join notice; step 5 detaches, and so does every changed file under colocated jj (arrival is unsupported there). A failure on one
+  file falls back to ordinary sync for that file and is logged (D14).
+- [ ] Send the shared moved message (GE-6) on the old handle, before the old Binding is disposed, whenever arrival
+  leaves a doc (G25); GE-14 H4 expects peers to see it.
 - [ ] Write test spec 7. In clone mode change `syncIndex`: tracked files ignore the pointer and removals; untracked
   files follow the pointer only where the path exists on disk. Gate `onDocChange` so it does not recreate a file whose
   path is absent at HEAD or is held. Leave `onDiskDelete` for a user\'s own delete of a tracked file as it is today
@@ -141,11 +161,12 @@ clock where timing matters.
   content (read with `git cat-file`, no filters) back to the file and detaches the file (inert); it never creates a
   second doc (detail chosen by the plan author; confirm). Test it: the file text equals the blob and the Binding is
   inert.
-- [ ] Event log: add `switched` (arrival attached a different doc), `detached`, `reattached`, and `held` to the
+- [ ] Event log: add `switched` (arrival attached a different doc), `detached`, `reattached`, `held`, `reset`, and `retired` to the
   events GE-9 widened (`logEvent`, `project.ts:247`), each with the path, the doc ids, and the reason; the first
   plan listed these for the extension. Test that each decision writes its event (detail chosen by the epic
   reviewer; confirm).
-- [ ] Status bar: the mode plus the detached count; clicking opens a quick pick listing the detached files with
+- [ ] Status bar: the mode plus the detached count (and a "your doc was superseded" line for a file attached to a doc
+  another peer retired); clicking opens a quick pick listing the detached files with
   "Adopt" and "Stay detached" per file (detail chosen by the plan author; confirm). Automatic re-attach: on a watcher
   event or a doc change, compare normalized text and re-attach when equal.
 - [ ] Write test spec 9. Implement the persisted record `.quarto-hub/git-epochs.json` (`version`, `head`, `blobs` as a
@@ -161,7 +182,11 @@ clock where timing matters.
   are removed or kept as shortcuts).
 - [ ] An owner hook: define a `PointerWriter` interface that the clone controller calls after each decision, with a
   no-op default; GE-12 supplies the owner implementation. Do not write the pointer here.
-- [ ] **Playwright tests** (GE-8 harness; a project published by the headless peer with a repo entry, a temp git repo
+- [ ] Add a git-enabled publish helper to the headless peer, `publishGit(dir, serverUrl)`: an index at version 4 with
+  the sidecar, `repo`, and a registry entry for each file under its HEAD blob at generation 0, built with the GE-1
+  schema helpers and the GE-5 registry operations. It is test code only (GE-12 builds the real origination); spec 1
+  and the Playwright tests use it.
+- [ ] **Playwright tests** (GE-8 harness; a project published with the headless peer\'s `publishGit`, a temp git repo
   as the workspace; later steps use `git switch` run from the test): attach succeeds and the status bar says clone;
   attach to an unrelated repo is refused and a mirror is offered; a `git switch` to a branch another peer already
   created attaches to that doc and shows the join notice; a dirty file detaches, "Adopt" asks first, and then takes the

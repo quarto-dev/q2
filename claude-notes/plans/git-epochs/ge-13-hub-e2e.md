@@ -62,21 +62,21 @@ The helpers get small unit-style checks first (they are test code, but a wrong h
 Then the scenarios, one test each, seen failing before the code under test is exercised end to end (if GE-3 and GE-4
 are correct they pass on first run; the failing run is the same spec against a hub started without `--git track`,
 which must fail the swap assertions). Every scenario starts `--git track --ui <viewer|editor>` on a repo whose `main`
-holds `index.qmd`, `old.qmd`, and `img.png`, and whose `feature` branch changes `index.qmd` and `img.png`, removes
-`old.qmd`, and adds `extra.qmd`.
+holds `_quarto.yml`, `index.qmd`, `a.qmd`, `c.qmd`, and `img/logo.png`, and whose `feature` branch changes `a.qmd`
+and `img/logo.png`, removes `c.qmd`, and adds `b.qmd` (the fixture GE-14 reuses and extends).
 
 | Id | Scenario | What must hold |
 |---|---|---|
-| S1 | A host commit while two guests edit | No notice and no swap; both guests\' edits stay in both pages and on disk; a marker typed after the commit reaches the other guest |
-| S2 | `git switch feature` | Both guests show the `feature` text; the host disk equals it; the aggregate notice appears once per guest (editor) or not at all (viewer, which re-renders instead) |
+| S1 | An owner commit while two guests edit | No notice and no swap; both guests\' edits stay in both pages and on disk; a marker typed after the commit reaches the other guest; the registry entry moves forward within a few seconds although the guests keep typing |
+| S2 | `git switch feature` | Both guests show the `feature` text; the hub\'s disk equals it; the aggregate notice appears once per guest (editor) or not at all (viewer, which re-renders instead) |
 | S3 | A stranded edit | A guest edits against the old doc while the switch happens; the notice also says the edit stayed with the previous version; the file on screen and on disk match `feature` |
 | S4 | `git switch main` back | Editor and disk agree; under `--allow-edit` a stranded edit retained in the old doc may resurface, because arrival joins live edits (G9 step 4); the spec asserts agreement between editor and disk and records which outcome occurred |
 | S5 | A rebase stopped for conflicts | `GET /api/preview/git-status` reports paused; the guests show the paused indicator and no conflict markers; after the rebase finishes, paused clears and exactly one decision is applied: one notice, editor equal to disk |
-| S6 | jj `edit` (colocated), skipped when `jj` is absent | Same result as S2 |
+| S6 | jj `edit` (colocated), skipped when `jj` is absent | Arrival under jj is unsupported: guests follow the flip to a doc created from disk (the step 5 fallback, nothing registered); no conflict marker reaches a doc |
 | S7 | Save then commit inside the 500 ms debounce | Treated as a commit: no swap, no notice, the new text reaches the guests by ordinary sync |
-| S8 | `feature` adds `extra.qmd` and removes `old.qmd` | After the switch the tree lists `extra.qmd` and not `old.qmd`; after switching back the reverse |
-| S9 | A tracked binary changes on `feature` | After each switch the host disk bytes equal the checked-out blob and the guests see the same image bytes; no cross-branch overwrite |
-| S10 | `git reset --hard` after a dirty edit | The reflog trigger fires with HEAD unchanged; the guests end on the HEAD content; the doc keeps no dirty text |
+| S8 | `feature` adds `b.qmd` and removes `c.qmd` | After the switch the tree lists `b.qmd` and not `c.qmd`; after switching back the reverse |
+| S9 | A tracked binary changes on `feature` | After each switch the hub\'s disk bytes equal the checked-out blob and the guests see the same image bytes; no cross-branch overwrite |
+| S10 | `git reset --hard` after a dirty edit | The reflog trigger fires with HEAD unchanged; the pointer moves to a new doc equal to the HEAD content; the dirty text stays in the retired doc, counted, and the decision appears in the status route |
 | S11 | No `--allow-edit` (`ReadOnly`) | A switch follows without any browser edit reaching disk; arrival attaches only a doc equal to disk, otherwise a new doc from disk |
 | S12 | Control: `--git ignore` | No paused indicator; the status route reports tracking false; today\'s behavior |
 | S13 | Optional: a guest through `startJoinGuest` | Sees the S2 swap through the tunnel; skipped when the relay is unreachable |
@@ -101,7 +101,7 @@ holds `index.qmd`, `old.qmd`, and `img.png`, and whose `feature` branch changes 
   `chromium` and `firefox` projects) and `q2-preview-spa/e2e/embed-git-epochs.spec.ts` (editor UI: S1 to S12, with
   the notices, stranded edit, jj, and `ReadOnly`; runs under the `embed` project; skips when `isEmbedBuilt` is false).
 - [ ] S3 stranded edit (detail chosen by the plan author; confirm): take guest A offline with
-  `context.setOffline(true)`, type, switch branches on the host, bring A online. If `setOffline` does not drop an
+  `context.setOffline(true)`, type, switch branches on the hub, bring A online. If `setOffline` does not drop an
   open WebSocket, use `page.routeWebSocket` to close the socket and drop its frames instead.
 - [ ] S5 rebase: build two branches that edit the same lines, start `rebase` so it stops, poll the status route for
   `paused`, assert the indicator and the absence of conflict markers in the editors, then `rebaseContinue` after

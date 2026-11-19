@@ -36,7 +36,7 @@ extension folder. It changes no sync behavior; it only exposes and configures wh
   `main.rs:339-340`; the library enum is `quarto_preview::PreviewUi` (`crates/quarto-preview/src/lib.rs:224-230`).
 - The conflict lists are `main.rs:370` (`--join`), `:387` (`--static`), and `:448` (`--hub-url`). The `--hub-url`
   list does not name `ui` because the mirror supports `--ui editor`; `git` joins all three lists.
-- `PreviewConfig` is at `lib.rs:234` and is built as a struct literal in 22 places: `lib.rs`,
+- `PreviewConfig` is at `lib.rs:234` and is built as a struct literal in many places (22 at the base commit, more on `origin/main`; recount with `grep -rn "PreviewConfig {" crates`): `lib.rs`,
   `crates/quarto/src/commands/preview.rs:444`, and 14 files under `crates/quarto-preview/tests/integration/` (`boot`,
   `render_flags`, `diagnostics_capture_failure`, `live_reexecute`, `render_scripts_boot`, `import_route`,
   `join_frontend`, `diagnostics_endpoint`, `staleness`, `render_routes_support`, `config_endpoint`, `join_tunnel`,
@@ -48,7 +48,7 @@ extension folder. It changes no sync behavior; it only exposes and configures wh
   its handler at `:852`. Handlers reach the hub through `State<SharedContext>` (comment at `lib.rs:778`).
 - The extension marker names are `META_DIR = '.quarto-hub'` and `META_FILE = 'project.json'`
   (`vscode-sync-experiment/src/project.ts:38-39`).
-- GE-1 fixes the response shape of the status route; GE-3 names the `HubConfig` option and the context accessor that
+- GE-1 fixes the response shape of the status route (`tracking`, `paused`, `pending`, `markers`, `decisions`); GE-3 names the `HubConfig` option and the context accessor that
   reports status. Read both before starting and write the names in the notes.
 
 ## Test specifications
@@ -72,11 +72,13 @@ order:
    - Create the file that `git rev-parse --git-path index.lock` names: `paused` becomes true; remove it: false again.
      Poll with a retrying helper until the state holds; no fixed sleeps.
    - `pending` is true while GE-3\'s decision is held and false after it is applied (use the held-decision hook GE-3
-     provides for its own tests; if GE-3 offers none, drive a real `git switch` and poll).
+     provides for its own tests; GE-3 provides one, with `HubContext::git_status()`). After a real `git switch`, `decisions` lists it (kind, files,
+     G9 step, at most 20 entries) and `markers` names the marker holding the gate while one exists.
 4. **Warning tests**: a unit test for `extension_bound(project_root)` (true only when
-   `<root>/.quarto-hub/project.json` exists; built with `Path::join`), and a binary-level test in
+   `<root>/.quarto-hub/project.json` exists and its `mode` is not `editor-only`; built with `Path::join`), and a binary-level test in
    `crates/quarto/tests/integration/` that starts `q2 preview --no-browser` on a temp directory containing that file
-   with `RUST_LOG=warn` and asserts the warning on stderr and that the server still starts.
+   with `RUST_LOG=warn` and asserts the warning on stderr and that the server still starts; a second case with `"mode": "editor-only"` in the
+   file prints no warning.
 
 ## Checklist
 
@@ -88,7 +90,7 @@ order:
   `crates/quarto-preview/tests/integration/main.rs` in alphabetical order. They fail to compile or fail.
 - [ ] Write the warning tests (item 4). They fail.
 - [ ] Add `PreviewGit` (`Ignore` default, `Track`) to `quarto-preview` next to `PreviewUi`, and `PreviewConfig::git`.
-  Update every literal `PreviewConfig {` site (the 22 above) with `git: Default::default()`.
+  Update every literal `PreviewConfig {` site (recount with the grep above) with `git: Default::default()`.
 - [ ] Add `PreviewGitArg` and the `--git` argument in `main.rs`: `value_enum`, `default_value_t = PreviewGitArg::Ignore`,
   no `default_missing_value`. Add `git` to the three conflict lists. Write the help text: what `track` does (this
   preview owns the project\'s pointer: it keeps docs in step with git checkouts), that `ignore` is today\'s behavior,
@@ -99,7 +101,7 @@ order:
   `State<SharedContext>`. Return exactly the GE-1 shape; add no field.
 - [ ] Add `extension_bound` and call it once after the project root is resolved in `commands/preview.rs`
   (`:286-300`), emitting `tracing::warn!` with the text: this directory is bound to a Quarto Hub folder
-  (`.quarto-hub/project.json`), so running a hub here syncs the same files twice. Warn only. Not run for
+  (`.quarto-hub/project.json`), so running a hub here syncs the same files twice. Warn only. `extension_bound` is false when `project.json` says `mode: editor-only` (G28). Not run for
   `--no-project`, single-file mode, or `--hub-url` (no directory is served). No new Q error code, so no error
   catalog or `docs/errors` work.
 - [ ] `--no-project` with `--git track` runs without git logic and logs one line saying so (detail chosen by the plan
