@@ -120,7 +120,7 @@ record an answer instead of passing or failing (see part two).
 
 ### Contract
 
-- [ ] Write `claude-notes/designs/git-epoch-registry-contract.md` (qmd; render-check it), normative, with these
+- [x] Write `claude-notes/designs/git-epoch-registry-contract.md` (qmd; render-check it), normative, with these
   sections. **Sidecar doc:** a `version` field (1); `entries`, a flat map from the key `path`, NUL, blob id, NUL, docId to
   the generation (an integer stored as Automerge `int`); and `retired`, a flat map with the same keys that only grows.
   Every entry is its own key, so concurrent adds union (G6; a nested map loses one side of a concurrent creation).
@@ -154,7 +154,7 @@ record an answer instead of passing or failing (see part two).
   (the tick-driven machine and the synchronous `check()`). The two plans run in parallel and take their names from this
   map, not from each other. **Row schemas:** the input and expected fields of every decision-table row, the step
   format of a scenario, and the golden manifest, so that GE-2 and GE-5 parse the same rows.
-- [ ] Verify the epic\'s "What became of D1 to D36" table against the contract and fix any row that is wrong; record
+- [x] Verify the epic\'s "What became of D1 to D36" table against the contract and fix any row that is wrong; record
   each change in Notes from the run.
 
 ### Package skeleton and CI
@@ -325,4 +325,9 @@ The logic itself (GE-2, GE-5), the swap module and the notice texts (GE-6), adop
   repo with many large binaries costs the same as one with many small files, since a key holds the blob id and not
   the content; only the number of tracked paths matters. Proposed soft limit for the contract: 15,000 tracked paths
   (about 2 MB and 100 ms load); above it the sidecar warns and still works. Rust timing was not measured.
+- Contract written (`claude-notes/designs/git-epoch-registry-contract.md`, renders with only the ignored `Q-12-13`
+  lines). It records the map-creation rule from item 6, the item 7 gate ordering, the item 8 fork result, and the
+  item 9 soft limit. The notice constant names in it (`NOTICE_SWITCHED_VERSIONS` and five others) are my proposal
+  (detail chosen by the plan author; confirm); GE-6 owns the texts and may add more. The "What became of D1 to D36"
+  table was checked against the contract: no row needed a change.
 - Not started: Gate 0 part two; the contract, package, schemas, fixtures. No repository code changed yet.
