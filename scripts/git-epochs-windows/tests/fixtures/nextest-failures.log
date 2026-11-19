@@ -1,0 +1,58 @@
+    Starting 9 tests across 2 binaries
+        PASS [   0.101s] (1/9) quarto-git-epochs::integration arrival::ok_one
+        FAIL [   0.250s] (2/9) quarto-git-epochs::integration probe_real_repo::git_path_has_drive_letter
+  stdout ───
+
+    running 1 test
+    test probe_real_repo::git_path_has_drive_letter ... FAILED
+
+    failures:
+
+    failures:
+        probe_real_repo::git_path_has_drive_letter
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.24s
+
+  stderr ───
+
+    thread 'probe_real_repo::git_path_has_drive_letter' (4120) panicked at crates\quarto-git-epochs\tests\integration\probe_real_repo.rs:88:9:
+    assertion `left == right` failed: path C:\Users\gw\AppData\Local\Temp\.tmpAbC123\repo
+      left: "C:/x"
+     right: "C:\\x"
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.260s] (3/9) quarto-git-epochs::integration probe_real_repo::reflog_subject_parses
+  stdout ───
+
+    running 1 test
+    test probe_real_repo::reflog_subject_parses ... FAILED
+
+  stderr ───
+
+    thread 'probe_real_repo::reflog_subject_parses' (4121) panicked at crates\quarto-git-epochs\tests\integration\probe_real_repo.rs:120:9:
+    assertion `left == right` failed: path C:\Users\gw\AppData\Local\Temp\.tmpXyZ789\repo
+      left: "C:/x"
+     right: "C:\\x"
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.300s] (4/9) quarto-git-epochs::integration classify::ok_two
+        FAIL [   0.310s] (5/9) quarto-hub::integration git_epochs::gate_holds
+  stdout ───
+
+    running 1 test
+
+  stderr ───
+
+    thread 'git_epochs::gate_holds' (9001) panicked at crates\quarto-hub\tests\integration\git_epochs.rs:300:5:
+    the gate never closed
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.400s] (6/9) quarto-git-epochs::integration arrival::ok_three
+        PASS [   0.410s] (7/9) quarto-git-epochs::integration classify::ok_four
+        PASS [   0.420s] (8/9) quarto-git-epochs::integration registry::ok_five
+        PASS [   0.430s] (9/9) quarto-git-epochs::integration registry::ok_six
+------------
+     Summary [   1.000s] 9 tests run: 6 passed, 3 failed, 0 skipped
+        FAIL [   0.250s] ( 2/9) quarto-git-epochs::integration probe_real_repo::git_path_has_drive_letter
+        FAIL [   0.260s] ( 3/9) quarto-git-epochs::integration probe_real_repo::reflog_subject_parses
+        FAIL [   0.310s] ( 5/9) quarto-hub::integration git_epochs::gate_holds
