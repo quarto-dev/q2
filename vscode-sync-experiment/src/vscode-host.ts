@@ -67,6 +67,7 @@ export class VscodeBufferHost implements BufferHost {
       dispose: () => binding.dispose(),
       sendMoved: () => binding.sendMoved(),
       reconcile: () => binding.reconcile(),
+      setInert: (inert) => binding.setInert(inert),
     };
   }
   dispose(): void {
@@ -98,7 +99,10 @@ export class VscodeNotifier implements Notifier {
       vscode.window.setStatusBarMessage(text, timeoutMs);
       return;
     }
-    this.item ??= vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
+    if (!this.item) {
+      this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
+      this.item.command = 'quartoHub.detachedFiles'; // lists the detached files in clone mode
+    }
     this.item.text = text;
     this.item.show();
   }

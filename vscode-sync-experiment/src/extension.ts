@@ -13,7 +13,11 @@ import * as vscode from 'vscode';
 import { Repo, type AnyDocumentId, type DocHandle } from '@automerge/automerge-repo/slim';
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
 import { Binding, bindings, registerBindingEvents, type TextDoc } from './binding';
+import { attachFolder } from './core/clone/attach-flow';
+import { rebindFolder } from './core/clone/rebind';
 import { createProjectFolder } from './core/create-folder';
+import { DEFAULT_SYNC_SERVER } from './core/meta';
+import { parseProjectRef } from '@quarto/share-url';
 import { readProjectMeta } from './core/meta';
 import type { Identity } from './core/presence';
 import { ProjectSync } from './core/project-sync';
@@ -42,6 +46,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('quartoHub.connect', () => connect(context)),
     vscode.commands.registerCommand('quartoHub.disconnect', disconnect),
     vscode.commands.registerCommand('quartoHub.createFolder', createFolder),
+    vscode.commands.registerCommand('quartoHub.attachFolder', () => attachCommand(context)),
+    vscode.commands.registerCommand('quartoHub.rebindFolder', () => rebindCommand(context)),
+    vscode.commands.registerCommand('quartoHub.detachedFiles', detachedFilesCommand),
     vscode.workspace.onDidCloseTextDocument((doc) => {
       if (doc.uri.scheme === SCHEME) void closeSingleFile(docIdOf(doc.uri));
     }),
@@ -88,6 +95,10 @@ async function askDocId(prompt: string): Promise<string | undefined> {
 async function createFolder(): Promise<void> {
   const indexDocId = await askDocId('Automerge document id of the Quarto Hub project');
   if (!indexDocId) return;
+  await createFolderFor(indexDocId, process.env.QUARTO_HUB_TEST_SYNC_SERVER || undefined);
+}
+
+async function createFolderFor(indexDocId: string, syncServer: string | undefined): Promise<void> {
   // Place the folder inside the current workspace folder (home dir if none).
   const parentDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
   let root: string;
@@ -97,7 +108,7 @@ async function createFolder(): Promise<void> {
       { location: vscode.ProgressLocation.Notification, title: `Creating folder from project ${indexDocId}…` },
       // QUARTO_HUB_TEST_SYNC_SERVER is a test-only seam for the Playwright
       // smoke tests (GE-8); GE-11 replaces it with the real per-folder binding.
-      () => createProjectFolder(indexDocId, parentDir, log, { syncServer: process.env.QUARTO_HUB_TEST_SYNC_SERVER || undefined }),
+      () => createProjectFolder(indexDocId, parentDir, log, { syncServer }),
     );
   } catch (err) {
     showError('create folder failed', err);
@@ -105,6 +116,87 @@ async function createFolder(): Promise<void> {
   }
   // Opening the folder reloads the window; startProject picks it up on activation.
   await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(root), { forceNewWindow: false });
+}
+
+/** The id and server a user names: a bare id, or a share URL (its `server=` wins; the test seam comes next). */
+async function askProject(prompt: string): Promise<{ indexDocId: string; syncServer: string } | undefined> {
+  const input = await vscode.window.showInputBox({ prompt, placeHolder: 'automerge:… or https://quarto-hub.com/#/share/…', ignoreFocusOut: true });
+  if (!input?.trim()) return undefined;
+  const ref = parseProjectRef(input.trim().replace(/^automerge:/, ''));
+  const syncServer = ref.server ?? (process.env.QUARTO_HUB_TEST_SYNC_SERVER || DEFAULT_SYNC_SERVER);
+  return { indexDocId: ref.project.replace(/^.*automerge:/, ''), syncServer };
+}
+
+/** "Attach Folder to Project": bind the open git clone to a project (GE-10; GE-11's Join command calls the same core). */
+async function attachCommand(context: vscode.ExtensionContext): Promise<void> {
+  const dir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!dir) {
+    void vscode.window.showErrorMessage('Quarto Hub: open the git clone as a folder first.');
+    return;
+  }
+  const project = await askProject('Project id or share link to attach this folder to');
+  if (!project) return;
+  try {
+    await ensureWasm();
+    const result = await attachFolder({ dir, serverUrl: project.syncServer, indexDocId: project.indexDocId });
+    if (!result.ok) {
+      log.appendLine(`attach refused (${result.reason}): ${result.message}`);
+      const choice = await vscode.window.showErrorMessage(`Quarto Hub: ${result.message}`, ...(result.offerMirror ? ['Create a mirror folder instead'] : []));
+      if (choice) await createFolderFor(project.indexDocId, project.syncServer);
+      return;
+    }
+    await startProject(result.projectRoot, context);
+  } catch (err) {
+    showError('attach failed', err);
+  }
+}
+
+/** "Rebind Folder to Project": point a bound folder at a new project session, after a confirm. */
+async function rebindCommand(context: vscode.ExtensionContext): Promise<void> {
+  const root = [...projects.keys()][0] ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!root) return;
+  const project = await askProject('Project id or share link to rebind this folder to');
+  if (!project) return;
+  try {
+    await ensureWasm();
+    const result = await rebindFolder({
+      root,
+      indexDocId: project.indexDocId,
+      serverUrl: project.syncServer,
+      confirm: async () =>
+        (await vscode.window.showWarningMessage(
+          'Rebinding deletes this folder\'s local sync history. Your files are not touched.',
+          { modal: true },
+          'Rebind',
+        )) === 'Rebind',
+      shutdown: () => stopProject(root),
+    });
+    if (!result.ok) {
+      if (result.reason !== 'declined') void vscode.window.showErrorMessage(`Quarto Hub: ${result.message}`);
+      return;
+    }
+    await startProject(root, context);
+  } catch (err) {
+    showError('rebind failed', err);
+  }
+}
+
+/** The status bar item's click: list the detached files and offer "Adopt" or "Stay detached" for each. */
+async function detachedFilesCommand(): Promise<void> {
+  const items: (vscode.QuickPickItem & { sync: ProjectSync; rel: string })[] = [];
+  for (const sync of projects.values()) {
+    for (const rel of sync.cloneState()?.detached ?? []) items.push({ label: rel, description: 'detached', sync, rel });
+    for (const rel of sync.cloneState()?.superseded ?? []) items.push({ label: rel, description: 'your doc was superseded', sync, rel });
+  }
+  if (items.length === 0) {
+    void vscode.window.showInformationMessage('Quarto Hub: no detached files.');
+    return;
+  }
+  const picked = await vscode.window.showQuickPick(items, { title: 'Detached files' });
+  if (!picked) return;
+  const action = await vscode.window.showQuickPick(['Adopt shared version', 'Stay detached'], { title: picked.rel });
+  if (action === 'Adopt shared version') await picked.sync.adopt(picked.rel);
+  else if (action === 'Stay detached') await picked.sync.stayDetached(picked.rel);
 }
 
 async function startProject(root: string, context: vscode.ExtensionContext): Promise<void> {

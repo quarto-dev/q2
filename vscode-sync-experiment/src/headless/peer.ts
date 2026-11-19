@@ -5,7 +5,8 @@
  * plans) as "the other collaborator" without a VS Code window. A library; no
  * command-line entry yet (detail chosen by the plan author; GE-9 may add one).
  *
- * Plain projects only: GE-10 adds the git-enabled variant.
+ * Plain projects with `publish` and `join`; the git-enabled variants (`publishGit`, `joinAsClone`, `joinAsMirror`) are
+ * GE-10's.
  */
 import { watch, type FSWatcher } from 'node:fs';
 import * as fs from 'node:fs/promises';
@@ -19,6 +20,10 @@ import { ProjectSync } from '../core/project-sync';
 import { findDoc, makeRepo } from '../core/repo';
 import { MemoryLog, RecordingNotifier } from '../core/recording';
 import { ensureWasm } from '../core/wasm';
+import { attachFolder } from '../core/clone/attach-flow';
+import type { CloneState } from '../core/clone/clone-sync';
+import { publishGit, type GitPublication } from './publish-git';
+import type { HubLike } from './owner';
 
 /** `fs.watch` on the folder, reporting absolute paths. */
 export class NodeFileWatcher implements FileWatcher {
@@ -125,12 +130,47 @@ export class HeadlessPeer {
     return HeadlessPeer.start(dir, identity);
   }
 
+  /** Publish the tracked files of the git repository at `dir` as a version 4 project (test code; GE-12 builds the real owner). */
+  static publishGit(dir: string, serverUrl: string, hub?: HubLike): Promise<GitPublication> {
+    return publishGit(dir, serverUrl, hub);
+  }
+
+  /** Attach the git clone at `dir` to project `indexDocId` as a clone peer. Throws the refusal message when the check fails. */
+  static async joinAsClone(dir: string, serverUrl: string, indexDocId: string, identity: Identity = IDENTITY): Promise<HeadlessPeer> {
+    await ensureWasm();
+    const r = await attachFolder({ dir, serverUrl, indexDocId });
+    if (!r.ok) throw new Error(`attach refused (${r.reason}): ${r.message}`);
+    return HeadlessPeer.start(r.projectRoot, identity);
+  }
+
+  /** Join the project into `dir` as a mirror, whatever the project's shape (the way out of a refused attach). */
+  static async joinAsMirror(dir: string, serverUrl: string, indexDocId: string, identity: Identity = IDENTITY): Promise<HeadlessPeer> {
+    await ensureWasm();
+    await fs.mkdir(dir, { recursive: true });
+    const log = new MemoryLog();
+    const repo = makeRepo(dir, serverUrl);
+    try {
+      const index = await findDoc<IndexDocument>(repo, indexDocId);
+      await writeProjectFiles(repo, dir, index.doc(), log);
+      await repo.flush();
+    } finally {
+      await repo.shutdown().catch(() => {});
+    }
+    await writeProjectMeta(dir, { indexDocId, syncServer: serverUrl, createdAt: new Date().toISOString(), mode: 'mirror' });
+    return HeadlessPeer.start(dir, identity);
+  }
+
   private static async start(dir: string, identity: Identity): Promise<HeadlessPeer> {
     const meta = (await readProjectMeta(dir)) as ProjectMeta;
     const host = { log: new MemoryLog(), watcher: new NodeFileWatcher(dir), buffers: new NoBuffers(), notifier: new RecordingNotifier() };
     const sync = new ProjectSync(dir, meta, identity, host);
     await sync.start();
     return new HeadlessPeer(dir, meta.indexDocId, host, sync);
+  }
+
+  /** Clone mode: HEAD, the attached docs, and the detached files; null in other modes. */
+  cloneState(): CloneState | null {
+    return this.sync.cloneState();
   }
 
   /** The index and file docs this peer holds, with their heads. */

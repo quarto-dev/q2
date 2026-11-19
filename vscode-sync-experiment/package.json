@@ -17,6 +17,8 @@
     "onCommand:quartoHub.connect",
     "onCommand:quartoHub.disconnect",
     "onCommand:quartoHub.createFolder",
+    "onCommand:quartoHub.attachFolder",
+    "onCommand:quartoHub.rebindFolder",
     "onFileSystem:quartohub",
     "workspaceContains:.quarto-hub/project.json"
   ],
@@ -33,6 +35,18 @@
       {
         "command": "quartoHub.createFolder",
         "title": "Quarto Hub: Create Folder from Project"
+      },
+      {
+        "command": "quartoHub.attachFolder",
+        "title": "Quarto Hub: Attach Folder to Project"
+      },
+      {
+        "command": "quartoHub.rebindFolder",
+        "title": "Quarto Hub: Rebind Folder to Project"
+      },
+      {
+        "command": "quartoHub.detachedFiles",
+        "title": "Quarto Hub: Detached Files"
       }
     ],
     "configuration": {
