@@ -507,3 +507,70 @@ fn standalone_dashboard_assets_match_quarto_1() {
         "toggle button rule"
     );
 }
+
+// --- Diagram cards ------------------------------------------------------------
+
+/// A diagram block (```` ```dot ````, ```` ```mermaid ````) is a card like
+/// Quarto 1's `{dot}` / `{mermaid}` cell: bare in a row it gets its own
+/// card, and alone in a `.card` div it fills that card's body under the
+/// div's title. The diagram transforms run before the dashboard one and
+/// leave a raw HTML `<pre>`, which the card builder must still count as
+/// real content (Q1 `hasRealLookingContent` skips raw blocks).
+#[test]
+fn diagram_blocks_become_cards() {
+    let temp = tempfile::TempDir::new().unwrap();
+    write(
+        &temp.path().join("doc.qmd"),
+        "---\ntitle: D\nformat: dashboard\n---\n\n## Row\n\n```dot\ndigraph G { a -> b }\n```\n\n```mermaid\nflowchart LR\n  A --> B\n```\n\n## Row\n\n::: {.card title=\"Dot card\"}\n\n```dot\ndigraph G { c -> d }\n```\n\n:::\n\n::: {.card title=\"Mermaid card\"}\n\n```mermaid\nflowchart LR\n  C --> D\n```\n\n:::\n",
+    );
+    let (_, html) = render(temp.path(), "dashboard");
+    let doc = scraper::Html::parse_document(&html);
+    assert_eq!(select(&doc, "div.bslib-card").len(), 4, "{html}");
+    assert_eq!(
+        select(&doc, "div.bslib-card > div.card-body > pre.graphviz").len(),
+        2,
+        "{html}"
+    );
+    assert_eq!(
+        select(&doc, "div.bslib-card > div.card-body > pre.mermaid").len(),
+        2,
+        "{html}"
+    );
+    // Nothing is left bare in a grid.
+    assert!(select(&doc, "div.bslib-grid > pre").is_empty(), "{html}");
+    let titles: Vec<String> = select(&doc, "div.bslib-card > div.card-header .card-title")
+        .into_iter()
+        .map(text)
+        .collect();
+    assert_eq!(titles, ["Dot card", "Mermaid card"]);
+    // Mermaid measures labels, so it must run after the dashboard shows
+    // `<html>`: `quarto-dashboard.js` (in the head) registers its
+    // `DOMContentLoaded` handler before the mermaid script registers its
+    // own.
+    let dashboard_js = html.find("quarto-dashboard.js").expect("dashboard js");
+    let mermaid_run = html
+        .find("document.addEventListener('DOMContentLoaded', run)")
+        .expect("deferred mermaid run");
+    assert!(dashboard_js < mermaid_run);
+    // The bare diagrams are fill cards, as a Q1 cell card is (not the
+    // flow card loose text gets).
+    let bare = select(&doc, "div.bslib-card");
+    for card in &bare[..2] {
+        assert!(card.value().classes().any(|c| c == "html-fill-container"));
+        assert!(card.value().attr("style").is_none(), "{:?}", card.value());
+    }
+}
+
+/// Other raw HTML is still not card content on its own (Q1
+/// `hasRealLookingContent`): only a diagram's `<pre>` is.
+#[test]
+fn raw_html_alone_is_still_not_a_card() {
+    let temp = tempfile::TempDir::new().unwrap();
+    write(
+        &temp.path().join("doc.qmd"),
+        "---\ntitle: D\nformat: dashboard\n---\n\n## Row\n\n::: {.card title=\"Raw\"}\n\n```{=html}\n<div class=\"raw-only\">raw</div>\n```\n\n:::\n",
+    );
+    let (_, html) = render(temp.path(), "dashboard");
+    let doc = scraper::Html::parse_document(&html);
+    assert!(select(&doc, "div.bslib-card").is_empty(), "{html}");
+}
