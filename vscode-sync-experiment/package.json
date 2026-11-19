@@ -20,7 +20,9 @@
     "onCommand:quartoHub.attachFolder",
     "onCommand:quartoHub.rebindFolder",
     "onFileSystem:quartohub",
-    "workspaceContains:.quarto-hub/project.json"
+    "workspaceContains:.quarto-hub/project.json",
+    "onCommand:quartoHub.shareFolder",
+    "onCommand:quartoHub.showShare"
   ],
   "contributes": {
     "commands": [
@@ -47,6 +49,14 @@
       {
         "command": "quartoHub.detachedFiles",
         "title": "Quarto Hub: Detached Files"
+      },
+      {
+        "command": "quartoHub.shareFolder",
+        "title": "Quarto Hub: Share this folder"
+      },
+      {
+        "command": "quartoHub.showShare",
+        "title": "Quarto Hub: Show share information"
       }
     ],
     "configuration": {

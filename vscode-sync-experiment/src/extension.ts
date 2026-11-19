@@ -17,6 +17,12 @@ import { attachFolder } from './core/clone/attach-flow';
 import { rebindFolder } from './core/clone/rebind';
 import { createProjectFolder } from './core/create-folder';
 import { DEFAULT_SYNC_SERVER } from './core/meta';
+import { PUBLIC_SERVER, buildConfirm } from './core/origination/confirm';
+import { dirtyFiles } from './core/origination/dirty';
+import { originate, shareName } from './core/origination/originate';
+import { checkOriginate, pickFolder } from './core/origination/refusals';
+import { selectFiles } from './core/origination/select';
+import { shareForms, type ShareInfo } from './core/origination/share-panel';
 import { parseProjectRef } from '@quarto/share-url';
 import { readProjectMeta } from './core/meta';
 import type { Identity } from './core/presence';
@@ -49,6 +55,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('quartoHub.attachFolder', () => attachCommand(context)),
     vscode.commands.registerCommand('quartoHub.rebindFolder', () => rebindCommand(context)),
     vscode.commands.registerCommand('quartoHub.detachedFiles', detachedFilesCommand),
+    vscode.commands.registerCommand('quartoHub.shareFolder', () => shareFolderCommand(context)),
+    vscode.commands.registerCommand('quartoHub.showShare', () => showShareCommand()),
     vscode.workspace.onDidCloseTextDocument((doc) => {
       if (doc.uri.scheme === SCHEME) void closeSingleFile(docIdOf(doc.uri));
     }),
@@ -178,6 +186,122 @@ async function rebindCommand(context: vscode.ExtensionContext): Promise<void> {
     await startProject(root, context);
   } catch (err) {
     showError('rebind failed', err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Origination: "Share this folder" (GE-12)
+// ---------------------------------------------------------------------------
+
+const SERVER_KEY = (dir: string) => `quartoHub.shareServer:${dir}`;
+
+async function askServer(context: vscode.ExtensionContext, dir: string): Promise<string | undefined> {
+  const remembered = context.workspaceState.get<string>(SERVER_KEY(dir));
+  // QUARTO_HUB_TEST_SYNC_SERVER is the test-only seam the Playwright tests use for a local hub.
+  const value = remembered ?? (process.env.QUARTO_HUB_TEST_SYNC_SERVER || PUBLIC_SERVER);
+  const input = await vscode.window.showInputBox({
+    title: 'Share this folder',
+    prompt: 'Sync server to publish to',
+    value,
+    ignoreFocusOut: true,
+    validateInput: (v) => (/^wss?:\/\/\S+$/.test(v.trim()) ? undefined : 'Enter a ws:// or wss:// URL.'),
+  });
+  return input?.trim() || undefined;
+}
+
+function shareInfoOf(meta: { indexDocId: string; syncServer: string; name?: string; file?: string }, dir: string): ShareInfo {
+  return { server: meta.syncServer, indexDocId: meta.indexDocId, name: meta.name ?? pathBase(dir), ...(meta.file ? { file: meta.file } : {}) };
+}
+
+const pathBase = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
+
+/** The share panel: three copyable forms; selecting one copies it. */
+async function showSharePanel(info: ShareInfo): Promise<void> {
+  const forms = shareForms(info);
+  const picked = await vscode.window.showQuickPick(
+    forms.map((f) => ({ label: f.label, detail: f.detail, form: f })),
+    { title: 'Shared. Select a form to copy it.', ignoreFocusOut: true },
+  );
+  if (!picked) return;
+  await vscode.env.clipboard.writeText(picked.form.text);
+  void vscode.window.showInformationMessage(`Quarto Hub: copied the ${picked.form.label.toLowerCase()}.`);
+}
+
+async function showShareFor(dir: string): Promise<void> {
+  const meta = await readProjectMeta(dir);
+  if (!meta) {
+    void vscode.window.showErrorMessage('Quarto Hub: this folder is not shared.');
+    return;
+  }
+  await showSharePanel(shareInfoOf(meta, dir));
+}
+
+async function showShareCommand(): Promise<void> {
+  const folders = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
+  const bound: string[] = [];
+  for (const f of folders) if (await readProjectMeta(f).catch(() => null)) bound.push(f);
+  const dir = await pickFolder(bound, async (c) => (await vscode.window.showQuickPick(c, { title: 'Show share information for which folder?' })) ?? null);
+  if (!dir) {
+    void vscode.window.showErrorMessage('Quarto Hub: no shared folder is open.');
+    return;
+  }
+  await showShareFor(dir);
+}
+
+/** "Share this folder": refusals, server, confirm, then bind, build offline, connect, wait, and only then the panel. */
+async function shareFolderCommand(context: vscode.ExtensionContext): Promise<void> {
+  const folders = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
+  if (folders.length === 0) {
+    void vscode.window.showErrorMessage('Quarto Hub: open a folder first.');
+    return;
+  }
+  const dir = await pickFolder(folders, async (c) => (await vscode.window.showQuickPick(c, { title: 'Share which folder?' })) ?? null);
+  if (!dir) return;
+  try {
+    await ensureWasm();
+    const check = await checkOriginate(dir);
+    if (!check.ok) {
+      if (check.reason === 'already-shared') {
+        void vscode.window.showInformationMessage(`Quarto Hub: ${check.message}`);
+        await showShareFor(dir);
+      } else void vscode.window.showErrorMessage(`Quarto Hub: ${check.message}`);
+      return;
+    }
+    const server = await askServer(context, dir);
+    if (!server) return;
+    const selection = await selectFiles(dir);
+    const dirty = await dirtyFiles(dir, selection);
+    const published = selection.files.map((f) => f.path);
+    for (const s of selection.skipped) log.appendLine(`share: skipped ${s.path} (${s.size} bytes, over the publish cap)`);
+    const confirm = buildConfirm({
+      server,
+      projectName: await shareName(dir, published),
+      kind: selection.kind,
+      branch: selection.branch,
+      fileCount: selection.files.length,
+      totalBytes: selection.totalBytes,
+      skipped: selection.skipped,
+      dirty,
+      published,
+    });
+    const choice = await vscode.window.showInformationMessage(confirm.title, { modal: true, detail: confirm.body }, confirm.confirmLabel);
+    if (choice !== confirm.confirmLabel) return;
+    await context.workspaceState.update(SERVER_KEY(dir), server);
+    const result = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'Sharing this folder…' },
+      () => originate({ dir, selection, server, identity: getIdentity(context) }, { waitMs: Number(process.env.QUARTO_HUB_TEST_PUBLISH_WAIT_MS) || undefined }),
+    );
+    // The folder is bound and its data is in local storage: the normal sync starts from there, and finishes an
+    // interrupted upload on its own.
+    await startProject(dir, context);
+    if (!result.ok) {
+      log.appendLine(`share: the server has not confirmed ${result.pending.length} doc(s) yet`);
+      void vscode.window.showWarningMessage('Quarto Hub: the server has not confirmed the upload yet. It keeps uploading in the background; run "Quarto Hub: Show share information" once it finishes.');
+      return;
+    }
+    await showSharePanel(shareInfoOf(result.meta, dir));
+  } catch (err) {
+    showError('share failed', err);
   }
 }
 

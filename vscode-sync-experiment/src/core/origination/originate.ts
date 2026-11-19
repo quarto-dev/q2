@@ -59,7 +59,7 @@ export type OriginateResult =
 const int = (n: number) => new A.Int(n) as unknown as number;
 
 /** The project name: the `_quarto.yml` title, as `projectFolderName` takes it, else the folder name. */
-async function shareName(dir: string, published: string[]): Promise<string> {
+export async function shareName(dir: string, published: string[]): Promise<string> {
   let title: string | undefined;
   if (published.includes('_quarto.yml')) {
     const yml = await fs.readFile(path.join(dir, '_quarto.yml'), 'utf8').catch(() => '');
