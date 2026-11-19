@@ -1,0 +1,84 @@
+   Compiling quarto-hub v0.47.0 (C:\Users\GordonWoodhull\src\fuck\q2\crates\quarto-hub)
+    Finished `test` profile [optimized + debuginfo] target(s) in 12.13s
+────────────
+ Nextest run ID bab2317b-bff3-43b4-9528-be6d35607cca with nextest profile: default
+    Starting 522 tests across 3 binaries
+        FAIL [   0.357s] (293/522) quarto-hub storage::tests::test_storage_manager_prevents_double_lock
+  stdout ───
+
+    running 1 test
+    test storage::tests::test_storage_manager_prevents_double_lock ... FAILED
+
+    failures:
+
+    failures:
+        storage::tests::test_storage_manager_prevents_double_lock
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 364 filtered out; finished in 0.01s
+
+  stderr ───
+
+    thread 'storage::tests::test_storage_manager_prevents_double_lock' (28900) panicked at crates\quarto-hub\src\storage.rs:733:9:
+    assertion failed: matches!(result, Err(Error::HubAlreadyRunning))
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.355s] (298/522) quarto-hub storage::tests::test_storage_manager_standalone_prevents_double_lock
+  stdout ───
+
+    running 1 test
+    test storage::tests::test_storage_manager_standalone_prevents_double_lock ... FAILED
+
+    failures:
+
+    failures:
+        storage::tests::test_storage_manager_standalone_prevents_double_lock
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 364 filtered out; finished in 0.02s
+
+  stderr ───
+
+    thread 'storage::tests::test_storage_manager_standalone_prevents_double_lock' (31204) panicked at crates\quarto-hub\src\storage.rs:782:9:
+    assertion failed: matches!(result, Err(Error::HubAlreadyRunning))
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+────────────
+     Summary [  38.470s] 522 tests run: 520 passed, 2 failed, 0 skipped
+        FAIL [   0.357s] (293/522) quarto-hub storage::tests::test_storage_manager_prevents_double_lock
+  stdout ───
+
+    running 1 test
+    test storage::tests::test_storage_manager_prevents_double_lock ... FAILED
+
+    failures:
+
+    failures:
+        storage::tests::test_storage_manager_prevents_double_lock
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 364 filtered out; finished in 0.01s
+
+  stderr ───
+
+    thread 'storage::tests::test_storage_manager_prevents_double_lock' (28900) panicked at crates\quarto-hub\src\storage.rs:733:9:
+    assertion failed: matches!(result, Err(Error::HubAlreadyRunning))
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.355s] (298/522) quarto-hub storage::tests::test_storage_manager_standalone_prevents_double_lock
+  stdout ───
+
+    running 1 test
+    test storage::tests::test_storage_manager_standalone_prevents_double_lock ... FAILED
+
+    failures:
+
+    failures:
+        storage::tests::test_storage_manager_standalone_prevents_double_lock
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 364 filtered out; finished in 0.02s
+
+  stderr ───
+
+    thread 'storage::tests::test_storage_manager_standalone_prevents_double_lock' (31204) panicked at crates\quarto-hub\src\storage.rs:782:9:
+    assertion failed: matches!(result, Err(Error::HubAlreadyRunning))
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+error: test run failed
