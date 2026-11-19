@@ -2,7 +2,7 @@
 title: 'GE-6: The swap module, the notice aggregator, the moved message'
 date: 2026-11-18
 description: 'Builds the pure TypeScript swap coordinator that every follower uses when the project owner flips a path to a different doc, with the shared notice wording and the type of the moved presence message.'
-status: approved
+status: done
 depends-on: [ge-1]
 lane: B
 epic: ../2026-11-18-git-epochs-epic.md
@@ -182,18 +182,18 @@ timers; nothing outlives a test.
 
 ## Checklist
 
-- [ ] Confirm GE-1 is complete and read the moved-message shape in its contract.
-- [ ] Write the test file `src/swap.test.ts` (items 1 to 9) and `src/notice.test.ts` (items 10 and 11) against the API
+- [x] Confirm GE-1 is complete and read the moved-message shape in its contract.
+- [x] Write the test file `src/swap.test.ts` (items 1 to 9) and `src/notice.test.ts` (items 10 and 11) against the API
   above; run them and see them fail because the module does not exist.
-- [ ] Implement `createSwapCoordinator`: per-path state, abort signals, the injected clock, the retired list with its
+- [x] Implement `createSwapCoordinator`: per-path state, abort signals, the injected clock, the retired list with its
   cap, and the stranded counter. Make tests 1 to 9 pass one at a time.
-- [ ] Implement `NoticeAggregator` and `movedNotice`; tests 10 and 11 pass.
-- [ ] Define `MovedMessage` in `src/moved.ts`, the constants in `src/notices.ts` (every notice text of the epic, one
+- [x] Implement `NoticeAggregator` and `movedNotice`; tests 10 and 11 pass.
+- [x] Define `MovedMessage` in `src/moved.ts`, the constants in `src/notices.ts` (every notice text of the epic, one
   constant each, with a test that lists them), and re-export the whole surface from `src/index.ts`.
-- [ ] Add the module to the package README: the API, the host contract, and the rule that wording lives here only.
-- [ ] Check there is no import of `vscode`, IndexedDB, or Automerge, and no direct use of a global timer
+- [x] Add the module to the package README: the API, the host contract, and the rule that wording lives here only.
+- [x] Check there is no import of `vscode`, IndexedDB, or Automerge, and no direct use of a global timer
   (`grep` the file; the injected clock is the only way).
-- [ ] Update this plan\'s checkboxes and fill in the notes below.
+- [x] Update this plan\'s checkboxes and fill in the notes below.
 
 ## Gates
 
@@ -225,4 +225,34 @@ against a real handle.
 
 ## Notes from the run
 
-Not started.
+**Session 1 (lane B, 2026-11-18).**
+
+- GE-1 is done on `feature/git-epochs`. The moved message in its contract is `{ type: 'moved', peerId }`, with no
+  reason field; `src/moved.ts` implements exactly that.
+- Test first: `src/swap.test.ts` and `src/notice.test.ts` were written against the API and run red because
+  `swap.js`, `notices.js`, and `moved.js` did not exist. The implementation then made them pass. Two tests beyond the
+  plan's list were added: flipping back to the still-bound doc while pending, and an index change that arrives during
+  an async `rebind`.
+- Result: `npm test -w @quarto/quarto-git-epochs` 51 passed (25 from GE-1 plus 26 new); `npm run typecheck` and `npm run
+  build` clean; `cargo xtask lint` clean. A grep of `swap.ts`, `moved.ts`, and `notices.ts` finds no `vscode`,
+  IndexedDB, or Automerge, and the only `setTimeout`/`clearTimeout` references are through the injected `clock`.
+- Not exercised against a real handle: this is a pure module with a fake host. GE-7 (two sync clients through the test
+  hub) and GE-9 exercise it for real.
+- Choices beyond the plan's sketch (detail chosen by the plan author; confirm, so I took the plan's choice where it
+  gave one):
+  - `SwapHost` gains a required `currentHandle(path)`: the coordinator only learns handles from `loadDoc`, so it
+    cannot retire the initial doc's handle or return a `live` target without it.
+  - `clock` is required, not optional, so that no global timer is reachable (an exit criterion). Hosts pass
+    `{ setTimeout, clearTimeout }`.
+  - Flipping back to the still-bound doc while a swap is pending abandons the swap and fires `done` with equal old and
+    new docIds, so the host unfreezes; `NoticeAggregator` ignores such an event.
+  - The `done` event's `stranded` is cumulative and is not reset by the event; `takeStranded` resets. A host should feed
+    the aggregator from `done` events and use `addStranded` only for edits counted after them.
+  - A write during `pending` against the old docId resolves as `retired` (counted as stranded), since that handle is
+    about to be retired.
+  - Constants: every text in the plan's table is a constant, plus the pieces the aggregator and `movedNotice` need
+    (`REPLACED_*`, `STRANDED_EDITS`, `MOVED_*`) and the action labels as `*_ACTIONS` arrays. The six names the GE-1
+    contract fixed (`NOTICE_SWITCHED_VERSIONS` and five others) are exported as aliases; `NOTICE_UNAVAILABLE` has no
+    text in any plan, so I wrote "The project owner's version of this file is not available yet." Templates use
+    `{n}`, `{path}`, and `{name}`, filled by `formatNotice`.
+  - `unavailable` and a retried load: a later `indexChanged` to the same docId starts a fresh load (test 6).
