@@ -2,7 +2,7 @@
 title: 'GE-8: Extension foundation: workspace, ignore fixes, vscode-free core, headless peer, Playwright harness'
 date: 2026-11-18
 description: Prepares the VS Code extension for the rest of the epic with no change in behavior, by rejoining the npm workspaces, fixing the ignore rules, extracting a vscode-free core and a headless peer, and adding a Playwright harness that drives VS Code.
-status: approved
+status: done
 depends-on: [ge-1]
 lane: C
 epic: ../2026-11-18-git-epochs-epic.md
@@ -315,5 +315,5 @@ from the run", and say that the output was inspected. A human has not watched th
 - **Details taken from the plan ("confirm" items):** package name `@quarto/share-url`; `FileWatcher`/`BufferHost`/
   `Notifier` shapes (with the `BufferHost` deviation above); headless peer as a library only; the
   `QUARTO_HUB_TEST_SYNC_SERVER` seam in the VS Code layer; the e2e workflow manual only; launch options as listed.
-- **Not run:** a Windows cross-clippy (no Rust code beyond `xtask`'s `verify.rs`, which uses no platform API); the
+- **Not run:** a Windows cross-clippy (no Rust code beyond `xtask`\'s `verify.rs`, which uses no platform API); the
   smoke tests on Linux or Windows; `cargo xtask verify` (Gordon's call); the full hub-client build.
