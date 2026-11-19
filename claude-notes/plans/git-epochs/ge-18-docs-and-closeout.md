@@ -3,12 +3,13 @@ title: 'GE-18: Docs and closeout'
 date: 2026-11-18
 description: Writes the user docs for git-aware live share and the VS Code extension, reconciles every plan checklist with what landed, runs the final verification and composition review, and prepares the pull request for Gordon without pushing.
 status: approved
-depends-on: [ge-17]
+depends-on: [ge-17, ge-19]
 lane: A
 epic: ../2026-11-18-git-epochs-epic.md
 ---
 
-**Epic:** [git epochs](../2026-11-18-git-epochs-epic.md) · **Waits for:** [GE-17](ge-17-windows-run-c.md) ·
+**Epic:** [git epochs](../2026-11-18-git-epochs-epic.md) · **Waits for:** [GE-17](ge-17-windows-run-c.md),
+[GE-19](ge-19-demo.md) ·
 **Unblocks:** the pull request for the whole epic ·
 **Branch:** `ge/18-docs-and-closeout` off `feature/git-epochs`, merged by rebase and fast-forward. Nothing is pushed in
 this plan; the pull request waits for Gordon.
@@ -70,6 +71,9 @@ and the review. Each states what it proves:
 ## Checklist
 
 - [ ] Confirm GE-17 is complete, including its final statement and any fix plans it inserted (each must be complete).
+- [ ] Confirm GE-19 is complete. After the rebuild below, run its rot check (`npm run test:demo -w quarto-hub-vscode`;
+  it needs R, rv, uv, and VS Code, and opens real windows) and record the result; a failure is a defect, handled like
+  any other.
 - [ ] **Docs, usage.** In `docs/guides/projects/preview.qmd`, add a section after `### Sharing`, "Git and live share":
   what `--git track` does (a checkout, pull, rebase, or reset in the shared directory is handled as a switch of
   versions, not as edits; commits disturb nobody), what collaborators see (the notice that the project owner\'s
@@ -98,8 +102,8 @@ and the review. Each states what it proves:
   page, not the allowlist.
 - [ ] Verify the hub-client changelog entry from GE-7 exists with real commit hashes; if hub-client changed, run
   `cd hub-client && npm run test:wasm` (the changelog render test). Do not add a new entry unless it is missing.
-- [ ] **Reconcile the plans.** Re-read the epic and each of GE-1 to GE-17. For every `- [ ]` and `- [x]`, check the
-  box against the code, the tests, and the notes; correct wrong marks; fix stale status lines; commit the updated
+- [ ] **Reconcile the plans.** Re-read the epic and each of GE-1 to GE-17 and GE-19. For every `- [ ]` and `- [x]`,
+  check the box against the code, the tests, and the notes; correct wrong marks; fix stale status lines; commit the updated
   plan files. Set the epic\'s `status:` to `done` with a one-line comment, and confirm the table "What became of D1 to
   D36" still matches what landed.
 - [ ] Confirm the old plan `2026-11-17-git-aware-live-share-epochs.md` is marked superseded with the pointer to the epic.
@@ -129,7 +133,7 @@ and the review. Each states what it proves:
   `claude-notes/plans/git-epochs/pr-summary.md`, with front matter and a description): what changed per plan; every
   snapshot file added, modified, or removed, with counts and what changed, calling out anything surprising; the e2e
   transcripts from GE-4, GE-13, and GE-14; the Windows results and final statement; the known gaps; the demos and how to
-  run them. List the affected snapshot files so Gordon can review the diffs.
+  run them, including the GE-19 demo and playground. List the affected snapshot files so Gordon can review the diffs.
 - [ ] **Pre-push recommendation.** In the summary, recommend (do not run unprompted) `cargo nextest run --workspace` and,
   more cheaply, `cargo nextest run -p <crate>` for the direct dependents of each crate touched (`cargo tree -i
   quarto-hub`, `cargo tree -i quarto-preview`, `cargo tree -i quarto`, and the new `quarto-git-epochs` crate).

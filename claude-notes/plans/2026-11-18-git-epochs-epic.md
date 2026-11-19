@@ -1,8 +1,8 @@
 ---
 title: 'Epic: git-aware sync (git epochs) for live share and the VS Code extension'
 date: 2026-11-18
-description: 'Makes disk-synced Automerge sessions resilient to git checkouts, rebases, and commits, for the preview hub and the VS Code extension together, including the extension joining and originating projects; 18 plans with a dependency graph, one integration branch, no pushes until the whole epic is done.'
-status: approved  # decisions closed 2026-11-18 in the review session; amended the same day after the second review (G1, G2, G4 to G9, G17, G20, G22, G25, G26, G28, G32, G33, G35, G36) and the third (implementability) review (G1, G7, G12, G22, G24, G26, G33, G35, G36, Gate 0 order and items 1, 3, 4, 8, 11 to 13); implementation not started
+description: 'Makes disk-synced Automerge sessions resilient to git checkouts, rebases, and commits, for the preview hub and the VS Code extension together, including the extension joining and originating projects; 20 plans (GE-1 to GE-19 and GE-16a) with a dependency graph, one integration branch, no pushes until the whole epic is done.'
+status: approved  # decisions closed 2026-11-18 in the review session; amended the same day after the second review (G1, G2, G4 to G9, G17, G20, G22, G25, G26, G28, G32, G33, G35, G36) and the third (implementability) review (G1, G7, G12, G22, G24, G26, G33, G35, G36, Gate 0 order and items 1, 3, 4, 8, 11 to 13); amended 2026-11-19 with Gordon to add GE-19 (the demo and playground) after approval
 ---
 
 **Supersedes:** [the 2026-11-17 plan](2026-11-17-git-aware-live-share-epochs.md). Its decisions D1 to D36 are mapped
@@ -10,12 +10,16 @@ to this epic\'s decisions [below](#what-became-of-d1-to-d36); that file stays as
 **Branch:** the integration line is `feature/git-epochs` (worktree `workspace-6`). Every plan lands there by rebase and
 fast-forward. Nothing is pushed until the whole epic is done and Gordon says so, except the temporary Windows tooling
 branch (see [Windows runs](#windows-runs)).
-**Plans:** the directory [git-epochs/](git-epochs/) holds one file per plan, GE-1 to GE-18, listed
+**Plans:** the directory [git-epochs/](git-epochs/) holds one file per plan, GE-1 to GE-19 and GE-16a, listed
 [below](#plans-and-dependencies).
 **Origin:** a review of the 2026-11-17 plan with two independent review agents, then a long design conversation with
 Gordon on 2026-11-18 that settled every question listed here. Nothing in this file is an open question; items that
 need a measurement are Gate 0 checks in GE-1, and the details the plan authors chose are listed under
 [Details chosen while writing the plans](#details-chosen-while-writing-the-plans).
+**Amendment, 2026-11-19:** after the e2e plans landed, Gordon and a planning session added
+[GE-19](git-epochs/ge-19-demo.md), a permanent demo and interactive playground of the system. It changes no decision
+below; it adds one plan to lane B, the edges `GE-14 -> GE-19 -> GE-18`, and GE-19 to wave 6. Its own design decisions
+are in its plan.
 
 **From the old plan:** its Part A (the hub) became GE-2 to GE-4 and GE-13, its Part B (the extension) GE-8 to GE-12, its
 demos GE-13 and GE-14, and its two Gate 0 sections GE-1.
@@ -207,7 +211,8 @@ top-level files only), so this table is the index.
 | [GE-16](git-epochs/ge-16-windows-run-b.md) | Windows run B: the TypeScript and extension items | GE-11, GE-12, GE-15 |
 | [GE-16a](git-epochs/ge-16a-windows-fixes.md) | Fixes for the defects the Windows runs found | GE-15, GE-16 |
 | [GE-17](git-epochs/ge-17-windows-run-c.md) | Windows run C: the scripted scenario and the Playwright subset | GE-14, GE-15, GE-16, GE-16a |
-| [GE-18](git-epochs/ge-18-docs-and-closeout.md) | Docs and closeout | GE-17 |
+| [GE-18](git-epochs/ge-18-docs-and-closeout.md) | Docs and closeout | GE-17, GE-19 |
+| [GE-19](git-epochs/ge-19-demo.md) | The demo and playground: three windows, a real terminal, scripted and free play (added 2026-11-19) | GE-14 |
 
 GE-16 waits for GE-15 because it extends the tooling branch GE-15 creates. If a Windows run finds a defect, a fix
 plan is inserted after that run; the fix plans cannot be listed in advance. GE-16a is the one fix plan for the defects
@@ -224,7 +229,7 @@ runs on the fixed code. A defect run C finds gets its own plan, inserted after G
 | 3 | GE-4, GE-10 |
 | 4 | GE-11, GE-12, GE-13, GE-15 |
 | 5 | GE-14, GE-16 |
-| 6 | GE-16a |
+| 6 | GE-16a, GE-19 |
 | 7 | GE-17 |
 | 8 | GE-18 |
 
@@ -247,11 +252,12 @@ GE-10 -> GE-11, GE-12
 GE-11 -> GE-14, GE-16
 GE-12 -> GE-14, GE-16
 GE-13 -> GE-14
-GE-14 -> GE-17
+GE-14 -> GE-17, GE-19
 GE-15 -> GE-16, GE-17
 GE-16 -> GE-16a, GE-17
 GE-16a -> GE-17
 GE-17 -> GE-18
+GE-19 -> GE-18
 ```
 
 ## Running the lanes
@@ -265,7 +271,7 @@ the rules the plan names.
 | Lane | Worktree | Plans, in order |
 |---|---|---|
 | A | `/Users/gordon/src/q2/.worktrees/workspace-7` | GE-1, GE-5, GE-9, GE-10, GE-11, GE-14, GE-17, GE-18 |
-| B | `/Users/gordon/src/q2/.worktrees/workspace-8` | GE-6, GE-2, GE-3, GE-4, GE-15, GE-13 |
+| B | `/Users/gordon/src/q2/.worktrees/workspace-8` | GE-6, GE-2, GE-3, GE-4, GE-15, GE-13, GE-19 |
 | C | `/Users/gordon/src/q2/.worktrees/workspace-9` | GE-8, GE-7, GE-12, GE-16, GE-16a |
 
 The integration branch `feature/git-epochs` is checked out in `/Users/gordon/src/q2/.worktrees/workspace-6`, the
@@ -275,7 +281,8 @@ work in it during a run.
 Lane A carries the critical path (GE-1, GE-5, GE-9, GE-10, GE-11, GE-14, GE-17, GE-18). Lane B starts with GE-6 so that
 GE-9 is not waiting on it, then runs the Rust chain. Lane C starts with GE-8 for the same reason. Lanes B and C wait for
 GE-1 and then run without waiting for each other until GE-15 (needs GE-4), GE-13 (needs GE-4 and GE-7), GE-12 (needs
-GE-10), and GE-16 (needs GE-11, GE-12, and GE-15). The assignment is static: a worker never takes a plan from another
+GE-10), and GE-16 (needs GE-11, GE-12, and GE-15). GE-19, added after approval, ends lane B: it needs only GE-14, and
+GE-18 waits for it. The assignment is static: a worker never takes a plan from another
 lane.
 
 A plan is **done** when its file on `feature/git-epochs` has `status: done` in its front matter. Every plan lists its
