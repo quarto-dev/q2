@@ -300,5 +300,23 @@ only coverage in the exit criteria?
 **Also to do on the macOS side.** The `ge/17a-windows-fixes` branch must land with the plan: it carries three code commits
 (`5c0ccc508`, `2e646f9cc`, `f47ec4a7b`). The tooling branch `windows/git-epochs` stays unmerged and undeleted (GE-18 deletes it).
 
+**Session 2 (lane A, 2026-11-19, from 16:19 EST): runs `161637` and `163017`.**
+
+- **Run `161637` (`a6,d2`) is void: a tooling defect.** `a0` failed with `could not find Cargo.toml in C:\Users\GordonWoodhull`.
+  `run.ps1` called `Set-Location $repo`, which moves only PowerShell\'s location; `Invoke-Logged` starts `cmd.exe` through
+  `Process.Start`, which inherits the .NET current directory, and that was the directory the shell was launched from.
+  Run from inside the checkout it worked, which is why the earlier runs passed. `d2` then compared against the stale
+  `152805` log, so its list of 82 "not on the base" failures is meaningless (it is mostly the pandoc 3.12.1 environment
+  failures). Fix: `[Environment]::CurrentDirectory = $repo` after `Set-Location` (tooling commit `b5b9a4cb0`;
+  `pwsh` parse check: 0 errors). The next `a6,d2` run must start the real list.
+- **Run `163017` (`c1`, step 9 only): Ctrl+C was delivered, and the hub did not exit within 60 s.** `ctrl-c.ps1` returned 0
+  (the hidden-console fix works), the marker was seen during the switch, the switch finished with code 0, and the hub logged
+  `the shutdown flush was skipped`, so the shutdown handler ran and the G5 behavior is observed on Windows. The test failed
+  only on `hubExit: "timeout"`. The hub log was not recorded, so a hang and a slow drain cannot be told apart yet. On macOS
+  the same step takes 15 s from Ctrl+C to exit, and the final sync alone takes about 10 s with 4,005 docs, so a slow drain
+  on Windows is plausible. Tooling change (same commit): step 9 waits 5 min, records `exitSeconds`, starts the hub with
+  `RUST_LOG=quarto_hub=info,warn`, and records the hub log tail. macOS dry run: passed (exit code 0 after 15 s). The next
+  step 9 run decides between slow and hung; do not classify before it.
+
 **The final statement, end-to-end record, and landing are not written**: they wait for the `a6` classification with
 pandoc 3.13, `c3`, and the step 7 and step 9 outcomes.
