@@ -92,10 +92,10 @@ instead; the `.json` is what records the items, so attach or paste that too.
 
 ## 6. Known failures to ignore
 
-On macOS at this base, two `quarto` Julia engine tests fail the same way with or without this branch
-(`julia_plain_render_is_presented_from_a_record` and `typst_plain_and_recorded_agree`: `QuartoNotebookRunner` raises
-`ArgumentError: startpath must be non-empty`). If they fail in `a6-nextest` on Windows too, leave them in the results;
-do not investigate. Anything else that fails is a finding: it goes into the plan\'s notes with its output, and the macOS
+Two `quarto` Julia engine tests (`julia_plain_render_is_presented_from_a_record` and `typst_plain_and_recorded_agree`)
+failed intermittently on macOS during GE-4 with `QuartoNotebookRunner` raising `ArgumentError: startpath must be
+non-empty`; they passed in the GE-15 baseline. If they fail in `a6-nextest` on Windows, leave them in the results and do
+not investigate. Anything else that fails is a finding: it goes into the plan\'s notes with its output, and the macOS
 session proposes a fix plan. Product code is not changed in this plan.
 
 ## 7. Explaining the failures
