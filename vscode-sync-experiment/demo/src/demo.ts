@@ -21,6 +21,7 @@ import { HeadlessPeer, ensureWasm } from '../../e2e/helpers/hub';
 import { bindFolder, deriveWsUrl } from '../../src/core/join';
 import { activeEditorText, fillInputBox, openFile as openVscodeFile, runCommand } from '../../e2e/helpers/palette';
 import net from 'node:net';
+import { connectDocReader, type DocReader } from './doc-reader';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..', '..');
@@ -112,6 +113,10 @@ export class Demo {
   private prevFiles: string[] | undefined;
   private lastActivity = 0;
   private warned = new Set<string>();
+  /** A violation is reported once it holds in two polls in a row (a transient state mid-swap is not a violation). */
+  private seen = new Map<string, number>();
+  /** Test seam: replaces the raw-Repo reader of the pointed docs. */
+  docReader?: DocReader;
   private rLibrary = '';
   layout!: Layout;
 
@@ -679,6 +684,10 @@ export class Demo {
     this.prevStatus = null;
     this.prevFiles = undefined;
     this.warned.clear();
+    this.seen.clear();
+    // A new hub is a new project: the reader reconnects on the next poll.
+    void this.docReader?.close();
+    this.docReader = undefined;
   }
 
   async status(): Promise<StatusBody> {
@@ -700,23 +709,65 @@ export class Demo {
     this.prevStatus = next ?? this.prevStatus;
     this.prevFiles = files;
     // Invariants, on the files of the hub's disk (the conflict-marker check reads every file the owner can see).
-    const docs = files
+    // While git has the rebase paused, the markers on the disk are git's own, not a defect of the sync.
+    const docs = (next?.paused ? [] : files)
       .filter((f) => f.endsWith('.qmd'))
       .map((f) => ({ path: f, text: readFileSync(path.join(this.journal, f), 'utf8') }));
+    const quiet = !next?.pending && !next?.paused && Date.now() - this.lastActivity > 2000;
+    // The hub's disk against the docs its pointers name (only when quiet, and only where a tracking hub exists).
+    const hubDisk: Record<string, string> = {};
+    let pointerDocs: Record<string, string> = {};
+    if (quiet && this.hubHttp && this.o.preset !== 'hubless') {
+      try {
+        this.docReader ??= await connectDocReader(this.wsUrl, this.projectId);
+        pointerDocs = await this.docReader.pointerTexts(docs.map((d) => d.path));
+        for (const d of docs) if (d.path in pointerDocs) hubDisk[d.path] = d.text;
+      } catch {
+        pointerDocs = {};
+      }
+    }
     const snap: Snapshot = {
-      quiet: !next?.pending && !next?.paused && Date.now() - this.lastActivity > 2000,
+      quiet,
       docs,
-      hubDisk: {},
-      pointerDocs: {},
-      clones: [],
+      hubDisk,
+      pointerDocs,
+      clones: this.cloneState(),
       followers: [],
     };
+    const present = new Set<string>();
     for (const v of checkInvariants(snap)) {
       const key = `${v.id}:${v.summary}`;
-      if (this.warned.has(key)) continue;
+      present.add(key);
+      const n = (this.seen.get(key) ?? 0) + 1;
+      this.seen.set(key, n);
+      if (n < 2 || this.warned.has(key)) continue;
       this.warned.add(key);
       this.record('invariant', v.id, v.summary);
       this.say('warning', `invariant: ${v.summary}`);
+    }
+    for (const k of [...this.seen.keys()]) if (!present.has(k)) this.seen.delete(k);
+  }
+
+  /** Maurice's clone, for the invariant that a clone on another branch never has its disk rewritten. */
+  private cloneState(): Snapshot['clones'] {
+    if (this.o.preset !== 'hub-vscode-clone' || !existsSync(path.join(this.guestDir, '.git'))) return [];
+    try {
+      const branchOf = (cwd: string) => execFileSync('git', ['branch', '--show-current'], { cwd, env: gitEnv(), encoding: 'utf8' }).trim();
+      const branch = branchOf(this.guestDir);
+      const hubBranch = branchOf(this.journal);
+      let diskRewritten = false;
+      if (branch !== hubBranch) {
+        // Foreign content: a file whose bytes equal the hub's branch version but not this clone's own branch version.
+        const changed = execFileSync('git', ['diff', '--name-only'], { cwd: this.guestDir, env: gitEnv(), encoding: 'utf8' }).split('\n').filter(Boolean);
+        for (const f of changed) {
+          const here = execFileSync('git', ['hash-object', f], { cwd: this.guestDir, env: gitEnv(), encoding: 'utf8' }).trim();
+          const theirs = execFileSync('git', ['rev-parse', `${hubBranch}:${f}`], { cwd: this.journal, env: gitEnv(), encoding: 'utf8' }).trim();
+          if (here === theirs) diskRewritten = true;
+        }
+      }
+      return [{ name: 'Maurice\'s clone', branch, hubBranch, diskRewritten }];
+    } catch {
+      return [];
     }
   }
 
@@ -818,6 +869,8 @@ export class Demo {
 
   async stop(): Promise<void> {
     this.stopObserver();
+    await this.docReader?.close();
+    this.docReader = undefined;
     await this.closeVscode();
     await this.browser?.close().catch(() => {});
     await this.stopHub();

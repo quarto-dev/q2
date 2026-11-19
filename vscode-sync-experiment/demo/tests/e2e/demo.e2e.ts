@@ -20,6 +20,8 @@ for (const preset of PRESETS) {
     await playStory(d);
     const expected = storyFor(d).map((s) => s.id);
     expect(storyLog(d).map((e) => `${e.kind}:${e.summary}`)).toEqual(expected.map((id) => `pass:${id}`));
+    // The live invariant checks stayed silent through the whole story.
+    expect(d.events.filter((e) => e.source === 'invariant')).toEqual([]);
   });
 }
 
@@ -56,6 +58,25 @@ test('E4: fault injection: a conflict marker in a doc raises the red warning', a
   writeFileSync(p, readFileSync(p, 'utf8') + '\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> other\n');
   await expect(d.terminalPages[0]!.page.getByTestId('strip')).toContainText('conflict marker in index.qmd', { timeout: 30_000 });
   expect(d.events.some((e) => e.source === 'invariant' && e.kind === 'conflict-marker')).toBe(true);
+});
+
+test('E4b: fault injection: the hub disk differing from the pointed doc raises the warning', async () => {
+  const d = await startFreePlay();
+  // The observer's reader says the pointed doc holds other text than the disk (a stand-in for a lost write).
+  d.docReader = { pointerTexts: async (paths) => Object.fromEntries(paths.map((p) => [p, 'not what the disk holds'])), close: async () => {} };
+  await expect(d.terminalPages[0]!.page.getByTestId('strip')).toContainText('hub disk differs from the pointed doc', { timeout: 60_000 });
+  expect(d.events.some((e) => e.source === 'invariant' && e.kind === 'disk-differs-from-pointer')).toBe(true);
+});
+
+test('E4c: fault injection: a clone on another branch whose disk holds the hub branch text raises the warning', async () => {
+  const d = await startFreePlay({ preset: 'hub-vscode-clone' });
+  d.git('switch', 'feature');
+  await expect.poll(() => d.shown('host'), { timeout: 60_000 }).toContain('After reanalysis');
+  const { execFileSync } = await import('node:child_process');
+  const text = execFileSync('git', ['show', 'feature:celia-2026-tip-extension-lmm.qmd'], { cwd: d.journal, encoding: 'utf8' });
+  (await import('node:fs')).writeFileSync(`${d.guestDir}/celia-2026-tip-extension-lmm.qmd`, text);
+  await expect(d.terminalPages[0]!.page.getByTestId('strip')).toContainText('is on main, not feature, but its disk was rewritten', { timeout: 60_000 });
+  expect(d.events.some((e) => e.source === 'invariant' && e.kind === 'clone-disk-rewritten')).toBe(true);
 });
 
 test('E5: hub-browser: reset restores the journal and a fresh hub; the windows stay open and follow it', async () => {

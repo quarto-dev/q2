@@ -22,12 +22,13 @@ export async function shows(d: Demo, who: 'host' | 'guest', needle: string | Reg
   await until(
     `${who} editor ${present ? 'shows' : 'does not show'} ${needle}`,
     async () => {
-      last = await d.shown(who);
+      // Monaco wraps long lines, so a phrase can be split across rendered lines: compare with whitespace collapsed.
+      last = (await d.shown(who)).replace(/\s+/g, ' ');
       return (typeof needle === 'string' ? last.includes(needle) : needle.test(last)) === present;
     },
     T,
   ).catch((e) => {
-    throw new Error(`${(e as Error).message}\nthe ${who} editor showed: ${last.slice(0, 300).replace(/\n/g, ' | ')}`);
+    throw new Error(`${(e as Error).message}\nthe ${who} editor showed: ${last.slice(0, 300)}`);
   });
 }
 

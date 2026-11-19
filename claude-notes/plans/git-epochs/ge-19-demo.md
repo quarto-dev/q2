@@ -252,8 +252,27 @@ rules of `.claude/rules/hub-client-tests.md` apply to every end-to-end test; no 
 
 - [x] The driver: captions, typing, checks, pacing, `--fast`, stop on failure.
 - [x] The `hub-browser` story (DM7).
-- [ ] Presets `hub-vscode-host` and `hub-vscode-clone` and their stories.
-- [ ] Preset `hubless` and its story (DM6), adjusted by research item 7.
+- [x] Presets `hub-vscode-host` and `hub-vscode-clone` and their stories. (`--fast` passes for both; the clone story
+  reorders the last two beats, see the notes.)
+- [x] Preset `hubless` and its story (DM6), adjusted by research item 7. (Item 7 answered: no chart through `--hub-url`.)
+
+**Phase 3b: human typing tempo (new requirement from Gordon, 2026-11-19; for the next agent)**
+
+Research first, then tests, then implementation. Today the terminal types at a fixed 40 ms per character and the
+editors type instantly, so a recording looks mechanical.
+
+- [ ] Research: read `TerminalServer.type()` in `demo/src/terminal-server.ts` (the per-character loop; not yet read
+  this session), `Demo.type()` and `Demo.typeAtEnd()` in `demo/src/demo.ts`, and the `delay` option of `page.keyboard.type`.
+  Record in the notes how each path sends characters and whether xterm.js or the PTY echo affects the visible tempo.
+- [ ] Tests first (unit, `demo/tests/unit/`): a `humanDelay()` helper that, for a given seed, returns a reproducible
+  sequence; every delay stays within bounds (a base times 0.5 to 1.8, longer after spaces and punctuation, an occasional
+  hesitation of 150 to 400 ms, a pause before the first character and before the final Enter); `--fast` (base 0) yields
+  exactly 0 with no jitter; two seeds differ, one seed repeats. Terminal-server tests: the typed bytes are unchanged
+  (jitter alters timing only) and the reported command line equals the input.
+- [ ] Implement one shared `humanDelay()` helper, seeded so recorded runs are reproducible (a `--seed` option, default
+  fixed), and use it in `TerminalServer.type()` and in `Demo.typeAtEnd()` (a loop of `keyboard.press`, or
+  `keyboard.type` with per-character delays). `--fast` keeps 0 with no jitter. Keep E1 in `--fast` unchanged.
+- [ ] Look at a headed run (`--play`) and record in the notes that the tempo reads as natural.
 
 **Phase 4: finish**
 
@@ -396,3 +415,62 @@ stories (including VS Code window placement through `app.evaluate`, the guest te
 `rejoinVscode`, and research item 7), the raw-`Repo` reader for the remaining invariants, the story's use of the
 clone terminal (H4), E1 for the other presets, E1 three times in a row per preset, `demo/README.md`, the
 screenshots after the switch and after reset, and the landing steps.
+
+### Phase 3 and 2, the VS Code presets and `hubless` (2026-11-19, third session)
+
+**Landed on the branch:** presets `hub-vscode-host` (editor-only VS Code on the hub's own folder, browser guest),
+`hub-vscode-clone` (browser host, VS Code clone guest with Maurice's terminal), and `hubless` (a standalone `q2 hub` typed
+in the host terminal, the VS Code originator running Share this folder with the modal on camera, the copied command pasted
+in Maurice's terminal with `--no-browser` and a log file appended). New files: `demo/stories/hub.ts` (the story for the two
+hub presets with a browser or VS Code on each side; replaces `hub-browser.ts`), `hub-clone.ts`, `hubless.ts`, `index.ts`
+(`storyFor`), `demo/src/doc-reader.ts` (raw `Repo` reader of the pointed docs). `Demo` gained `kinds`, `shown`,
+`typeAtEnd`, `scrollTop`, `notices`, the VS Code windows (placed through `BrowserWindow.setBounds`), the guest
+terminal, the hubless methods, and a debounced invariant loop (a violation must hold in two polls). Steps take `who`
+(which terminal) and a lazy `command`. The failure log now carries each terminal's tail.
+
+**Tests run:** unit 49 pass; `typecheck` clean; E5 for the three new presets and E7b pass (4 passed, 1.7 min); E4,
+E4b (disk differs from the pointed doc, through a stand-in reader) and E4c (a clone's disk holds the hub branch's text)
+pass; E1 for `hub-browser`, `hub-vscode-host`, `hub-vscode-clone`, `hubless` passed once each in `--fast` by hand through
+`npm run demo -- --preset <p> --fast`. The last full E1 run (all four, with the whitespace fix below) was started when
+this was written; read `e1.log` results below if added, otherwise rerun.
+
+**Findings.**
+
+1. **Auto save and an editor-only window on the hub's own folder (product, for Gordon).** With `files.autoSave:
+   afterDelay` (the e2e helper's default) the open R paper's old text was written over the hub's disk after the
+   `git switch feature` flip, so `git switch main` was refused ("local changes would be overwritten"). Reproduced three
+   times, also with 3 s pacing; with auto save off the whole story passes. G28 names this topology the supported use of
+   editor-only. The demo uses VS Code's own default (off); the cause (the window's auto save, or the sync) is not
+   attributed. Worth a strand or a plan.
+2. **Remote edits reach a VS Code originator's buffer, not its disk, until it saves** (auto save off). The `hubless`
+   story has Myra save (the `save` step) before the commit.
+3. **A clone on `feature` is handed the pilot study as an untracked file** when the hub returns to `main`, so the
+   clone's own `git switch main` is refused. The clone story therefore has Maurice go back to main before Myra.
+4. **Research item 7:** through `q2 preview --hub-url` against a standalone `q2 hub`, the R paper shows no chart, so
+   live chunks do not run in `hubless`; its story uses the paper's text only and records the finding in the event log.
+5. Monaco wraps long lines, so a phrase can span rendered lines: `shows()` compares with whitespace collapsed. After
+   typing at the end the viewport sits at the bottom, so a check on the abstract first calls `scrollTop`.
+6. The conflict-marker invariant reads the hub's disk, where git's own markers appear during a paused rebase: it is
+   skipped while the hub is paused.
+7. The browser guest in `hubless` and the status route: `q2 hub` has none, so the observer narrates files and checks
+   invariants only.
+
+**Open at the pause (first work for the next session).**
+
+1. The last E1 run (all four presets, `--fast`) was red: `hub-browser` and `hub-vscode-clone` passed every story step
+   but the new assertion that no `invariant` event occurred failed with `disk-differs-from-pointer` for
+   `morel-2026-fusion-spectra.qmd`, apparently after the `reset-hard` beat retires that doc (the index may still name
+   the retired doc, or the reader holds a stale handle). Decide whether it is a reader bug (fix it) or a real defect
+   (record it); do not weaken the assertion. `hub-vscode-host` failed at `reset-hard` ("the status reports the discarded
+   edit"), which passed in the hand runs; check for a race with Maurice's edit and the editor-only window. `hubless` was
+   not reached before the run was read. The whitespace fix in `shows()` did cure the earlier `resolve` failure.
+2. Then Phase 3b (below), `demo/README.md`, E1 three times in a row per preset, the screenshots, and the Phase 4 gates.
+
+**Deviations.** `demo reset` for VS Code presets relaunches the window at the same place and rebinds it (G19 gives
+a new project id), instead of the Join session route; the browsers and terminals stay open. The follower-stale
+invariant is unit-tested but not fed live (it needs each follower's shown version). The story of `hub-vscode-clone` is shorter
+than DM7 (no reset-hard or rebase beats; the clone switches its own branch instead). The VS Code swap notice is not
+checked (`notices` is 0 for VS Code). `ts-packages` `dist/` outputs were stale in this worktree and were rebuilt
+(`quarto-automerge-schema`, `quarto-sync-client`, `quarto-git-epochs`, `quarto-share-url`); the `.vscode-test` cache was
+copied from workspace-7. Not done: E1 three times in a row per preset, `demo/README.md`, the screenshots after the
+switch beat and after reset, Phase 3b, the Phase 4 gates, and landing.
