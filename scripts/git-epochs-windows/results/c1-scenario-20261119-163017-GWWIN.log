@@ -1,0 +1,31 @@
+
+Running 1 test using 1 worker
+
+[c1] ok   invoke: "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2 preview --no-browser --data-dir C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-data9-fkddtD --allow-edit --ui editor --git track --host 127.0.0.1 --port 63046 C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-hub9-kP6Z3Y"
+[c1] ok   progress: the mirror holds every file: {"files":4005,"seconds":0,"hubAlive":true}
+[c1] ok   9 ctrl-c helper: {"status":0,"stderr":""}
+[c1] ok   9 stop the hub during the switch: {"markerSeen":true,"switchCode":0,"hubExit":"timeout","skippedFlushLogged":true}
+  ✘  1 scripts\git-epochs-windows\c1\windows-scenario.e2e.ts:457:1 › c1 step 9: stopping the hub during a git switch skips the flush and leaves no conflict markers (3.8m)
+
+
+  1) scripts\git-epochs-windows\c1\windows-scenario.e2e.ts:457:1 › c1 step 9: stopping the hub during a git switch skips the flush and leaves no conflict markers 
+
+    Error: the hub exited on Ctrl+C
+
+    expect(received).not.toBe(expected) // Object.is equality
+
+    Expected: not "timeout"
+
+      491 |   const log = hub.log();
+      492 |   record('9 stop the hub during the switch', { markerSeen, switchCode, hubExit: code, skippedFlushLogged: /shutdown flush was skipped/.test(log) });
+    > 493 |   expect(code, 'the hub exited on Ctrl+C').not.toBe('timeout');
+          |                                                ^
+      494 |   expect(switchCode).toBe(0);
+      495 |
+      496 |   // restart on the same data dir: no doc holds conflict markers or half-written text, and the disk is the switched tree
+        at C:\Users\GordonWoodhull\src\fuck\q2\scripts\git-epochs-windows\c1\windows-scenario.e2e.ts:493:48
+
+    Error Context: scripts\git-epochs-windows\c1\test-results\windows-scenario.e2e.ts-c1-f6284--leaves-no-conflict-markers\error-context.md
+
+  1 failed
+    scripts\git-epochs-windows\c1\windows-scenario.e2e.ts:457:1 › c1 step 9: stopping the hub during a git switch skips the flush and leaves no conflict markers 
