@@ -736,8 +736,9 @@ export class Demo {
       try {
         this.docReader ??= await connectDocReader(this.wsUrl, this.projectId);
         const current = await this.docReader.pointerTexts(docs.map((d) => d.path));
-        // The hub writes a doc to disk after a debounce, so only a pointed text that has held still is compared.
-        pointerDocs = stablePointerTexts(this.pointerSince, current, Date.now(), 3000);
+        // `q2 preview` runs the hub's periodic sync every 5 s (quarto-preview's `sync_interval_secs`), which is what writes
+        // an edited doc to the disk. Only a pointed text that has held still longer than that, with margin, is compared.
+        pointerDocs = stablePointerTexts(this.pointerSince, current, Date.now(), 8000);
         for (const d of docs) if (d.path in pointerDocs) hubDisk[d.path] = d.text;
       } catch {
         pointerDocs = {};
