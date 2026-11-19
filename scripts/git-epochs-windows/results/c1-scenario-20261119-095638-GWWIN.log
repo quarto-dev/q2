@@ -1,0 +1,74 @@
+
+Running 2 tests using 1 worker
+
+[c1] ok   1 generate the repo: {"tracked":4005}
+[c1] ok   1 tracked files: 4005
+[c1] ok   invoke: "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2 preview --no-browser --data-dir C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-data-jNbUQI --allow-edit --ui editor --git track --host 127.0.0.1 --port 54885 C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-hub-rfXgIa"
+[c1] ok   2 start the hub: {"port":54885,"indexDocId":"z1AcRkWKmYxzuotn4moQs9noTZQ"}
+
+  ✘  1 scripts\git-epochs-windows\c1\windows-scenario.e2e.ts:249:1 › c1 steps 1-8: gate, classifier, registry, flips, unlists, a binary file (20.4m)
+[c1] ok   invoke: "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2 preview --no-browser --data-dir C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-data9-aO7Bye --allow-edit --ui editor --git track --host 127.0.0.1 --port 64251 C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-hub9-llbSlm"
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":0,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":15,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":30,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":45,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":60,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":75,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":90,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":105,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":120,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":135,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":150,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":165,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":180,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":195,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":210,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":226,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":241,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":256,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":271,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":286,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":301,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":316,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":331,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":346,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":361,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":376,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":391,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":406,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":421,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":436,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":451,"hubAlive":true}
+[c1] ok   progress: the mirror holds every file: {"files":4,"seconds":466,"hubAlive":true}
+[c1] FAIL timeout: the mirror holds every file: {"files":4,"expected":4000,"seconds":480,"hubExit":null,"hubLogTail":"3mpath\u001b[0m\u001b[2m=\u001b[0md37\\f2637.qmd\n\u001b[2m2026-11-19T15:26:59.384002Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md38\\f0158.qmd\n\u001b[2m2026-11-19T15:26:59.384004Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md06\\f2646.qmd\n\u001b[2m2026-11-19T15:26:59.384007Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md03\\f3123.qmd\n\u001b[2m2026-11-19T15:26:59.384009Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md05\\f3725.qmd\n\u001b[2m2026-11-19T15:26:59.384012Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md01\\f2521.qmd\n\u001b[2m2026-11-19T15:26:59.384014Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md04\\f1284.qmd\n\u001b[2m2026-11-19T15:26:59.384016Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md26\\f0306.qmd\n\u001b[2m2026-11-19T15:26:59.384019Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md03\\f3363.qmd\n\u001b[2m2026-11-19T15:26:59.384021Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md00\\f3800.qmd\n"}
+  ✘  2 scripts\git-epochs-windows\c1\windows-scenario.e2e.ts:423:1 › c1 step 9: stopping the hub during a git switch skips the flush and leaves no conflict markers (9.2m)
+
+
+  1) scripts\git-epochs-windows\c1\windows-scenario.e2e.ts:249:1 › c1 steps 1-8: gate, classifier, registry, flips, unlists, a binary file 
+
+    Test timeout of 1200000ms exceeded.
+
+    Error Context: scripts\git-epochs-windows\c1\test-results\windows-scenario.e2e.ts-c1-db0fe-flips-unlists-a-binary-file\error-context.md
+
+  2) scripts\git-epochs-windows\c1\windows-scenario.e2e.ts:423:1 › c1 step 9: stopping the hub during a git switch skips the flush and leaves no conflict markers 
+
+    Error: timed out waiting for the mirror holds every file
+
+       at ..\..\..\vscode-sync-experiment\src\core\test-support.ts:167
+
+      165 |     const v = await check();
+      166 |     if (v) return v as NonNullable<T>;
+    > 167 |     if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+          |                                      ^
+      168 |     await sleep(50);
+      169 |   }
+      170 | }
+        at waitFor (C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\src\core\test-support.ts:167:38)
+        at mirrorHolds (C:\Users\GordonWoodhull\src\fuck\q2\scripts\git-epochs-windows\c1\windows-scenario.e2e.ts:226:5)
+        at C:\Users\GordonWoodhull\src\fuck\q2\scripts\git-epochs-windows\c1\windows-scenario.e2e.ts:433:3
+
+    Error Context: scripts\git-epochs-windows\c1\test-results\windows-scenario.e2e.ts-c1-f6284--leaves-no-conflict-markers\error-context.md
+
+  2 failed
+    scripts\git-epochs-windows\c1\windows-scenario.e2e.ts:249:1 › c1 steps 1-8: gate, classifier, registry, flips, unlists, a binary file 
+    scripts\git-epochs-windows\c1\windows-scenario.e2e.ts:423:1 › c1 step 9: stopping the hub during a git switch skips the flush and leaves no conflict markers 

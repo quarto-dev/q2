@@ -1,0 +1,108 @@
+﻿{
+    "run_id":  "20261119-095638-GWWIN",
+    "branch":  "windows/git-epochs",
+    "commit":  "b6c4cb95efb468699cb7046b2b2471fcfabf9923",
+    "base":  "current tip of origin/windows/git-epochs",
+    "host_triple":  "x86_64-pc-windows-msvc",
+    "os":  "Microsoft Windows 11 Pro",
+    "git":  "git version 2.47.1.windows.1",
+    "node":  "v24.21.0",
+    "autocrlf":  "true",
+    "longpaths":  "(unset)",
+    "tools":  [
+                  {
+                      "tool":  "git",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Git.Git   (Git for Windows; the probe is tested against it)"
+                  },
+                  {
+                      "tool":  "rustc",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "winget install Rustlang.Rustup   (then: rustup default stable-x86_64-pc-windows-msvc)"
+                  },
+                  {
+                      "tool":  "cargo",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "comes with rustup"
+                  },
+                  {
+                      "tool":  "cargo-nextest",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "cargo install cargo-nextest --locked"
+                  },
+                  {
+                      "tool":  "uv",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "winget install astral-sh.uv   (runs make_large_tree.py and extract_failures.py)"
+                  },
+                  {
+                      "tool":  "nasm",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "winget install NASM.NASM   (the aws-lc-sys crates in quarto-hub need it)"
+                  },
+                  {
+                      "tool":  "cmake",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "winget install Kitware.CMake   (the aws-lc-sys crates in quarto-hub need it)"
+                  },
+                  {
+                      "tool":  "link",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "Visual Studio Build Tools, \"Desktop development with C++\" (cargo finds link.exe itself, so absent from PATH is normal; install only if the build says \"linker not found\")"
+                  },
+                  {
+                      "tool":  "node",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "fnm/nvm; Node major per .nvmrc (items b1 to b7)"
+                  },
+                  {
+                      "tool":  "npm",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "comes with Node"
+                  },
+                  {
+                      "tool":  "jj",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "optional: winget install jj-vcs.jj (the jj scenarios of b1 skip without it)"
+                  }
+              ],
+    "items":  [
+                  {
+                      "id":  "c1",
+                      "catalog":  "W9",
+                      "title":  "scripted end-to-end scenario against q2.exe and git.exe",
+                      "status":  "FAIL",
+                      "reason":  "exit code 1; 0 passed, 2 failed; the transcript names the failing step",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The whole feature works end to end on Windows through the real q2.exe and git.exe on a generated repo in %TEMP% (about 4,000 tracked files): the gate pauses during a real git switch, the classifier treats a commit as a move-forward and a switch as a flip, a changed file flips, a removed file is unlisted, an added file is listed, a binary changes, arrival re-attaches the earlier docs without a fork, reset --hard keeps the dirty text in the retired doc, and a hub stopped during a switch skips the flush and leaves no conflict markers.",
+                      "does_not_prove":  "jj on Windows; other Git builds; a long soak; the browser (c2 covers the editor surfaces).",
+                      "output_tail":  "[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":60,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":75,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":90,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":105,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":120,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":135,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":150,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":165,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":180,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":195,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":210,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":226,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":241,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":256,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":271,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":286,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":301,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":316,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":331,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":346,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":361,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":376,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":391,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":406,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":421,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":436,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":451,\"hubAlive\":true}\n[c1] ok   progress: the mirror holds every file: {\"files\":4,\"seconds\":466,\"hubAlive\":true}\n[c1] FAIL timeout: the mirror holds every file: {\"files\":4,\"expected\":4000,\"seconds\":480,\"hubExit\":null,\"hubLogTail\":\"3mpath\\u001b[0m\\u001b[2m=\\u001b[0md37\\\\f2637.qmd\\n\\u001b[2m2026-11-19T15:26:59.384002Z\\u001b[0m \\u001b[33m WARN\\u001b[0m \\u001b[2mquarto_hub::sync\\u001b[0m\\u001b[2m:\\u001b[0m Index path escapes project root, rejecting \\u001b[3mpath\\u001b[0m\\u001b[2m=\\u001b[0md38\\\\f0158.qmd\\n\\u001b[2m2026-11-19T15:26:59.384004Z\\u001b[0m \\u001b[33m WARN\\u001b[0m \\u001b[2mquarto_hub::sync\\u001b[0m\\u001b[2m:\\u001b[0m Index path escapes project root, rejecting \\u001b[3mpath\\u001b[0m\\u001b[2m=\\u001b[0md06\\\\f2646.qmd\\n\\u001b[2m2026-11-19T15:26:59.384007Z\\u001b[0m \\u001b[33m WARN\\u001b[0m \\u001b[2mquarto_hub::sync\\u001b[0m\\u001b[2m:\\u001b[0m Index path escapes project root, rejecting \\u001b[3mpath\\u001b[0m\\u001b[2m=\\u001b[0md03\\\\f3123.qmd\\n\\u001b[2m2026-11-19T15:26:59.384009Z\\u001b[0m \\u001b[33m WARN\\u001b[0m \\u001b[2mquarto_hub::sync\\u001b[0m\\u001b[2m:\\u001b[0m Index path escapes project root, rejecting \\u001b[3mpath\\u001b[0m\\u001b[2m=\\u001b[0md05\\\\f3725.qmd\\n\\u001b[2m2026-11-19T15:26:59.384012Z\\u001b[0m \\u001b[33m WARN\\u001b[0m \\u001b[2mquarto_hub::sync\\u001b[0m\\u001b[2m:\\u001b[0m Index path escapes project root, rejecting \\u001b[3mpath\\u001b[0m\\u001b[2m=\\u001b[0md01\\\\f2521.qmd\\n\\u001b[2m2026-11-19T15:26:59.384014Z\\u001b[0m \\u001b[33m WARN\\u001b[0m \\u001b[2mquarto_hub::sync\\u001b[0m\\u001b[2m:\\u001b[0m Index path escapes project root, rejecting \\u001b[3mpath\\u001b[0m\\u001b[2m=\\u001b[0md04\\\\f1284.qmd\\n\\u001b[2m2026-11-19T15:26:59.384016Z\\u001b[0m \\u001b[33m WARN\\u001b[0m \\u001b[2mquarto_hub::sync\\u001b[0m\\u001b[2m:\\u001b[0m Index path escapes project root, rejecting \\u001b[3mpath\\u001b[0m\\u001b[2m=\\u001b[0md26\\\\f0306.qmd\\n\\u001b[2m2026-11-19T15:26:59.384019Z\\u001b[0m \\u001b[33m WARN\\u001b[0m \\u001b[2mquarto_hub::sync\\u001b[0m\\u001b[2m:\\u001b[0m Index path escapes project root, rejecting \\u001b[3mpath\\u001b[0m\\u001b[2m=\\u001b[0md03\\\\f3363.qmd\\n\\u001b[2m2026-11-19T15:26:59.384021Z\\u001b[0m \\u001b[33m WARN\\u001b[0m \\u001b[2mquarto_hub::sync\\u001b[0m\\u001b[2m:\\u001b[0m Index path escapes project root, rejecting \\u001b[3mpath\\u001b[0m\\u001b[2m=\\u001b[0md00\\\\f3800.qmd\\n\"}\n  ✘  2 scripts\\git-epochs-windows\\c1\\windows-scenario.e2e.ts:423:1 › c1 step 9: stopping the hub during a git switch skips the flush and leaves no conflict markers (9.2m)\n\n\n  1) scripts\\git-epochs-windows\\c1\\windows-scenario.e2e.ts:249:1 › c1 steps 1-8: gate, classifier, registry, flips, unlists, a binary file \n\n    Test timeout of 1200000ms exceeded.\n\n    Error Context: scripts\\git-epochs-windows\\c1\\test-results\\windows-scenario.e2e.ts-c1-db0fe-flips-unlists-a-binary-file\\error-context.md\n\n  2) scripts\\git-epochs-windows\\c1\\windows-scenario.e2e.ts:423:1 › c1 step 9: stopping the hub during a git switch skips the flush and leaves no conflict markers \n\n    Error: timed out waiting for the mirror holds every file\n\n       at ..\\..\\..\\vscode-sync-experiment\\src\\core\\test-support.ts:167\n\n      165 |     const v = await check();\n      166 |     if (v) return v as NonNullable\u003cT\u003e;\n    \u003e 167 |     if (Date.now() \u003e deadline) throw new Error(`timed out waiting for ${what}`);\n          |                                      ^\n      168 |     await sleep(50);\n      169 |   }\n      170 | }\n        at waitFor (C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\\src\\core\\test-support.ts:167:38)\n        at mirrorHolds (C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\c1\\windows-scenario.e2e.ts:226:5)\n        at C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\c1\\windows-scenario.e2e.ts:433:3\n\n    Error Context: scripts\\git-epochs-windows\\c1\\test-results\\windows-scenario.e2e.ts-c1-f6284--leaves-no-conflict-markers\\error-context.md\n\n  2 failed\n    scripts\\git-epochs-windows\\c1\\windows-scenario.e2e.ts:249:1 › c1 steps 1-8: gate, classifier, registry, flips, unlists, a binary file \n    scripts\\git-epochs-windows\\c1\\windows-scenario.e2e.ts:423:1 › c1 step 9: stopping the hub during a git switch skips the flush and leaves no conflict markers ",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-095638-GWWIN\\c1-scenario.log"
+                  },
+                  {
+                      "id":  "c2",
+                      "catalog":  "W8",
+                      "title":  "Playwright subset with the pinned VS Code build and the timing test",
+                      "status":  "PASS",
+                      "reason":  "20 passed, 0 skipped",
+                      "caveat":  "The cross-client Playwright scenarios were NOT run: they need the hub-client embed in q2.exe (rerun with -BuildEmbed on a machine with the WASM toolchain; see the instructions page). Measured lock-release to last-reload gap: 0 ms.",
+                      "known_unrelated":  false,
+                      "proves":  "The extension\u0027s VS Code surfaces (commands, notifications, status bar, buffers) work with the pinned Code.exe the harness downloads; the permanent cross-client scenarios (H1 to H7, L1 to L4, the registry check) pass on Windows; editor-only\u0027s quiet window is measured against a real Windows buffer reload (a gap above 1 s is a finding for the experimental fallback in G20, not a failure).",
+                      "does_not_prove":  "VS Code Insiders or other versions; the unmarked exploratory scenarios.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-095638-GWWIN\\c2-timing.log"
+                  }
+              ]
+}

@@ -1,0 +1,313 @@
+{
+  "platform": "win32",
+  "node": "v24.21.0",
+  "q2": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2",
+  "files": 4000,
+  "differing": 800,
+  "steps": [
+    {
+      "step": "invoke",
+      "ok": true,
+      "observed": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2 preview --no-browser --data-dir C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-data9-aO7Bye --allow-edit --ui editor --git track --host 127.0.0.1 --port 64251 C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-hub9-llbSlm"
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 0,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 15,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 30,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 45,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 60,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 75,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 90,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 105,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 120,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 135,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 150,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 165,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 180,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 195,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 210,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 226,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 241,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 256,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 271,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 286,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 301,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 316,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 331,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 346,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 361,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 376,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 391,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 406,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 421,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 436,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 451,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4,
+        "seconds": 466,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "timeout: the mirror holds every file",
+      "ok": false,
+      "observed": {
+        "files": 4,
+        "expected": 4000,
+        "seconds": 480,
+        "hubExit": null,
+        "hubLogTail": "3mpath\u001b[0m\u001b[2m=\u001b[0md37\\f2637.qmd\n\u001b[2m2026-11-19T15:26:59.384002Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md38\\f0158.qmd\n\u001b[2m2026-11-19T15:26:59.384004Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md06\\f2646.qmd\n\u001b[2m2026-11-19T15:26:59.384007Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md03\\f3123.qmd\n\u001b[2m2026-11-19T15:26:59.384009Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md05\\f3725.qmd\n\u001b[2m2026-11-19T15:26:59.384012Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md01\\f2521.qmd\n\u001b[2m2026-11-19T15:26:59.384014Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md04\\f1284.qmd\n\u001b[2m2026-11-19T15:26:59.384016Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md26\\f0306.qmd\n\u001b[2m2026-11-19T15:26:59.384019Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md03\\f3363.qmd\n\u001b[2m2026-11-19T15:26:59.384021Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::sync\u001b[0m\u001b[2m:\u001b[0m Index path escapes project root, rejecting \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0md00\\f3800.qmd\n"
+      }
+    }
+  ]
+}
