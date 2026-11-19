@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -99,7 +100,7 @@ describe('safeJoin rejects (G36)', () => {
     await fs.mkdir(path.join(root, '.git'));
     let resolved = '';
     try {
-      resolved = await fs.realpath.native(path.join(root, 'GIT~1'));
+      resolved = realpathSync.native(path.join(root, 'GIT~1'));
     } catch {
       ctx.skip(); // the volume has no 8.3 names
     }
