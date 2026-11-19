@@ -37,7 +37,7 @@
  *   round-trip on boot, no new server-side patterns introduced.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import {
   initWasm,
   connect,
@@ -50,9 +50,12 @@ import {
   vfsAddFile,
   vfsReadFile,
   getFileContent,
+  getFileHandle,
   diffToEditorChanges,
   applyEditorOperations,
   regenerateNestedBuffers,
+  swapStatus,
+  createGitStatusPoller,
 } from '@quarto/preview-runtime';
 import { Q2PreviewIframe } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
 import { extractMetaString } from '@quarto/preview-renderer/framework';
@@ -67,6 +70,8 @@ import {
 } from './customComponents';
 import { BootLoadingScreen } from './components/BootLoadingScreen';
 import { ForceRefreshButton } from './components/ForceRefreshButton';
+import { PausedBanner } from './components/PausedBanner';
+import { SwapNotice } from './components/SwapNotice';
 import { PreviewDiagnosticsOverlay } from './components/PreviewDiagnosticsOverlay';
 import { StaleCaptureOverlay } from './components/StaleCaptureOverlay';
 import { PdfPane } from './components/PdfPane';
@@ -594,6 +599,18 @@ export default function PreviewApp() {
   // evaluated at import time, before the test harness applies its overrides).
   const [state, setState] = useState<PreviewAppState>(buildInitialState);
 
+  // GE-7: a file the project owner is replacing is frozen until the swap finishes (`pending` → `done`/`unavailable`).
+  // The "paused for git" poller is created once; the banner component starts and stops it.
+  const swap = useSyncExternalStore(swapStatus.subscribe, swapStatus.getSnapshot);
+  const frozen = state.activeFile !== null && swap.pending.includes(state.activeFile);
+  const gitPoller = useMemo(
+    () => createGitStatusPoller({ url: serverUrl('/api/preview/git-status') }),
+    [],
+  );
+  useEffect(() => {
+    swapStatus.setOpenFile(state.activeFile ?? undefined);
+  }, [state.activeFile]);
+
   // Position in the SPA's own navigation, mirrored from `history.state` (P11-D4) so the PDF
   // pane's Back button knows whether Back stays inside the SPA.
   const [navIndex, setNavIndex] = useState(readNavIndex);
@@ -637,6 +654,9 @@ export default function PreviewApp() {
       if (!edit.__isPreviewNodeEdit) return;
       if (!state.allowEdit) return;
       if (!state.untransformedAstJson || !state.activeFile) return;
+      // The file is being replaced: drop the edit rather than write into a doc that is about to be retired. The
+      // editing surface is inert while frozen (`editingDisabled`), so this is defense in depth.
+      if (swapStatus.getSnapshot().pending.includes(state.activeFile)) return;
       // Use the content snapshot captured at render time so byte offsets are
       // guaranteed to match astJson (live VFS content may have drifted).
       if (!state.renderedContent) return;
@@ -665,10 +685,13 @@ export default function PreviewApp() {
         // Automerge-side content — same reasoning as hub-client's
         // handleContentRewrite. The change echoes back through
         // onFileContent with identical text; re-render is idempotent.
+        // The doc id is captured with the diff base: if the owner replaces the file before the write lands, the
+        // write stays with the doc it was computed against instead of corrupting the new one (GE-7).
+        const baseDocId = getFileHandle(state.activeFile)?.documentId;
         const oldContent = getFileContent(state.activeFile) ?? '';
         const changes = diffToEditorChanges(oldContent, newQmd);
         if (changes.length > 0) {
-          applyEditorOperations(state.activeFile, changes);
+          applyEditorOperations(state.activeFile, changes, baseDocId);
         }
         // Optimistic local update so the re-render is immediate rather
         // than waiting for the sync round-trip.
@@ -1413,6 +1436,15 @@ export default function PreviewApp() {
     </div>
   );
 
+  // GE-7: the replaced-file notice shows on editing surfaces only (the read-only viewer's re-render says it all); the
+  // paused banner is informational and shows everywhere.
+  const swapChrome = (
+    <>
+      {state.allowEdit && <SwapNotice />}
+      <PausedBanner poller={gitPoller} />
+    </>
+  );
+
   // P11: the live PDF pane sits above the HTML render gates below, which all assume an AST.
   if (pageKind === 'pdf' && state.activeFile) {
     return (
@@ -1425,6 +1457,7 @@ export default function PreviewApp() {
           render={state.renderFlags}
         />
         {connectionBanner}
+        {swapChrome}
       </div>
     );
   }
@@ -1496,7 +1529,7 @@ export default function PreviewApp() {
         untransformedAstJson={state.untransformedAstJson}
         // bd-ov4gqk3m: without --allow-edit the preview is read-only —
         // no edit affordance renders inside the iframe at all.
-        editingDisabled={!state.allowEdit}
+        editingDisabled={!state.allowEdit || frozen}
         // GH #973: comments can't be saved either, so don't offer to add any.
         commentingDisabled={!state.allowEdit}
         // P3.2: nesting-cursor mode + per-key nested buffers.
@@ -1538,6 +1571,7 @@ export default function PreviewApp() {
           render failure. server-gone recovers automatically when
           /health answers again (same-port restart). */}
       {connectionBanner}
+      {swapChrome}
       <ForceRefreshButton onRefresh={handleRefresh} />
     </div>
   );

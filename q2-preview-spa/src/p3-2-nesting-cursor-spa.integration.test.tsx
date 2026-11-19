@@ -81,11 +81,12 @@ type RuntimeMockState = {
 let runtimeMockState: RuntimeMockState;
 let mockRegenerateNestedBuffers: ReturnType<typeof vi.fn>;
 
-vi.mock('@quarto/preview-runtime', () => {
+vi.mock('@quarto/preview-runtime', async () => {
   const mockRegen = vi.fn(() => ({ '0:0-10:0': '- item\n' }));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).__mockRegenerateNestedBuffers__ = mockRegen;
   return {
+    ...(await import('./test-utils/swapMock')).swapRuntimeMock(),
     initWasm: vi.fn().mockResolvedValue(undefined),
     isWasmReady: vi.fn(() => true),
     resolvePandocFormats: vi.fn(() => ({ success: true, source: 'default', formats: [{ key: 'html', class: 'preview' }] })),

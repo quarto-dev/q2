@@ -12,8 +12,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, act } from '@testing-library/react';
 import type { FileEntry } from '@quarto/quarto-automerge-schema';
+import { swapController } from './test-utils/swapMock';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -42,7 +43,8 @@ let mockState: MockState;
 // write-back test can assert applyEditorOperations receives them verbatim.
 const SENTINEL_CHANGES = [{ rangeOffset: 0, rangeLength: 5, text: 'updated' }];
 
-vi.mock('@quarto/preview-runtime', () => ({
+vi.mock('@quarto/preview-runtime', async () => ({
+  ...(await import('./test-utils/swapMock')).swapRuntimeMock(),
   initWasm: vi.fn().mockResolvedValue(undefined),
   isWasmReady: vi.fn(() => true),
   resolvePandocFormats: vi.fn(() => ({ success: true, source: 'default', formats: [{ key: 'html', class: 'preview' }] })),
@@ -74,6 +76,8 @@ import PreviewApp from './PreviewApp';
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  swapController.reset();
+  swapController.docId = 'doc-current';
   capturedIframeProps.length = 0;
   mockState = {
     files: [{ path: 'index.qmd', docId: 'automerge:doc-index' }],
@@ -224,9 +228,48 @@ describe('PreviewApp edit write-back (bd-ov4gqk3m)', () => {
     expect(diffToEditorChanges).toHaveBeenCalledWith('old qmd content\n', 'updated qmd\n');
     // The splice ops go into the Automerge doc for the active file...
     expect(applyEditorOperations).toHaveBeenCalledOnce();
-    expect(applyEditorOperations).toHaveBeenCalledWith('index.qmd', SENTINEL_CHANGES);
+    // The write carries the doc id captured with the diff base (GE-7), so a swap cannot redirect it.
+    expect(applyEditorOperations).toHaveBeenCalledWith('index.qmd', SENTINEL_CHANGES, 'doc-current');
     // ...and the optimistic local VFS update still happens.
     expect(vfsAddFile).toHaveBeenCalledWith('index.qmd', 'updated qmd\n');
+  });
+
+  it('binds the write to the doc id the file has when the diff base is read (GE-7)', async () => {
+    const { applyEditorOperations } = await import('@quarto/preview-runtime');
+    swapController.docId = 'doc-A';
+    const setAst = await mountAndGetSetAst();
+    setAst(TEXT_PAYLOAD);
+    expect(applyEditorOperations).toHaveBeenCalledWith('index.qmd', SENTINEL_CHANGES, 'doc-A');
+  });
+
+  it('drops the edit and freezes the editing surface while the file is being replaced (GE-7)', async () => {
+    const { applyNodeEdit, applyEditorOperations } = await import('@quarto/preview-runtime');
+    const setAst = await mountAndGetSetAst();
+    act(() => swapController.set({ pending: ['index.qmd'] }));
+    expect(capturedIframeProps[capturedIframeProps.length - 1].editingDisabled).toBe(true);
+
+    setAst(TEXT_PAYLOAD);
+    expect(applyNodeEdit).not.toHaveBeenCalled();
+    expect(applyEditorOperations).not.toHaveBeenCalled();
+
+    act(() => swapController.set({ pending: [] }));
+    expect(capturedIframeProps[capturedIframeProps.length - 1].editingDisabled).toBe(false);
+  });
+
+  it('shows the replaced-file notice on the editing surface (--allow-edit) in a live region (GE-7)', async () => {
+    await mountAndGetSetAst();
+    act(() => swapController.set({ notice: 'This file was replaced because the project owner\'s checked-out version changed.', noticeSeq: 1 }));
+    const notice = screen.getByTestId('swap-notice');
+    expect(notice.textContent).toContain('This file was replaced');
+    expect(screen.getByTestId('swap-notice-region').getAttribute('aria-live')).toBe('polite');
+  });
+
+  it('shows no notice in the default read-only viewer (GE-7)', async () => {
+    mockState.allowEdit = false;
+    await mountAndGetSetAst();
+    act(() => swapController.set({ notice: 'This file was replaced.', noticeSeq: 1 }));
+    expect(screen.queryByTestId('swap-notice')).toBeNull();
+    expect(screen.queryByTestId('swap-notice-region')).toBeNull();
   });
 
   it('without allowEdit: drops the edit entirely (no applyNodeEdit, no Automerge, no VFS)', async () => {

@@ -14,6 +14,7 @@
 
 export * from './wasmRenderer';
 export * from './automergeSync';
+export * from './gitStatus';
 export * from './swapStatus';
 export * from './diffToEditorChanges';
 export * from './pipelineKind';
