@@ -235,6 +235,8 @@ pub struct JoinArgs {
     /// Open the session in this browser instead of the system
     /// default (`--browser <name>`).
     pub browser: Option<String>,
+    /// Leave the session when stdin reaches EOF (`--exit-on-stdin-close`).
+    pub exit_on_stdin_close: bool,
 }
 
 pub fn execute_join(args: JoinArgs) -> Result<()> {
@@ -577,6 +579,19 @@ async fn run(args: PreviewArgs) -> Result<()> {
     }
 }
 
+/// Resolves when `reader` reaches EOF or errors (`--exit-on-stdin-close`).
+/// The read runs on a plain thread, not `spawn_blocking`: a blocked stdin
+/// read must not hold up the runtime's shutdown when Ctrl-C wins instead.
+async fn stdin_closed<R: std::io::Read + Send + 'static>(mut reader: R) {
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    std::thread::spawn(move || {
+        let mut sink = [0u8; 1024];
+        while matches!(reader.read(&mut sink), Ok(n) if n > 0) {}
+        let _ = tx.send(());
+    });
+    let _ = rx.await;
+}
+
 /// Guest path (live-share plan Phase 3, bd-6y0p1bne): parse the join
 /// string, dial the host over iroh, serve the session on a local
 /// loopback proxy, and report connection status until Ctrl-C. Bypasses
@@ -733,10 +748,22 @@ async fn run_join(args: JoinArgs) -> Result<()> {
         }
     };
 
+    let stdin_gone = async {
+        if args.exit_on_stdin_close {
+            stdin_closed(std::io::stdin()).await;
+        } else {
+            std::future::pending::<()>().await;
+        }
+    };
     let outcome = tokio::select! {
         _ = tokio::signal::ctrl_c() => {
             println!();
             println!("  Received Ctrl-C, leaving the shared session…");
+            Ok(())
+        }
+        () = stdin_gone => {
+            println!();
+            println!("  Standard input closed, leaving the shared session…");
             Ok(())
         }
         reported = status_reporter => reported,
@@ -1344,6 +1371,27 @@ pub(crate) fn pick_editor_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// GE-11: `--exit-on-stdin-close` resolves when the reader reaches EOF,
+    /// and not before.
+    #[tokio::test]
+    async fn stdin_closed_waits_for_eof() {
+        use std::io::Write;
+        let (reader, mut writer) = std::io::pipe().unwrap();
+        let mut closed = Box::pin(stdin_closed(reader));
+        writer.write_all(b"ignored bytes").unwrap();
+        // Data is not EOF: the future must stay pending.
+        assert!(
+            tokio::time::timeout(Duration::from_millis(200), &mut closed)
+                .await
+                .is_err(),
+            "resolved before the pipe closed"
+        );
+        drop(writer);
+        tokio::time::timeout(Duration::from_secs(5), closed)
+            .await
+            .expect("did not resolve after the pipe closed");
+    }
 
     /// GE-4 (G28): a directory counts as bound by a VS Code extension only
     /// when `<root>/.quarto-hub/project.json` exists and its `mode` is not

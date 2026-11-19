@@ -387,6 +387,16 @@ enum Commands {
         )]
         join: Option<String>,
 
+        /// With `--join`: exit when this process's standard input closes.
+        ///
+        /// A parent that spawns the proxy (the VS Code extension) keeps
+        /// stdin piped and open; when the parent dies or closes the pipe,
+        /// the proxy leaves the session instead of lingering. Stdin
+        /// attached to `/dev/null` is already closed, so the proxy exits
+        /// at once: only use this flag with a pipe you hold open.
+        #[arg(long, requires = "join")]
+        exit_on_stdin_close: bool,
+
         /// Quarto-1-style preview: render the document or project to
         /// disk exactly as `q2 render` does, serve the output directory
         /// over a plain static HTTP server, and (unless --no-watch)
@@ -1983,6 +1993,57 @@ mod cli_parse_tests {
     }
 
     #[test]
+    fn preview_exit_on_stdin_close_requires_join() {
+        let err = match try_parse(&["preview", "--exit-on-stdin-close"]) {
+            Ok(_) => panic!("--exit-on-stdin-close without --join must be rejected"),
+            Err(e) => e,
+        };
+        assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn preview_exit_on_stdin_close_composes_with_join_flags() {
+        let Commands::Preview {
+            join,
+            port,
+            host,
+            no_browser,
+            exit_on_stdin_close,
+            ..
+        } = parse_preview(&[
+            "preview",
+            "--join",
+            "q2previewabc",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "9281",
+            "--no-browser",
+            "--exit-on-stdin-close",
+        ])
+        else {
+            unreachable!()
+        };
+        assert_eq!(join.as_deref(), Some("q2previewabc"));
+        assert_eq!(port, Some(9281));
+        assert_eq!(host.as_deref(), Some("127.0.0.1"));
+        assert!(no_browser);
+        assert!(exit_on_stdin_close);
+    }
+
+    #[test]
+    fn preview_exit_on_stdin_close_defaults_off() {
+        let Commands::Preview {
+            exit_on_stdin_close,
+            ..
+        } = parse_preview(&["preview", "--join", "q2previewabc"])
+        else {
+            unreachable!()
+        };
+        assert!(!exit_on_stdin_close);
+    }
+
+    #[test]
     fn preview_browser_parses_and_composes_with_share() {
         let Commands::Preview { browser, share, .. } =
             parse_preview(&["preview", "--share", "--browser", "firefox"])
@@ -2142,6 +2203,7 @@ fn run() -> Result<()> {
             git,
             print_asset_manifest_hashes,
             join,
+            exit_on_stdin_close,
             static_mode,
             no_watch,
             no_navigate,
@@ -2179,6 +2241,7 @@ fn run() -> Result<()> {
                     host,
                     no_browser,
                     browser,
+                    exit_on_stdin_close,
                 })
             } else {
                 let ui = ui.into();
