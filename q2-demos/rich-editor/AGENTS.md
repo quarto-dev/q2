@@ -26,8 +26,10 @@ While iterating, run Chromium only, on the specs you're changing:
 specs before committing a finished piece of work, and the whole suite in every
 browser before merging. Always use the npm scripts, not `npx playwright test`:
 they queue runs across worktrees so that agents running the suite at once
-don't slow each other down. Time spent waiting in the queue counts against the
-Bash tool's timeout, so run a whole suite in the background.
+don't slow each other down. Small runs (a spec file or a `-g` filter) have a
+lane of their own and don't wait for a whole suite. Time spent waiting in the
+queue counts against the Bash tool's timeout, so run a whole suite in the
+background.
 Run the unit tests (`npm run test:unit`) and `npm run typecheck` too
 before committing.
 

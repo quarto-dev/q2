@@ -361,16 +361,19 @@ they are meant to be complete: someone with only the specs should be able
 to build this editor again. Behaviour that no spec describes is a gap in
 the specs; add the spec with (or before) the behaviour.
 
-`npm run test:e2e` runs one suite at a time across all of the repo's
-worktrees (`scripts/e2e-queue.mjs`): a run started while another is going
-waits for it to finish. Playwright sizes its workers for a machine to
+`npm run test:e2e` queues runs across all of the repo's worktrees
+(`scripts/e2e-queue.mjs`). Playwright sizes its workers for a machine to
 itself, so runs in parallel each run much slower and slow tests time out.
-`npx playwright test` skips the queue.
+Big runs go one at a time: a run started while another is going waits for
+it to finish. Small runs (at most 150 tests, say a spec file or a `-g`
+filter) have a lane of their own, with two at a time and two workers each,
+so they don't wait for a whole suite. Each run gets a free port for its dev
+server. `npx playwright test` skips the queue.
 
-The tests start a dev server on port 5192, and use one that's already
-there. To run them outside the queue in two checkouts at once, give one a
-port of its own (`E2E_PORT=5200 npx playwright test`), or each will be
-testing the other's app.
+The tests start a dev server on port 5192 (or `E2E_PORT`), and use one
+that's already there. To run them outside the queue in two checkouts at
+once, give one a port of its own (`E2E_PORT=5200 npx playwright test`), or
+each will be testing the other's app.
 
 Every spec runs in Chromium, Firefox and WebKit (`npx playwright install`
 fetches them; `--project=firefox` runs one). The engines differ most
