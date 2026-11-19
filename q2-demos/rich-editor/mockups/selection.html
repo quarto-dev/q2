@@ -1,0 +1,2904 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Selection models</title>
+<style>
+:root { --ink:#212529; --muted:#6c757d; --faint:#adb5bd; --line:#dee2e6; --accent:#2780e3; --chrome:#f6f7f9;
+  --sel-bg:#e7f1fc; --sel-ink:#145ca8; }
+* { box-sizing: border-box; }
+body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:#fff; }
+.app { display:grid; grid-template-columns: 280px 1fr 340px; height:100vh; }
+aside { background:var(--chrome); border-right:1px solid var(--line); padding:16px; overflow:auto; font-size:14px; }
+aside h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:18px 0 8px; }
+aside h2:first-child { margin-top:0; }
+.opt { display:block; padding:8px 10px; border-radius:6px; cursor:pointer; margin-bottom:4px; }
+.opt:hover { background:#eceef1; }
+.opt.on { background:#fff; box-shadow:0 0 0 1px var(--line); }
+.opt b { display:block; font-weight:600; }
+.opt span { color:var(--muted); font-size:12.5px; line-height:1.35; display:block; margin-top:2px; }
+.reset { margin-top:12px; font:inherit; font-size:13px; padding:4px 10px; border:1px solid var(--line); background:#fff; border-radius:5px; cursor:pointer; }
+
+/* Toolbar, as in the editor (and blocks.html). */
+.toolbar { display:flex; gap:3px; align-items:center; padding:7px 16px; border-bottom:1px solid var(--line); background:#fff; min-height:45px; flex-wrap:wrap; }
+.toolbar button { font:13px system-ui, sans-serif; border:1px solid transparent; background:none; padding:4px 9px; border-radius:5px; cursor:pointer; color:#343a40; display:inline-flex; align-items:center; gap:6px; }
+.toolbar button:hover:not(:disabled) { background:#f1f3f5; }
+.toolbar button:disabled { color:var(--faint); cursor:default; }
+.split { display:inline-flex; align-items:center; }
+.split > button.icon { border-top-right-radius:0; border-bottom-right-radius:0; }
+.split > button.arrow { padding:4px 2px !important; border-top-left-radius:0; border-bottom-left-radius:0; color:#444746; align-self:stretch; }
+.split > button.arrow svg { width:9px; height:9px; }
+.toolbar button[aria-pressed="true"] { background:var(--sel-bg); border-color:#c5dcf5; color:var(--sel-ink); }
+.toolbar .style { width:150px; justify-content:space-between; border-color:var(--line); }
+.toolbar .style svg, .toolbar .caret { width:8px; height:8px; }
+.toolbar .pick { border-color:var(--line); }
+.toolbar .pick .kicon { width:15px; height:15px; }
+button.icon { padding:4px !important; position:relative; color:#444746; }
+button.icon svg { width:20px; height:20px; display:block; }
+[data-tip] { position:relative; }
+[data-tip]::after { content:attr(data-tip); position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%);
+  background:#343a40; color:#fff; font:12px/1 system-ui, sans-serif; padding:5px 7px; border-radius:4px; white-space:nowrap;
+  pointer-events:none; visibility:hidden; z-index:40; font-weight:400; }
+[data-tip]:hover::after { visibility:visible; transition:visibility 0s .5s; }
+/* Not again for what was just clicked (its menu may be under it), until the
+   pointer's been somewhere else. */
+body.tips-held [data-tip]::after { visibility:hidden !important; }
+.toolbar .sep { width:1px; height:20px; background:var(--line); margin:0 6px; flex:none; }
+.toolbar .ctx { font-size:12px; color:var(--muted); padding:0 4px 0 2px; }
+
+.center { display:flex; flex-direction:column; min-width:0; min-height:0; }
+.scroller { flex:1; overflow:auto; }
+.tips { max-width:760px; margin:16px auto 0; padding:9px 14px; background:#fff8e1; border:1px solid #f3e1a6; border-radius:6px; font-size:13px; color:#5c4b00; line-height:1.6; }
+.tips code { font:11.5px ui-monospace, Menlo, monospace; border:1px solid #d9c98f; border-radius:3px; padding:0 4px; background:#fffdf3; }
+.source { border-left:1px solid var(--line); background:var(--chrome); padding:16px; overflow:auto; }
+.source h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; }
+.source .blk { font:12.5px/1.5 ui-monospace, Menlo, monospace; white-space:pre-wrap; margin:0 0 12px; padding:1px 4px; border-radius:3px; overflow-wrap:anywhere; }
+.source .cur { background:var(--sel-bg); }
+
+/* The document. */
+/* 799px of text, as in q2 render's article layout, so lines wrap where
+   they would there. */
+.page { max-width:879px; margin:0 auto; padding:36px 40px 240px; }
+.body { font-size:17px; line-height:1.5; }
+.body [contenteditable] { outline:none; white-space:pre-wrap; }
+.body > p, .callout p { margin:0 0 17px; min-height:1lh; }
+.body h2 { font-size:1.6rem; font-weight:600; line-height:1.2; margin:1.8rem 0 .75rem; border-bottom:1px solid var(--line); padding-bottom:.25rem; min-height:1lh; }
+.body > :first-child { margin-top:0; }
+
+/* Callouts, after q2 render's default theme: its markup and its colours
+   (measured from a rendered page), with the theme's 85% / 75% header
+   opacity flattened to solid text colours. */
+.callout { --c:#0d6efd; --h:#e7f1ff; --i:#0c63e4; position:relative; margin:1.25rem 0; border-radius:.375rem;
+  border:1px solid #dedfe0; border-left:5px solid var(--c); overflow-wrap:break-word; }
+.callout-note { --c:#0d6efd; --h:#e7f1ff; --i:#0c63e4; }
+.callout-tip { --c:#198754; --h:#e8f4ee; --i:#177a4c; }
+.callout-warning { --c:#ffc107; --h:#fff9e6; --i:#e6ae06; }
+.callout-caution { --c:#fd7e14; --h:#fff2e8; --i:#e47112; }
+.callout-important { --c:#dc3545; --h:#fcebec; --i:#c6303e; }
+/* The layout below follows q2 render's computed spacing, measured part by
+   part (its rem is 17px; header and text are 15.3px). Headers: .2em above,
+   pulled .2em up below; the icon .35em (default) or .55em (simple) from
+   the title, .1em or .2em down. A collapsible default one has no padding
+   above and centres its row (for the chevron). */
+.callout-header { display:flex; align-items:flex-start; gap:.35em; font-size:.9em; font-weight:600; line-height:1.5; position:relative; padding-top:.2em; margin-bottom:-.2em; }
+.callout-style-default > .callout-header { background:var(--h); color:#3d4145; padding:.2em .5em 0; border-top-right-radius:calc(.375rem - 1px); }
+.callout-style-default > .callout-header.collapsible { padding-top:0; margin-bottom:0; align-items:center; min-height:35px; }
+/* The icon sits in a box a line tall, plus its padding (which sets the
+   header's height), about 2px down in that line. */
+.callout-style-default > .callout-header:not(.collapsible) .kslot { min-height:24.48px; align-content:start; }
+.callout-style-default > .callout-header:not(.collapsible) .kslot > .kicon { margin-top:3.53px; }
+/* With an icon, a default one's title 1px up, as q2's is. */
+.callout-style-default:not(.no-icon) > .callout-header .callout-title-container { margin-top:-1px; }
+.callout-style-simple { padding:.4em .7em; }
+.callout-style-simple > .callout-header { color:#595c60; gap:.55em; }
+.callout-style-simple .kslot { min-height:26.01px; align-content:start; }
+.callout-style-simple .kslot > .kicon { margin-top:5.06px; }
+.chev { align-self:center; }
+.callout-title-container { flex:1; min-width:0; display:flex; }
+.callout .title { flex:1; min-width:4ch; }
+/* With no title, the kind's name, where it renders ("Note"), but faint, as
+   placeholders are: it isn't text (not "## Note", no places for the caret in
+   it), and typing replaces it. A drift from the render in colour only. */
+.callout .title:empty::before { content:attr(data-ph); color:var(--faint); }
+/* Or as rendered, with a hint after it that says what it is. */
+.callout .title.hinted:empty::before { color:inherit; }
+/* #646b72: at least 4.5:1 (WCAG AA for its size) on every kind's header
+   tint and on white; placeholder grey is under 2:1 there. */
+.callout .title.hinted:empty::after { content:attr(data-hint); color:#646b72; font-weight:400; font-size:calc(1em - 3px); margin-left:.6em; opacity:0; }
+/* The hint shows on hover over the header (left of its settings bar: see
+   hintK), saying what "Note" is, fading in; and with the caret in the title (the Title button gets there without
+   a hover), at once: a click redraws the callout, and a fade there flickered
+   it out and back in. "Note" fades to a placeholder, which typing replaces. */
+.callout .title.hinted.hint-on:empty::after { opacity:1; transition:opacity .2s; }
+.callout .title.hinted:empty:focus::after { opacity:1; transition:none; }
+.callout .title.hinted:empty:focus::before { color:var(--faint); }
+.callout .title.ghost:empty::before { color:var(--faint); font-weight:400; }
+/* A callout with nothing in it: its one empty line, as the editor's empty
+   document has it. */
+.callout p.ph:empty::before { content:attr(data-ph); color:var(--faint); pointer-events:none; }
+.callout .num { white-space:pre; }
+/* Text: .9 of the body's 17px (15.3px). Paragraphs 1rem apart; under a
+   header, the last has .5rem of padding below instead of a margin, and in
+   a default one the first .5rem above. Simple: the text .5em below the
+   header, pulled .4em up, and 1.6em in past the icon. Untitled (simple or
+   minimal): the icon beside the text, .25rem down; .25rem above the first
+   paragraph and .5em below the last. */
+.callout-body-container { font-size:.9em; }
+.callout-style-default > .callout-body-container { padding:0 .5em; }
+.callout-body-container p { margin:0 0 17px; }
+.callout-titled > .callout-body-container > p:last-child { margin-bottom:0; padding-bottom:8.5px; }
+.callout-style-default > .callout-body-container > p:first-child { padding-top:8.5px; }
+.callout-style-simple > .callout-body-container, .callout-style-simple > .untitled { margin-top:7.65px; margin-bottom:-6.12px; }
+.callout-style-simple.callout-titled:not(.no-icon) > .callout-body-container { padding-left:24.48px; }
+.callout .untitled { display:flex; gap:8.415px; align-items:flex-start; }
+.callout .untitled > .kslot { margin-top:4.25px; }
+.callout .untitled > .callout-body-container { flex:1; min-width:0; margin-bottom:7.65px; }
+.callout:not(.callout-titled) .callout-body-container > p:first-child { margin-top:4.25px; }
+.callout:not(.callout-titled) .callout-body-container > p:last-child { margin-bottom:7.65px; }
+/* The icon: .9rem in a default one, 1rem in a simple one. */
+.callout .kicon { width:15.3px; height:15.3px; fill:var(--i); flex:none; display:block; }
+.callout-style-simple .kicon { width:17px; height:17px; }
+.kslot { border-radius:4px; display:grid; place-items:center; }
+.on-header .kslot { cursor:pointer; padding:2px; margin:-2px; }
+.on-header .kslot:hover { background:color-mix(in srgb, var(--c) 18%, #fff); }
+/* Quarto's chevron, for a collapsible callout. */
+.chev { width:22px; height:22px; display:grid; place-items:center; border:0; background:none; padding:0; border-radius:4px; cursor:pointer; color:#3d4145; flex:none; }
+.chev:hover { background:color-mix(in srgb, var(--c) 18%, #fff); }
+.chev svg { width:12px; height:12px; transition:transform .15s linear; }
+.chev.shut svg { transform:rotate(-90deg); }
+.chev.setting { color:var(--muted); }
+
+/* Figures, as in figure.html: an image on a line of its own, its caption
+   typed under it. */
+.body figure { margin:0 0 20px; display:flex; flex-direction:column; align-items:center; }
+.body figure.left { align-items:flex-start; }
+.body figure.right { align-items:flex-end; }
+.body figure .frame { position:relative; max-width:100%; line-height:0; border-radius:2px; cursor:default; user-select:none; }
+.body figure img { max-width:100%; display:block; }
+.body figcaption { font-size:.9em; color:#5c636a; margin-top:8px; text-align:center; min-width:12ch; line-height:1.4; }
+.body figure.left figcaption { text-align:left; }
+.body figure.right figcaption { text-align:right; }
+.body figcaption:empty::before { content:attr(data-ph); color:var(--faint); }
+/* The resize handles inside an image's sides, as in Notion (figure.html). */
+.vhandle { position:absolute; width:6px; border-radius:3px; background:rgba(15,15,15,.6); border:1px solid #fff; box-shadow:0 0 2px rgba(0,0,0,.35); cursor:ew-resize; pointer-events:auto; }
+.vhandle::before { content:""; position:absolute; inset:-8px -10px; }
+.size-label { position:absolute; pointer-events:none; background:#343a40; color:#fff; font:12px/1 system-ui, sans-serif; padding:4px 6px; border-radius:4px; }
+.hmenu label { font-size:12px; color:var(--muted); padding:4px 6px 6px; }
+.hmenu input { margin:0 4px 4px; font:14px system-ui, sans-serif; padding:6px 8px; border:1px solid var(--line); border-radius:5px; outline:none; width:300px; }
+.hmenu input:focus { border-color:var(--accent); }
+.tips h3 { font-size:13px; margin:8px 0 2px; }
+.tips ul { margin:2px 0; padding-left:18px; }
+
+/* "On the callout itself": its settings at the right of its header, or in
+   its corner without one, while the pointer's over it (never just for the
+   caret being in it). */
+/* Across its top edge, not in its header: there it'd take room from the
+   title even while hidden, and wrap it sooner than it renders. */
+.cbar { position:absolute; top:-14px; right:8px; z-index:2; display:flex; gap:1px; visibility:hidden; background:#fff; border-radius:6px; box-shadow:0 0 0 1px var(--line); padding:1px; }
+/* Over the callout, anywhere in it, or the bar itself. */
+.callout:hover .cbar, .cbar:hover,
+.callout.menu-open .cbar { visibility:visible; }
+.cbar button { width:24px; height:24px; display:grid; place-items:center; padding:0; border:0; background:none; border-radius:5px; cursor:pointer; color:#4a4e52; }
+.cbar button:hover, .cbar button[aria-pressed="true"] { background:color-mix(in srgb, var(--c) 18%, #fff); }
+.cbar svg { width:16px; height:16px; }
+
+/* Things laid over the page. */
+#layer { position:fixed; inset:0; pointer-events:none; z-index:20; }
+/* A selection across lines, the editor's own (the browser's can't cross
+   from one line to another here): multiplied over the page so the text
+   shows through a solid colour. In the page, not over it, so it moves with
+   the text however the page scrolls (a scroll past its end bounces it
+   without a scroll event to redraw by). */
+.page { position:relative; }
+#selayer { position:absolute; inset:0; pointer-events:none; mix-blend-mode:multiply; }
+.sel-box { position:absolute; background:#b9d3fb; }
+.sel-block { border-radius:4px; }
+#editor.xsel ::selection { background:transparent; }
+.hbar { position:absolute; pointer-events:auto; display:flex; align-items:center; gap:2px; background:#fff; border-radius:7px; padding:3px;
+  box-shadow:0 0 0 1px rgba(15,15,15,.06), 0 3px 10px rgba(15,15,15,.14); }
+.hbar button { width:28px; height:28px; display:grid; place-items:center; padding:0; border:0; background:none; border-radius:6px; cursor:pointer; color:#37352f; }
+.hbar button:hover, .hbar button[aria-pressed="true"] { background:#efeeec; }
+.hbar button.wide { width:auto; padding:0 6px; gap:4px; display:flex; font:13px system-ui, sans-serif; }
+.hbar svg { width:18px; height:18px; display:block; }
+.hbar .kicon { width:16px; height:16px; }
+/* A choice in a row with its name under its picture. */
+.hbar button.lab { width:auto; height:auto; display:flex; flex-direction:column; align-items:center; gap:2px; padding:5px 8px 3px; font:11.5px system-ui, sans-serif; color:#37352f; }
+.hbar button.lab svg { width:22px; height:22px; }
+.hbar .vsep { width:1px; height:18px; background:var(--line); margin:0 3px; }
+.hmenu { position:absolute; pointer-events:auto; display:flex; flex-direction:column; background:#fff; border-radius:8px; padding:4px; min-width:150px;
+  box-shadow:0 0 0 1px rgba(15,15,15,.06), 0 3px 10px rgba(15,15,15,.14); font-size:14px; }
+.hmenu button { display:flex; align-items:center; gap:9px; padding:6px 8px; border:0; background:none; border-radius:5px; font:inherit; text-align:left; cursor:pointer; color:#37352f; }
+.hmenu button:hover:not(:disabled) { background:#efeeec; }
+.hmenu button:disabled { color:var(--faint); cursor:default; }
+.hmenu .icon { flex:none; display:grid; width:18px; color:#5f5e5b; }
+.hmenu .icon svg { width:18px; height:18px; }
+.hmenu .kicon { width:16px; height:16px; margin:1px; }
+.hmenu .label { flex:1; }
+.hmenu .label small { display:block; color:var(--muted); font-size:12px; }
+.hmenu .hint { color:var(--faint); font:12px ui-monospace, Menlo, monospace; }
+.hmenu button.on { background:var(--sel-bg); color:var(--sel-ink); }
+.hmenu button.on:hover { background:#d8e8fa; }
+.hmenu button.on .label small { color:#4f7fb3; }
+.hmenu .danger { color:#c4342d; }
+/* A button that's a switch (Collapsible): on, it's tinted as chosen menu
+   items are, so it doesn't look merely hovered. */
+.hbar button.switch[aria-pressed="true"], .cbar button.switch[aria-pressed="true"] { background:var(--sel-bg); color:var(--sel-ink); }
+.hmenu hr { border:0; border-top:1px solid var(--line); margin:4px 0; }
+.hmenu h3 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:6px 8px 4px; font-weight:600; }
+.kicon.k-note { --i:#0c63e4; } .kicon.k-tip { --i:#177a4c; } .kicon.k-warning { --i:#e6ae06; } .kicon.k-caution { --i:#e47112; } .kicon.k-important { --i:#c6303e; }
+.kicon { fill:var(--i); }
+.kicon.kplain, .callout .kicon.kplain { fill:currentColor; }
+/* Moving blocks: a handle in the gutter beside the block under the pointer,
+   as in Notion; a bar where it'd go. */
+.grip { position:absolute; width:18px; height:24px; display:grid; place-items:center; color:#9a9a97; border-radius:4px; cursor:grab; pointer-events:auto; }
+.grip:hover { background:#efeeec; color:#5f5e5b; }
+.grip svg { width:10px; height:16px; }
+/* The caret between two blocks (a gap): a short blinking line at the text's
+   left, in the text's colour, unlike the blue bar of a drop. */
+.gap-caret { position:absolute; width:22px; height:1px; background:var(--ink); border-radius:1px; pointer-events:none; animation:blink 1.06s steps(1) infinite; }
+@keyframes blink { 50% { visibility:hidden; } }
+#editor:focus { outline:none; }
+.drop-line { position:absolute; height:2px; background:var(--accent); border-radius:1px; pointer-events:none; }
+.move-ghost { position:fixed; z-index:200; pointer-events:none; max-width:260px; padding:5px 9px; border-radius:6px; background:#fff; font-size:13px; color:#37352f;
+  box-shadow:0 0 0 1px rgba(15,15,15,.06), 0 3px 10px rgba(15,15,15,.14); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; gap:6px; align-items:center; }
+.move-ghost .kicon { width:14px; height:14px; flex:none; }
+.moving-from { opacity:.35; }
+/* Over what's selected, an arrow: pressed and dragged, it moves. */
+#editor.over-sel, #editor.over-sel * { cursor:default; }
+/* What's moving, small under the pointer. */
+.drag-preview { position:fixed; z-index:200; pointer-events:none; width:max-content; max-width:420px; overflow:hidden; background:#fff; border-radius:8px; padding:10px 12px; box-sizing:content-box;
+  box-shadow:0 0 0 1px #e6e6e3, 0 6px 18px #d4d4d0; -webkit-mask-image:linear-gradient(#000 70%, transparent); mask-image:linear-gradient(#000 70%, transparent); }
+.drag-preview > .body { transform:scale(.5); transform-origin:0 0; }
+.drag-preview.inline { -webkit-mask-image:none; mask-image:none; padding:4px 8px; }
+.drag-preview.inline > .body { transform:none; margin:0; }
+.drag-preview .body > :first-child { margin-top:0; }
+body.dragging, body.dragging * { cursor:grabbing !important; user-select:none; }
+.toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#343a40; color:#fff; font:13px system-ui, sans-serif; padding:8px 12px; border-radius:6px; z-index:300; pointer-events:none; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside id="options"></aside>
+  <div class="center">
+    <div class="toolbar" id="toolbar"></div>
+    <div class="scroller" id="scroller">
+      <div class="tips">
+        Figures and callouts are both objects: a box with fields in it (a figure's caption; a callout's title and text). How they look and their controls are settled (figure.html, callouts.html); this compares only how a selection treats them, chosen on the left.
+        <h3>Try, in each model</h3>
+        <ul>
+          <li>Select from the middle of a paragraph into the middle of a caption, or of a callout's text, with Shift and the arrows, a Shift-click or a drag. Then back out again.</li>
+          <li>Select from inside a callout's text out past its end.</li>
+          <li>With that selected, copy (⌘C) and paste (⌘V) it somewhere else: into a line, or into an empty paragraph. Cut (⌘X) or Backspace it.</li>
+          <li>Drag what's selected somewhere else.</li>
+          <li>Click an image to select its figure; the source on the right is what copy writes.</li>
+        </ul>
+      </div>
+      <div class="page">
+        <div class="body" id="editor" tabindex="-1"></div>
+        <div id="selayer"></div>
+      </div>
+    </div>
+  </div>
+  <div class="source"><h2>Source (qmd)</h2><div id="source"></div></div>
+</div>
+<div id="layer"></div>
+
+<script>
+// ---------------------------------------------------------------- options
+const GROUPS = [
+  // The one open question here. Both select text within a field (a line, a
+  // caption, a callout's title or its text) as text; they differ where a
+  // selection's ends are in different places.
+  { key: 'model', title: 'Selecting across a figure or callout\'s edge', options: [
+    ['partial', 'Partial', 'A selection can take part of a figure or callout and what\'s outside it, as in ProseMirror editors (Confluence, RStudio\'s visual editor). What it covers of the object is its text, a line or character at a time. Deleting keeps the object and what\'s left in it; copying takes the object with only that much in it, and pastes as one.'],
+    ['whole', 'Whole objects', 'A selection is in one field, or holds whole objects, as in Notion and Word\'s tables. Crossing a figure or callout\'s edge (into it, or out of it) takes all of it in one step; crossing from a callout\'s title into its text too. Back inside, it\'s text again. Copy and paste take whole objects, or text.'],
+  ]},
+]
+const opts = Object.fromEntries(GROUPS.map((g) => [g.key, g.options[0][0]]))
+for (const [k, v] of new URLSearchParams(location.hash.slice(1))) if (k in opts) opts[k] = v
+// Settled: the callout's controls as callouts.html settled them, and how
+// Shift with ↑/↓ treats a title. What the model decides, as callouts.html
+// put it: selecting into a callout (whole or as text), and from its title
+// into its text (the whole callout, or as any lines).
+const SETTLED = { controls: 'hover', afterPick: 'stay', kind: 'row', appearancePick: 'row', untitled: 'hint', create: 'split', collapse: 'faithful', titleKeys: 'ends' }
+for (const [k, v] of Object.entries(SETTLED)) Object.defineProperty(opts, k, { value: v, enumerable: false })
+Object.defineProperty(opts, 'select', { get: () => (opts.model === 'whole' ? 'whole' : 'text'), enumerable: false })
+Object.defineProperty(opts, 'crossTitle', { get: () => (opts.model === 'whole' ? 'callout' : 'text'), enumerable: false })
+
+function renderOptions() {
+  const aside = document.getElementById('options')
+  aside.replaceChildren()
+  for (const g of GROUPS) {
+    aside.append(Object.assign(document.createElement('h2'), { textContent: g.title }))
+    for (const [value, name, why] of g.options) {
+      const el = document.createElement('label')
+      el.className = 'opt' + (opts[g.key] === value ? ' on' : '')
+      el.innerHTML = '<b></b><span></span>'
+      el.children[0].textContent = name
+      el.children[1].textContent = why
+      el.onclick = () => { opts[g.key] = value; history.replaceState(null, '', '#' + new URLSearchParams(opts)); menu = null; renderOptions(); render() }
+      aside.append(el)
+    }
+  }
+  const reset = Object.assign(document.createElement('button'), { className: 'reset', textContent: 'Reset the document' })
+  reset.onclick = () => { start(); render() }
+  aside.append(reset)
+}
+
+// ------------------------------------------------------------------ model
+// The document is a list of blocks: paragraphs and headings (text), and two
+// kinds of object. A callout holds paragraphs, and its settings: its kind,
+// its appearance, how it collapses (null: it doesn't), its icon, its title
+// and its label (a #nte- id, which numbers it). A figure is an image, and
+// its caption (kept as its `title`, the field it has, as a callout's title
+// is: both are a line of text in the object, 't:k', never joined to a
+// paragraph), its alt text, width and alignment.
+const KINDS = ['note', 'tip', 'warning', 'caution', 'important']
+const NAME = { note: 'Note', tip: 'Tip', warning: 'Warning', caution: 'Caution', important: 'Important' }
+const PREFIX = { note: 'nte', tip: 'tip', warning: 'wrn', caution: 'cau', important: 'imp' }
+let doc, nextKey, sel, hist
+const key = () => nextKey++
+const para = (text, tag = 'p') => ({ k: key(), tag, text })
+const callout = (type, body, f = {}) => ({ k: key(), tag: 'callout', type, appearance: 'default', collapse: null, icon: true, title: '', id: null, body: body.map((t) => (typeof t === 'string' ? para(t) : t)), ...f })
+const figure = (src, f = {}) => ({ k: key(), tag: 'figure', src, title: '', alt: '', width: null, align: 'center', ...f })
+/** Whether a block is an object (a callout or a figure), not a line of text. */
+const isObj = (b) => b?.tag === 'callout' || b?.tag === 'figure'
+const isFigure = (b) => b?.tag === 'figure'
+
+// The images, as figure.html has them.
+const svg = (w, h, body) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${body}</svg>`)
+const FILES = {
+  'images/sales.svg': svg(640, 360, `<rect width="640" height="360" fill="#fff"/>
+  <g stroke="#dee2e6">${[0, 1, 2, 3, 4].map((i) => `<line x1="60" x2="610" y1="${300 - i * 60}" y2="${300 - i * 60}"/>`).join('')}</g>
+  <g fill="#6c757d" font-family="system-ui,sans-serif" font-size="14" text-anchor="end">${[0, 1, 2, 3, 4].map((i) => `<text x="50" y="${305 - i * 60}">${i * 25}</text>`).join('')}</g>
+  ${[['Q1', 70], ['Q2', 110], ['Q3', 150], ['Q4', 205]].map(([q, v], i) => `<rect x="${95 + i * 130}" y="${300 - v * 2.4}" width="80" height="${v * 2.4}" fill="#2780e3"/><text x="${135 + i * 130}" y="325" fill="#495057" font-family="system-ui,sans-serif" font-size="15" text-anchor="middle">${q}</text>`).join('')}`),
+  'images/mountains.svg': svg(800, 450, `<defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4b183"/><stop offset=".6" stop-color="#fde2c4"/></linearGradient></defs>
+  <rect width="800" height="450" fill="url(#s)"/><circle cx="560" cy="190" r="48" fill="#fff2d9"/>
+  <path d="M0 330 L150 170 L250 260 L380 120 L520 290 L620 210 L800 330 V450 H0Z" fill="#6b7f99"/>
+  <path d="M0 380 L120 300 L260 360 L420 260 L600 370 L720 320 L800 360 V450 H0Z" fill="#3e4f66"/>
+  <path d="M380 120 L415 170 L398 165 L380 185 L362 162 L348 160Z" fill="#fff"/>`),
+}
+
+function start() {
+  nextKey = 1
+  doc = [
+    para('Figures and callouts', 'h2'),
+    para('Sales rose every quarter, as the chart below shows. Select from the middle of this sentence into the middle of its caption.'),
+    figure('images/sales.svg', { title: 'Sales by quarter, rising each quarter from about 30 to about 85', width: 60, alt: 'Bar chart of sales by quarter.' }),
+    para('A paragraph between the figure and the callout, to select from and to paste into.'),
+    callout('note', ['The first paragraph of the callout\'s text.', 'Its second paragraph. Select from the middle of it out past the callout\'s end, into the paragraph below.'], { title: 'A callout with a title' }),
+    para('A paragraph after the callout.'),
+    figure('images/mountains.svg', { width: 45 }),
+    callout('tip', ['A figure with no caption, and a callout right after it: between them, the caret is a gap.']),
+    para('Paste here', 'h2'),
+    para('Paste into the middle of this line, or into the empty paragraph below it.'),
+    para(''),
+  ]
+  sel = { u: 'p:' + doc[1].k, o: 0 }
+  hist = { past: [], future: [], typing: false, at: 0 }
+  menu = null
+  peek.clear()
+  forceTitle.clear()
+}
+
+// A callout's header shows always in the default appearance; in the others,
+// only for something to show in it: a title, a chevron or a number. One the
+// caret was put in to add a title shows (as "Add a title") until it's left.
+// So does a figure's caption, put in with its Caption button.
+const forceTitle = new Set()
+const showHeader = (c) => c.appearance === 'default' || Boolean(c.title) || c.collapse != null || Boolean(c.id) || forceTitle.has(c.k)
+const hasIcon = (c) => c.icon && c.appearance !== 'minimal'
+// Opened (or shut) here, against how it starts when rendered: never written.
+const peek = new Set()
+function bodyShown(c) {
+  if (opts.collapse === 'open' || c.collapse == null) return true
+  const startsOpen = c.collapse !== true
+  return peek.has(c.k) ? !startsOpen : startsOpen
+}
+
+/** Where a unit of text is: a paragraph (in the document or a callout), or an object's title (a callout's, or a figure's caption). */
+function locate(u) {
+  if (!u) return null
+  const [t, ks] = u.split(':'), k = Number(ks)
+  if (t === 't') { const c = doc.find((b) => b.k === k); return c ? { title: true, c } : null }
+  for (const [i, b] of doc.entries()) {
+    if (b.k === k) return { list: doc, i, blk: b, c: null }
+    if (b.tag === 'callout') { const j = b.body.findIndex((x) => x.k === k); if (j >= 0) return { list: b.body, i: j, blk: b.body[j], c: b } }
+  }
+  return null
+}
+const caretCallout = () => locate(sel?.u)?.c ?? null
+/** The units of text the caret can be in, in order. */
+function units() {
+  const out = []
+  for (const b of doc) {
+    if (isFigure(b)) { if (b.title || forceTitle.has(b.k)) out.push('t:' + b.k); continue }
+    if (b.tag !== 'callout') { out.push('p:' + b.k); continue }
+    if (showHeader(b)) out.push('t:' + b.k)
+    if (bodyShown(b)) for (const x of b.body) out.push('p:' + x.k)
+  }
+  return out
+}
+function numberOf(c) {
+  let n = 0
+  for (const b of doc) if (b.tag === 'callout' && b.id && b.type === c.type) { n++; if (b === c) return n }
+  return null
+}
+
+// ---------------------------------------------------------------- history
+const snapshot = () => JSON.stringify({ doc, sel, nextKey, forceTitle: [...forceTitle] })
+function record(typing = false) {
+  const now = Date.now()
+  const merge = typing && hist.typing && now - hist.at < 1500
+  hist.typing = typing
+  hist.at = now
+  if (!merge) { hist.past.push(lastState ?? snapshot()); hist.future = [] }
+}
+function restore(s) { const o = JSON.parse(s); doc = o.doc; sel = o.sel; nextKey = o.nextKey; forceTitle.clear(); o.forceTitle.forEach((k) => forceTitle.add(k)); hist.typing = false; menu = null }
+function undo() { if (hist.past.length) { hist.future.push(snapshot()); restore(hist.past.pop()); render() } }
+function redo() { if (hist.future.length) { hist.past.push(snapshot()); restore(hist.future.pop()); render() } }
+let lastState = null
+
+// ------------------------------------------------------------------ edits
+/** Do `change` to a callout's settings, then show it. */
+function change(c, fn) { record(); fn(c); menu = null; render() }
+
+function setKind(c, type) {
+  if (c.type === type) { menu = null; return render() }
+  change(c, () => {
+    if (c.id) {
+      // Its label goes with its kind (#nte- is a note's), and so do the
+      // references to it.
+      const id = PREFIX[type] + c.id.slice(c.id.indexOf('-'))
+      let n = 0
+      const re = new RegExp('@' + c.id + '\\b', 'g')
+      for (const t of texts()) t.text = t.text.replace(re, () => (n++, '@' + id))
+      toast(`Its label is #${id} now` + (n ? `, and ${n === 1 ? 'the reference' : `the ${n} references`} to it follow` : ''))
+      c.id = id
+    }
+    c.type = type
+  })
+}
+function texts() { return doc.flatMap((b) => (b.tag === 'callout' ? b.body : [b])) }
+function slug(s) { return s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').split(/\s+/).filter(Boolean).slice(0, 3).join('-') || 'callout' }
+
+/** Put the block with the caret in a callout: a heading becomes its title. */
+function wrap(type) {
+  const loc = locate(sel?.u)
+  if (!loc || loc.title || loc.c) return
+  record()
+  const b = loc.blk
+  let c
+  if (b.tag === 'h2') { const p = para(''); c = callout(type, [p], { title: b.text }); sel = { u: 'p:' + p.k, o: 0 } }
+  else c = callout(type, [b])
+  doc.splice(loc.i, 1, c)
+  menu = null
+  render()
+}
+/** Take a callout away and keep what's in it: just its fences go, so its title is a heading again. */
+function unwrap(c) {
+  record()
+  const i = doc.indexOf(c)
+  const out = []
+  let h = null
+  if (c.title) out.push((h = para(c.title, 'h2')))
+  out.push(...c.body)
+  doc.splice(i, 1, ...out)
+  if (sel?.u === 't:' + c.k) sel = h ? { u: 'p:' + h.k, o: sel.o } : { u: 'p:' + c.body[0]?.k, o: 0 }
+  // Selected whole (or across it): the caret at the start of what was in it.
+  if (sel?.anchor) sel = { u: 'p:' + (h ?? c.body[0]).k, o: 0 }
+  if (c.id && texts().some((t) => t.text.includes('@' + c.id))) toast(`Nothing has the label #${c.id} now: its references show as ?${c.id}?`)
+  menu = null
+  render()
+}
+function remove(c) {
+  record()
+  const i = doc.indexOf(c)
+  doc.splice(i, 1)
+  const next = doc[i] ?? doc[i - 1]
+  if (!next) doc.push(para(''))
+  const n = doc[Math.min(i, doc.length - 1)]
+  sel = { u: n.tag === 'callout' ? (showHeader(n) ? 't:' : 'p:') + (showHeader(n) ? n.k : n.body[0].k) : 'p:' + n.k, o: 0 }
+  menu = null
+  render()
+}
+function addTitle(c) {
+  menu = null
+  forceTitle.add(c.k)
+  if (c.collapse === true) peek.add(c.k)
+  sel = { u: 't:' + c.k, o: 0 }
+  render()
+}
+
+// ----------------------------------------------------------------- render
+const editor = document.getElementById('editor')
+const layer = document.getElementById('layer')
+const STROKE = (body) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`
+const KIND_PATHS = {
+  note: '<path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/>',
+  tip: '<path d="M2 6a6 6 0 1 1 10.174 4.31c-.203.196-.359.4-.453.619l-.762 1.769A.5.5 0 0 1 10.5 13a.5.5 0 0 1 0 1 .5.5 0 0 1 0 1l-.224.447a1 1 0 0 1-.894.553H6.618a1 1 0 0 1-.894-.553L5.5 15a.5.5 0 0 1 0-1 .5.5 0 0 1 0-1 .5.5 0 0 1-.46-.302l-.761-1.77a1.964 1.964 0 0 0-.453-.618A5.984 5.984 0 0 1 2 6zm6-5a5 5 0 0 0-3.479 8.592c.263.254.514.564.676.941L5.83 12h4.342l.632-1.467c.162-.377.413-.687.676-.941A5 5 0 0 0 8 1z"/>',
+  warning: '<path d="M7.938 2.016A.13.13 0 0 1 8.002 2a.13.13 0 0 1 .063.016.146.146 0 0 1 .054.057l6.857 11.667c.036.06.035.124.002.183a.163.163 0 0 1-.054.06.116.116 0 0 1-.066.017H1.146a.115.115 0 0 1-.066-.017.163.163 0 0 1-.054-.06.176.176 0 0 1 .002-.183L7.884 2.073a.147.147 0 0 1 .054-.057zm1.044-.45a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566z"/><path d="M7.002 12a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 5.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995z"/>',
+  caution: '<path d="M9.97 4.88l.953 3.811C10.158 8.878 9.14 9 8 9c-1.14 0-2.159-.122-2.923-.309L6.03 4.88C6.635 4.957 7.3 5 8 5s1.365-.043 1.97-.12zm-.245-.978L8.97.88C8.718-.13 7.282-.13 7.03.88L6.274 3.9C6.8 3.965 7.382 4 8 4c.618 0 1.2-.036 1.725-.098zm4.396 8.613a.5.5 0 0 1 .037.96l-6 2a.5.5 0 0 1-.316 0l-6-2a.5.5 0 0 1 .037-.96l2.391-.598.565-2.257c.862.212 1.964.339 3.165.339s2.303-.127 3.165-.339l.565 2.257 2.391.598z"/>',
+  important: '<path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995z"/>',
+}
+// Each appearance as a little callout, with its thick left edge: default's
+// header a solid band (where its tint is); simple, an icon and a title on
+// white, its text in past the icon; minimal, only lines of text.
+const MINI = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`
+const APPEARANCE_ICONS = {
+  default: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 4h15.5a1.5 1.5 0 0 1 1.5 1.5V10h-17z" fill="currentColor"/><path d="M3.5 4v16" stroke-width="2.8"/><path d="M7.5 14h9M7.5 17h6"/>'),
+  simple: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 4v16" stroke-width="2.8"/><circle cx="8.2" cy="8.5" r="1.4"/><path d="M11 8.5h6.5M11 13h6.5M11 16.5h4"/>'),
+  minimal: MINI('<rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 4v16" stroke-width="2.8"/><path d="M7.5 8.5h9M7.5 12h9M7.5 15.5h6"/>'),
+}
+const kindIcon = (t) => `<svg viewBox="0 0 16 16" class="kicon k-${t}">${KIND_PATHS[t]}</svg>`
+// The same icon in a control: uncoloured, in the control's ink. Only the
+// callout's own icon has its kind's colour, as rendered.
+const kindGlyph = (t) => `<svg viewBox="0 0 16 16" class="kicon kplain">${KIND_PATHS[t]}</svg>`
+const ICONS = {
+  callout: STROKE('<rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M4 5v14" stroke-width="3.2"/><path d="M8.5 10h7.5M8.5 14h5"/>'),
+  // A palette: how it looks (and unlike Collapsing's box).
+  appearance: STROKE('<path d="M12 4a8 8 0 1 0 0 16c1.2 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.6 1.7-1.6H16a4 4 0 0 0 4-4c0-3.5-3.6-6.3-8-6.3z"/><circle cx="8" cy="11" r="1" fill="currentColor"/><circle cx="10.5" cy="7.8" r="1" fill="currentColor"/><circle cx="14.5" cy="8" r="1" fill="currentColor"/>'),
+  chevron: '<svg viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/></svg>',
+  // Not a chevron: beside Quarto's own, which does collapse the callout, it
+  // read as a button that would. A header, and the lines of text under it
+  // that it can hide.
+  collapse: STROKE('<rect x="4" y="4" width="16" height="5" rx="1"/><path d="M6.5 13h11M6.5 16.5h11M6.5 20h7"/>'),
+  more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>',
+  bold: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z"/></svg>',
+  italic: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z"/></svg>',
+  quote: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>',
+  bullets: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 19h14v-2H7v2zm0-6h14v-2H7v2zm0-8v2h14V5H7z"/></svg>',
+  icon: STROKE('<circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8v.01"/>'),
+  numbered: STROKE('<path d="M10 4 8 20M16 4l-2 16M5 9h15M4 15h15"/>'),
+  title: STROKE('<path d="M5 6h14M12 6v13"/>'),
+  unwrap: STROKE('<path d="M4 5v14" stroke-dasharray="2 2.5"/><path d="M8.5 10h10M8.5 14h7"/>'),
+  delete: STROKE('<path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13M10 11v5.5M14 11v5.5"/>'),
+  up: STROKE('<path d="M12 19V5M6 11l6-6 6 6"/>'),
+  down: STROKE('<path d="M12 5v14M6 13l6 6 6-6"/>'),
+  grip: '<svg viewBox="0 0 10 16" fill="currentColor"><circle cx="3" cy="3" r="1.3"/><circle cx="7" cy="3" r="1.3"/><circle cx="3" cy="8" r="1.3"/><circle cx="7" cy="8" r="1.3"/><circle cx="3" cy="13" r="1.3"/><circle cx="7" cy="13" r="1.3"/></svg>',
+}
+
+function render() {
+  const headers = headerHeights()
+  editor.replaceChildren(...doc.map(renderBlock))
+  easeHeaders(headers)
+  lastState = snapshot()
+  placeCaret()
+  renderToolbar()
+  renderSource()
+  renderLayer()
+}
+
+// A collapsible callout's header is taller (q2 renders it 35px, for the
+// chevron's button, not 28px). Made collapsible or not, its header eases
+// from the old height to the new, and the text under it with it, instead of
+// jumping: the page is rebuilt, so it starts the new header at the old one's
+// height and lets it grow or shrink.
+let wasCollapsible = new Map()
+function headerHeights() {
+  const out = new Map()
+  for (const el of editor.querySelectorAll('.callout')) {
+    const h = el.querySelector(':scope > .callout-header')
+    if (h) out.set(Number(el.dataset.k), h.getBoundingClientRect().height)
+  }
+  return out
+}
+function easeHeaders(before) {
+  const now = new Map(doc.filter((b) => b.tag === 'callout').map((c) => [c.k, c.collapse != null]))
+  for (const [k, collapsible] of now) {
+    const from = before.get(k)
+    if (from == null || wasCollapsible.get(k) === collapsible || wasCollapsible.get(k) == null) continue
+    const h = editor.querySelector(`.callout[data-k="${k}"] > .callout-header`)
+    if (!h) continue
+    const to = h.getBoundingClientRect().height
+    if (Math.abs(to - from) < 1) continue
+    h.style.height = from + 'px'
+    h.style.minHeight = '0'
+    h.getBoundingClientRect()
+    h.style.transition = 'height .2s ease'
+    h.style.height = to + 'px'
+    h.addEventListener('transitionend', () => { h.style.height = h.style.minHeight = h.style.transition = ''; renderLayer() }, { once: true })
+  }
+  wasCollapsible = now
+}
+
+function textEl(tag, u, text, cls = '') {
+  const el = document.createElement(tag)
+  el.contentEditable = 'true'
+  el.dataset.u = u
+  if (cls) el.className = cls
+  el.textContent = text
+  return el
+}
+
+/** Something that opens one of a callout's menus: it keeps the caret where it is. */
+function opener(el, kind, c) {
+  el.classList.add('hui')
+  el.onmousedown = (e) => e.preventDefault()
+  el.onclick = (e) => { e.stopPropagation(); toggleMenu(kind, c.k, el) }
+  return el
+}
+function smallButton(name, icon, kind, c, pressed = false) {
+  const b = document.createElement('button')
+  b.innerHTML = icon
+  b.setAttribute('aria-label', name)
+  b.dataset.tip = name
+  b.setAttribute('aria-pressed', String(pressed))
+  return opener(b, kind, c)
+}
+
+/** A callout's paragraphs; with nothing in it, its one line shows "Start writing…". */
+function bodyEls(c) {
+  const els = c.body.map((p) => textEl('p', 'p:' + p.k, p.text))
+  if (isEmptyBody(c)) { els[0].classList.add('ph'); els[0].dataset.ph = 'Start writing…' }
+  return els
+}
+const isEmptyBody = (c) => c.body.length === 1 && !c.body[0].text
+/**
+ * Put a paragraph in a callout. Into one with nothing in it, it takes the
+ * place of its empty line, so moving its only paragraph out and back in
+ * leaves it as it was.
+ */
+function putInCallout(c, i, blk) {
+  if (isEmptyBody(c) && c.body[0] !== blk) c.body.splice(0, 1, blk)
+  else c.body.splice(i, 0, blk)
+}
+
+/**
+ * Collapsible, as a button that's the switch itself: pressed while readers
+ * can collapse the callout. On, it starts collapsed (collapse="true"), as
+ * collapsible callouts mostly do; starting open instead (collapse="false")
+ * is rarer, so it's in More, only then. In the toolbar, it's spelled out.
+ */
+/**
+ * Set how it collapses when rendered, leaving it as it is here: making it
+ * collapsible (or starting it collapsed) doesn't collapse it under the
+ * caret; its chevron still shuts it here, to look.
+ */
+function setCollapse(c, v) {
+  const shown = bodyShown(c)
+  c.collapse = v
+  if (bodyShown(c) !== shown) peek.has(c.k) ? peek.delete(c.k) : peek.add(c.k)
+}
+/**
+ * Title, as an image's Caption: clicked, the caret goes into it. Not drawn
+ * as pressed while it has one: it isn't a switch (clicking doesn't take the
+ * title away), so it mustn't look like one. With none, its header comes back with "Add a title" (a
+ * simple or minimal one shows none without a title), and goes again if it's
+ * left empty. Always in the bar, so it's always found in the same place.
+ */
+function titleButton(c, inToolbar = false) {
+  const b = document.createElement('button')
+  if (inToolbar) { b.className = 'pick'; b.textContent = 'Title' }
+  else { b.innerHTML = ICONS.title; b.dataset.tip = 'Title' }
+  b.classList.add('hui')
+  b.setAttribute('aria-label', 'Title')
+  b.onmousedown = (e) => e.preventDefault()
+  b.onclick = (e) => { e.stopPropagation(); addTitle(c) }
+  return b
+}
+function collapseButton(c, inToolbar = false) {
+  const b = document.createElement('button')
+  if (inToolbar) { b.className = 'pick'; b.textContent = 'Collapsible' }
+  else { b.className = 'switch'; b.innerHTML = ICONS.collapse; b.dataset.tip = 'Collapsible' }
+  b.classList.add('hui')
+  b.setAttribute('aria-label', 'Collapsible')
+  b.setAttribute('aria-pressed', String(c.collapse != null))
+  b.onmousedown = (e) => e.preventDefault()
+  b.onclick = (e) => {
+    e.stopPropagation()
+    // A bar kept after a pick: it slides from where it was kept, as ever.
+    const kept = pinned?.k === c.k && layer.querySelector(`.hbar[data-hk="${c.k}"]`)
+    if (kept) { lastBar = { k: c.k, left: kept.getBoundingClientRect().left, chev: c.collapse != null }; pinned = null; hoverK = c.k }
+    record(); setCollapse(c, c.collapse == null ? true : null); menu = null; render()
+  }
+  return b
+}
+
+/** A figure: its image, and its caption under it (while it has one, or the caret's put there). */
+function renderFigure(f) {
+  const el = document.createElement('figure')
+  el.dataset.k = f.k
+  if (f.align !== 'center') el.className = f.align
+  const frame = document.createElement('div')
+  frame.className = 'frame'
+  const img = Object.assign(document.createElement('img'), { src: FILES[f.src] ?? f.src, alt: f.alt || f.title, draggable: false })
+  if (f.width) { frame.style.width = f.width + '%'; img.style.width = '100%' }
+  frame.append(img)
+  el.append(frame)
+  if (f.title || forceTitle.has(f.k)) {
+    const cap = textEl('figcaption', 't:' + f.k, f.title)
+    cap.dataset.ph = 'Add a caption'
+    el.append(cap)
+  }
+  return el
+}
+
+function renderBlock(b) {
+  if (isFigure(b)) return renderFigure(b)
+  if (b.tag !== 'callout') return textEl(b.tag, 'p:' + b.k, b.text)
+  const c = b
+  const header = showHeader(c), icon = hasIcon(c), num = c.id ? numberOf(c) : null
+  const box = document.createElement('div')
+  box.className = `callout callout-style-${c.appearance === 'default' ? 'default' : 'simple'} callout-${c.type}` + (header ? ' callout-titled' : '') + (icon ? '' : ' no-icon') + (opts.controls === 'header' ? ' on-header' : '')
+  if (menu?.k === c.k) box.classList.add('menu-open')
+  box.dataset.k = c.k
+  // Its icon: on the callout itself, the way to its kind.
+  const kslot = () => {
+    const s = document.createElement('span')
+    s.className = 'kslot'
+    s.innerHTML = kindIcon(c.type)
+    if (opts.controls === 'header') { s.dataset.tip = `${NAME[c.type]}: change its kind`; opener(s, 'kind', c) }
+    return s
+  }
+  // Its settings, at the right end of its header (or in its corner).
+  const cbar = () => {
+    const bar = document.createElement('span')
+    bar.className = 'cbar'
+    if (!icon) bar.append(smallButton(`Kind: ${NAME[c.type]}`, kindGlyph(c.type), 'kind', c))
+    bar.append(titleButton(c), smallButton('Appearance', ICONS.appearance, 'appearance', c), collapseButton(c), smallButton('More', ICONS.more, 'more', c))
+    return bar
+  }
+  const shown = bodyShown(c)
+  if (header) {
+    const h = document.createElement('div')
+    h.className = 'callout-header' + (c.collapse != null ? ' collapsible' : '')
+    if (icon) h.append(kslot())
+    const tc = document.createElement('div')
+    tc.className = 'callout-title-container'
+    if (num) tc.append(Object.assign(document.createElement('span'), { className: 'num', textContent: `${NAME[c.type]} ${num}${c.title || sel?.u === 't:' + c.k ? ': ' : ''}` }))
+    // With no title: "Add a title" where it'd render none; where it renders
+    // its kind's name (none with a number, which says the kind already), as
+    // opts.untitled says: that name faint, "Add a title" instead, or that
+    // name as rendered with a hint after it.
+    // Decided from its settings, not whether it has a title now: emptied by
+    // typing (no re-render), it shows the same as one that never had one.
+    // The styles only take hold while the title's empty.
+    const rendersName = !num && !(c.appearance !== 'default' && c.collapse == null)
+    const ghost = !num && (!rendersName || opts.untitled === 'placeholder')
+    const t = textEl('span', 't:' + c.k, c.title, 'title' + (ghost ? ' ghost' : '') + (rendersName && opts.untitled === 'hint' ? ' hinted' : ''))
+    t.dataset.ph = num ? '' : ghost ? 'Add a title' : NAME[c.type]
+    t.dataset.hint = 'Using the default title. Add your own.'
+    if (hintK === c.k) t.classList.add('hint-on')
+    tc.append(t)
+    h.append(tc)
+    if (opts.controls === 'header') box.append(cbar())
+    if (c.collapse != null) {
+      // Quarto's chevron. Here it opens and shuts the callout, or (always
+      // open here) sets how it starts.
+      const chev = document.createElement('button')
+      chev.className = 'chev' + ((opts.collapse === 'open' ? c.collapse === true : !shown) ? ' shut' : '') + (opts.collapse === 'open' ? ' setting' : '')
+      chev.innerHTML = ICONS.chevron
+      // As rendered (q2 and Quarto 1): no tooltip, labelled "Toggle callout".
+      // Always open here, it changes the document instead, so it says how.
+      chev.setAttribute('aria-label', 'Toggle callout')
+      if (opts.collapse === 'open') chev.dataset.tip = c.collapse ? 'Starts collapsed: start it open' : 'Starts open: start it collapsed'
+      chev.onmousedown = (e) => e.preventDefault()
+      chev.onclick = () => {
+        if (opts.collapse === 'open') return change(c, () => { c.collapse = !c.collapse })
+        peek.has(c.k) ? peek.delete(c.k) : peek.add(c.k)
+        render()
+      }
+      h.append(chev)
+    }
+    box.append(h)
+    if (shown) {
+      const body = document.createElement('div')
+      body.className = 'callout-body-container callout-body'
+      body.append(...bodyEls(c))
+      box.append(body)
+    }
+  } else {
+    // No header: as rendered, the icon (if any) beside the text.
+    const row = document.createElement('div')
+    row.className = 'untitled'
+    if (icon) row.append(kslot())
+    const body = document.createElement('div')
+    body.className = 'callout-body-container'
+    body.append(...bodyEls(c))
+    row.append(body)
+    box.append(row)
+    if (opts.controls === 'header') box.append(cbar())
+  }
+  return box
+}
+
+function placeCaret() {
+  if (!sel) return
+  if (sel.anchor) { getSelection().removeAllRanges(); return editor.focus({ preventScroll: true }) }
+  if (sel.gap != null) return editor.focus({ preventScroll: true })
+  let el = editor.querySelector(`[data-u="${sel.u}"]`)
+  if (!el) return
+  setCaret(el, sel.o)
+}
+function setCaret(el, o) {
+  el.focus({ preventScroll: true })
+  const r = document.createRange()
+  const t = el.firstChild
+  if (t && t.nodeType === 3) r.setStart(t, Math.min(o, t.length))
+  else r.setStart(el, 0)
+  r.collapse(true)
+  const s = getSelection()
+  s.removeAllRanges()
+  s.addRange(r)
+}
+/** The caret's offset in a unit, or null if it isn't in it. */
+function caretIn(el) {
+  const s = getSelection()
+  if (!s.rangeCount || !el.contains(s.focusNode)) return null
+  const r = document.createRange()
+  r.selectNodeContents(el)
+  r.setEnd(s.focusNode, s.focusOffset)
+  return { o: r.toString().length, collapsed: s.isCollapsed }
+}
+
+// ---------------------------------------------------------------- toolbar
+function toolButton(name, icon, action, pressed = null) {
+  const b = document.createElement('button')
+  b.className = 'icon'
+  b.innerHTML = icon
+  b.setAttribute('aria-label', name)
+  b.dataset.tip = name
+  if (pressed !== null) b.setAttribute('aria-pressed', String(pressed))
+  b.disabled = !action
+  b.onmousedown = (e) => e.preventDefault()
+  if (action) b.onclick = (e) => { e.stopPropagation(); action(b) }
+  return b
+}
+const sep = () => Object.assign(document.createElement('span'), { className: 'sep' })
+/**
+ * The callout the selection's in or on: the caret's, or one selected whole
+ * (and nothing else), or the one both ends of a selection are in.
+ */
+function selectedCallout() {
+  const loc = locate(sel?.u)
+  if (loc) return loc.c ?? null
+  if (!sel?.anchor) return null
+  const [s, e] = effective()
+  const cov = coverage(s, e)
+  if (cov.length === 1 && cov[0].block != null) return doc[cov[0].block].tag === 'callout' ? doc[cov[0].block] : null
+  const a = partOf(s)?.c
+  return a && a === partOf(e)?.c ? a : null
+}
+// The kind the toolbar's split button last made (opts.create splitLast).
+let lastKind = 'note'
+const KIND_COLOR = { note: '#0d6efd', tip: '#198754', warning: '#ffc107', caution: '#fd7e14', important: '#dc3545' }
+const calloutIconIn = (t) => STROKE(`<rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M4 5v14" stroke-width="3.2" stroke="${KIND_COLOR[t]}"/><path d="M8.5 10h7.5M8.5 14h5"/>`)
+let toolbarU = null   // the line the toolbar was last drawn for
+function renderToolbar() {
+  toolbarU = sel?.u ?? null
+  const bar = document.getElementById('toolbar')
+  const loc = locate(sel?.u)
+  const c = selectedCallout()
+  const style = document.createElement('button')
+  style.className = 'style'
+  style.disabled = true
+  style.innerHTML = `<span>${loc?.title ? '—' : loc?.blk?.tag === 'h2' ? 'Heading 2' : 'Paragraph'}</span><svg viewBox="0 0 8 8"><path d="M1 2.5 4 5.5 7 2.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`
+  // A wrapper, as quote and lists are: pressed in one, which it takes away.
+  const calloutButton = toolButton(c ? 'Remove the callout' : 'Callout', ICONS.callout, (b) => {
+    if (c) return unwrap(c)
+    if (opts.create === 'pick') toggleMenu('create', 0, b)
+    else wrap('note')
+  }, Boolean(c))
+  calloutButton.classList.add('hui')
+  let calloutControl = calloutButton
+  if (opts.create === 'split' || opts.create === 'splitLast') {
+    // A split button: the button does it, the arrow beside it picks.
+    const kind = opts.create === 'splitLast' ? lastKind : 'note'
+    if (opts.create === 'splitLast' && !c) calloutButton.innerHTML = calloutIconIn(kind)
+    if (!c && kind !== 'note') { calloutButton.dataset.tip = `Callout: ${NAME[kind]}`; calloutButton.setAttribute('aria-label', `Callout: ${NAME[kind]}`) }
+    calloutButton.onclick = (e) => { e.stopPropagation(); c ? unwrap(c) : wrap(kind) }
+    const split = Object.assign(document.createElement('span'), { className: 'split' })
+    const arrow = document.createElement('button')
+    arrow.className = 'arrow hui'
+    arrow.innerHTML = '<svg viewBox="0 0 8 8"><path d="M1 2.5 4 5.5 7 2.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>'
+    arrow.dataset.tip = c ? 'Its kind' : 'Callout kinds'
+    arrow.setAttribute('aria-label', arrow.dataset.tip)
+    arrow.onmousedown = (e) => e.preventDefault()
+    arrow.onclick = (e) => { e.stopPropagation(); c ? toggleMenu('kind', c.k, split) : toggleMenu('create', 0, split) }
+    split.append(calloutButton, arrow)
+    calloutControl = split
+  }
+  bar.replaceChildren(style, sep(), toolButton('Bold', ICONS.bold, null), toolButton('Italic', ICONS.italic, null), sep(),
+    toolButton('Bulleted list', ICONS.bullets, null), toolButton('Quote', ICONS.quote, null), calloutControl)
+  if (opts.controls !== 'toolbar' || !c) return
+  // The callout's own section: what it is, then how it looks.
+  const pick = (label, icon, kind, tip) => {
+    const b = document.createElement('button')
+    b.className = 'pick hui'
+    b.innerHTML = `${icon}<span>${label}</span><svg class="caret" viewBox="0 0 8 8"><path d="M1 2.5 4 5.5 7 2.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`
+    b.dataset.tip = tip
+    b.onmousedown = (e) => e.preventDefault()
+    b.onclick = (e) => { e.stopPropagation(); toggleMenu(kind, c.k, b) }
+    return b
+  }
+  bar.append(sep(), Object.assign(document.createElement('span'), { className: 'ctx', textContent: 'Callout' }))
+  if (opts.kind === 'row') {
+    for (const t of KINDS) {
+      const b = toolButton(NAME[t], kindGlyph(t), () => setKind(c, t), c.type === t)
+      b.querySelector('svg').style.width = b.querySelector('svg').style.height = '17px'
+      bar.append(b)
+    }
+  } else bar.append(pick(NAME[c.type], kindGlyph(c.type), 'kind', 'Kind'))
+  bar.append(titleButton(c, true), pick({ default: 'Default', simple: 'Simple', minimal: 'Minimal' }[c.appearance], '', 'appearance', 'Appearance'),
+    collapseButton(c, true))
+  const more = toolButton('More', ICONS.more, (b) => toggleMenu('more', c.k, b))
+  more.classList.add('hui')
+  bar.append(more)
+}
+
+// ------------------------------------------------------------ the layer
+// Menus, and the hover bar: over everything, in the window's coordinates.
+let menu = null    // { kind: 'kind' | 'create' | 'appearance' | 'more', k, x, y }
+let hoverK = null
+let lastBar = null  // where the bar on its corner was: { k, left, chev }
+let hintK = null    // the callout whose untitled hint the pointer's over
+let pinned = null   // a bar kept after a pick (opts.afterPick): { k, left, top, area }
+/** After a pick from c's menu: its bar stays where it is, over everything it and the menu cover. */
+function pinBar(c) {
+  if (opts.afterPick !== 'stay' || !c) return
+  const bar = layer.querySelector(`.hbar[data-hk="${c.k}"]`)
+  if (!bar) return
+  const rects = [...layer.querySelectorAll('.hui'), editor.querySelector(`.callout[data-k="${c.k}"]`)].filter(Boolean).map((el) => el.getBoundingClientRect())
+  const area = { left: Math.min(...rects.map((r) => r.left)), top: Math.min(...rects.map((r) => r.top)), right: Math.max(...rects.map((r) => r.right)), bottom: Math.max(...rects.map((r) => r.bottom)) }
+  // By its right end, where it sits on the corner: wider (a longer kind's
+  // name), it grows to the left.
+  const br = bar.getBoundingClientRect()
+  pinned = { k: c.k, right: br.right, top: bar.style.top, area }
+}
+/** Whether the pointer's still where a kept bar stays: what it covered then, and the callout now. */
+function inPinned(e) {
+  const el = editor.querySelector(`.callout[data-k="${pinned.k}"]`)
+  const inside = (r, pad = 6) => r && e.clientX >= r.left - pad && e.clientX <= r.right + pad && e.clientY >= r.top - pad && e.clientY <= r.bottom + pad
+  return inside(pinned.area) || inside(el?.getBoundingClientRect())
+}
+function toggleMenu(kind, k, el) {
+  if (menu && menu.kind === kind && menu.k === k) { menu = null; return render() }
+  const r = el.getBoundingClientRect()
+  menu = { kind, k, x: r.left, y: r.bottom + 4, cx: r.left + r.width / 2 }
+  render()
+}
+const calloutByKey = (k) => doc.find((b) => b.k === k && b.tag === 'callout')
+const objByKey = (k) => doc.find((b) => b.k === k && isObj(b))
+
+function renderLayer() {
+  layer.replaceChildren()
+  renderSelection()
+  if (drag) return
+  renderGrip()
+  renderGapCaret()
+  const asImage = opts.controls === 'image'
+  if (opts.controls === 'hover' || asImage) {
+    // Only for the one under the pointer (or whose menu is open), as an
+    // image's: never just for the caret being in it.
+    const c = calloutByKey(menu?.k ?? pinned?.k ?? hoverK)
+    const el = c && editor.querySelector(`.callout[data-k="${c.k}"]`)
+    if (el) {
+      const bar = document.createElement('div')
+      bar.className = 'hbar hui'
+      bar.dataset.hk = c.k
+      bar.addEventListener('mousedown', (e) => e.preventDefault())
+      const b = (name, icon, kind, wide = false) => {
+        const btn = smallButton(name, icon, kind, c, menu?.k === c.k && menu.kind === kind)
+        if (wide) btn.classList.add('wide')
+        return btn
+      }
+      if (asImage) {
+        // The current kind's icon, as the image bar's Alignment shows the
+        // current alignment; the kinds open from it (a menu, or a row of
+        // icons under it).
+        bar.append(b(`Kind: ${NAME[c.type]}`, kindGlyph(c.type), 'kind'))
+      } else if (opts.kind === 'row') {
+        for (const t of KINDS) {
+          const btn = document.createElement('button')
+          btn.innerHTML = kindGlyph(t)
+          btn.dataset.tip = NAME[t]
+          btn.setAttribute('aria-pressed', String(c.type === t))
+          btn.onclick = () => setKind(c, t)
+          bar.append(btn)
+        }
+        bar.append(Object.assign(document.createElement('span'), { className: 'vsep' }))
+      } else {
+        const kb = b('Kind', `${kindGlyph(c.type)}<span>${NAME[c.type]}</span>`, 'kind', true)
+        bar.append(kb, Object.assign(document.createElement('span'), { className: 'vsep' }))
+      }
+      bar.append(titleButton(c), b('Appearance', ICONS.appearance, 'appearance'), collapseButton(c), b('More', ICONS.more, 'more'))
+      layer.append(bar)
+      const r = el.getBoundingClientRect()
+      if (asImage) {
+        // Inside its top-right corner, as on an image, but always clear of
+        // where Quarto's chevron goes, chevron or not: making it collapsible
+        // mustn't move the bar out from under the pointer.
+        const header = el.querySelector(':scope > .callout-header')
+        const cs = getComputedStyle(el), hs = header && getComputedStyle(header)
+        const slot = parseFloat(cs.borderRightWidth) + parseFloat(cs.paddingRight) + (hs ? parseFloat(hs.paddingRight) : 8) + 22
+        bar.style.left = r.right - slot - 4 - bar.offsetWidth + 'px'
+        // Centred on its header, open or collapsed, so collapsing it doesn't
+        // move the bar either (nor shrink it); 3px in, with no header.
+        const hr = header?.getBoundingClientRect()
+        bar.style.top = (hr ? hr.top + (hr.height - bar.offsetHeight) / 2 : r.top + 3) + 'px'
+        if (pinned?.k === c.k) { bar.style.left = pinned.right - bar.offsetWidth + 'px'; bar.style.top = pinned.top }
+      } else {
+        // On its top-right corner, across its top edge, so the pointer can
+        // reach it without leaving the callout; clear of Quarto's chevron
+        // when it has one. Made collapsible (or not), it slides there from
+        // where it was, so the move can be followed.
+        const chev = el.querySelector(':scope > .callout-header .chev')?.getBoundingClientRect()
+        const left = (chev ? chev.left - 4 : r.right - 8) - bar.offsetWidth
+        bar.style.top = r.top - bar.offsetHeight / 2 - 2 + 'px'
+        if (lastBar?.k === c.k && lastBar.chev !== Boolean(chev)) {
+          bar.style.left = lastBar.left + 'px'
+          bar.getBoundingClientRect()
+          bar.style.transition = 'left .2s ease'
+        }
+        bar.style.left = left + 'px'
+        lastBar = { k: c.k, left, chev: Boolean(chev) }
+        // Kept after a pick, where it was: it moves on only once it's put away.
+        if (pinned?.k === c.k) { bar.style.transition = ''; bar.style.left = pinned.right - bar.offsetWidth + 'px'; bar.style.top = pinned.top; lastBar = null }
+      }
+    }
+  }
+  renderFigureBar()
+  if (menu && !menu.kind.startsWith('f')) renderMenu()
+  else endPreview()
+}
+
+// ------------------------------------------------------- a figure's bar
+// As figure.html settled it, cut to what this mockup needs: a bar inside
+// the image's top-right corner while the pointer's over it (Caption,
+// Alignment, More), and handles inside its sides that resize it.
+let hoverF = null    // the figure under the pointer
+const ALIGN_ICONS = {
+  left: STROKE('<path d="M4 4.5h16M4 19.5h16"/><rect x="4" y="8" width="9" height="8" rx="1"/>'),
+  center: STROKE('<path d="M4 4.5h16M4 19.5h16"/><rect x="7.5" y="8" width="9" height="8" rx="1"/>'),
+  right: STROKE('<path d="M4 4.5h16M4 19.5h16"/><rect x="11" y="8" width="9" height="8" rx="1"/>'),
+}
+const CAPTION_ICON = STROKE('<rect x="4" y="4" width="16" height="10" rx="1"/><path d="M4 17.5h16M4 20.5h10"/>')
+const ALT_ICON = STROKE('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h10M7 14h6"/>')
+function figButton(name, icon, action, pressed = false) {
+  const b = document.createElement('button')
+  b.innerHTML = icon
+  b.setAttribute('aria-label', name)
+  b.dataset.tip = name
+  b.setAttribute('aria-pressed', String(pressed))
+  b.classList.add('hui')
+  b.onmousedown = (e) => e.preventDefault()
+  b.onclick = (e) => { e.stopPropagation(); action(b) }
+  return b
+}
+/** The caret in a figure's caption: at its end, or a new one ("Add a caption"). */
+function toCaption(f) {
+  menu = null
+  if (!f.title) forceTitle.add(f.k)
+  sel = { u: 't:' + f.k, o: f.title.length }
+  render()
+}
+function renderFigureBar() {
+  const f = objByKey(menu?.kind?.startsWith('f') ? menu.k : hoverF)
+  if (!isFigure(f)) return
+  const frame = editor.querySelector(`figure[data-k="${f.k}"] .frame`)
+  if (!frame) return
+  const fr = frame.getBoundingClientRect()
+  const toggle = (kind) => (b) => {
+    if (menu?.kind === kind && menu.k === f.k) menu = null
+    else { const r = b.getBoundingClientRect(); menu = { kind, k: f.k, x: r.right, y: r.bottom + 6, cx: r.left + r.width / 2 } }
+    renderLayer()
+  }
+  const bar = document.createElement('div')
+  bar.className = 'hbar hui'
+  bar.dataset.fk = f.k
+  bar.addEventListener('mousedown', (e) => e.preventDefault())
+  bar.append(
+    figButton('Caption', CAPTION_ICON, () => toCaption(f), Boolean(f.title)),
+    figButton('Alignment', ALIGN_ICONS[f.align], toggle('falign'), menu?.kind === 'falign'),
+    figButton('More', ICONS.more, toggle('fmore'), menu?.kind === 'fmore'),
+  )
+  layer.append(bar)
+  bar.style.left = fr.right - bar.offsetWidth - 3 + 'px'
+  bar.style.top = fr.top + 3 + 'px'
+  renderResizeHandles(f, frame, fr)
+  if (menu?.k !== f.k) return
+  const under = (box, centre) => {
+    layer.append(box)
+    const x = centre ? menu.cx - box.offsetWidth / 2 : menu.x - box.offsetWidth
+    box.style.left = Math.max(8, Math.min(x, innerWidth - box.offsetWidth - 8)) + 'px'
+    box.style.top = menu.y + 'px'
+  }
+  if (menu.kind === 'falign') {
+    const sub = document.createElement('div')
+    sub.className = 'hbar hui'
+    sub.addEventListener('mousedown', (e) => e.preventDefault())
+    for (const a of ['left', 'center', 'right']) sub.append(figButton(a === 'center' ? 'Centre' : a[0].toUpperCase() + a.slice(1), ALIGN_ICONS[a], () => { record(); f.align = a; menu = null; render() }, f.align === a))
+    under(sub, true)
+  } else if (menu.kind === 'fmore') {
+    const list = document.createElement('div')
+    list.className = 'hmenu hui'
+    list.addEventListener('mousedown', (e) => e.preventDefault())
+    const item = (icon, label, action, { danger = false, hint = '' } = {}) => {
+      const b = document.createElement('button')
+      b.innerHTML = `<span class="icon">${icon}</span><span class="label"></span><span class="hint"></span>`
+      b.querySelector('.label').textContent = label
+      b.querySelector('.hint').textContent = hint
+      if (danger) b.classList.add('danger')
+      b.onclick = action
+      list.append(b)
+    }
+    item(ALT_ICON, 'Alt text…', () => { menu = { ...menu, kind: 'falt' }; renderLayer() }, { hint: f.alt ? '' : 'none yet' })
+    list.append(document.createElement('hr'))
+    item(ICONS.delete, 'Delete', () => { menu = null; hoverF = null; const i = doc.indexOf(f); deleteRange([{ edge: i }, { edge: i + 1 }]); render() }, { danger: true })
+    under(list, false)
+  } else if (menu.kind === 'falt') {
+    const box = document.createElement('div')
+    box.className = 'hmenu hui'
+    const label = Object.assign(document.createElement('label'), { textContent: 'Alt text: what the image shows, for those who can\'t see it' })
+    const input = Object.assign(document.createElement('input'), { value: f.alt, placeholder: 'A description of the image' })
+    input.addEventListener('input', () => { record(true); f.alt = input.value; lastState = snapshot(); renderSource() })
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); menu = null; render() }
+    })
+    box.append(label, input)
+    under(box, false)
+    input.focus({ preventScroll: true })
+  }
+}
+
+// Drag a handle: the width as a share of the page's text, snapping to the
+// common ones, from the side the image grows from.
+const SNAPS = [25, 33, 50, 67, 75, 100]
+let resizing = false
+function renderResizeHandles(f, frame, fr) {
+  const place = (h, r) => {
+    const left = h.classList.contains('l'), out = r.width < 60
+    h.style.left = (left ? r.left + (out ? -10 : 6) : r.right + (out ? 4 : -12)) + 'px'
+    const height = Math.min(48, Math.max(r.height / 3, 16))
+    h.style.top = r.top + r.height / 2 - height / 2 + 'px'
+    h.style.height = height + 'px'
+  }
+  for (const side of ['l', 'r']) {
+    const h = document.createElement('div')
+    h.className = 'vhandle hui ' + side
+    h.dataset.fk = f.k
+    place(h, fr)
+    h.onpointerdown = (e) => {
+      e.preventDefault()
+      resizing = true
+      h.setPointerCapture(e.pointerId)
+      menu = null
+      layer.querySelectorAll('.hbar, .hmenu').forEach((el) => el.remove())
+      const full = editor.getBoundingClientRect().width, startW = fr.width, startX = e.clientX
+      const grow = (f.align === 'center' ? 2 : 1) * (side === 'r' ? 1 : -1)
+      const label = Object.assign(document.createElement('div'), { className: 'size-label' })
+      layer.append(label)
+      let recorded = false
+      const move = (ev) => {
+        const px = Math.max(24, Math.min(full, startW + (ev.clientX - startX) * grow))
+        let w = Math.max(1, Math.round((px / full) * 100))
+        const snap = SNAPS.find((s) => Math.abs(s - w) <= 2)
+        if (snap) w = snap
+        if (!recorded) { record(); recorded = true }
+        f.width = w
+        frame.style.width = px + 'px'
+        frame.querySelector('img').style.width = '100%'
+        const r = frame.getBoundingClientRect()
+        label.textContent = `${w}%`
+        label.style.left = r.left + r.width / 2 - label.offsetWidth / 2 + 'px'
+        label.style.top = r.top + 8 + 'px'
+        for (const hh of layer.querySelectorAll('.vhandle')) place(hh, r)
+        renderSelection()
+        renderSource()
+      }
+      const up = () => {
+        resizing = false
+        h.removeEventListener('pointermove', move)
+        h.removeEventListener('pointerup', up)
+        render()
+      }
+      h.addEventListener('pointermove', move)
+      h.addEventListener('pointerup', up)
+    }
+    layer.append(h)
+  }
+}
+document.addEventListener('mousemove', (e) => {
+  if (drag || resizing || e.buttons) return
+  const t = e.target
+  const k = Number(t.closest?.('[data-fk]')?.dataset.fk ?? (editor.contains(t) ? t.closest?.('figure .frame')?.closest('figure')?.dataset.k : 0) ?? 0) || null
+  if (k === hoverF) return
+  hoverF = k
+  renderSource()
+  renderLayer()
+})
+
+
+// Pointing at a kind or an appearance shows it on the callout, for a look:
+// only the page shows it (not the document or its source); clicking keeps
+// it, and moving off it, or closing the menu, puts the callout back.
+let previewing = null   // the callout key shown with a preview
+function previewOn(el, c, look) {
+  el.addEventListener('mouseenter', () => showPreview(c, look))
+  el.addEventListener('mouseleave', () => endPreview())
+}
+function showPreview(c, look) {
+  const el = editor.querySelector(`.callout[data-k="${c.k}"]`)
+  if (!el) return
+  el.replaceWith(renderBlock({ ...c, ...look }))
+  previewing = c.k
+}
+function endPreview() {
+  if (previewing == null) return
+  const c = calloutByKey(previewing), el = editor.querySelector(`.callout[data-k="${previewing}"]`)
+  previewing = null
+  if (c && el) el.replaceWith(renderBlock(c))
+}
+
+function renderMenu() {
+  const c = calloutByKey(menu.k)
+  if (menu.kind !== 'create' && !c) { menu = null; return }
+  const place = (box, centre = false) => {
+    layer.append(box)
+    const x = centre ? menu.cx - box.offsetWidth / 2 : menu.x
+    box.style.left = Math.max(8, Math.min(x, innerWidth - box.offsetWidth - 8)) + 'px'
+    box.style.top = menu.y + 'px'
+  }
+  const list = document.createElement('div')
+  list.className = 'hmenu hui'
+  list.addEventListener('mousedown', (e) => e.preventDefault())
+  const item = (icon, label, action, { check = null, hint = '', sub = '', disabled = false, danger = false, preview = null, pin = true } = {}) => {
+    const b = document.createElement('button')
+    // What's chosen: its row tinted, so no column is kept for a tick.
+    b.innerHTML = `${icon ? `<span class="icon">${icon}</span>` : ''}<span class="label"></span><span class="hint"></span>`
+    if (check) { b.classList.add('on'); b.setAttribute('aria-checked', 'true') }
+    b.querySelector('.label').textContent = label
+    if (sub) b.querySelector('.label').append(Object.assign(document.createElement('small'), { textContent: sub }))
+    b.querySelector('.hint').textContent = hint
+    if (danger) b.classList.add('danger')
+    b.disabled = disabled
+    b.onclick = () => { if (pin) pinBar(c); action() }
+    if (preview) previewOn(b, c, preview)
+    list.append(b)
+  }
+  const heading = (t) => list.append(Object.assign(document.createElement('h3'), { textContent: t }))
+  // A setting's choices as a row of icons under its button, names (and what
+  // they mean) in tooltips, the current one pressed.
+  const row = (choices) => {
+    const bar = document.createElement('div')
+    bar.className = 'hbar hui'
+    bar.addEventListener('mousedown', (e) => e.preventDefault())
+    for (const ch of choices) {
+      const btn = document.createElement('button')
+      btn.innerHTML = ch.icon
+      if (ch.label) btn.classList.add('lab'), btn.append(Object.assign(document.createElement('span'), { textContent: ch.label }))
+      if (ch.tip) btn.dataset.tip = ch.tip
+      btn.setAttribute('aria-label', ch.tip)
+      btn.setAttribute('aria-pressed', String(ch.on))
+      btn.onclick = () => { pinBar(c); ch.act() }
+      if (ch.preview) previewOn(btn, c, ch.preview)
+      bar.append(btn)
+    }
+    place(bar, true)
+  }
+  if (menu.kind === 'kind' || menu.kind === 'create') {
+    const choose = (t) => (menu.kind === 'create' ? (lastKind = t, wrap(t)) : setKind(c, t))
+    const look = (t) => (menu.kind === 'create' ? null : { type: t })
+    if (opts.kind === 'row') return row(KINDS.map((t) => ({ icon: kindGlyph(t), tip: NAME[t], on: c?.type === t, act: () => choose(t), preview: look(t) })))
+    if (menu.kind === 'create') heading('A callout of this kind')
+    for (const t of KINDS) item(kindGlyph(t), NAME[t], () => choose(t), { check: c?.type === t, preview: look(t) })
+  } else if (menu.kind === 'appearance') {
+    // What each looks like, in the words of Quarto's docs ("colored header",
+    // "header background color or icon"), each a step from the last.
+    const choices = [['default', 'Default', 'Colored header'], ['simple', 'Simple', 'No colored header'], ['minimal', 'Minimal', 'No colored header or icon']]
+    // Pictures of each, named (under them in a row, beside them in a menu):
+    // the pictures alone are too alike to tell apart at a glance.
+    if (opts.appearancePick === 'row') return row(choices.map(([a, name, sub]) => ({ icon: APPEARANCE_ICONS[a], label: name, tip: sub, on: c.appearance === a, act: () => change(c, () => { c.appearance = a }), preview: { appearance: a } })))
+    for (const [a, name, sub] of choices) item(APPEARANCE_ICONS[a], name, () => change(c, () => { c.appearance = a }), { check: c.appearance === a, sub, preview: { appearance: a } })
+  } else if (menu.kind === 'more') {
+    if (c.title) item(ICONS.title, 'Remove the title', () => change(c, () => { c.title = ''; if (sel?.u === 't:' + c.k) sel = { u: 'p:' + c.body[0].k, o: 0 } }))
+    item(ICONS.icon, 'Icon', () => change(c, () => { c.icon = !c.icon }), { check: hasIcon(c), disabled: c.appearance === 'minimal', hint: c.appearance === 'minimal' ? 'minimal has none' : '' })
+    // Named for what it does, as Add / Remove the title is: no on/off state
+    // to read. Collapsible callouts start collapsed (collapse="true"); this
+    // swaps that for starting open ("false"), and back.
+    if (c.collapse != null) item(ICONS.collapse, c.collapse ? 'Start open' : 'Start collapsed', () => change(c, () => setCollapse(c, !c.collapse)))
+    item(ICONS.numbered, 'Numbered', () => change(c, () => { c.id = c.id ? null : `${PREFIX[c.type]}-${slug(c.title || NAME[c.type])}` }), { check: Boolean(c.id), hint: c.id ? '#' + c.id : '' })
+    list.append(document.createElement('hr'))
+    const i = doc.indexOf(c)
+    item(ICONS.up, 'Move up', () => { menu = null; moveCallout(c, -1) }, { hint: '⌥⇧↑', disabled: i === 0, pin: false })
+    item(ICONS.down, 'Move down', () => { menu = null; moveCallout(c, 1) }, { hint: '⌥⇧↓', disabled: i === doc.length - 1, pin: false })
+    list.append(document.createElement('hr'))
+    item(ICONS.unwrap, 'Remove the callout', () => unwrap(c), { sub: 'Keeps what\'s in it', pin: false })
+    item(ICONS.delete, 'Delete', () => remove(c), { danger: true, pin: false })
+  }
+  place(list)
+}
+
+// ----------------------------------------------------------------- source
+function calloutQmd(c) {
+  const attrs = [c.id ? '#' + c.id : null, '.callout-' + c.type, c.appearance !== 'default' ? `appearance="${c.appearance}"` : null,
+    c.collapse != null ? `collapse="${c.collapse}"` : null, c.icon ? null : 'icon=false'].filter(Boolean)
+  const parts = []
+  if (c.title) parts.push('## ' + c.title)
+  parts.push(...c.body.map((p) => p.text).filter(Boolean))
+  return `::: {${attrs.join(' ')}}\n${parts.join('\n\n')}\n:::`
+}
+function figureQmd(f) {
+  const q = (v) => '"' + String(v).replace(/"/g, '\\"') + '"'
+  const attrs = [f.width ? `width=${q(f.width + '%')}` : null, f.align !== 'center' ? `fig-align=${q(f.align)}` : null, f.alt ? `fig-alt=${q(f.alt)}` : null].filter(Boolean)
+  return `![${f.title}](${f.src})` + (attrs.length ? `{${attrs.join(' ')}}` : '')
+}
+const objQmd = (b) => (isFigure(b) ? figureQmd(b) : calloutQmd(b))
+function renderSource() {
+  const out = document.getElementById('source')
+  const cur = caretCallout()?.k ?? locate(sel?.u)?.blk?.k
+  out.replaceChildren(...doc.map((b) => {
+    const el = document.createElement('div')
+    el.className = 'blk' + (b.k === cur || b.k === hoverK || b.k === hoverF ? ' cur' : '')
+    el.textContent = isObj(b) ? objQmd(b) : (b.tag === 'h2' ? '## ' : '') + b.text
+    return el
+  }))
+}
+
+// ------------------------------------------------------------------- keys
+editor.addEventListener('beforeinput', () => record(true))
+editor.addEventListener('input', (e) => {
+  const el = e.target.closest('[data-u]')
+  const loc = el && locate(el.dataset.u)
+  if (!loc) return
+  // Empty, it's truly empty, so its placeholder shows.
+  if (!el.textContent) { el.replaceChildren(); setCaret(el, 0) }
+  if (loc.title) {
+    loc.c.title = el.textContent
+    const num = el.parentElement.querySelector('.num')
+    if (num) num.textContent = `${NAME[loc.c.type]} ${numberOf(loc.c)}: `
+  } else loc.blk.text = el.textContent
+  lastState = snapshot()
+  renderSource()
+})
+
+editor.addEventListener('keydown', (e) => {
+  const el = e.target.closest?.('[data-u]')
+  if (!el) return
+  const u = el.dataset.u, loc = locate(u)
+  const at = caretIn(el)
+  if (!loc || !at) return
+  // Where the caret is now: selectionchange comes later than a key pressed
+  // straight after a click.
+  sel = { u, o: at.o }
+  const len = el.textContent.length
+  const list = units(), ui = list.indexOf(u)
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') goalX = null
+  const go = (v, end) => { const t = editor.querySelector(`[data-u="${v}"]`); if (!t) return; e.preventDefault(); sel = { u: v, o: end ? t.textContent.length : 0 }; setCaret(t, sel.o) }
+  if (e.altKey && e.shiftKey && !e.metaKey && !e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    e.preventDefault()
+    return moveByKey(loc, e.key === 'ArrowUp' ? -1 : 1)
+  }
+  if (e.metaKey || e.ctrlKey || e.altKey) return
+  // Shift with an arrow selects (selecting), within a line the browser's way.
+  if (e.shiftKey && e.key.startsWith('Arrow')) return
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    if (loc.title && isFigure(loc.c)) {
+      // Out of a caption: a paragraph after the figure (or on into the one
+      // there, if it's empty), as figure.html's ↵.
+      const i = doc.indexOf(loc.c), next = doc[i + 1]
+      if (next && !isObj(next) && !next.text) sel = { u: 'p:' + next.k, o: 0 }
+      else { record(); const p = para(''); doc.splice(i + 1, 0, p); sel = { u: 'p:' + p.k, o: 0 } }
+      return render()
+    }
+    if (loc.title) {
+      // On into its text.
+      const c = loc.c
+      if (!bodyShown(c)) peek.has(c.k) ? peek.delete(c.k) : peek.add(c.k)
+      if (!c.body.length) c.body.push(para(''))
+      sel = { u: 'p:' + c.body[0].k, o: 0 }
+      return render()
+    }
+    if (loc.c && !loc.blk.text && loc.i === loc.list.length - 1 && loc.list.length > 1) {
+      // An empty last line: out of the callout, as in Notion.
+      record()
+      loc.list.pop()
+      const p = para('')
+      doc.splice(doc.indexOf(loc.c) + 1, 0, p)
+      sel = { u: 'p:' + p.k, o: 0 }
+      return render()
+    }
+    record()
+    const p = para(loc.blk.text.slice(at.o))
+    loc.blk.text = loc.blk.text.slice(0, at.o)
+    loc.list.splice(loc.i + 1, 0, p)
+    sel = { u: 'p:' + p.k, o: 0 }
+    return render()
+  }
+  if (!at.collapsed) return
+  if (e.key === 'Backspace' && at.o === 0) {
+    e.preventDefault()
+    if (loc.title) { if (ui > 0) go(list[ui - 1], true); return }
+    const prev = loc.list[loc.i - 1]
+    if (prev && !isObj(prev)) {
+      record()
+      const o = prev.text.length
+      prev.text += loc.blk.text
+      loc.list.splice(loc.i, 1)
+      sel = { u: 'p:' + prev.k, o }
+      return render()
+    }
+    if (isObj(prev)) {
+      // After a callout: an empty line goes; a line of text doesn't join it.
+      // One that leaves a gap where it was (as typing in a gap made it) puts
+      // the caret back in that gap.
+      if (!loc.blk.text) {
+        record()
+        loc.list.splice(loc.i, 1)
+        if (loc.list === doc && isGap(loc.i)) { sel = { gap: loc.i }; return render() }
+        sel = null
+        render()
+      }
+      if (ui > 0) { const v = list[ui - 1]; const t = editor.querySelector(`[data-u="${v}"]`); if (t) { sel = { u: v, o: t.textContent.length }; setCaret(t, sel.o); renderToolbar(); renderSource(); renderLayer() } }
+      return
+    }
+    // The first line in a callout: back to its title, never out of it.
+    if (loc.c && showHeader(loc.c)) go('t:' + loc.c.k, true)
+    return
+  }
+  if (e.key === 'Delete' && at.o === len) {
+    e.preventDefault()
+    const next = loc.title ? null : loc.list[loc.i + 1]
+    if (next && !isObj(next)) {
+      record()
+      loc.blk.text += next.text
+      loc.list.splice(loc.i + 1, 1)
+      sel = { u, o: at.o }
+      return render()
+    }
+    // An empty line before a callout goes, back to the gap it leaves, if any.
+    if (next && !loc.blk.text && loc.list === doc) {
+      record()
+      doc.splice(loc.i, 1)
+      sel = isGap(loc.i) ? { gap: loc.i } : sel
+      return render()
+    }
+    return
+  }
+  // ↑/↓ off a line's edge: to the line above or below, where the caret was
+  // across the page (kept through a run of them), as between any lines.
+  const vertical = (v, line) => {
+    const t = editor.querySelector(`[data-u="${v}"]`)
+    if (!t) return
+    e.preventDefault()
+    goalX ??= caretX(el)
+    placeAtX(t, goalX, line)
+    sel = { u: v, o: caretIn(t)?.o ?? 0 }
+  }
+  // Off a block's first or last line, into the gap beside it, if there's
+  // one (no text there to hold a caret), before going on past it.
+  const b = blockOf(u)
+  const toGap = (dir) => {
+    const i = dir < 0 ? b : b + 1
+    const edge = dir < 0 ? unitsOf(b)[0] === u : unitsOf(b).at(-1) === u
+    if (!edge || !isGap(i)) return false
+    e.preventDefault()
+    goalX ??= caretX(el)
+    toGapAt(i)
+    return true
+  }
+  if (e.key === 'ArrowUp' && atLineEdge(el, -1, at.o, len)) { if (!toGap(-1) && ui > 0) vertical(list[ui - 1], 'last') }
+  else if (e.key === 'ArrowDown' && atLineEdge(el, 1, at.o, len)) { if (!toGap(1) && ui < list.length - 1) vertical(list[ui + 1], 'first') }
+  else if (e.key === 'ArrowLeft' && at.o === 0) { if (!toGap(-1) && ui > 0) go(list[ui - 1], true) }
+  else if (e.key === 'ArrowRight' && at.o === len) { if (!toGap(1) && ui < list.length - 1) go(list[ui + 1], false) }
+})
+// Where across the page ↑/↓ keep the caret, through a run of them.
+let goalX = null
+document.addEventListener('mousedown', () => { goalX = null }, true)
+/** The caret's x in el (its left edge, empty). */
+function caretX(el) {
+  const s = getSelection()
+  const rect = s.rangeCount ? s.getRangeAt(0).getClientRects()[0] : null
+  return rect ? rect.left : el.getBoundingClientRect().left
+}
+/** The caret in el's first or last line, as near x as that line goes. */
+function placeAtX(el, x, line) {
+  const r = el.getBoundingClientRect()
+  const lh = Math.min(parseFloat(getComputedStyle(el).lineHeight) || 24, r.height)
+  const y = line === 'first' ? r.top + lh / 2 : r.bottom - lh / 2
+  const cx = Math.max(r.left + 1, Math.min(x, r.right - 1))
+  let node = null, offset = 0
+  if (document.caretPositionFromPoint) { const pos = document.caretPositionFromPoint(cx, y); node = pos?.offsetNode; offset = pos?.offset ?? 0 }
+  else { const rg = document.caretRangeFromPoint(cx, y); node = rg?.startContainer; offset = rg?.startOffset ?? 0 }
+  if (!node || !el.contains(node)) return setCaret(el, line === 'first' ? 0 : el.textContent.length)
+  el.focus({ preventScroll: true })
+  const rg = document.createRange()
+  rg.setStart(node, offset)
+  rg.collapse(true)
+  const s = getSelection()
+  s.removeAllRanges()
+  s.addRange(rg)
+}
+
+/** Whether the caret's on the first (dir -1) or last (dir 1) line of el. */
+function atLineEdge(el, dir, o, len) {
+  const s = getSelection()
+  const rect = s.rangeCount ? s.getRangeAt(0).getClientRects()[0] : null
+  if (!rect) return dir < 0 ? o === 0 : o === len
+  const er = el.getBoundingClientRect()
+  const lh = parseFloat(getComputedStyle(el).lineHeight) || 24
+  return dir < 0 ? rect.top - er.top < lh * 0.8 : er.bottom - rect.bottom < lh * 0.8
+}
+
+document.addEventListener('keydown', (e) => {
+  const mod = e.metaKey || e.ctrlKey
+  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
+  else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo() }
+  else if (e.key === 'Escape' && menu) { menu = null; render() }
+  else if (e.key === 'Escape' && pinned) { pinned = null; renderLayer() }
+  // (Not a key the text already handled: moving into the gap is one.)
+  else if (sel?.gap != null && !mod && !e.altKey && !e.defaultPrevented) gapKey(e)
+})
+
+// Where the caret is: the toolbar, the source and the controls follow it.
+document.addEventListener('selectionchange', () => {
+  // A drag across lines: the selection is the editor's (selecting).
+  if (dragging) return
+  const el = document.activeElement?.closest?.('[data-u]')
+  if (!el || !editor.contains(el)) return
+  const at = caretIn(el)
+  if (!at) return
+  // Against where the toolbar last showed the caret: the arrows set sel
+  // before the selection moves.
+  const was = toolbarU
+  sel = { u: el.dataset.u, o: at.o }
+  if (was === sel.u) return
+  // A title emptied by typing, left: if it renders no header without one
+  // (simple, minimal), its header goes now, as rendered.
+  const left = was?.startsWith('t:') && calloutByKey(Number(was.slice(2)))
+  if (left && !showHeader(left) && editor.querySelector(`.callout[data-k="${left.k}"] > .callout-header`)) return render()
+  // So does a figure's caption.
+  const leftFig = was?.startsWith('t:') && objByKey(Number(was.slice(2)))
+  if (isFigure(leftFig) && !leftFig.title && !forceTitle.has(leftFig.k)) return render()
+  // A title (or caption) being added, left empty: it goes.
+  for (const k of [...forceTitle]) {
+    const c = objByKey(k)
+    if (sel.u !== 't:' + k && (!c || !c.title)) { forceTitle.delete(k); return render() }
+    if (c?.title) forceTitle.delete(k)
+  }
+  renderToolbar()
+  renderSource()
+  renderLayer()
+})
+
+document.addEventListener('mousemove', (e) => {
+  if (drag) return
+  const t = e.target
+  // Its settings for the callout under the pointer, anywhere in it (or its bar).
+  const box = t.closest?.('.callout'), header = box?.querySelector(':scope > .callout-header')
+  const k = Number(t.closest?.('[data-hk]')?.dataset.hk ?? box?.dataset.k ?? 0) || null
+  const g = hoveredBlock(e)
+  const gripMoved = g?.k !== grip?.k || g?.top !== grip?.top
+  grip = g
+  // The untitled hint: over the header, but stopping 24px short of its
+  // settings bar (or its right end, with none), not under the bar.
+  const bar = layer.querySelector('.hbar')?.getBoundingClientRect()
+  const hr = header?.getBoundingClientRect()
+  const limit = hr && (bar && bar.bottom > hr.top && bar.top < hr.bottom ? bar.left : hr.right) - 24
+  const hint = hr && header.contains(t) && e.clientX < limit ? Number(box.dataset.k) : null
+  if (hint !== hintK) {
+    hintK = hint
+    for (const el of editor.querySelectorAll('.title.hinted')) el.classList.toggle('hint-on', Number(el.dataset.u.slice(2)) === hintK)
+  }
+  // A bar kept after a pick: until the pointer's away from it.
+  if (pinned && !inPinned(e)) { pinned = null; hoverK = k; renderSource(); return renderLayer() }
+  if (k === hoverK && !gripMoved) return
+  if (k !== hoverK) { hoverK = k; renderSource() }
+  renderLayer()
+})
+
+// ----------------------------------------------------------- gap caret
+// Between two blocks with no text to hold a caret (two callouts; a callout
+// at the start or end), the caret is a gap: { gap: i }, before doc[i], as
+// beside a figure in blocks.html (and ProseMirror's gap cursor). Typing
+// there starts a paragraph; the arrows go on into the blocks either side.
+const isText = (blk) => blk && !isObj(blk)
+/** Whether there's a gap before doc[i]. */
+function isGap(i) {
+  if (i < 0 || i > doc.length) return false
+  const before = doc[i - 1], after = doc[i]
+  return !isText(before) && !isText(after) && Boolean(before || after)
+}
+/** The top-level block a unit of text is in. */
+function blockOf(u) {
+  const loc = locate(u)
+  return loc.c ? doc.indexOf(loc.c) : loc.i
+}
+/** The units of text in doc[b], in order. */
+const unitsOf = (b) => units().filter((v) => blockOf(v) === b)
+function toGapAt(i) {
+  sel = { gap: i }
+  getSelection().removeAllRanges()
+  editor.focus({ preventScroll: true })
+  renderToolbar()
+  renderSource()
+  renderLayer()
+}
+function renderGapCaret() {
+  if (sel?.gap == null) return
+  const i = sel.gap, kids = editor.children, er = editor.getBoundingClientRect()
+  const a = kids[i - 1]?.getBoundingClientRect(), b = kids[i]?.getBoundingClientRect()
+  const y = a && b ? (a.bottom + b.top) / 2 : a ? a.bottom + 10 : b.top - 10
+  const caret = Object.assign(document.createElement('div'), { className: 'gap-caret' })
+  caret.style.left = er.left + 'px'
+  caret.style.top = y - 0.5 + 'px'
+  layer.append(caret)
+}
+/** Keys with the caret in a gap. */
+function gapKey(e) {
+  const i = sel.gap
+  const into = (b, end) => {
+    const list = unitsOf(b)
+    const v = end ? list.at(-1) : list[0]
+    const t = v && editor.querySelector(`[data-u="${v}"]`)
+    if (!t) return
+    if (goalX != null && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) placeAtX(t, goalX, end ? 'last' : 'first')
+    else setCaret(t, end ? t.textContent.length : 0)
+    sel = { u: v, o: caretIn(t)?.o ?? 0 }
+    // Out of the gap: its caret goes (selectionchange won't redraw it, since
+    // sel already says where the caret is).
+    renderToolbar()
+    renderSource()
+    renderLayer()
+  }
+  if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); if (e.key === 'ArrowLeft') goalX = null; if (i > 0) into(i - 1, true) }
+  else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); if (e.key === 'ArrowRight') goalX = null; if (i < doc.length) into(i, false) }
+  else if (e.key === 'Enter' || e.key.length === 1) {
+    // A paragraph here, the character in it.
+    e.preventDefault()
+    record()
+    const p = para(e.key === 'Enter' ? '' : e.key)
+    doc.splice(i, 0, p)
+    sel = { u: 'p:' + p.k, o: p.text.length }
+    render()
+  }
+  else if (e.key === 'Backspace' && i > 0) { e.preventDefault(); into(i - 1, true) }
+  else if (e.key === 'Delete' && i < doc.length) { e.preventDefault(); into(i, false) }
+}
+// A click in the space between two blocks, where there's a gap: the caret
+// goes there. Over that space the pointer is a text caret (I-beam), as over
+// text, so it's plain a click there puts the caret somewhere.
+/** The gap under the pointer, if it's in the space between two blocks, or null. */
+function gapAt(e) {
+  if (e.target !== editor && e.target !== page) return null
+  const kids = [...editor.children]
+  for (let i = 0; i <= kids.length; i++) {
+    const a = kids[i - 1]?.getBoundingClientRect(), b = kids[i]?.getBoundingClientRect()
+    const top = a ? a.bottom : -Infinity, bottom = b ? b.top : Infinity
+    if (e.clientY >= top && e.clientY <= bottom) return isGap(i) ? i : null
+  }
+  return null
+}
+const page = document.querySelector('.page')
+page.addEventListener('mousedown', (e) => {
+  const i = gapAt(e)
+  if (i == null) return
+  e.preventDefault()
+  goalX = null
+  toGapAt(i)
+})
+page.addEventListener('mousemove', (e) => { page.style.cursor = gapAt(e) == null ? '' : 'text' })
+
+// ----------------------------------------------------------- selecting
+// Each line here is its own editable element, so the browser's selection
+// stays in one. Within a line it's the browser's; once one end leaves the
+// line, the selection is the editor's: sel = { anchor, focus }, where a
+// position is { u, o } in a line or { edge: i } between blocks i - 1 and i,
+// painted on #selayer. What it covers (effective) is up to where its ends
+// are, never how they got there (opts.select, opts.crossTitle).
+const selLayer = document.getElementById('selayer')
+const unitEl = (u) => editor.querySelector(`[data-u="${u}"]`)
+const unitText = (u) => { const loc = locate(u); return loc.title ? loc.c.title : loc.blk.text }
+/** Positions in reading order: an edge comes before the block it's before. */
+function posKey(p) {
+  if (p.edge != null) return [p.edge, -1, 0]
+  const b = blockOf(p.u)
+  return [b, unitsOf(b).indexOf(p.u), p.o]
+}
+function cmp(p, q) {
+  const a = posKey(p), b = posKey(q)
+  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2]
+}
+/** The callout a position's in, and which part of it: its title (t) or its text (b). */
+function partOf(p) {
+  if (p.u == null) return null
+  const loc = locate(p.u)
+  return loc?.c ? { c: loc.c, part: loc.title ? 't' : 'b' } : null
+}
+const inCallout = (p, c) => partOf(p)?.c === c
+// Selected whole: from outside it in, as opts.select says (a collapsed one
+// always, its text being out of sight; and an object with no text in it at
+// all, a figure with no caption).
+const wholeFromOutside = (c) => opts.select === 'whole' || !bodyShown(c) || !unitsOf(doc.indexOf(c)).length
+
+/** What the selection covers: [start, end]. */
+function effective(a = sel.anchor, f = sel.focus) {
+  let [s, e] = cmp(a, f) <= 0 ? [a, f] : [f, a]
+  const ps = partOf(s), pe = partOf(e)
+  if (ps?.c !== pe?.c) {
+    if (ps && wholeFromOutside(ps.c)) s = { edge: doc.indexOf(ps.c) }
+    if (pe && wholeFromOutside(pe.c)) e = { edge: doc.indexOf(pe.c) + 1 }
+  }
+  if (opts.crossTitle === 'text') return [s, e]
+  // Across a callout's title and its text, wherever the other end is (in
+  // its text, or past it): as opts.crossTitle says, from that end.
+  const titleEnd = (c) => ({ u: 't:' + c.k, o: c.title.length }), bodyStart = (c) => ({ u: 'p:' + c.body[0].k, o: 0 })
+  const S = partOf(s), E = partOf(e)
+  if (S?.part === 't' && bodyShown(S.c) && cmp(e, titleEnd(S.c)) > 0) {
+    s = opts.crossTitle === 'callout' ? { edge: doc.indexOf(S.c) } : { u: 't:' + S.c.k, o: 0 }
+  }
+  if (E?.part === 'b' && showHeader(E.c) && cmp(s, bodyStart(E.c)) < 0) {
+    const last = E.c.body.at(-1)
+    e = opts.crossTitle === 'callout' ? { edge: doc.indexOf(E.c) + 1 } : { u: 'p:' + last.k, o: last.text.length }
+  }
+  return [s, e]
+}
+/** What of line u [start, end] covers, as [from, to] offsets; null for none of it. */
+function cover(u, s, e) {
+  const uS = { u, o: 0 }, uE = { u, o: unitText(u).length }
+  const from = cmp(s, uS) > 0 ? s : uS, to = cmp(e, uE) < 0 ? e : uE
+  return cmp(from, to) > 0 ? null : [from.o, to.o]
+}
+/** Whether block i, as a block (a callout itself, not its text), is in [s, e]. */
+const blockIn = (i, s, e) => cmp(s, { edge: i }) <= 0 && cmp(e, { edge: i + 1 }) >= 0
+/** Whether all of what's in block i is in [s, e]. */
+function allOf(i, s, e) {
+  const us = unitsOf(i)
+  if (!us.length || blockIn(i, s, e)) return blockIn(i, s, e)
+  return cmp(s, { u: us[0], o: 0 }) <= 0 && cmp(e, { u: us.at(-1), o: unitText(us.at(-1)).length }) >= 0
+}
+
+// ---- where things are on the page
+/** Offset in el of a point in it. */
+function offsetIn(el, node, off) {
+  const r = document.createRange()
+  r.selectNodeContents(el)
+  r.setEnd(node, off)
+  return r.toString().length
+}
+/** The caret's box at offset o in el: { x, top, bottom }. */
+function caretRect(el, o) {
+  const t = el.firstChild
+  if (!t || t.nodeType !== 3 || !t.length) {
+    const b = el.getBoundingClientRect(), lh = parseFloat(getComputedStyle(el).lineHeight) || 24
+    return { x: b.left, top: b.top, bottom: b.top + Math.min(lh, b.height || lh) }
+  }
+  const r = document.createRange()
+  // By the character after it, if any: at a line's wrap, the caret is at
+  // the start of the next line.
+  if (o < t.length) { r.setStart(t, o); r.setEnd(t, o + 1); const b = r.getClientRects()[0]; if (b) return { x: b.left, top: b.top, bottom: b.bottom } }
+  r.setStart(t, Math.max(0, o - 1)); r.setEnd(t, o)
+  const b = [...r.getClientRects()].at(-1)
+  return { x: b.right, top: b.top, bottom: b.bottom }
+}
+/** el's lines, top to bottom: [{ top, bottom }]. */
+function lineBoxes(el) {
+  const r = document.createRange()
+  r.selectNodeContents(el)
+  const out = []
+  for (const b of [...r.getClientRects()].filter((b) => b.height > 0).sort((a, b) => a.top - b.top)) {
+    const last = out.at(-1)
+    if (last && b.top < last.bottom - 2) last.bottom = Math.max(last.bottom, b.bottom)
+    else out.push({ top: b.top, bottom: b.bottom })
+  }
+  return out
+}
+/** The offset in el nearest x on its line (a { top, bottom }). */
+function offsetAt(el, x, line) {
+  // A point off the screen has no caret position: that line in sight first.
+  const dy = scrollToShow(line.top, line.bottom)
+  line = { top: line.top - dy, bottom: line.bottom - dy }
+  const r = el.getBoundingClientRect()
+  const cx = Math.max(r.left + 1, Math.min(x, r.right - 1)), y = (line.top + line.bottom) / 2
+  let node = null, off = 0
+  if (document.caretPositionFromPoint) { const p = document.caretPositionFromPoint(cx, y); node = p?.offsetNode; off = p?.offset ?? 0 }
+  else { const p = document.caretRangeFromPoint(cx, y); node = p?.startContainer; off = p?.startOffset ?? 0 }
+  return node && el.contains(node) ? offsetIn(el, node, off) : null
+}
+/**
+ * A position under the pointer: a gap, or in the line nearest it (over a
+ * callout's icon, border or padding, between paragraphs, in the margins),
+ * as the browser finds the text nearest the pointer in one long text.
+ */
+function pointPos(e) {
+  const g = gapAt(e)
+  if (g != null) return { edge: g }
+  // Over a figure's image: before the figure or after it, by which half of
+  // the image (there's no text in an image to be at).
+  const fig = e.target.closest?.('figure')
+  if (fig && editor.contains(fig) && !e.target.closest('[data-u]')) {
+    const i = [...editor.children].indexOf(fig), fr = fig.querySelector('.frame').getBoundingClientRect()
+    if (e.clientY <= fr.bottom + 4) return { edge: e.clientY < (fr.top + fr.bottom) / 2 ? i : i + 1 }
+  }
+  let el = e.target.closest?.('[data-u]')
+  if (!el || !editor.contains(el)) {
+    // Only over the page: not the toolbar, the choices or the source.
+    if (!page.contains(e.target)) return null
+    // In a callout: one of its lines; anywhere else, any.
+    const inBox = e.target.closest?.('.callout')
+    const els = [...(inBox && editor.contains(inBox) ? inBox : editor).querySelectorAll('[data-u]')]
+    const dist = (x) => { const r = x.getBoundingClientRect(); return e.clientY < r.top ? r.top - e.clientY : e.clientY > r.bottom ? e.clientY - r.bottom : 0 }
+    el = els.reduce((best, x) => (!best || dist(x) < dist(best) ? x : best), null)
+    if (!el) return null
+  }
+  const lines = lineBoxes(el)
+  const line = lines.find((l) => e.clientY >= l.top && e.clientY <= l.bottom) ?? (e.clientY < (lines[0]?.top ?? 0) ? lines[0] : lines.at(-1))
+  const o = line ? offsetAt(el, e.clientX, line) : null
+  return { u: el.dataset.u, o: o ?? (e.clientX < el.getBoundingClientRect().left + el.offsetWidth / 2 ? 0 : el.textContent.length) }
+}
+
+// ---- moving one end
+// Where across the page Shift with ↑/↓ keeps the selection's moving end.
+let selGoalX = null
+const posX = (p) => (p.u != null ? caretRect(unitEl(p.u), p.o).x : editor.getBoundingClientRect().left)
+
+/** A step within line p.u; null at its edge, where it'd leave it. */
+function stepInLine(p, dir, vertical) {
+  const len = unitText(p.u).length
+  if (!vertical) return p.o + dir < 0 || p.o + dir > len ? null : { u: p.u, o: p.o + dir }
+  // A title is one field, however it wraps: ↑ to its start, ↓ to its end.
+  if (p.u.startsWith('t:')) { const o = dir < 0 ? 0 : len; return o === p.o ? null : { u: p.u, o } }
+  const el = unitEl(p.u), lines = lineBoxes(el)
+  const r = caretRect(el, p.o), mid = (r.top + r.bottom) / 2
+  const at = lines.findIndex((l) => mid >= l.top && mid <= l.bottom)
+  const to = lines[(at < 0 ? (dir > 0 ? lines.length - 1 : 0) : at) + dir]
+  if (!to) return null
+  return { u: p.u, o: offsetAt(el, selGoalX ?? r.x, to) ?? (dir > 0 ? len : 0) }
+}
+/** Arriving in line v going dir: its start (end), or for ↑/↓ its first (last) line at the goal. */
+function arrive(v, dir, vertical) {
+  const el = unitEl(v), len = unitText(v).length
+  // Into a title, at its near end (a field, as stepInLine).
+  if (!vertical || selGoalX == null || v.startsWith('t:')) return { u: v, o: dir > 0 ? 0 : len }
+  const lines = lineBoxes(el)
+  const line = dir > 0 ? lines[0] : lines.at(-1)
+  return { u: v, o: (line && offsetAt(el, selGoalX, line)) ?? (dir > 0 ? 0 : len) }
+}
+/**
+ * Into the block on the far side of edge i, going dir. A callout the
+ * anchor's not in, selected whole from outside: over it, to its far edge.
+ * One it's in: into the part of it the anchor's in, so coming back
+ * retraces the way out.
+ */
+function beyond(i, dir, anchor, vertical) {
+  const n = dir > 0 ? i : i - 1, blk = doc[n]
+  if (!blk) return null
+  if (isObj(blk) && !inCallout(anchor, blk) && wholeFromOutside(blk)) {
+    // Its edge, not into the text past it: the break before that text
+    // isn't selected, so it isn't shown selected.
+    return { edge: dir > 0 ? n + 1 : n }
+  }
+  let us = unitsOf(n)
+  if (isObj(blk) && inCallout(anchor, blk) && opts.crossTitle !== 'text') {
+    const part = partOf(anchor).part
+    us = us.filter((u) => u.startsWith(part === 't' ? 't:' : 'p:'))
+  }
+  return arrive(dir > 0 ? us[0] : us.at(-1), dir, vertical)
+}
+/** The selection's moving end, a step on: null at the document's end. */
+function stepFocus(p, dir, vertical, anchor) {
+  if (p.edge != null) return beyond(p.edge, dir, anchor, vertical)
+  const inLine = stepInLine(p, dir, vertical)
+  if (inLine) return inLine
+  const list = units(), b = blockOf(p.u), v = list[list.indexOf(p.u) + dir]
+  if (v != null && blockOf(v) === b) {
+    // Between a callout's title and its text. With the anchor on the other
+    // side, crossing selects them whole (opts.crossTitle): to the far end of
+    // this part, so the next step leaves the callout.
+    const here = partOf(p), there = partOf({ u: v, o: 0 })
+    if (opts.crossTitle !== 'text' && here.part !== there.part && inCallout(anchor, here.c) && partOf(anchor).part === here.part) {
+      if (dir < 0) return { u: v, o: 0 }
+      const last = here.c.body.at(-1)
+      return { u: 'p:' + last.k, o: last.text.length }
+    }
+    return arrive(v, dir, vertical)
+  }
+  // Off the block: into the gap past it, if there's one, or on beyond it.
+  const i = dir > 0 ? b + 1 : b
+  if (isGap(i)) return { edge: i }
+  // Out of the callout the anchor's in, selected whole from outside: first
+  // just the callout, a step of its own (its edge), then on past it.
+  const here = partOf(p)?.c
+  if (here && inCallout(anchor, here) && wholeFromOutside(here)) return { edge: i }
+  // Toward a callout that'd be selected whole: first to its edge, out of
+  // this text (on, if that shows nothing new; see extend), then over it.
+  const there = doc[dir > 0 ? i : i - 1]
+  if (isObj(there) && !inCallout(anchor, there) && wholeFromOutside(there)) return { edge: i }
+  const on = beyond(i, dir, anchor, vertical)
+  if (on) return on
+  // ↑ on the document's first line (↓ on its last): to its start (end).
+  const end = dir < 0 ? 0 : unitText(p.u).length
+  return end === p.o ? null : { u: p.u, o: end }
+}
+
+/** Select from anchor to focus: within one line, the browser's own selection. */
+function setRange(anchor, focus) {
+  if (anchor.u != null && anchor.u === focus.u) {
+    const el = unitEl(anchor.u), t = el.firstChild
+    el.focus({ preventScroll: true })
+    if (t?.nodeType === 3) getSelection().setBaseAndExtent(t, anchor.o, t, focus.o)
+    else setCaret(el, 0)
+    sel = { u: anchor.u, o: focus.o }
+  } else if (anchor.edge != null && anchor.edge === focus.edge) return toGapAt(anchor.edge)
+  else if (!coverage(...effective(anchor, focus)).length) {
+    // Covering nothing (from the end of a line to the edge after it): the
+    // caret, where the selection began.
+    sel = caretAt(anchor)
+    return render()
+  } else {
+    sel = { anchor, focus }
+    getSelection().removeAllRanges()
+    editor.focus({ preventScroll: true })
+  }
+  reveal(focus)
+  renderToolbar()
+  renderSource()
+  renderLayer()
+}
+/** Scroll the page just enough to show position p (as the browser does a caret). */
+function reveal(p) {
+  let top, bottom
+  if (p.u != null) ({ top, bottom } = caretRect(unitEl(p.u), p.o))
+  else {
+    const a = editor.children[p.edge - 1]?.getBoundingClientRect(), b = editor.children[p.edge]?.getBoundingClientRect()
+    top = a ? a.bottom : b.top
+    bottom = b ? b.top : a.bottom
+  }
+  scrollToShow(top, bottom)
+}
+/** Scroll the page just enough to show from top to bottom (on the screen now); how far it went. */
+function scrollToShow(top, bottom) {
+  const sc = document.getElementById('scroller'), r = sc.getBoundingClientRect(), pad = 40, was = sc.scrollTop
+  if (top < r.top + pad) sc.scrollBy(0, top - r.top - pad)
+  else if (bottom > r.bottom - pad) sc.scrollBy(0, bottom - r.bottom + pad)
+  return sc.scrollTop - was
+}
+/** The caret at a position: an edge's, its gap, or the text beside it. */
+function caretAt(p) {
+  if (p.u != null) return { u: p.u, o: p.o }
+  const i = Math.min(p.edge, doc.length)
+  const after = doc[i], before = doc[i - 1]
+  if (isGap(i)) return { gap: i }
+  if (isText(after)) return { u: 'p:' + after.k, o: 0 }
+  if (isText(before)) return { u: 'p:' + before.k, o: before.text.length }
+  return { gap: i }
+}
+/** Where the caret (or the browser's selection's anchor) is now, as a position. */
+function anchorNow() {
+  if (sel?.anchor) return sel.anchor
+  if (sel?.gap != null) return { edge: sel.gap }
+  if (sel?.u == null) return null
+  const el = unitEl(sel.u), s = getSelection()
+  return { u: sel.u, o: el && s.rangeCount && el.contains(s.anchorNode) ? offsetIn(el, s.anchorNode, s.anchorOffset) : sel.o }
+}
+
+// ---- editing what's selected
+/** Line by line, a callout's title (0) and paragraphs (1…). */
+const cellOf = (c, p) => (p.u.startsWith('t:') ? 0 : 1 + c.body.findIndex((x) => 'p:' + x.k === p.u))
+const cellText = (c, i) => (i === 0 ? c.title : c.body[i - 1].text)
+function setCell(c, i, text) { if (i === 0) c.title = text; else c.body[i - 1].text = text }
+/**
+ * Take [from, to] out of a callout (null: from its start, to its end). Its
+ * paragraphs join where the cut meets in them; its title never joins one.
+ */
+function cutCallout(c, from, to) {
+  // A figure's only line is its caption.
+  if (isFigure(c)) { c.title = c.title.slice(0, from ? from.o : 0) + c.title.slice(to ? to.o : c.title.length); return }
+  const fi = from ? cellOf(c, from) : 0, fo = from ? from.o : 0
+  const ti = to ? cellOf(c, to) : c.body.length, to_ = to ? to.o : cellText(c, ti).length
+  if (fi === ti) setCell(c, fi, cellText(c, fi).slice(0, fo) + cellText(c, fi).slice(to_))
+  else {
+    setCell(c, fi, cellText(c, fi).slice(0, fo))
+    setCell(c, ti, cellText(c, ti).slice(to_))
+    // The paragraphs between go (cells fi + 1 … ti - 1 are body fi … ti - 2).
+    c.body.splice(fi, ti - 1 - fi)
+    // Both in its text: the two paragraphs join.
+    if (fi >= 1) { const [end] = c.body.splice(fi, 1); c.body[fi - 1].text += end.text }
+  }
+  if (!c.body.length) c.body.push(para(''))
+}
+/** Delete [s, e]; the caret where it began. Two lines of text either side join. */
+function deleteRange([s, e]) {
+  const sb = s.edge ?? blockOf(s.u), eb = e.edge != null ? e.edge - 1 : blockOf(e.u)
+  if (sb > eb) return
+  record()
+  const S = doc[sb], E = doc[eb]
+  let caret
+  if (sb === eb) {
+    if (s.edge != null && e.edge != null) { doc.splice(sb, 1); caret = { edge: sb } }
+    else if (!isObj(S)) { const a = s.edge != null ? 0 : s.o, b = e.edge != null ? S.text.length : e.o; S.text = S.text.slice(0, a) + S.text.slice(b); caret = { u: 'p:' + S.k, o: a } }
+    else { cutCallout(S, s.edge != null ? null : s, e.edge != null ? null : e); caret = s.edge != null ? { edge: sb } : s }
+  } else {
+    const keepE = e.edge == null, keepS = s.edge == null
+    if (keepE) { if (!isObj(E)) E.text = E.text.slice(e.o); else cutCallout(E, null, e) }
+    if (keepS) { if (!isObj(S)) S.text = S.text.slice(0, s.o); else cutCallout(S, s, null) }
+    const from = keepS ? sb + 1 : sb, to = keepE ? eb : eb + 1
+    doc.splice(from, to - from)
+    if (keepS && keepE && !isObj(S) && !isObj(E)) { S.text += E.text; doc.splice(sb + 1, 1) }
+    caret = keepS ? s : { edge: sb }
+  }
+  if (!doc.length) doc.push(para(''))
+  // The caret left in a caption that's all gone: it stays, to type in.
+  const capFig = caret.u?.startsWith('t:') && objByKey(Number(caret.u.slice(2)))
+  if (isFigure(capFig) && !capFig.title) forceTitle.add(capFig.k)
+  sel = caretAt(caret)
+}
+/** Type ch at the caret (in a gap, a paragraph with it). */
+function insertText(ch) {
+  if (sel.gap != null) { const p = para(ch); doc.splice(sel.gap, 0, p); sel = { u: 'p:' + p.k, o: 1 }; return render() }
+  const loc = locate(sel.u)
+  const t = unitText(sel.u), text = t.slice(0, sel.o) + ch + t.slice(sel.o)
+  if (loc.title) loc.c.title = text
+  else loc.blk.text = text
+  sel = { u: sel.u, o: sel.o + 1 }
+  render()
+}
+/** What [s, e] covers, as qmd: a callout partly covered, in its fences with what of it is. */
+function qmdOf([s, e]) {
+  const parts = []
+  doc.forEach((b, i) => {
+    if (!isObj(b)) {
+      const r = cover('p:' + b.k, s, e)
+      if (r && r[0] < r[1]) parts.push((b.tag === 'h2' ? '## ' : '') + b.text.slice(...r))
+      return
+    }
+    if (allOf(i, s, e)) return parts.push(objQmd(b))
+    const us = unitsOf(i)
+    const slice = (u) => { if (!us.includes(u)) return ''; const r = cover(u, s, e); return r ? unitText(u).slice(...r) : '' }
+    // A figure partly covered: the figure, with what of its caption is.
+    if (isFigure(b)) { const title = slice('t:' + b.k); if (title) parts.push(figureQmd({ ...b, title })); return }
+    const title = slice('t:' + b.k), body = b.body.map((p) => ({ text: slice('p:' + p.k) })).filter((p) => p.text)
+    if (title || body.length) parts.push(calloutQmd({ ...b, title, body }))
+  })
+  return parts.join('\n\n')
+}
+
+// ---- drawing it
+function renderSelection() {
+  selLayer.replaceChildren()
+  if (!sel?.anchor) return
+  const [s, e] = effective()
+  const at = selLayer.getBoundingClientRect()
+  const paint = (r, cls = 'sel-box') => {
+    const d = Object.assign(document.createElement('div'), { className: cls })
+    Object.assign(d.style, { left: r.left - at.left + 'px', top: r.top - at.top + 'px', width: r.width + 'px', height: r.height + 'px' })
+    selLayer.append(d)
+  }
+  for (const c of coverage(s, e)) {
+    // A callout selected as a block: all of it, as a block.
+    if (c.block != null) {
+      const el = editor.children[c.block]
+      // A figure: over its image and caption, a little past their edges.
+      if (el.tagName === 'FIGURE') {
+        const rs = [...el.querySelectorAll('.frame, figcaption')].map((x) => x.getBoundingClientRect())
+        const left = Math.min(...rs.map((r) => r.left)) - 4, right = Math.max(...rs.map((r) => r.right)) + 4
+        const top = Math.min(...rs.map((r) => r.top)) - 4, bottom = Math.max(...rs.map((r) => r.bottom)) + 4
+        paint({ left, top, width: right - left, height: bottom - top }, 'sel-box sel-block')
+      } else paint(el.getBoundingClientRect(), 'sel-box sel-block')
+      continue
+    }
+    const el = unitEl(c.u), t = el.firstChild
+    if (c.from < c.to && t?.nodeType === 3) {
+      const rg = document.createRange()
+      rg.setStart(t, c.from); rg.setEnd(t, c.to)
+      for (const box of rg.getClientRects()) paint(box)
+    }
+    // On past its end: a sliver for the line's end, as Google Docs shows it.
+    if (c.tail) {
+      const r = caretRect(el, unitText(c.u).length)
+      paint({ left: r.x, top: r.top, width: 6, height: r.bottom - r.top })
+    }
+  }
+}
+/** What's drawn selected for [s, e]: callouts as blocks, and lines' covered text. */
+function coverage(s, e) {
+  const out = []
+  doc.forEach((b, i) => {
+    if (isObj(b) && blockIn(i, s, e)) return out.push({ block: i })
+    for (const u of unitsOf(i)) {
+      const r = cover(u, s, e)
+      // Its line break, shown selected (a sliver past its end) only where
+      // it goes on deleting: the line joins the next one, or goes whole. A
+      // title's never does, nor a line beside a callout.
+      const title = u.startsWith('t:')
+      const joins = e.u != null && !e.u.startsWith('t:') && partOf(e)?.c === partOf({ u })?.c
+      const tail = Boolean(r) && !title && cmp(e, { u, o: unitText(u).length }) > 0 && (joins || cmp(s, { u, o: 0 }) <= 0)
+      if (r && (r[0] < r[1] || tail)) out.push({ u, from: r[0], to: r[1], tail })
+    }
+  })
+  return out
+}
+
+// ---- keys and the pointer
+document.addEventListener('keydown', (e) => {
+  const mod = e.metaKey || e.ctrlKey
+  const arrow = e.key.startsWith('Arrow')
+  const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1
+  const vertical = e.key === 'ArrowUp' || e.key === 'ArrowDown'
+  const done = () => { e.preventDefault(); e.stopPropagation() }
+  if (sel?.anchor) {
+    // Undo, copy and cut go on as ever; a modifier alone does nothing.
+    if (mod || e.altKey || ['Shift', 'Meta', 'Control', 'Alt', 'CapsLock', 'Tab'].includes(e.key) || (e.key === 'Escape' && (menu || pinned))) return
+    if (arrow && e.shiftKey) {
+      if (!vertical) selGoalX = null
+      else selGoalX ??= posX(sel.focus)
+      extend(sel.anchor, sel.focus, dir, vertical)
+    } else if (arrow) {
+      // To its start (←/↑) or end (→/↓).
+      const [s, en] = effective()
+      sel = caretAt(dir < 0 ? s : en)
+      render()
+    } else if (e.key === 'Escape') { sel = caretAt(sel.focus); render() }
+    else if (e.key === 'Backspace' || e.key === 'Delete') { deleteRange(effective()); render() }
+    else if (e.key === 'Enter') {
+      deleteRange(effective())
+      render()
+      done()
+      // Then Enter where the caret is, as ever.
+      return document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    } else if (e.key.length === 1) { deleteRange(effective()); insertText(e.key) }
+    else return
+    return done()
+  }
+  if (!arrow || !e.shiftKey || mod || e.altKey) return
+  // Shift and an arrow at the edge of a line (or from a gap): the
+  // selection becomes the editor's. Anywhere else, the browser's.
+  let anchor, focus
+  if (sel?.gap != null) {
+    anchor = focus = { edge: sel.gap }
+    selGoalX = vertical ? goalX ?? editor.getBoundingClientRect().left : null
+  } else {
+    const el = document.activeElement?.closest?.('[data-u]'), s = getSelection()
+    if (!el || !editor.contains(el) || !s.rangeCount || !el.contains(s.focusNode)) return
+    anchor = { u: el.dataset.u, o: offsetIn(el, s.anchorNode, s.anchorOffset) }
+    focus = { u: el.dataset.u, o: offsetIn(el, s.focusNode, s.focusOffset) }
+    selGoalX = vertical ? caretRect(el, focus.o).x : null
+    const inLine = stepInLine(focus, dir, vertical)
+    // Within the line, the browser's; but a title's ↑/↓ go to its ends.
+    if (inLine && !(vertical && focus.u.startsWith('t:'))) return
+  }
+  done()
+  extend(anchor, focus, dir, vertical)
+}, true)
+
+// Shift and an arrow in a row, as steps (opts.titleKeys): with "retrace",
+// one back the other way undoes the last, wherever it went.
+let steps = []
+const samePos = (p, q) => Boolean(p && q) && p.edge === q.edge && p.u === q.u && p.o === q.o
+/** Move the selection's focus a step, from anchor and focus as they are now. */
+function extend(anchor, focus, dir, vertical) {
+  const last = steps.at(-1)
+  if (!last || !samePos(last.anchor, anchor) || !samePos(last.to, focus)) steps = []
+  else if (opts.titleKeys === 'retrace' && last.dir === -dir && last.vertical === vertical) {
+    steps.pop()
+    return setRange(anchor, last.from)
+  }
+  // Every press changes what's selected: a step that doesn't (into a
+  // callout's text that's all selected anyway, out to its edge) goes on.
+  const shown = (f) => JSON.stringify(coverage(...effective(anchor, f)))
+  const was = shown(focus)
+  let to = stepFocus(focus, dir, vertical, anchor)
+  for (let next = to; next; next = stepFocus(next, dir, vertical, anchor)) {
+    to = next
+    if (shown(to) !== was) break
+  }
+  if (!to) return
+  steps.push({ anchor, from: focus, to, dir, vertical })
+  setRange(anchor, to)
+}
+
+// Shift-click: from the caret (or the selection's anchor) to there. A drag
+// from one line into another: the editor's selection, from where it began.
+let dragFrom = null, dragging = false
+document.addEventListener('mousedown', (e) => {
+  if (e.button !== 0 || layer.contains(e.target) || e.target.closest?.('.hui, .chev, .kslot')) return
+  // On what's selected: it moves, dragged (pressMove). Not the second or
+  // third press of a double or triple click, which selects a word or a line.
+  const range = !e.shiftKey && e.detail < 2 && selectionUnder(e)
+  // An image: a click selects its figure, whole, as figure.html's; pressed
+  // and dragged, what's selected moves (the figure, or a selection it's in).
+  const frame = !e.shiftKey && e.target.closest?.('figure .frame')
+  if (frame && editor.contains(frame)) {
+    const i = [...editor.children].indexOf(frame.closest('figure'))
+    const selectIt = () => setRange({ edge: i }, { edge: i + 1 })
+    if (range) return pressMove(e, range, selectIt)
+    e.preventDefault()
+    e.stopPropagation()
+    selectIt()
+    return pressMove(e, effective(), () => {})
+  }
+  if (range) return pressMove(e, range)
+  selGoalX = null
+  const p = pointPos(e)
+  const anchor = e.shiftKey && p ? anchorNow() : null
+  if (anchor) {
+    e.preventDefault()
+    e.stopPropagation()
+    setRange(anchor, p)
+    dragFrom = anchor
+    return
+  }
+  dragFrom = p
+  // A double or triple click's drag goes by words or lines, keeping the
+  // word or line clicked: what it selected, from where it starts.
+  dragGrain = p?.u != null && e.detail >= 2 ? (e.detail >= 3 ? 'line' : 'word') : null
+  dragFirst = dragGrain ? grainAround(p, dragGrain) : null
+  clickFrom = sel?.anchor ? p : null
+}, true)
+let dragGrain = null, dragFirst = null
+const WORD = /[\p{L}\p{N}_'’]/u
+/** The word or line around p, as [start, end]. */
+function grainAround(p, grain) {
+  const t = unitText(p.u)
+  if (grain === 'line') return [{ u: p.u, o: 0 }, { u: p.u, o: t.length }]
+  let a = p.o, b = p.o
+  while (a > 0 && WORD.test(t[a - 1])) a--
+  while (b < t.length && WORD.test(t[b])) b++
+  return [{ u: p.u, o: a }, { u: p.u, o: b }]
+}
+// A click off any text (a callout's header, its padding, a margin) with a
+// selection showing: the caret at the nearest line, as a click in text does.
+let clickFrom = null
+document.addEventListener('mousemove', (e) => {
+  if (!e.buttons) editor.classList.toggle('over-sel', !drag && Boolean(selectionUnder(e)))
+  if (!dragFrom || !(e.buttons & 1)) return
+  const p = pointPos(e)
+  // Within the line it began in, the browser's; but a double or triple
+  // click's drag is the editor's from the first move, browsers not all
+  // keeping the word or line clicked selected as it goes.
+  if (!p || (!dragging && !dragFirst && p.u === dragFrom.u && p.edge === dragFrom.edge)) return
+  if (!dragging) { dragging = true; editor.classList.add('xsel') }
+  if (dragFirst) {
+    // By words or lines: from the far side of the one clicked, to the far
+    // side of the one under the pointer.
+    const back = cmp(p, dragFirst[0]) < 0
+    const at = p.u != null ? grainAround(p, dragGrain)[back ? 0 : 1] : p
+    sel = { anchor: dragFirst[back ? 1 : 0], focus: at }
+  } else sel = { anchor: dragFrom, focus: p }
+  getSelection().removeAllRanges()
+  editor.focus({ preventScroll: true })
+  renderToolbar()
+  renderSource()
+  renderLayer()
+}, true)
+document.addEventListener('mouseup', () => {
+  if (!dragging && clickFrom && sel?.anchor) { sel = caretAt(clickFrom); render() }
+  clickFrom = null
+  if (dragging) {
+    dragging = false
+    editor.classList.remove('xsel')
+    if (sel?.anchor) setRange(sel.anchor, sel.focus)
+  }
+  dragFrom = null
+}, true)
+
+// ---- moving what's selected
+// Whatever's selected moves, pressed and dragged, as text does in Google
+// Docs: what's shown selected (half a line, whole callouts, lines in one)
+// goes where it's dropped, anywhere it can be. Its content is a slice: its
+// pieces (lines of text, and callouts), the first and last of them open
+// when they're part of a line, to join the line they're dropped in.
+const DROP_MARK = ''
+const copyOf = (o) => JSON.parse(JSON.stringify(o))
+/** What [s, e] covers, as a slice: { pieces, openStart, openEnd }. */
+function sliceOf([s, e]) {
+  const pieces = []
+  doc.forEach((b, i) => {
+    if (!isObj(b)) {
+      const r = cover('p:' + b.k, s, e)
+      if (r) pieces.push({ k: key(), tag: b.tag, text: b.text.slice(...r) })
+      return
+    }
+    // Selected as a block: the callout itself, as it is.
+    if (blockIn(i, s, e)) return pieces.push(copyOf(b))
+    const lines = unitsOf(i).map((u) => { const r = cover(u, s, e); return r && { u, text: unitText(u).slice(...r) } }).filter(Boolean)
+    if (!lines.length) return
+    // Lines in one callout, the selection in it: lines. Partly covered
+    // otherwise: a callout with what of it's covered (as copy gives it).
+    if (partOf(s)?.c === b && partOf(e)?.c === b) return lines.forEach((l) => pieces.push({ k: key(), tag: 'p', text: l.text }))
+    const title = lines.find((l) => l.u.startsWith('t:'))?.text ?? ''
+    // A figure partly covered: the figure, with what of its caption is.
+    if (isFigure(b)) return pieces.push({ ...copyOf(b), k: key(), title })
+    const body = lines.filter((l) => l.u.startsWith('p:')).map((l) => ({ k: key(), tag: 'p', text: l.text }))
+    pieces.push({ ...copyOf(b), k: key(), title, body: body.length ? body : [para('')] })
+  })
+  const isText = (x) => x && !isObj(x)
+  return { pieces, openStart: s.u != null && isText(pieces[0]), openEnd: e.u != null && isText(pieces.at(-1)) }
+}
+const hasCallout = (slice) => slice.pieces.some((x) => isObj(x))
+/** Within one line: only text, to go into a line, a title too. */
+const inline = (slice) => slice.pieces.length === 1 && slice.openStart && slice.openEnd
+
+/**
+ * The places in a callout's text a paragraph can go, i before its
+ * paragraph i: { i, top, bottom, y }, the space there (from its title, or
+ * its top, to its first paragraph; between two; from its last to its
+ * bottom) and its middle, where a drop's line shows.
+ */
+function calloutSlots(c) {
+  const el = editor.querySelector(`.callout[data-k="${c.k}"]`), body = el?.querySelector('.callout-body-container')
+  if (!body) return []
+  const r = el.getBoundingClientRect(), cs = getComputedStyle(el)
+  const inTop = r.top + parseFloat(cs.borderTopWidth), inBottom = r.bottom - parseFloat(cs.borderBottomWidth)
+  const header = el.querySelector(':scope > .callout-header')?.getBoundingClientRect()
+  // By the text's own lines, not the paragraphs' boxes, which run into the
+  // title bar and the callout's bottom edge.
+  const ps = [...body.children].map((x) => {
+    const lines = lineBoxes(x), r = x.getBoundingClientRect()
+    return { top: lines[0]?.top ?? r.top, bottom: lines.at(-1)?.bottom ?? r.bottom }
+  })
+  return Array.from({ length: ps.length + 1 }, (_, i) => {
+    const top = i === 0 ? (header ? header.bottom : inTop) : ps[i - 1].bottom
+    const bottom = i === ps.length ? inBottom : ps[i].top
+    return { i, top, bottom, y: (top + bottom) / 2 }
+  })
+}
+/** Where a slice would drop, under the pointer: a position outside [s, e] it can go; or null. */
+function dropTarget(ev, [s, e], slice) {
+  // What's under the pointer now (the page may have scrolled under it).
+  const target = document.elementFromPoint(ev.clientX, ev.clientY)
+  if (!target) return null
+  let d = null
+  // In the space between a callout's title and its text, or between its
+  // paragraphs: there, as paragraphs of its own (not a callout, which
+  // doesn't go in one). Narrow spaces take a few pixels either side.
+  const box = target.closest?.('.callout'), c = box && editor.contains(box) && calloutByKey(Number(box.dataset.k))
+  if (c && bodyShown(c) && !hasCallout(slice)) {
+    for (const sl of calloutSlots(c)) {
+      if (ev.clientY >= Math.min(sl.top, sl.y - 5) && ev.clientY <= Math.max(sl.bottom, sl.y + 5)) { d = { into: c.k, i: sl.i }; break }
+    }
+  }
+  // In the space between two blocks (or past the first or last): there,
+  // between them, as a block of its own; over a line, into it.
+  const kids = [...editor.children]
+  for (let i = 0; i <= kids.length && !d; i++) {
+    const a = kids[i - 1]?.getBoundingClientRect(), b = kids[i]?.getBoundingClientRect()
+    const top = a ? a.bottom : b.top - 24, bottom = b ? b.top : a.bottom + 24
+    if (ev.clientY > top && ev.clientY < bottom) d = { edge: i }
+  }
+  d ??= pointPos({ clientX: ev.clientX, clientY: ev.clientY, target })
+  if (!d) return null
+  if (d.u != null) {
+    const loc = locate(d.u)
+    // Not into a title (more than a line of text), nor a callout into a
+    // callout: to that callout's nearer edge.
+    if ((loc.title && !inline(slice)) || (loc.c && hasCallout(slice))) {
+      const i = doc.indexOf(loc.c), r = editor.children[i].getBoundingClientRect()
+      d = { edge: ev.clientY < (r.top + r.bottom) / 2 ? i : i + 1 }
+    }
+  }
+  // Into what's moving, or at its ends, it'd stay put.
+  const at = d.into != null ? slotPos(d) : d
+  if (cmp(s, at) <= 0 && cmp(at, e) <= 0) return null
+  return d
+}
+/** A place in a callout's text, as a position: the start of the paragraph it's before (or the end of the last). */
+function slotPos({ into, i }) {
+  const c = calloutByKey(into), p = c.body[i]
+  return p ? { u: 'p:' + p.k, o: 0 } : { u: 'p:' + c.body.at(-1).k, o: c.body.at(-1).text.length }
+}
+/** Mark where it'd drop: a caret in a line, a line between blocks or a callout's paragraphs. */
+function markDropAt(d) {
+  if (!d) return dropLine.remove()
+  if (d.into != null) {
+    const c = calloutByKey(d.into), sl = calloutSlots(c)[d.i]
+    const br = editor.querySelector(`.callout[data-k="${d.into}"] .callout-body-container`).getBoundingClientRect()
+    Object.assign(dropLine.style, { left: br.left + 6 + 'px', top: sl.y - 1 + 'px', width: br.width - 12 + 'px', height: '2px' })
+  } else if (d.u != null) {
+    const r = caretRect(unitEl(d.u), d.o)
+    Object.assign(dropLine.style, { left: r.x - 1 + 'px', top: r.top + 'px', width: '2px', height: r.bottom - r.top + 'px' })
+  } else {
+    const kids = editor.children, er = editor.getBoundingClientRect()
+    const a = kids[d.edge - 1]?.getBoundingClientRect(), b = kids[d.edge]?.getBoundingClientRect()
+    const y = a && b ? (a.bottom + b.top) / 2 : a ? a.bottom + 6 : b.top - 6
+    Object.assign(dropLine.style, { left: er.left + 'px', top: y - 1 + 'px', width: er.width + 'px', height: '2px' })
+  }
+  layer.append(dropLine)
+}
+
+/** Move what [s, e] covers to d; selected where it lands. */
+function moveSelection([s, e], d) {
+  const slice = sliceOf([s, e])
+  // Where it goes, marked so it's found again once it's gone from where it
+  // was (which can join lines and shift blocks): a block between blocks, a
+  // character in a line.
+  let mark = null
+  s = { ...s }; e = { ...e }
+  if (d.into != null) {
+    mark = { k: key(), tag: 'mark', text: '' }
+    calloutByKey(d.into).body.splice(d.i, 0, mark)
+  } else if (d.edge != null) {
+    mark = { k: key(), tag: 'mark', text: '' }
+    doc.splice(d.edge, 0, mark)
+    for (const p of [s, e]) if (p.edge != null && p.edge >= d.edge) p.edge++
+  } else {
+    const loc = locate(d.u), t = unitText(d.u), text = t.slice(0, d.o) + DROP_MARK + t.slice(d.o)
+    if (loc.title) loc.c.title = text
+    else loc.blk.text = text
+    for (const p of [s, e]) if (p.u === d.u && p.o >= d.o) p.o++
+  }
+  deleteRange([s, e])
+  // A whole line moved to a place of its own: its paragraph goes too, not
+  // left empty (a callout keeps one, though, to type in).
+  if ((d.edge != null || d.into != null) && inline(slice) && s.u?.startsWith('p:') && s.o === 0 && e.o === slice.pieces[0].text.length) {
+    const loc = locate(s.u)
+    if (loc && !loc.blk.text && (loc.list === doc || loc.list.length > 1)) loc.list.splice(loc.i, 1)
+  }
+  let at
+  if (mark && d.into != null) { const c = calloutByKey(d.into), i = c.body.indexOf(mark); c.body.splice(i, 1); at = { into: d.into, i } }
+  else if (mark) { const i = doc.indexOf(mark); doc.splice(i, 1); at = { edge: i } }
+  else {
+    for (const u of units()) {
+      const o = unitText(u).indexOf(DROP_MARK)
+      if (o < 0) continue
+      const loc = locate(u), text = unitText(u).replace(DROP_MARK, '')
+      if (loc.title) loc.c.title = text
+      else loc.blk.text = text
+      at = { u, o }
+      break
+    }
+  }
+  const [a, f] = insertSlice(at, slice)
+  sel = { anchor: a, focus: f }
+  render()
+  setRange(a, f)
+}
+/** Put a slice in at d; its start and end there. */
+function insertSlice(d, { pieces, openStart, openEnd }) {
+  const toBlock = (x) => (isObj(x) ? x : { k: x.k, tag: x.tag, text: x.text })
+  const notEmptyEnd = (x, n) => !(!isObj(x) && !x.text && ((n === 0 && openStart) || (n === pieces.length - 1 && openEnd)))
+  if (d.into != null) {
+    // Into a callout's text: its lines as paragraphs there (into one with
+    // nothing in it, in place of its empty line).
+    const c = calloutByKey(d.into)
+    const ps = pieces.filter(notEmptyEnd).map((x) => ({ k: x.k, tag: 'p', text: x.text }))
+    if (!ps.length) ps.push(para(''))
+    if (isEmptyBody(c)) c.body.splice(0, 1, ...ps)
+    else c.body.splice(d.i, 0, ...ps)
+    return [{ u: 'p:' + ps[0].k, o: 0 }, { u: 'p:' + ps.at(-1).k, o: ps.at(-1).text.length }]
+  }
+  if (d.edge != null) {
+    // Between blocks: its pieces as blocks, but not an empty piece of a line.
+    const blocks = pieces.filter((x, n) => !(!isObj(x) && !x.text && ((n === 0 && openStart) || (n === pieces.length - 1 && openEnd)))).map(toBlock)
+    doc.splice(d.edge, 0, ...blocks)
+    return [{ edge: d.edge }, { edge: d.edge + blocks.length }]
+  }
+  const loc = locate(d.u), t = unitText(d.u)
+  if (pieces.length === 1 && openStart && openEnd) {
+    // Text into a line (a title too).
+    const text = t.slice(0, d.o) + pieces[0].text + t.slice(d.o)
+    if (loc.title) loc.c.title = text
+    else loc.blk.text = text
+    return [{ u: d.u, o: d.o }, { u: d.u, o: d.o + pieces[0].text.length }]
+  }
+  // Lines into a line: it splits there, its first part joining the first
+  // line moving (if that's part of a line), its last the last.
+  const { list, i, blk } = loc
+  const before = t.slice(0, d.o), after = t.slice(d.o)
+  const inCallout = Boolean(loc.c)
+  const first = pieces[0], last = pieces.at(-1)
+  const joinFirst = openStart, joinLast = openEnd && pieces.length > 1
+  const middle = pieces.slice(joinFirst ? 1 : 0, joinLast ? -1 : undefined).map(toBlock)
+  // In a callout, lines are paragraphs (its title's the only heading in it).
+  if (inCallout) for (const x of middle) if (!isObj(x)) x.tag = 'p'
+  const out = []
+  let head = null, tail = null
+  if (joinFirst || before) { head = blk; blk.text = before + (joinFirst ? first.text : ''); out.push(head) }
+  out.push(...middle)
+  if (joinLast || after) { tail = { k: key(), tag: inCallout ? 'p' : joinLast ? last.tag : blk.tag, text: (joinLast ? last.text : '') + after }; out.push(tail) }
+  list.splice(i, 1, ...out)
+  if (!list.length) list.push(para(''))
+  const posBefore = (x) => (isObj(x) ? { edge: doc.indexOf(x) } : { u: 'p:' + x.k, o: 0 })
+  const posAfter = (x) => (isObj(x) ? { edge: doc.indexOf(x) + 1 } : { u: 'p:' + x.k, o: x.text.length })
+  const a = joinFirst ? { u: 'p:' + head.k, o: before.length } : middle.length ? posBefore(middle[0]) : { u: 'p:' + tail.k, o: 0 }
+  const f = joinLast ? { u: 'p:' + tail.k, o: last.text.length } : middle.length ? posAfter(middle.at(-1)) : { u: 'p:' + head.k, o: head.text.length }
+  return [a, f]
+}
+
+/** What's selected, if the pointer's on it: [s, e]; null if not. */
+function selectionUnder(ev) {
+  // Text's boxes are shorter than its lines: a few pixels' slack, so the
+  // whole height of a selected line takes a press.
+  const hit = (rects) => [...rects].some((r) => ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top - 5 && ev.clientY <= r.bottom + 5)
+  if (sel?.anchor) return hit([...selLayer.children].map((el) => el.getBoundingClientRect())) ? effective() : null
+  // The browser's own, in a line.
+  const el = ev.target.closest?.('[data-u]'), s = getSelection()
+  if (!el || !editor.contains(el) || !s.rangeCount || s.isCollapsed || !el.contains(s.anchorNode) || !el.contains(s.focusNode)) return null
+  if (!hit(s.getRangeAt(0).getClientRects())) return null
+  const a = offsetIn(el, s.anchorNode, s.anchorOffset), f = offsetIn(el, s.focusNode, s.focusOffset)
+  return [{ u: el.dataset.u, o: Math.min(a, f) }, { u: el.dataset.u, o: Math.max(a, f) }]
+}
+/**
+ * A picture of what's moving, under the pointer: its callouts as they
+ * look and its lines as they read, small, fading out where it's long.
+ */
+function dragPreview(slice) {
+  const box = document.createElement('div')
+  box.className = 'drag-preview'
+  const inner = document.createElement('div')
+  inner.className = 'body'
+  inner.style.width = editor.offsetWidth + 'px'
+  for (const x of slice.pieces) {
+    const el = isObj(x) ? renderBlock(x) : Object.assign(document.createElement(x.tag), { textContent: x.text || ' ' })
+    for (const ed of [el, ...el.querySelectorAll('[contenteditable]')]) ed.removeAttribute?.('contenteditable')
+    inner.append(el)
+  }
+  // One line alone: just its text, at its size.
+  if (inline(slice)) { box.classList.add('inline'); inner.style.width = '' }
+  box.append(inner)
+  document.body.append(box)
+  // Scaled, it still takes its full size: the box takes the scaled size.
+  if (!inline(slice)) {
+    box.style.width = inner.offsetWidth / 2 + 'px'
+    box.style.height = Math.min(inner.offsetHeight / 2, 220) + 'px'
+    if (inner.offsetHeight / 2 <= 220) box.style.maskImage = box.style.webkitMaskImage = 'none'
+  }
+  return box
+}
+/** Press on what's selected: dragged, it moves; a click is onClick (the caret where it's clicked). */
+function pressMove(ev0, range, onClick = null) {
+  ev0.preventDefault()
+  ev0.stopPropagation()
+  const x0 = ev0.clientX, y0 = ev0.clientY
+  let moving = null, last = null
+  // Near the top or bottom of the page, it scrolls, faster nearer.
+  const sc = document.getElementById('scroller')
+  const scroll = setInterval(() => {
+    if (!moving || !last) return
+    const r = sc.getBoundingClientRect(), edge = 48
+    const dy = last.clientY < r.top + edge ? -(r.top + edge - last.clientY) : last.clientY > r.bottom - edge ? last.clientY - (r.bottom - edge) : 0
+    if (!dy) return
+    sc.scrollBy(0, dy / 3)
+    moving.at = dropTarget(last, range, moving.slice)
+    markDropAt(moving.at)
+  }, 16)
+  const move = (ev) => {
+    last = ev
+    if (!moving) {
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return
+      const slice = sliceOf(range)
+      moving = drag = { k: null, ghost: dragPreview(slice), at: null, slice }
+      menu = null
+      document.body.classList.add('dragging')
+      layer.replaceChildren()
+    }
+    moving.ghost.style.left = ev.clientX + 14 + 'px'
+    moving.ghost.style.top = ev.clientY + 10 + 'px'
+    moving.at = dropTarget(ev, range, moving.slice)
+    markDropAt(moving.at)
+  }
+  const up = (ev) => {
+    clearInterval(scroll)
+    document.removeEventListener('mousemove', move)
+    document.removeEventListener('mouseup', up)
+    if (!moving) {
+      if (onClick) return onClick()
+      // A click: the caret there, as anywhere.
+      const p = pointPos(ev)
+      if (p) { sel = caretAt(p); render() }
+      return
+    }
+    moving.ghost.remove()
+    dropLine.remove()
+    Object.assign(dropLine.style, { width: '', height: '' })
+    document.body.classList.remove('dragging')
+    drag = null
+    grip = null
+    if (moving.at) moveSelection(range, moving.at)
+    else render()
+  }
+  document.addEventListener('mousemove', move)
+  document.addEventListener('mouseup', up)
+}
+
+// ---- the clipboard
+// Copy writes what's shown selected as qmd (a partly covered object, as
+// itself with only that much in it); the editor keeps the slice it came
+// from, so pasting that text back is the same blocks again, as an editor
+// would read its own copy back from the clipboard's HTML. Anything else
+// pastes as plain text, a paragraph a blank line.
+let clip = null   // { text, slice }
+function copySelection(e) {
+  const r = effective(), text = qmdOf(r)
+  e.clipboardData.setData('text/plain', text)
+  clip = { text, slice: sliceOf(r) }
+}
+document.addEventListener('copy', (e) => {
+  if (!sel?.anchor) return
+  e.preventDefault()
+  copySelection(e)
+})
+document.addEventListener('cut', (e) => {
+  if (!sel?.anchor) return
+  e.preventDefault()
+  copySelection(e)
+  deleteRange(effective())
+  render()
+})
+/** A copy of a piece, with keys of its own: pasted twice, it's two. */
+function rekey(x) {
+  const y = copyOf(x)
+  y.k = key()
+  if (y.body) y.body = y.body.map((p) => ({ ...p, k: key() }))
+  return y
+}
+document.addEventListener('paste', (e) => {
+  if (!editor.contains(document.activeElement) && document.activeElement !== editor) return
+  if (sel?.u == null && sel?.gap == null && !sel?.anchor) return
+  e.preventDefault()
+  const text = e.clipboardData?.getData('text/plain') ?? ''
+  const slice = clip && text === clip.text
+    ? { ...clip.slice, pieces: clip.slice.pieces.map(rekey) }
+    : { pieces: text.split(/\n\s*\n/).map((t) => ({ k: key(), tag: 'p', text: t.replace(/\s*\n\s*/g, ' ') })), openStart: true, openEnd: true }
+  if (!slice.pieces.length) return
+  if (sel.anchor) { deleteRange(effective()); render() }
+  else record()
+  let d
+  if (sel.gap != null) d = { edge: sel.gap }
+  else {
+    const el = unitEl(sel.u)
+    d = { u: sel.u, o: (el && caretIn(el)?.o) ?? sel.o }
+    // Not more than a line into a title or caption, nor an object into an
+    // object: after the one the caret's in.
+    const loc = locate(d.u)
+    if ((loc.title && !inline(slice)) || (loc.c && hasCallout(slice))) d = { edge: doc.indexOf(loc.c) + 1 }
+  }
+  const [, f] = insertSlice(d, slice)
+  sel = caretAt(f)
+  render()
+})
+
+// ------------------------------------------------------------- moving
+// Any block moves by the handle beside it in the gutter (a callout's beside
+// its border, a paragraph in a callout's just inside it). Where it can go
+// is up to what it is: a callout, between blocks (never into another); a
+// paragraph, between blocks or between a callout's paragraphs; a heading,
+// between blocks (in a callout, one would be its title). Moving never
+// changes what it is.
+let grip = null    // the block under the pointer: { k }
+let drag = null    // { k, ghost, at }
+const dropLine = Object.assign(document.createElement('div'), { className: 'drop-line' })
+const elFor = (k) => editor.querySelector(`.callout[data-k="${k}"], figure[data-k="${k}"]`) ?? editor.querySelector(`[data-u="p:${k}"]`)
+
+/** The block under the pointer, or beside it in the gutter. */
+function hoveredBlock(e) {
+  if (e.target.closest?.('.grip')) return grip
+  if (e.target.closest?.('.hui')) return null
+  const x = e.clientX, y = e.clientY, er = editor.getBoundingClientRect()
+  // Only near the handles: in the gutter, or the left 12% of the text, so
+  // they don't flicker beside everything the pointer crosses.
+  if (x < er.left - 70 || x > er.left + er.width * 0.12) return null
+  for (const el of editor.children) {
+    const r = el.getBoundingClientRect(), cs = getComputedStyle(el)
+    if (y < r.top - parseFloat(cs.marginTop) / 2 || y > r.bottom + parseFloat(cs.marginBottom) / 2) continue
+    const left = r.left - 24
+    if (el.classList.contains('callout')) {
+      // Level with one of its paragraphs: that paragraph. Anywhere else in
+      // it (its header, the space around its paragraphs, its left edge):
+      // the callout, its handle level with its title.
+      const k = Number(el.dataset.k)
+      const onEdge = x >= r.left - 1 && x <= r.left + 6
+      for (const p of el.querySelectorAll('.callout-body-container > p')) {
+        const pr = p.getBoundingClientRect()
+        if (!onEdge && y >= pr.top - 2 && y <= pr.bottom + 2) return { k: Number(p.dataset.u.slice(2)), left, top: lineTop(p) }
+      }
+      const title = el.querySelector(':scope > .callout-header .callout-title-container')
+      return { k, left, top: title ? lineTop(title) : r.top + 2 }
+    }
+    // A figure: level with its image's top.
+    if (el.tagName === 'FIGURE') return { k: Number(el.dataset.k), left, top: el.querySelector('.frame').getBoundingClientRect().top }
+    return { k: Number(el.dataset.u.slice(2)), left, top: lineTop(el) }
+  }
+  return null
+}
+
+/** A handle's top, level with an element's first line. */
+function lineTop(el) {
+  const r = el.getBoundingClientRect()
+  const lh = parseFloat(getComputedStyle(el).lineHeight) || 24
+  return r.top + (Math.min(lh, r.height) - 24) / 2
+}
+/**
+ * One handle at a time, all in one column in the gutter, close to the text:
+ * a paragraph's level with its first line, whether it's in a callout or not
+ * (never on a callout's border); a callout's level with its title.
+ */
+function renderGrip() {
+  if (!grip) return
+  const h = document.createElement('div')
+  h.className = 'grip'
+  h.innerHTML = ICONS.grip
+  h.dataset.tip = 'Drag to move'
+  h.style.left = grip.left + 'px'
+  h.style.top = grip.top + 'px'
+  const k = grip.k
+  h.onmousedown = (e) => pressGrip(e, k)
+  layer.append(h)
+}
+
+function pressGrip(e, k) {
+  if (e.button !== 0) return
+  e.preventDefault()
+  const x0 = e.clientX, y0 = e.clientY
+  const move = (ev) => {
+    if (!drag) {
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return
+      startDrag(k)
+    }
+    drag.ghost.style.left = ev.clientX + 14 + 'px'
+    drag.ghost.style.top = ev.clientY + 10 + 'px'
+    drag.at = dropAt(ev)
+    markDrop(drag.at)
+  }
+  const up = () => {
+    document.removeEventListener('mousemove', move)
+    document.removeEventListener('mouseup', up)
+    if (!drag) return
+    const { at } = drag
+    drag.ghost.remove()
+    dropLine.remove()
+    document.body.classList.remove('dragging')
+    drag = null
+    grip = null
+    if (at) moveBlock(k, at)
+    else render()
+  }
+  document.addEventListener('mousemove', move)
+  document.addEventListener('mouseup', up)
+}
+
+function startDrag(k) {
+  const blk = locate('p:' + k).blk
+  const ghost = document.createElement('div')
+  ghost.className = 'move-ghost'
+  if (blk.tag === 'callout') { ghost.innerHTML = kindGlyph(blk.type); ghost.append(blk.title || NAME[blk.type]) }
+  else if (isFigure(blk)) ghost.textContent = blk.title || blk.src
+  else ghost.textContent = blk.text || (blk.tag === 'h2' ? 'Heading' : 'Empty paragraph')
+  document.body.append(ghost)
+  drag = { k, ghost, at: null }
+  menu = null
+  document.body.classList.add('dragging')
+  layer.replaceChildren()
+  elFor(k)?.classList.add('moving-from')
+}
+
+/**
+ * Where the dragged block would go: { list, i, y, left, right }, a place
+ * between blocks (list: the document) or between a callout's paragraphs
+ * (list: its body); null where it'd stay put.
+ */
+function dropAt(ev) {
+  const loc = locate('p:' + drag.k)
+  const y = ev.clientY, er = editor.getBoundingClientRect()
+  const between = (els, list, left, right, pad) => els.length === 0 ? [] : Array.from({ length: els.length + 1 }, (_, i) => {
+    const a = els[i - 1]?.getBoundingClientRect(), b = els[i]?.getBoundingClientRect()
+    return { list, i, y: !a ? b.top - pad : !b ? a.bottom + pad : (a.bottom + b.top) / 2, left, right }
+  })
+  let gaps = null
+  if (loc.blk.tag === 'p') {
+    // Over a callout's text: between its paragraphs.
+    for (const el of editor.querySelectorAll('.callout')) {
+      const body = el.querySelector('.callout-body-container')
+      if (!body) continue
+      const br = body.getBoundingClientRect()
+      if (y < br.top - 4 || y > br.bottom + 4 || ev.clientX < el.getBoundingClientRect().left) continue
+      const c = calloutByKey(Number(el.dataset.k))
+      gaps = calloutSlots(c).map((sl) => ({ list: c.body, i: sl.i, y: sl.y, left: br.left + 6, right: br.right - 6 }))
+    }
+  }
+  gaps ??= between([...editor.children], doc, er.left, er.right, 6)
+  let best = null
+  for (const g of gaps) if (!best || Math.abs(g.y - y) < Math.abs(best.y - y)) best = g
+  if (!best || (best.list === loc.list && (best.i === loc.i || best.i === loc.i + 1))) return null
+  return best
+}
+function markDrop(at) {
+  if (!at) return dropLine.remove()
+  dropLine.style.left = at.left + 'px'
+  dropLine.style.width = at.right - at.left + 'px'
+  dropLine.style.top = at.y - 1 + 'px'
+  layer.append(dropLine)
+}
+
+function moveBlock(k, at) {
+  record()
+  const loc = locate('p:' + k)
+  const [blk] = loc.list.splice(loc.i, 1)
+  const i = at.list === loc.list && loc.i < at.i ? at.i - 1 : at.i
+  const into = doc.find((b) => b.tag === 'callout' && b.body === at.list)
+  if (into) putInCallout(into, i, blk)
+  else at.list.splice(i, 0, blk)
+  // A callout keeps a line to type in.
+  if (loc.c && !loc.c.body.length) loc.c.body.push(para(''))
+  render()
+}
+
+/**
+ * ⌥⇧↑ / ⌥⇧↓: the block with the caret, a step. A paragraph steps into a
+ * callout next to it and out of the one it's in; a heading steps over a
+ * callout; with the caret in a callout's title, the callout moves.
+ */
+function moveByKey(loc, dir) {
+  if (loc.title) return moveCallout(loc.c, dir)
+  const { blk, list, i, c } = loc
+  if (c) {
+    record()
+    list.splice(i, 1)
+    if (dir < 0 ? i > 0 : i < list.length) list.splice(i + dir, 0, blk)
+    else {
+      // Off its end: out of the callout.
+      doc.splice(doc.indexOf(c) + (dir > 0 ? 1 : 0), 0, blk)
+      if (!c.body.length) c.body.push(para(''))
+    }
+    return render()
+  }
+  const next = doc[i + dir]
+  if (!next) return
+  record()
+  doc.splice(i, 1)
+  if (next.tag === 'callout' && blk.tag === 'p' && bodyShown(next)) putInCallout(next, dir < 0 ? next.body.length : 0, blk)
+  else doc.splice(i + dir, 0, blk)
+  render()
+}
+function moveCallout(c, dir) {
+  const i = doc.indexOf(c), j = i + dir
+  if (j < 0 || j >= doc.length) return render()
+  record()
+  doc.splice(i, 1)
+  doc.splice(j, 0, c)
+  render()
+}
+document.addEventListener('mousedown', (e) => {
+  if (pinned && !e.target.closest('.hui')) { pinned = null; renderLayer() }
+  if (menu && !e.target.closest('.hui')) { menu = null; renderLayer(); for (const el of editor.querySelectorAll('.menu-open')) el.classList.remove('menu-open') }
+})
+document.getElementById('scroller').addEventListener('scroll', () => { menu = null; grip = null; pinned = null; renderLayer() })
+// The layer's over the page, not in what scrolls: the wheel over a handle,
+// a bar or a menu scrolls the document as it would over the page. Caught on
+// the document, not the layer: a scroll redraws the layer, and the browser
+// keeps sending the rest of the gesture to the bar it began on, which is no
+// longer in the page by then (nor in the layer, to hear it).
+document.addEventListener('wheel', (e) => {
+  if (!layer.contains(e.target) && e.target.isConnected) return
+  const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1
+  document.getElementById('scroller').scrollBy(e.deltaX * unit, e.deltaY * unit)
+}, { passive: true })
+window.addEventListener('resize', () => renderLayer())
+
+// A click on something with a tooltip holds tooltips back: re-rendered under
+// the still pointer, it would show its tooltip over the menu it opened.
+// Moving onto anything else lets them show again.
+let tipHeld = null
+document.addEventListener('mousedown', (e) => {
+  const t = e.target.closest?.('[data-tip]')
+  if (!t) return
+  tipHeld = t.dataset.tip
+  document.body.classList.add('tips-held')
+}, true)
+document.addEventListener('mousemove', (e) => {
+  if (tipHeld == null) return
+  if (e.target.closest?.('[data-tip]')?.dataset.tip === tipHeld) return
+  tipHeld = null
+  document.body.classList.remove('tips-held')
+}, true)
+
+let toastTimer = null
+function toast(text) {
+  document.querySelector('.toast')?.remove()
+  const el = Object.assign(document.createElement('div'), { className: 'toast', textContent: text })
+  document.body.append(el)
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => el.remove(), 3200)
+}
+
+window.addEventListener('hashchange', () => location.reload())
+start()
+renderOptions()
+render()
+</script>
+</body>
+</html>
