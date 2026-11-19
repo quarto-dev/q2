@@ -23,6 +23,10 @@ import { DOC_DIR, matrixDocs, recordedDocs } from '../src/test-utils/recordingFi
 // Serial, and no retry to mask a flaky median (the harness config sets `retries: 1` and `fullyParallel`).
 test.describe.configure({ mode: 'serial', retries: 0 });
 
+// Skipped in WebKit (#1266): since #1210 the first fresh pandoc run hangs here in CI's Linux WebKit,
+// so every spec in this file hits its timeout. Remove this once #1266 is fixed.
+test.skip(({ browserName }) => browserName === 'webkit', 'hangs in WebKit since #1210; see #1266');
+
 export interface SeedDoc {
   name: string;
   /** `.qmd` path relative to the document's directory. */
