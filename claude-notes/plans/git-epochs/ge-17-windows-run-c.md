@@ -263,22 +263,42 @@ equal to HEAD and the dirty text stays in the retired doc (`retired(discarded=1)
 Not mine and listed in the first look: `lmd_snapshots` (4), `render_scripts_cli` (2), `render_dry_run`, `convert_positron_cli`,
 `smoke_all` (14 smoke-all failures: `great_tables` not installed, and the `brand-monospace-*` typst files fail their
 regexes), `preview_static_e2e` (2), `render_record_sources_cli`, `route_tests` (2), `import_route`, `book_downloads`,
-`render_scripts_boot`, `live_reexecute`, `storage` double-lock (2). **Possibly ours:**
+`render_scripts_boot`, `live_reexecute`, `storage` double-lock (2). **Not on the base:**
 `quarto-hub::integration git_epochs::unreachable_canonical_docs_wait_one_cap_not_one_per_doc` (8.8 s against a 1.5 s
-limit; Windows slowness or a real bug, failure text needed). The two `quarto-git-epochs` probe tests from the earlier
+limit; classified below as load-sensitive). The two `quarto-git-epochs` probe tests from the earlier
 first look did not fail in this run. The tooling items `d1` (the `quarto-hub` failure text) and `d2` (which failures also
-fail on the merge base with `main`) were added to answer this; their first run is in progress.
+fail on the merge base with `main`) were added to answer this; their first run is below.
+
+**`d1` and `d2` (run `152805`, base `748fd4603`, no `-WithTools`).** This run is not a clean `a6`: the machine\'s own
+pandoc is 3.12.1, and q2 requires 3.13 (`Error [Q-20-2]: Pandoc Version Too Old`), so 100 tests failed, 99 of them also on
+the merge base `f9936b08d` (the baseline run: 1,751 tests, 102 failed). Those 99 are environment, not code; rerun `a6` with
+`-WithTools` (CI\'s pinned 3.13 and typst) to get the real list. What the two diagnostics settled:
+- **`storage::test_storage_manager_prevents_double_lock` and `..._standalone_prevents_double_lock`** (`quarto-hub`, run alone
+  by `d1`: 520 of 522 pass): `assertion failed: matches!(result, Err(Error::HubAlreadyRunning))` at `storage.rs:733` and
+  `:782`. Both also fail on the merge base, so they predate the epic: a second lock attempt in one process does not fail
+  on Windows. Known unrelated; not changed here.
+- **`git_epochs::unreachable_canonical_docs_wait_one_cap_not_one_per_doc` passed** when `quarto-hub` ran alone (`d1`), and
+  failed (8.8 s against a 1.5 s limit) only in the first full four-crate run, with 1,900 tests competing for the machine. The
+  test times wall clock with a 300 ms margin (1.5 s limit; one cap is 0.6 s, three caps 1.8 s), which a loaded Windows host
+  can overrun. Classified as a **load-sensitive timing assertion**, not a product defect. A sturdier test counts the attach
+  attempts instead of the clock; not changed here (it is the epic\'s own test, so it needs a decision, below).
 
 **Open (Gordon, on the Windows machine).**
-1. `run.ps1 -Only a6,d1,d2 -Publish` (running as this was written).
-2. After step 9 and step 7 are settled: `c1` again, twice.
-3. `run.ps1 -Only c3 -WithTools -Publish`, which needs the `a6` failures classified as known unrelated (`d2`) or fixed.
+1. `run.ps1 -Only a6,d2 -WithTools -Publish`: the real `a6` list with pandoc 3.13, and which of its failures also fail on
+   the base. Then `c3` needs those classified as known unrelated or fixed.
+2. Step 9: `$env:C1_GREP='step 9'; run.ps1 -Only c1 -Publish` (hidden-console fix, pushed as `ff9347d91`); then `c1` twice
+   more for the step 7 intermittent.
+3. `run.ps1 -Only c3 -WithTools -Publish`.
 4. Still open from GE-16a: `b5,b6` with Developer Mode on, and `b4` with `QUARTO_HUB_DEBUG=1`.
 5. Optionally `c2` with `-BuildEmbed` for the cross-client scenarios.
 
-**Also to do on the macOS side.** Land the `join.e2e (b)` race fix or file it (skip `.quarto-hub-tmp-*`). The
-`ge/17a-windows-fixes` branch must land with the plan: it carries three code commits (`5c0ccc508`, `2e646f9cc`,
-`f47ec4a7b`). The tooling branch `windows/git-epochs` stays unmerged and undeleted (GE-18 deletes it).
+**Decisions for Gordon.** (a) Replace the wall-clock assertion in `unreachable_canonical_docs_wait_one_cap_not_one_per_doc`
+with an attempt count, or leave it as a known Windows-under-load flake? (b) Fix the `join.e2e (b)` race (skip
+`.quarto-hub-tmp-*`) here, or file it? (c) If step 9 still cannot deliver Ctrl+C on Windows, accept GE-3\'s tests as the
+only coverage in the exit criteria?
 
-**The final statement, end-to-end record, and landing are not written**: they wait for the `a6` classification, `c3`, and
-the step 7 and step 9 outcomes.
+**Also to do on the macOS side.** The `ge/17a-windows-fixes` branch must land with the plan: it carries three code commits
+(`5c0ccc508`, `2e646f9cc`, `f47ec4a7b`). The tooling branch `windows/git-epochs` stays unmerged and undeleted (GE-18 deletes it).
+
+**The final statement, end-to-end record, and landing are not written**: they wait for the `a6` classification with
+pandoc 3.13, `c3`, and the step 7 and step 9 outcomes.
