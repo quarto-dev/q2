@@ -1,0 +1,4 @@
+# "crate test-name" lines that also fail on the merge base with main (d2): not caused by the git-epochs work.
+# a6 marks itself known unrelated only when every failure is listed here, which lets c3 pass. Add lines from a d2 result.
+quarto-hub storage::tests::test_storage_manager_prevents_double_lock
+quarto-hub storage::tests::test_storage_manager_standalone_prevents_double_lock

@@ -376,7 +376,15 @@ if (Test-Selected 'a6') {
         if ($rn.Exit -eq 0) {
             Add-Result 'a6-nextest' 'nextest, four crates' 'PASS' ($cnt.ToString() + ' tests ran and passed') $a6Proves $a6Not '' '' $false $rn.Log 'W10'
         } else {
-            Add-Result 'a6-nextest' 'nextest, four crates' 'FAIL' ($fails.Count.ToString() + ' failing: ' + ($fails -join ', ')) $a6Proves $a6Not (Get-Tail $rn.Log 80) '' $false $rn.Log 'W10'
+            # known-unrelated.txt lists "crate test-name" lines that also fail on the merge base with main (from d2); when every
+            # failure is on that list the item stays FAIL but is marked known unrelated, so c3 does not count it.
+            $kuPath = Join-Path $PSScriptRoot 'known-unrelated.txt'
+            $ku = @(); if (Test-Path $kuPath) { $ku = @(Get-Content -Path $kuPath -Encoding UTF8 | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') }) }
+            $unknown = @($fails | Where-Object { $ku -notcontains $_ })
+            $allKnown = ($fails.Count -gt 0 -and $unknown.Count -eq 0)
+            $why = $fails.Count.ToString() + ' failing: ' + ($fails -join ', ')
+            if ($ku.Count -gt 0) { $why += '; not on the known-unrelated list: ' + $unknown.Count + $(if ($unknown.Count -gt 0) { ' (' + ($unknown -join ', ') + ')' } else { '' }) }
+            Add-Result 'a6-nextest' 'nextest, four crates' 'FAIL' $why $a6Proves $a6Not (Get-Tail $rn.Log 80) '' $allKnown $rn.Log 'W10'
         }
     }
 }
