@@ -63,6 +63,7 @@ import {
   HOLDER,
   markIslands,
   WRAP_ATTR,
+  wrapOf,
   pointOnLine,
   positionAt,
   readMouseSelection,
@@ -820,7 +821,18 @@ export function useFieldEditor(
         selection.setBaseAndExtent(saved.anchor.node, saved.anchor.offset, to.node, to.offset)
         return true
       }
-      if (fieldOf(root, selection.focusNode)) return true
+      const reached = fieldOf(root, selection.focusNode)
+      // Into a line's wrap or out of it (a figure's image, above its
+      // caption): Shift+Down into the caption stops at the start of its
+      // text, and Shift+Up out of it at the end of the line above, so the
+      // image is taken in on a step of its own.
+      const across = key.forward ? reached : origin
+      if (e.shiftKey && granularity === 'line' && reached && reached !== origin && across && wrapOf(root, across)) {
+        const to = edge(reached, key.forward ? 'start' : 'end')
+        selection.setBaseAndExtent(saved.anchor.node, saved.anchor.offset, to.node, to.offset)
+        return true
+      }
+      if (reached) return true
 
       const target = fields[fields.indexOf(origin) + (key.forward ? 1 : -1)]
       let to = saved.focus
