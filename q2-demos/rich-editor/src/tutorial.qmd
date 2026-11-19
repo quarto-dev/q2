@@ -26,6 +26,12 @@ Use the style box at the left of the toolbar to make a line a heading, or ⌥⌘
 
 > The quote button, or ⇧⌘9, quotes a paragraph.
 
+## Figures
+
+An image on a line of its own is a figure, with its caption under it. Figures can't be edited here yet: change one in the source.
+
+![A *test* caption](https://quarto.org/quarto.png){width=40%}
+
 ## Under the hood
 
 The page is the same document as its qmd source. The Show source button at the right end of the toolbar shows that source next to the editor: edit either one, and the other follows.
