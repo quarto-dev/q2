@@ -1808,6 +1808,8 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project_root = temp.path();
         let file = project_root.join("d00\\f.qmd");
+        // `\` is a file-name character on Unix and a separator on Windows.
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "nested").unwrap();
 
         let repo = create_test_repo().await;

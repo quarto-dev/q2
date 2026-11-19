@@ -1514,6 +1514,11 @@ mod tests {
         let project_root = temp.path().join("project");
         std::fs::create_dir(&project_root).unwrap();
         std::fs::write(project_root.join("index.qmd"), "# Hello").unwrap();
+        // The `\` is a file-name character on Unix (a stand-in for the Windows
+        // separator) and a real separator on Windows, where `d00` must exist.
+        for name in ["d00\\f0000.qmd", "d00\\img.png"] {
+            std::fs::create_dir_all(project_root.join(name).parent().unwrap()).unwrap();
+        }
         std::fs::write(project_root.join("d00\\f0000.qmd"), "# Nested").unwrap();
         std::fs::write(
             project_root.join("d00\\img.png"),
