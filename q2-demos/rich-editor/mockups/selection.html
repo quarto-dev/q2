@@ -283,7 +283,7 @@ const GROUPS = [
   // caption, a callout's title or its text) as text; they differ where a
   // selection's ends are in different places.
   { key: 'model', title: 'Selecting across a figure or callout\'s edge', options: [
-    ['partial', 'Partial', 'A selection can take part of a figure or callout and what\'s outside it, as in ProseMirror editors (Confluence, RStudio\'s visual editor). What it covers of the object is its text, a line or character at a time. Deleting keeps the object and what\'s left in it; copying takes the object with only that much in it, and pastes as one.'],
+    ['partial', 'Partial', 'A selection can take part of a figure or callout and what\'s outside it, as in ProseMirror editors (Confluence, RStudio\'s visual editor). What it covers of the object is its text, a line or character at a time; a figure\'s image shows selected with any of its caption, since it goes with it. Deleting keeps the object and what\'s left in it; copying takes the object with only that much in it, and pastes as one.'],
     ['whole', 'Whole objects', 'A selection is in one field, or holds whole objects, as in Notion and Word\'s tables. Crossing a figure or callout\'s edge (into it, or out of it) takes all of it in one step; crossing from a callout\'s title into its text too. Back inside, it\'s text again. Copy and paste take whole objects, or text.'],
   ]},
 ]
@@ -2069,6 +2069,8 @@ function renderSelection() {
       } else paint(el.getBoundingClientRect(), 'sel-box sel-block')
       continue
     }
+    // A figure's image, with part of its caption: the image alone.
+    if (c.image != null) { paint(editor.children[c.image].querySelector('.frame').getBoundingClientRect(), 'sel-box sel-block'); continue }
     const el = unitEl(c.u), t = el.firstChild
     if (c.from < c.to && t?.nodeType === 3) {
       const rg = document.createRange()
@@ -2087,6 +2089,13 @@ function coverage(s, e) {
   const out = []
   doc.forEach((b, i) => {
     if (isObj(b) && blockIn(i, s, e)) return out.push({ block: i })
+    // A figure partly covered, from outside it: its image goes with what's
+    // covered of its caption (copied, moved, as the figure), so it's shown
+    // selected too. Not from inside its caption, which is only text.
+    if (isFigure(b) && !(partOf(s)?.c === b && partOf(e)?.c === b)) {
+      const r = unitsOf(i).length ? cover('t:' + b.k, s, e) : null
+      if (r && r[0] < r[1]) out.push({ image: i })
+    }
     for (const u of unitsOf(i)) {
       const r = cover(u, s, e)
       // Its line break, shown selected (a sliver past its end) only where
@@ -2290,7 +2299,8 @@ function sliceOf([s, e]) {
     if (partOf(s)?.c === b && partOf(e)?.c === b) return lines.forEach((l) => pieces.push({ k: key(), tag: 'p', text: l.text }))
     const title = lines.find((l) => l.u.startsWith('t:'))?.text ?? ''
     // A figure partly covered: the figure, with what of its caption is.
-    if (isFigure(b)) return pieces.push({ ...copyOf(b), k: key(), title })
+    // (With none of its caption, none of it: as copy, and as shown.)
+    if (isFigure(b)) return title && pieces.push({ ...copyOf(b), k: key(), title })
     const body = lines.filter((l) => l.u.startsWith('p:')).map((l) => ({ k: key(), tag: 'p', text: l.text }))
     pieces.push({ ...copyOf(b), k: key(), title, body: body.length ? body : [para('')] })
   })
