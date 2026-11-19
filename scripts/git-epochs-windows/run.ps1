@@ -13,7 +13,8 @@
   Full logs go under results/logs/ (not committed).
 
 .PARAMETER Only
-  Run only these item ids (for example -Only a1,a5 or -Only b1,b2,b3,b4,b5,b6,b7). Default: all. A b-only run needs
+  Run only these item ids (for example -Only a1,a5 or -Only b1,b2,b3,b4,b5,b6,b7). Diagnostics d1 (quarto-hub failure
+  text) and d2 (which a6 failures also fail on the merge base with main; run together as -Only a6,d2 or after an a6 run) run only when named. Default: all. A b-only run needs
   no Rust toolchain, NASM, or CMake; an a-only run needs no Node.
 .PARAMETER WithTools
   Download pandoc and typst (the versions CI pins in .github/workflows/test-suite.yml) as portable zips into
@@ -50,8 +51,10 @@ if ($Only -and ($Only -contains 'c3')) {
 $wantC = (-not $Only) -or (@($Only | Where-Object { $_ -like 'c*' }).Count -gt 0)
 
 $wantA = (-not $Only) -or (@($Only | Where-Object { $_ -like 'a*' }).Count -gt 0)
+# d1 and d2 are diagnostics (the quarto-hub failure text, and the failures that also fail on the merge base); an unfiltered run skips them.
 $wantB = (-not $Only) -or (@($Only | Where-Object { $_ -like 'b*' }).Count -gt 0)
-$ra = if ($wantA) { 'yes' } else { 'no' }
+$wantD = ($Only -and (@($Only | Where-Object { $_ -like 'd*' }).Count -gt 0))
+$ra = if ($wantA -or $wantD) { 'yes' } else { 'no' }
 $rb = if ($wantB) { 'yes' } else { 'no' }
 
 $repo = (& git -C $PSScriptRoot rev-parse --show-toplevel).Trim()
@@ -353,10 +356,81 @@ if (Test-Selected 'a6') {
         $ntext = Get-LogText $rn.Log
         $fails = @([regex]::Matches($ntext, '(?m)^\s+(?:FAIL|TIMEOUT|SIGABRT)\s+\[[^\]]*\]\s+\(\s*\d+/\d+\)\s+(\S+\s+\S+)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
         $cnt = Get-NextestCount $ntext
+        $script:a6Fails = $fails
         if ($rn.Exit -eq 0) {
             Add-Result 'a6-nextest' 'nextest, four crates' 'PASS' ($cnt.ToString() + ' tests ran and passed') $a6Proves $a6Not '' '' $false $rn.Log 'W10'
         } else {
             Add-Result 'a6-nextest' 'nextest, four crates' 'FAIL' ($fails.Count.ToString() + ' failing: ' + ($fails -join ', ')) $a6Proves $a6Not (Get-Tail $rn.Log 80) '' $false $rn.Log 'W10'
+        }
+    }
+}
+
+# --------------------------------------------------------------------------------------------
+# d1, d2: diagnostics for a6 failures (run with -Only d1,d2; an unfiltered run skips them)
+# --------------------------------------------------------------------------------------------
+function Get-NextestFails {
+    param([string]$Text)
+    return @([regex]::Matches($Text, '(?m)^\s+(?:FAIL|TIMEOUT|SIGABRT)\s+\[[^\]]*\]\s+\(\s*\d+/\d+\)\s+(\S+\s+\S+)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+}
+
+if ($Only -and (Test-Selected 'd1')) {
+    # d1: quarto-hub alone, with every failure's own output, committed beside the results.
+    Write-Host '== d1: quarto-hub nextest with failure output =='
+    $r1 = Invoke-Logged 'd1-hub-nextest' 'cargo nextest run -p quarto-hub --no-fail-fast --failure-output immediate-final --status-level fail'
+    $t1 = Get-LogText $r1.Log
+    $f1 = Get-NextestFails $t1
+    Copy-Item -Path $r1.Log -Destination (Join-Path $resultsDir ('d1-hub-' + $runId + '.log')) -Force
+    if ($r1.Exit -eq 0) {
+        Add-Result 'd1' 'quarto-hub failure text' 'PASS' 'every quarto-hub test passed' '' '' '' '' $false $r1.Log ''
+    } else {
+        Add-Result 'd1' 'quarto-hub failure text' 'INFO' ($f1.Count.ToString() + ' failing: ' + ($f1 -join ', ') + '; the full output is results\d1-hub-' + $runId + '.log') '' '' (Get-Tail $r1.Log 150) 'diagnostic: the output of the failing tests' $false $r1.Log ''
+    }
+}
+
+if ($Only -and (Test-Selected 'd2')) {
+    # d2: the a6 failures that also fail on the merge base with main (a throwaway worktree that shares this checkout's target dir).
+    Write-Host '== d2: the a6 baseline on the merge base with main =='
+    $cur = $null
+    if ((Get-Variable -Name a6Fails -Scope Script -ErrorAction SilentlyContinue)) { $cur = $script:a6Fails }
+    $curFrom = 'this run'
+    if ($null -eq $cur) {
+        $prev = Get-ChildItem -Path (Join-Path $resultsDir 'logs') -Filter 'a6-nextest.log' -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notlike ('*' + $runId + '*') } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($prev) { $cur = Get-NextestFails (Get-LogText $prev.FullName); $curFrom = $prev.FullName }
+    }
+    if ($null -eq $cur) {
+        Add-Result 'd2' 'a6 failures that also fail on the merge base' 'FAIL' 'no a6 result to compare: run a6 first (-Only a6,d2), or keep a log under results\logs' '' '' '' '' $false '' ''
+    } else {
+        & git fetch origin main 2>&1 | Out-Null
+        $mb = (& git merge-base HEAD origin/main).Trim()
+        $baseDir = Join-Path (Split-Path $repo -Parent) ('q2-baseline-' + $runId)
+        & git worktree add --detach $baseDir $mb 2>&1 | Out-Null
+        if (-not (Test-Path $baseDir)) {
+            Add-Result 'd2' 'a6 failures that also fail on the merge base' 'FAIL' ('git worktree add failed for ' + $mb) '' '' '' '' $false '' ''
+        } else {
+            $prevTarget = $env:CARGO_TARGET_DIR
+            $env:CARGO_TARGET_DIR = Join-Path $repo 'target'
+            Set-Location $baseDir
+            [Environment]::CurrentDirectory = $baseDir
+            $basePkgs = (($crates | Where-Object { Test-Path (Join-Path $baseDir ('crates\' + $_ + '\Cargo.toml')) }) | ForEach-Object { '-p ' + $_ }) -join ' '
+            $rb2 = Invoke-Logged 'd2-baseline-nextest' ('cargo nextest run ' + $basePkgs + ' --no-fail-fast')
+            Set-Location $repo
+            [Environment]::CurrentDirectory = $repo
+            if ($prevTarget) { $env:CARGO_TARGET_DIR = $prevTarget } else { Remove-Item Env:\CARGO_TARGET_DIR -ErrorAction SilentlyContinue }
+            & git worktree remove --force $baseDir 2>&1 | Out-Null
+            $t2 = Get-LogText $rb2.Log
+            $base = Get-NextestFails $t2
+            Copy-Item -Path $rb2.Log -Destination (Join-Path $resultsDir ('d2-baseline-' + $runId + '.log')) -Force
+            $newFails = @($cur | Where-Object { $base -notcontains $_ })
+            $oldFails = @($cur | Where-Object { $base -contains $_ })
+            $summary = 'merge base ' + $mb.Substring(0, 9) + '; current failures from ' + $curFrom + ': ' + $cur.Count + '; also failing on the base: ' + $oldFails.Count + '; NOT failing on the base: ' + $newFails.Count + ' (' + ($newFails -join ', ') + ')'
+            if ($null -eq (Get-NextestCount $t2)) {
+                Add-Result 'd2' 'a6 failures that also fail on the merge base' 'FAIL' ('the baseline run did not complete (exit ' + $rb2.Exit + '); see results\d2-baseline-' + $runId + '.log') '' '' (Get-Tail $rb2.Log 60) '' $false $rb2.Log ''
+            } elseif ($newFails.Count -gt 0) {
+                Add-Result 'd2' 'a6 failures that also fail on the merge base' 'FAIL' $summary '' '' (Get-Tail $rb2.Log 40) '' $false $rb2.Log ''
+            } else {
+                Add-Result 'd2' 'a6 failures that also fail on the merge base' 'PASS' ('every current failure also fails on the base: ' + $summary) '' '' '' '' $false $rb2.Log ''
+            }
         }
     }
 }
@@ -659,7 +733,9 @@ if ($nf -gt 0) {
 $pushCmd = 'git add scripts/git-epochs-windows/results/*.json scripts/git-epochs-windows/results/*.md; git commit -m "GE-15/GE-16: Windows results"; git push origin HEAD:windows/git-epochs'
 if ($Publish) {
     & git add $jsonPath $mdPath
-    Get-ChildItem -Path $resultsDir -Filter ('c1-*' + $runId + '*') -ErrorAction SilentlyContinue | ForEach-Object { & git add $_.FullName }
+    foreach ($pfx in 'c1-', 'd1-', 'd2-') {
+        Get-ChildItem -Path $resultsDir -Filter ($pfx + '*' + $runId + '*') -ErrorAction SilentlyContinue | ForEach-Object { & git add $_.FullName }
+    }
     & git commit -m ('GE-15/GE-16: Windows results ' + $runId)
     & git push origin 'HEAD:windows/git-epochs'
     Write-Host 'Pushed. Tell the macOS agent: results are pushed.'
