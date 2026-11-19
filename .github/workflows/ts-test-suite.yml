@@ -402,10 +402,19 @@ jobs:
         shell: bash
         run: |
           TYPST_PARITY_VERSION=$(node -p "require('./resources/typst-wasm.json').typst_version")
-          if [ "$RUNNER_OS" = "Linux" ]; then TRIPLE=x86_64-unknown-linux-musl; else TRIPLE=aarch64-apple-darwin; fi
-          curl -fsSL -o typst-parity.tar.xz "https://github.com/typst/typst/releases/download/v${TYPST_PARITY_VERSION}/typst-${TRIPLE}.tar.xz"
-          mkdir typst-parity && tar -xf typst-parity.tar.xz -C typst-parity --strip-components=1
-          echo "TYPST_PARITY_BIN=$PWD/typst-parity/typst" >> "$GITHUB_ENV"
+          mkdir typst-parity
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            curl -fsSL -o typst-parity.zip "https://github.com/typst/typst/releases/download/v${TYPST_PARITY_VERSION}/typst-x86_64-pc-windows-msvc.zip"
+            7z x typst-parity.zip -otypst-parity -y
+            # The zip nests the binary in a folder; flatten it.
+            mv typst-parity/typst-x86_64-pc-windows-msvc/typst.exe typst-parity/typst.exe
+            echo "TYPST_PARITY_BIN=$(cygpath -m "$PWD")/typst-parity/typst.exe" >> "$GITHUB_ENV"
+          else
+            if [ "$RUNNER_OS" = "Linux" ]; then TRIPLE=x86_64-unknown-linux-musl; else TRIPLE=aarch64-apple-darwin; fi
+            curl -fsSL -o typst-parity.tar.xz "https://github.com/typst/typst/releases/download/v${TYPST_PARITY_VERSION}/typst-${TRIPLE}.tar.xz"
+            tar -xf typst-parity.tar.xz -C typst-parity --strip-components=1
+            echo "TYPST_PARITY_BIN=$PWD/typst-parity/typst" >> "$GITHUB_ENV"
+          fi
           echo "TYPST_PARITY_REQUIRED=1" >> "$GITHUB_ENV"
 
       - name: Run typst-host unit tests (includes browser/native parity)

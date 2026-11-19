@@ -297,9 +297,11 @@ jobs:
       # See claude-notes/2026-04-28-ci-disk-space-and-profile-ci.md.
       - name: Test Rust code
         shell: bash
-        run: cargo nextest run --tests --cargo-profile ci ${FILTER:+-E "$FILTER"}
+        run: cargo nextest run --tests --cargo-profile ci ${NO_FAIL_FAST} ${FILTER:+-E "$FILTER"}
         env:
           FILTER: ${{ inputs.filter }}
+          # A Windows run is for surveying: report every failure, not the first few.
+          NO_FAIL_FAST: ${{ runner.os == 'Windows' && '--no-fail-fast' || '' }}
           RUSTFLAGS: "-D warnings"
           # Turns the silent Node-skip in node_available_when_quarto_ci (and the
           # node_available_for_tests() gates) into a hard failure if the
