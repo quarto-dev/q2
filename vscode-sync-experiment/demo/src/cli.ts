@@ -2,7 +2,7 @@
 import { parseArgs } from 'node:util';
 import { Demo, defaultOptions, type Preset } from './demo';
 import { runStory, StoryFailure, type DriverEnv } from './driver';
-import { hubBrowserStory } from '../stories/hub-browser';
+import { storyFor } from '../stories';
 import type { Where } from './captions';
 
 const USAGE = `usage: npm run demo -w quarto-hub-vscode -- [options]
@@ -22,13 +22,17 @@ export async function playStory(d: Demo): Promise<void> {
   d.hostTerminal.onInput(() => keyWaiters.splice(0).forEach((f) => f()));
   const env: DriverEnv = {
     caption: (t) => d.say('caption', t),
-    type: (c) => d.type(c),
-    fail: (t) => d.say('warning', `FAILED ${t}`),
+    type: (c, who) => d.type(c, who),
+    fail: (t) => {
+      // The tail of each terminal goes in the log, so a failed run can be read afterward.
+      d.record('story', 'terminal-tail', t, { host: d.hostTerminal.output().slice(-1500), guest: d.guestTerminal?.output().slice(-1500) });
+      d.say('warning', `FAILED ${t}`);
+    },
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     waitKey: () => new Promise<void>((r) => keyWaiters.push(r)),
     log: (e) => d.record('story', e.result, e.id, e),
   };
-  await runStory(hubBrowserStory(d), env, { pace: d.o.pace, dwellMs: d.o.dwellMs, fast: d.o.fast });
+  await runStory(storyFor(d), env, { pace: d.o.pace, dwellMs: d.o.dwellMs, fast: d.o.fast });
 }
 
 async function main() {
@@ -48,7 +52,7 @@ async function main() {
   });
   if (v.help) return void console.log(USAGE);
   const preset = (v.preset ?? 'hub-browser') as Preset;
-  if (preset !== 'hub-browser') throw new Error(`preset ${preset} is not built yet`);
+  if (!['hub-browser', 'hub-vscode-host', 'hub-vscode-clone'].includes(preset)) throw new Error(`preset ${preset} is not built yet`);
   const play = !!v.play || !!v.fast;
   const d = await Demo.create(
     defaultOptions({

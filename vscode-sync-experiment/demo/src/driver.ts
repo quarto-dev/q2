@@ -3,8 +3,9 @@
 export interface Step {
   id: string;
   caption: string;
-  /** Typed into the host terminal at a human pace. */
+  /** Typed into a terminal at a human pace (the host's unless `who` says otherwise). */
   command?: string;
+  who?: 'host' | 'guest';
   /** A non-terminal action (a click in an editor, a command palette entry). */
   action?: () => Promise<void>;
   /** A retrying check; throws when the effect does not appear in time. */
@@ -13,7 +14,7 @@ export interface Step {
 
 export interface DriverEnv {
   caption(text: string): void;
-  type(command: string): Promise<void>;
+  type(command: string, who?: 'host' | 'guest'): Promise<void>;
   /** Show a failure in the terminal. */
   fail(text: string): void;
   sleep(ms: number): Promise<void>;
@@ -39,7 +40,7 @@ export async function runStory(steps: Step[], env: DriverEnv, o: DriverOptions):
     const entry = { id: s.id, caption: s.caption, command: s.command, at: new Date().toISOString() };
     if (!o.fast) env.caption(s.caption);
     try {
-      if (s.command !== undefined) await env.type(s.command);
+      if (s.command !== undefined) await env.type(s.command, s.who ?? 'host');
       if (s.action) await s.action();
       await s.check();
     } catch (e) {

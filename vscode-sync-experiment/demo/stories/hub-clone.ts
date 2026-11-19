@@ -1,0 +1,97 @@
+/**
+ * The scripted story for `hub-vscode-clone`: a browser host on the hub, and Maurice's VS Code window on his own clone
+ * with its own terminal (the H2 and H4 behavior). The hub's switches do not touch the clone; the clone's own
+ * `git switch` attaches the doc for that blob and joins the hub's feature doc.
+ */
+import { gitStatus } from '../../../q2-preview-spa/e2e/helpers/editor';
+import { expect } from '@playwright/test';
+import type { Step } from '../src/driver';
+import { Demo, PY_PAPER } from '../src/demo';
+import { disk, shows, until } from './hub';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
+const cloneDisk = (d: Demo, rel: string) => readFileSync(path.join(d.guestDir, rel), 'utf8');
+
+export function hubCloneStory(d: Demo): Step[] {
+  let decisions = 0;
+  const mark = async () => void (decisions = (await gitStatus(d.hubHttp)).decisions.length);
+  return [
+    {
+      id: 'start-hub',
+      caption: 'Myra starts the hub on her journal, following git. Maurice has his own clone, in VS Code.',
+      command: d.o.typedHub ? d.hubCommandLine() : undefined,
+      action: async () => {
+        if (d.o.typedHub) {
+          await d.waitForHub();
+          await d.openEditors();
+        }
+      },
+      check: async () => {
+        await shows(d, 'host', 'Tip extension');
+        await shows(d, 'guest', 'Fusion spectra');
+        expect((await gitStatus(d.hubHttp)).tracking).toBe(d.o.hubGit === 'track');
+      },
+    },
+    {
+      id: 'maurice-types',
+      caption: "Maurice types in his clone: the edit reaches Myra's disk.",
+      action: async () => {
+        await d.typeAtEnd('guest', 'Maurice adds a sentence. ');
+        await mark();
+      },
+      check: async () => {
+        await until("the hub wrote Maurice's text", () => disk(d, PY_PAPER).includes('Maurice adds a sentence.'));
+      },
+    },
+    {
+      id: 'commit',
+      caption: 'Myra commits. Nothing swaps.',
+      command: "git add -A && git commit -qm 'Spectra: a sentence from Maurice'",
+      check: async () => {
+        if (d.o.hubGit === 'track') await until('the hub moved forward', async () => (await gitStatus(d.hubHttp)).decisions.slice(decisions).some((x) => x.kind === 'moved-forward'));
+        expect(await d.notices('host')).toBe(0);
+        await shows(d, 'guest', 'Maurice adds a sentence.');
+      },
+    },
+    {
+      id: 'switch-feature',
+      caption: "Myra switches to feature. Her browser follows; Maurice's clone stays on main.",
+      command: 'git switch feature',
+      action: mark,
+      check: async () => {
+        await shows(d, 'host', 'After reanalysis');
+        await until("Maurice's disk is untouched", () => cloneDisk(d, PY_PAPER).includes('0.6 *') && !cloneDisk(d, PY_PAPER).includes('0.9 *'));
+        await shows(d, 'guest', 'Maurice adds a sentence.');
+      },
+    },
+    {
+      id: 'clone-switch',
+      caption: 'Maurice switches to feature in his own terminal: his clone joins the same doc.',
+      command: 'git switch feature',
+      who: 'guest',
+      check: async () => {
+        await until("Maurice's checkout holds the feature text", () => cloneDisk(d, PY_PAPER).includes('0.9 *'));
+      },
+    },
+    {
+      id: 'clone-main',
+      caption: 'Maurice goes back to main first, in his terminal.',
+      command: 'git switch main',
+      who: 'guest',
+      check: async () => {
+        await until("Maurice's checkout holds the main text", () => cloneDisk(d, PY_PAPER).includes('0.6 *'));
+      },
+    },
+    {
+      id: 'switch-main',
+      caption: 'Then Myra goes back to main: her browser and the hub follow.',
+      command: 'git switch main',
+      action: mark,
+      check: async () => {
+        await shows(d, 'host', 'After reanalysis', false);
+        await until('the guest paper holds the main code on the hub', () => disk(d, PY_PAPER).includes('0.6 *'));
+      },
+    },
+  ];
+}

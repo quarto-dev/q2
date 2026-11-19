@@ -5,19 +5,21 @@
 import { test, expect } from '@playwright/test';
 import { editorText, noticeLocator } from '../../../../q2-preview-spa/e2e/helpers/editor';
 import { StoryFailure } from '../../src/driver';
-import { hubBrowserStory } from '../../stories/hub-browser';
+import { storyFor } from '../../stories';
 import { playStory, startDemo, startFreePlay, stopAll } from './helpers';
 
 test.afterEach(stopAll);
 
 const storyLog = (d: { events: { source: string; kind: string; summary: string }[] }) => d.events.filter((e) => e.source === 'story');
 
-test('E1: hub-browser story in --fast: every check passes and the step log equals the story', async () => {
-  const d = await startDemo({ fast: true, typedHub: true });
-  await playStory(d);
-  const expected = hubBrowserStory(d).map((s) => s.id);
-  expect(storyLog(d).map((e) => `${e.kind}:${e.summary}`)).toEqual(expected.map((id) => `pass:${id}`));
-});
+for (const preset of ['hub-browser', 'hub-vscode-host', 'hub-vscode-clone'] as const) {
+  test(`E1: ${preset} story in --fast: every check passes and the step log equals the story`, async () => {
+    const d = await startDemo({ preset, fast: true, typedHub: true });
+    await playStory(d);
+    const expected = storyFor(d).map((s) => s.id);
+    expect(storyLog(d).map((e) => `${e.kind}:${e.summary}`)).toEqual(expected.map((id) => `pass:${id}`));
+  });
+}
 
 test('E2: engines: the guest shows the R and Python charts, and the R chart re-executes across the switch', async () => {
   const d = await startFreePlay();

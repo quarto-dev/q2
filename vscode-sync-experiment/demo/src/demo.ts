@@ -16,6 +16,10 @@ import { deriveEvents, narrate, type DemoEvent, type StatusBody } from './observ
 import { missingToolAdvice, setupCommands } from './setup';
 import { startTerminalServer, type TerminalServer } from './terminal-server';
 import { terminalAssets, terminalPageHtml, STRIP_LINES } from './terminal-page';
+import { launchVscode, type RunningVscode } from '../../e2e/helpers/launch';
+import { HeadlessPeer, ensureWasm } from '../../e2e/helpers/hub';
+import { bindFolder, deriveWsUrl } from '../../src/core/join';
+import { activeEditorText, openFile as openVscodeFile } from '../../e2e/helpers/palette';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..', '..');
@@ -60,6 +64,13 @@ export const defaultOptions = (over: Partial<DemoOptions> = {}): DemoOptions => 
   ...over,
 });
 
+/**
+ * VS Code's own default for auto save is off, and the demo keeps it. With `files.autoSave: afterDelay` (the e2e helper's
+ * default) an editor-only window on the hub's own folder wrote the old text of the open paper over the hub's disk after a
+ * flip (found in GE-19; see the plan's notes), so `git switch` back was refused as a dirty tree.
+ */
+const VSCODE_SETTINGS = { 'files.autoSave': 'off' };
+
 export const R_PAPER = 'celia-2026-tip-extension-lmm.qmd';
 export const PY_PAPER = 'morel-2026-fusion-spectra.qmd';
 
@@ -80,6 +91,11 @@ export class Demo {
   readonly logs: string;
   readonly strip = new StripBuffer(STRIP_LINES);
   hostTerminal!: TerminalServer;
+  /** The guest's terminal, in presets where the guest has its own repository (`hub-vscode-clone`). */
+  guestTerminal?: TerminalServer;
+  /** Maurice's clone of the journal (presets with a clone guest). */
+  readonly guestDir: string;
+  vscode: { host?: RunningVscode; guest?: RunningVscode } = {};
   hubUrl = '';
   hubHttp = '';
   projectId = '';
@@ -102,6 +118,7 @@ export class Demo {
     this.root = o.root ?? mkdtempSync('/tmp/ge19-demo-');
     this.journal = path.join(this.root, 'journal');
     this.logs = path.join(this.root, 'logs');
+    this.guestDir = path.join(this.root, 'maurice');
   }
 
   /** Checks the tools, builds the runtime directory and the engine environments, starts the host terminal. */
@@ -161,6 +178,30 @@ export class Demo {
       this.lastActivity = Date.now();
       this.record('terminal', 'command', line, { line });
     });
+    if (this.o.preset === 'hub-vscode-clone') {
+      this.cloneJournal();
+      this.guestTerminal = await startTerminalServer({
+        cwd: this.guestDir,
+        env: this.env(),
+        pageHtml: (ws) => terminalPageHtml(ws, 'Maurice — terminal'),
+        assets: terminalAssets(),
+      });
+      this.guestTerminal.onCommand((line) => {
+        this.typed.push(line);
+        this.lastActivity = Date.now();
+        this.record('terminal', 'command', `(Maurice) ${line}`, { line, who: 'guest' });
+      });
+    }
+  }
+
+  /** Maurice's clone: a plain `git clone` of Myra's journal (before it is attached to the project). */
+  private cloneJournal(): void {
+    rmSync(this.guestDir, { recursive: true, force: true });
+    execFileSync('git', ['clone', '--quiet', this.journal, this.guestDir], { env: gitEnv(), stdio: 'ignore' });
+  }
+
+  terminal(who: 'host' | 'guest'): TerminalServer {
+    return who === 'host' ? this.hostTerminal : this.guestTerminal!;
   }
 
   /** (Re)build the journal repository, keeping `.venv`. */
@@ -301,9 +342,14 @@ export class Demo {
   /** Open the host terminal window (the page the driver and a person type into). */
   async openHostTerminal(): Promise<void> {
     this.computeLayout();
+    await this.openTerminalWindow(this.hostTerminal, this.layout.hostTerminal);
+    if (this.guestTerminal) await this.openTerminalWindow(this.guestTerminal, this.layout.guestTerminal);
+  }
+
+  private async openTerminalWindow(term: TerminalServer, rect: Rect | undefined): Promise<void> {
     const w = await this.window();
     if (this.headless) {
-      await w.page.goto(this.hostTerminal.pageUrl);
+      await w.page.goto(term.pageUrl);
     } else {
       // A popup window has no tab strip or toolbar, so it can be as short as the layout asks (a normal window cannot
       // be shorter than about 375 points).
@@ -311,24 +357,95 @@ export class Demo {
       await opener.goto('about:blank');
       const [popup] = await Promise.all([
         opener.waitForEvent('popup'),
-        opener.evaluate((u) => void window.open(u, 'terminal', 'popup=yes,width=900,height=200'), this.hostTerminal.pageUrl),
+        opener.evaluate((u) => void window.open(u, 'terminal', 'popup=yes,width=900,height=200'), term.pageUrl),
       ]);
       await popup.waitForLoadState();
       await opener.close();
       w.page = popup;
     }
-    await this.place(w, this.layout.hostTerminal);
+    await this.place(w, rect);
     this.terminalPages.push(w);
   }
 
-  /** Open the two browser editors on the hub. */
+  /** The kind of editor each side has in this preset. */
+  get kinds(): { host: 'browser' | 'vscode'; guest: 'browser' | 'vscode' } {
+    return { host: this.o.preset === 'hub-vscode-host' ? 'vscode' : 'browser', guest: this.o.preset === 'hub-vscode-clone' ? 'vscode' : 'browser' };
+  }
+
+  get wsUrl(): string {
+    return deriveWsUrl(this.hubHttp);
+  }
+
+  /** Open the two editors on the hub: browsers, or VS Code windows (an editor-only host, a clone guest). */
   async openEditors(): Promise<void> {
-    const host = await this.window();
-    const guest = await this.window();
-    await Promise.all([this.place(host, this.layout.hostEditor), this.place(guest, this.layout.guestEditor)]);
-    this.hostEditor = host;
-    this.guestEditor = guest;
-    await Promise.all([this.openProject(host.page, R_PAPER), this.openProject(guest.page, PY_PAPER)]);
+    if (this.kinds.host === 'browser') {
+      const host = await this.window();
+      await this.place(host, this.layout.hostEditor);
+      this.hostEditor = host;
+      await this.openProject(host.page, R_PAPER);
+    } else {
+      await this.openVscodeHost();
+    }
+    if (this.kinds.guest === 'browser') {
+      const guest = await this.window();
+      await this.place(guest, this.layout.guestEditor);
+      this.guestEditor = guest;
+      await this.openProject(guest.page, PY_PAPER);
+    } else {
+      await this.openVscodeGuest();
+    }
+  }
+
+  private async placeVscode(v: RunningVscode, r: Rect): Promise<void> {
+    await v.app.evaluate(({ BrowserWindow }, b) => {
+      const w = BrowserWindow.getAllWindows()[0]!;
+      w.setBounds({ x: Math.round(b.left), y: Math.round(b.top), width: Math.round(b.width), height: Math.round(b.height) });
+    }, r);
+  }
+
+  /** The host's VS Code: an editor-only window on the journal folder the hub serves. */
+  private async openVscodeHost(): Promise<void> {
+    await ensureWasm();
+    await bindFolder({ root: this.journal, indexDocId: this.projectId, syncServer: this.wsUrl, mode: 'editor-only' });
+    const v = await launchVscode({ workspace: this.journal, settings: VSCODE_SETTINGS });
+    this.vscode.host = v;
+    await this.placeVscode(v, this.layout.hostEditor);
+    await v.page.locator('.statusbar').getByText('Quarto Hub: editor only').waitFor({ timeout: 60_000 });
+    await openVscodeFile(v.page, R_PAPER);
+  }
+
+  /** The guest's VS Code: a clone of the journal attached to the project, with Maurice's terminal beside it. */
+  private async openVscodeGuest(): Promise<void> {
+    await ensureWasm();
+    const peer = await HeadlessPeer.joinAsClone(this.guestDir, this.wsUrl, this.projectId);
+    await peer.stop();
+    const v = await launchVscode({ workspace: this.guestDir, settings: VSCODE_SETTINGS });
+    this.vscode.guest = v;
+    await this.placeVscode(v, this.layout.guestEditor);
+    await v.page.locator('.statusbar').getByText('Quarto Hub: clone').waitFor({ timeout: 60_000 });
+    await openVscodeFile(v.page, PY_PAPER);
+  }
+
+  /** What an editor shows right now (browser: the rendered Monaco lines; VS Code: the active editor's lines). */
+  async shown(who: 'host' | 'guest'): Promise<string> {
+    if (this.kinds[who] === 'vscode') return activeEditorText(this.vscode[who]!.page);
+    const { shownText } = await import('../../../q2-preview-spa/e2e/helpers/editor');
+    return shownText((who === 'host' ? this.hostEditor : this.guestEditor)!.page).catch(() => '');
+  }
+
+  /** Click into the editor, go to the end of the document, and type (Cmd+Down on macOS; Ctrl+End does nothing there). */
+  async typeAtEnd(who: 'host' | 'guest', text: string): Promise<void> {
+    const page = this.kinds[who] === 'vscode' ? this.vscode[who]!.page : (who === 'host' ? this.hostEditor : this.guestEditor)!.page;
+    await page.locator(this.kinds[who] === 'vscode' ? '.editor-instance .view-lines' : '.monaco-editor .view-lines').first().click();
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
+    await page.keyboard.type(text);
+  }
+
+  /** The number of swap notices an editor shows (always 0 for VS Code, which shows notifications, not this banner). */
+  async notices(who: 'host' | 'guest'): Promise<number> {
+    if (this.kinds[who] === 'vscode') return 0;
+    const { noticeLocator } = await import('../../../q2-preview-spa/e2e/helpers/editor');
+    return noticeLocator((who === 'host' ? this.hostEditor : this.guestEditor)!.page).count();
   }
 
   private async openProject(page: Page, file: string): Promise<void> {
@@ -415,11 +532,11 @@ export class Demo {
   // ---- driving the terminal ----------------------------------------------------------------------------------------
 
   /** Wait until the host shell shows its prompt again, after any typed command. */
-  async waitPrompt(timeoutMs = 60_000): Promise<void> {
+  async waitPrompt(timeoutMs = 60_000, who: 'host' | 'guest' = 'host'): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     let last = '';
     for (;;) {
-      const o = stripAnsi(this.hostTerminal.output());
+      const o = stripAnsi(this.terminal(who).output());
       if (/\$ $/.test(o) && o === last) return;
       last = o;
       if (Date.now() > deadline) throw new Error('the shell did not return to its prompt');
@@ -427,9 +544,9 @@ export class Demo {
     }
   }
 
-  async type(command: string): Promise<void> {
-    await this.hostTerminal.type(command, { charDelayMs: this.o.fast ? 0 : 40 });
-    await this.waitPrompt();
+  async type(command: string, who: 'host' | 'guest' = 'host'): Promise<void> {
+    await this.terminal(who).type(command, { charDelayMs: this.o.fast ? 0 : 40 });
+    await this.waitPrompt(60_000, who);
   }
 
   /** Run `git` as Myra would, in the journal, without the terminal (used by checks and fixtures). */
@@ -445,6 +562,7 @@ export class Demo {
       {
         stopProcesses: async () => {
           this.stopObserver();
+          await this.closeVscode();
           await this.stopHub();
         },
         rebuildJournal: async () => {
@@ -456,7 +574,11 @@ export class Demo {
           rmSync(path.join(this.root, 'data'), { recursive: true, force: true });
           mkdirSync(path.join(this.root, 'data'), { recursive: true });
         },
-        rebuildGuestClone: async () => {},
+        rebuildGuestClone: async () => {
+          await this.guestTerminal!.type('cd ~ && cd ' + JSON.stringify(this.guestDir), { charDelayMs: 0 });
+          await this.waitPrompt(60_000, 'guest');
+          this.cloneJournal();
+        },
         startHub: async () => {
           await this.startHubProcess();
           return this.projectId;
@@ -469,7 +591,12 @@ export class Demo {
           if (this.hostEditor) await this.openProject(this.hostEditor.page, R_PAPER);
           if (this.guestEditor) await this.openProject(this.guestEditor.page, PY_PAPER);
         },
-        rejoinVscode: async () => {},
+        // A fresh hub has a new project id (G19), so the VS Code windows are relaunched and rebound at the same place
+        // (the plan's Join session route would need the share link; the relaunch is recorded as a deviation).
+        rejoinVscode: async () => {
+          if (this.kinds.host === 'vscode') await this.openVscodeHost();
+          if (this.kinds.guest === 'vscode') await this.openVscodeGuest();
+        },
         clearObserver: async () => this.clearObserver(),
         clearStrip: async () => this.clearStrip(),
         announce: (t) => {
@@ -482,11 +609,20 @@ export class Demo {
     this.startObserver();
   }
 
+  private async closeVscode(): Promise<void> {
+    for (const k of ['host', 'guest'] as const) {
+      await this.vscode[k]?.close().catch(() => {});
+      this.vscode[k] = undefined;
+    }
+  }
+
   async stop(): Promise<void> {
     this.stopObserver();
+    await this.closeVscode();
     await this.browser?.close().catch(() => {});
     await this.stopHub();
     await this.hostTerminal.close().catch(() => {});
+    await this.guestTerminal?.close().catch(() => {});
   }
 
   /** Remove the runtime directory (tests; a person keeps theirs). */
