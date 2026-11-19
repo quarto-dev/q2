@@ -51,7 +51,7 @@ describe('buildOffline: the bootstrap content (spec 5)', () => {
     expect(f.owner).toMatch(/\S{8,}/);
     expect(f.epochs).toBe(b.sidecar!.documentId);
     expect(f.repo).toEqual({ roots: [git(dir, 'rev-list', '--max-parents=0', 'HEAD')], prefix: '' });
-    expect(idx.identities[identity.userId]).toEqual({ name: identity.userName, color: identity.userColor });
+    expect(idx.identities?.[identity.userId]).toEqual({ name: identity.userName, color: identity.userColor });
     expect(Object.keys(idx.files).sort()).toEqual(['index.qmd', 'logo.png', 'sub/a.qmd']);
 
     const entries = viewOf(b.sidecar!.doc()!).entries.sort((x, y) => x.path.localeCompare(y.path));
