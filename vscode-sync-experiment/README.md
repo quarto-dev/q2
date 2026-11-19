@@ -44,11 +44,38 @@ of people editing it in the web app.
     repository never does this, even with the same user. Ownership cannot be
     transferred yet.
 - **Quarto Hub: Show share information** — show the share panel again for a shared folder.
+- **Quarto Hub: Join Session** — paste whatever you have: a share ticket
+  (`q2preview…`), a hub URL (`http://127.0.0.1:3000`, `ws://…`), or a
+  quarto-hub.com share link. The command works out the project and where it
+  lives, then offers only the modes that apply, default first:
+  - **Attach this folder** (git clone of the shared repository),
+  - **Create a mirror folder**,
+  - **Editor only** (the hub owns the files; offered when the hub's project
+    folder is the folder you have open, and confirmed first),
+  - **Rebind this folder to the new session** (the open folder is already bound).
+
+  The mode is written to `.quarto-hub/project.json`, and the status bar shows it.
+- **Quarto Hub: Leave Session** — stops syncing the joined folder and ends the
+  join proxy. The folder stays bound.
+- Setting `quartoHub.q2Path` — the `q2` executable that Join Session runs for a
+  ticket (default `q2` on `PATH`). It has machine scope, so a workspace
+  `settings.json` cannot set it. On Windows use `q2.exe`; a `q2.cmd` also works.
 - Setting `quartoHub.userName` — the label shown next to your cursor.
 
-Projects you create from a folder (Create Folder from Project) use
-`wss://sync.automerge.org`; Share this folder accepts any `ws://` or `wss://`
-server. There is no authentication.
+Create Folder from Project and Attach Folder use `wss://sync.automerge.org` unless a share
+link names another server; Share this folder accepts any `ws://` or `wss://` server; Join
+Session uses the server of what you paste. There is no authentication.
+
+### Tickets
+
+A ticket makes the extension start `q2 preview --join <ticket> --host 127.0.0.1 --port N
+--no-browser --exit-on-stdin-close` as a local proxy to the host's session (the extension has
+no iroh of its own), and sync through `ws://127.0.0.1:N/ws`. The ticket is held in memory
+only: it is never written to `project.json` or to the Quarto Hub output channel. It is
+visible, though, in the process argument list to other users of the same machine; treat a
+ticket as a credential for that session. The proxy exits when the extension host does. The
+proxy's port changes every run, so a folder bound through a ticket is stale after a restart:
+the next open reports the project as unavailable and offers to rebind.
 The buffer's dirty indicator is cosmetic — saving is a no-op because edits
 have already synced.
 

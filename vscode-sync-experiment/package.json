@@ -22,7 +22,9 @@
     "onFileSystem:quartohub",
     "workspaceContains:.quarto-hub/project.json",
     "onCommand:quartoHub.shareFolder",
-    "onCommand:quartoHub.showShare"
+    "onCommand:quartoHub.showShare",
+    "onCommand:quartoHub.joinSession",
+    "onCommand:quartoHub.leaveSession"
   ],
   "contributes": {
     "commands": [
@@ -57,6 +59,14 @@
       {
         "command": "quartoHub.showShare",
         "title": "Quarto Hub: Show share information"
+      },
+      {
+        "command": "quartoHub.joinSession",
+        "title": "Quarto Hub: Join Session"
+      },
+      {
+        "command": "quartoHub.leaveSession",
+        "title": "Quarto Hub: Leave Session"
       }
     ],
     "configuration": {
@@ -66,6 +76,12 @@
           "type": "string",
           "default": "",
           "description": "Display name shown next to your cursor in Quarto Hub. Empty picks a name from your machine's username."
+        },
+        "quartoHub.q2Path": {
+          "type": "string",
+          "default": "q2",
+          "scope": "machine",
+          "markdownDescription": "The `q2` executable that Join Session runs for a share ticket. Found on `PATH` by default. Machine scope: a workspace `settings.json` cannot set it."
         }
       }
     }

@@ -28,6 +28,7 @@ import { readProjectMeta } from './core/meta';
 import type { Identity } from './core/presence';
 import { ProjectSync } from './core/project-sync';
 import { ensureWasm } from './core/wasm';
+import { joinCommand, leaveCommand, stopAllProxies, type JoinHost } from './join-command';
 import { VscodeBufferHost, VscodeFileWatcher, VscodeNotifier } from './vscode-host';
 
 const SCHEME = 'quartohub';
@@ -57,6 +58,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('quartoHub.detachedFiles', detachedFilesCommand),
     vscode.commands.registerCommand('quartoHub.shareFolder', () => shareFolderCommand(context)),
     vscode.commands.registerCommand('quartoHub.showShare', () => showShareCommand()),
+    vscode.commands.registerCommand('quartoHub.joinSession', () => joinCommand(joinHost(context))),
+    vscode.commands.registerCommand('quartoHub.leaveSession', () => leaveCommand(joinHost(context))),
     vscode.workspace.onDidCloseTextDocument((doc) => {
       if (doc.uri.scheme === SCHEME) void closeSingleFile(docIdOf(doc.uri));
     }),
@@ -68,7 +71,18 @@ export function activate(context: vscode.ExtensionContext): void {
   for (const f of vscode.workspace.workspaceFolders ?? []) void startProject(f.uri.fsPath, context);
 }
 
+function joinHost(context: vscode.ExtensionContext): JoinHost {
+  return {
+    log,
+    startProject: (root) => startProject(root, context),
+    stopProject,
+    runningRoots: () => [...projects.keys()],
+    defaultServer: () => process.env.QUARTO_HUB_TEST_SYNC_SERVER || DEFAULT_SYNC_SERVER,
+  };
+}
+
 export async function deactivate(): Promise<void> {
+  await stopAllProxies();
   await Promise.all([...[...singleFiles.keys()].map(closeSingleFile), ...[...projects.keys()].map(stopProject)]);
 }
 

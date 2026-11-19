@@ -30,6 +30,8 @@ export interface LaunchOptions {
   workspace: string;
   /** Extra environment for VS Code (and so for the extension host). */
   env?: Record<string, string>;
+  /** Extra user settings (machine-scoped ones such as `quartoHub.q2Path` belong here). */
+  settings?: Record<string, unknown>;
 }
 
 export interface RunningVscode {
@@ -68,6 +70,7 @@ export async function launchVscode(options: LaunchOptions): Promise<RunningVscod
         'files.autoSave': 'afterDelay',
         'files.autoSaveDelay': 300,
         'editor.formatOnSave': false,
+        ...options.settings,
       },
       null,
       2,
