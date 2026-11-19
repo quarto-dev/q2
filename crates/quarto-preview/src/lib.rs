@@ -854,10 +854,24 @@ pub fn extend_with_preview(
         // once at boot — currently just `allowEdit`, which gates the
         // inline block-editing surface.
         .route("/api/preview/config", get(preview_config_handler))
+        // GE-4 (G33): the "paused for git" indicator polls this.
+        .route("/api/preview/git-status", get(git_status_handler))
         .fallback(spa_handler)
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
+
+/// `GET /api/preview/git-status` (GE-4, G33): whether the hub follows
+/// git, whether the gate is closed (`paused`), whether a decision is
+/// waiting for the quiet window (`pending`), the names of the markers
+/// holding the gate, and the last 20 decisions. Exactly the shape
+/// `HubContext::git_status` returns (GE-1 fixes it); web clients show an
+/// indicator only.
+async fn git_status_handler(
+    axum::extract::State(ctx): axum::extract::State<quarto_hub::context::SharedContext>,
+) -> Response {
+    axum::Json(ctx.git_status()).into_response()
+}
 
 /// `GET /api/preview/config` — session-level preview settings the SPA
 /// reads once at boot (bd-ov4gqk3m). `allowEdit` mirrors the

@@ -12,6 +12,7 @@ pub mod diagnostics_endpoint;
 pub mod eager_capture;
 pub mod editor_ui;
 pub mod embed_downloads;
+pub mod git_status;
 pub mod import_route;
 pub mod join_frontend;
 pub mod join_tunnel;
