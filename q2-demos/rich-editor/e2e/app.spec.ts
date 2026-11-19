@@ -1,6 +1,6 @@
 /**
  * The app around the visual editor: which document it opens, the source
- * pane the toolbar's Developer tools button shows beside the editor, the
+ * pane the toolbar's Show source button shows beside the editor, the
  * connection to the hub, the line of status under the editor, and the
  * layout in a narrow window.
  *
@@ -65,23 +65,22 @@ test.describe('which document', () => {
 })
 
 test.describe('the source pane', () => {
-  /** Open the document, and show the source pane with the Developer tools button. */
+  /** Open the document, and show the source pane with the Show source button. */
   async function openBothPanes(page: import('@playwright/test').Page, source = basic) {
     const document = await createDocument(source)
     await document.open(page)
-    await page.getByRole('button', { name: 'Developer tools' }).click()
+    await page.getByRole('button', { name: 'Show source' }).click()
     const frame = page.frameLocator('iframe.visual-frame')
     return { document, frame, sourcePane: page.locator('textarea') }
   }
 
-  test('is not there until the Developer tools button is pressed, and the editor is a page wide, in the middle', async ({ page }) => {
+  test('is not there until the Show source button is pressed, and the editor is a page wide, in the middle', async ({ page }) => {
     await page.setViewportSize({ width: 1400, height: 900 })
     await openEditor(page)
 
     await expect(page.locator('iframe.visual-frame')).toHaveCount(1)
     await expect(page.locator('textarea')).toHaveCount(0)
-    const button = page.getByRole('button', { name: 'Developer tools' })
-    await expect(button).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.getByRole('button', { name: 'Show source' })).toBeVisible()
     const visual = (await page.locator('.visual-box').boundingBox())!
     expect(Math.abs(visual.width - 816)).toBeLessThan(2)
     expect(Math.abs(visual.x - (1400 - (visual.x + visual.width)))).toBeLessThan(2)
@@ -90,25 +89,26 @@ test.describe('the source pane', () => {
   test('is to the right of the visual editor, and holds the source text', async ({ page }) => {
     const { sourcePane } = await openBothPanes(page)
 
-    await expect(page.getByRole('button', { name: 'Developer tools' })).toHaveAttribute('aria-pressed', 'true')
+    // The button is named for what it does now.
+    await expect(page.getByRole('button', { name: 'Hide source' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Show source' })).toHaveCount(0)
     await expect(sourcePane).toHaveValue(basic)
     const source = (await sourcePane.boundingBox())!
     const visual = (await page.locator('iframe.visual-frame').boundingBox())!
     expect(visual.x + visual.width).toBeLessThanOrEqual(source.x)
   })
 
-  test('goes when the Developer tools button is pressed again, and the caret stays where it was', async ({ page }) => {
+  test('goes when the Hide source button is pressed, and the caret stays where it was', async ({ page }) => {
     const document = await createDocument(basic)
     const editor = await document.open(page)
-    const button = page.getByRole('button', { name: 'Developer tools' })
     await editor.placeCaret('title', 4)
 
-    await button.click()
+    await page.getByRole('button', { name: 'Show source' }).click()
     await expect(page.locator('textarea')).toHaveCount(1)
-    await button.click()
+    await page.getByRole('button', { name: 'Hide source' }).click()
 
     await expect(page.locator('textarea')).toHaveCount(0)
-    await expect(button).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.getByRole('button', { name: 'Show source' })).toBeVisible()
     await editor.expectCaret('title', 4)
   })
 
@@ -116,7 +116,7 @@ test.describe('the source pane', () => {
     await page.goto('/fixture.html')
 
     await expect(page.frameLocator('iframe.visual-frame').locator('h1.title')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Developer tools' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /source/ })).toHaveCount(0)
   })
 
   test('the caret starts in the visual editor, at the start of the title', async ({ page }) => {
@@ -292,7 +292,7 @@ test.describe('a narrow window', () => {
     const document = await createDocument(basic)
     await page.setViewportSize({ width: 700, height: 800 })
     await document.open(page)
-    await page.getByRole('button', { name: 'Developer tools' }).click()
+    await page.getByRole('button', { name: 'Show source' }).click()
   }
 
   test('has the source pane below the visual editor, each as wide as the window', async ({ page }) => {

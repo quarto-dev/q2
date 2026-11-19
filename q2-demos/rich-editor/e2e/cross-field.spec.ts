@@ -126,7 +126,8 @@ test.describe('selecting across fields', () => {
     await editor.expectCaret('title', 0)
     expect(await editor.text('subtitle')).toBe('')
     expect(await editor.text('abstract')).toBe('')
-    expect(await editor.blocks()).toEqual([])
+    // The body is one empty line, as an empty body always is.
+    expect(await editor.blocks()).toEqual(['p: '])
     // What isn't a field (the author, the date) is still there.
     await expect(editor.frame.locator('#title-block-header')).toContainText('Ana Silva')
     await editor.document.expectSource(

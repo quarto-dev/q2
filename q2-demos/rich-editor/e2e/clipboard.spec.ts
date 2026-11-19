@@ -199,9 +199,7 @@ test.describe('drag and drop', () => {
     const doc = await createDocument(basic)
     await doc.open(page)
     // With the source pane, which is outside the editor, beside it.
-    const url = new URL(page.url())
-    url.searchParams.delete('view')
-    await page.goto(url.toString())
+    await page.getByRole('button', { name: 'Show source' }).click()
     const frame = page.frameLocator('iframe.visual-frame')
     const title = frame.locator('h1.title .qe-field')
     await expect(title).toHaveText('Quarterly report')

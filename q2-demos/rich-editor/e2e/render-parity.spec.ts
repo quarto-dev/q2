@@ -63,7 +63,15 @@ test.describe('the layout', () => {
         return { size: s.fontSize, weight: s.fontWeight, display: s.display }
       })
     expect(await style('body')).toEqual({ size: '17px', weight: '400', display: 'block' })
-    expect(await style('h1.title')).toEqual({ size: '34px', weight: '600', display: 'block' })
+    expect(await style('h1.title')).toMatchObject({ weight: '600', display: 'block' })
+    // The title's size is the theme's responsive one: 2rem on a page 1200px
+    // wide or more, and calc(1.325rem + .9vw) on a narrower one, as the
+    // editor's page (a page wide) is.
+    const title = await frame.locator('h1.title').evaluate((el) => ({
+      size: parseFloat(getComputedStyle(el).fontSize),
+      width: window.innerWidth,
+    }))
+    expect(title.size).toBeCloseTo(title.width >= 1200 ? 34 : 1.325 * 17 + 0.009 * title.width, 0)
     expect(await style('p.subtitle')).toEqual({ size: '21.25px', weight: '300', display: 'block' })
     expect(await style('.quarto-title-meta-author')).toMatchObject({ display: 'grid' })
     // The article's column is narrower than the page, and centred in it.

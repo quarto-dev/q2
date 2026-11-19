@@ -449,7 +449,7 @@ editor has to keep:
   `&server=<ws-url>`, or none of them for a new document from the
   tutorial (see `app.spec.ts`), and
   `/fixture.html?fixture=<name>`. The source pane is a `textarea`, shown
-  by the toolbar's "Developer tools" button. The
+  by the toolbar's "Show source" button. The
   page's own status is `.status` (`.status-error` for an error), and the
   line under the editor is `.visual-editor .status`.
 - The document is in `iframe.visual-frame`, in the page structure `q2
