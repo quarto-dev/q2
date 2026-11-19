@@ -10,7 +10,7 @@ import { Repo, type DocHandle } from '@automerge/automerge-repo/slim';
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
 import { createIndexDocumentContent, type IndexDocument } from '@quarto/quarto-automerge-schema';
 import { startTestHub, type TestHub } from '@quarto/quarto-sync-client/testing';
-import type { BufferBinding, BufferHost, FileWatcher, Logger, Notifier, SyncHost } from './host';
+import type { BindHooks, BufferBinding, BufferHost, FileWatcher, Logger, Notifier, SyncHost } from './host';
 import type { Identity } from './presence';
 import { MemoryLog, RecordingNotifier } from './recording';
 
@@ -42,10 +42,17 @@ export class FakeWatcher implements FileWatcher {
 export class FakeBufferHost implements BufferHost {
   readonly texts = new Map<string, string>();
   readonly bindings = new Map<string, TextBindingCore>();
+  /** Buffers with unsaved changes: `type` marks one, `save` clears it. */
+  readonly dirty = new Set<string>();
+  /** What bindings were told, in order: `moved:<path>` and `dispose:<path>`. */
+  readonly bindingEvents: string[] = [];
   private readonly opens: ((p: string) => void)[] = [];
   private readonly closes: ((p: string) => void)[] = [];
   getText(absPath: string): string | null {
     return this.texts.get(absPath) ?? null;
+  }
+  isDirty(absPath: string): boolean {
+    return this.dirty.has(absPath);
   }
   openPaths(): string[] {
     return [...this.texts.keys()];
@@ -56,7 +63,7 @@ export class FakeBufferHost implements BufferHost {
   onClose(cb: (p: string) => void): void {
     this.closes.push(cb);
   }
-  bind(absPath: string, handle: DocHandle<TextDoc>): BufferBinding {
+  bind(absPath: string, handle: DocHandle<TextDoc>, _identity?: unknown, hooks?: BindHooks): BufferBinding {
     const buffer = {
       getText: () => this.texts.get(absPath) ?? '',
       applyReplace: async (start: number, end: number, text: string) => {
@@ -65,13 +72,18 @@ export class FakeBufferHost implements BufferHost {
       },
     };
     const core = new TextBindingCore(handle, buffer);
+    core.onLocalEditBatch = () => hooks?.onLocalEdit?.();
+    core.suspended = hooks?.suspended ?? null;
     this.bindings.set(absPath, core);
     core.start();
     return {
       dispose: () => {
+        this.bindingEvents.push(`dispose:${absPath}`);
         core.dispose();
         this.bindings.delete(absPath);
       },
+      sendMoved: () => void this.bindingEvents.push(`moved:${absPath}`),
+      reconcile: () => void core.applyRemote(),
     };
   }
   dispose(): void {}
@@ -80,8 +92,12 @@ export class FakeBufferHost implements BufferHost {
     this.texts.set(absPath, text);
     for (const cb of this.opens) cb(absPath);
   }
+  save(absPath: string): void {
+    this.dirty.delete(absPath);
+  }
   close(absPath: string): void {
     this.texts.delete(absPath);
+    this.dirty.delete(absPath);
     for (const cb of this.closes) cb(absPath);
   }
   /** The user types: replaces the whole buffer text, reported as one splice. */
@@ -89,6 +105,7 @@ export class FakeBufferHost implements BufferHost {
     const cur = this.texts.get(absPath) ?? '';
     const r = computeReplace(cur, newText);
     this.texts.set(absPath, newText);
+    this.dirty.add(absPath);
     if (r) this.bindings.get(absPath)?.onLocalEdit([{ rangeOffset: r.start, rangeLength: r.end - r.start, text: r.text }]);
   }
 }

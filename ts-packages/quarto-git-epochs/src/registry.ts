@@ -33,7 +33,7 @@ export function registryKey(path: string, blob: string, doc: string): string {
 
 export function parseKey(key: string): { path: string; blob: string; doc: string } {
   const [path, blob, doc] = key.split(NUL);
-  return { path, blob, doc };
+  return { path: path!, blob: blob!, doc: doc! };
 }
 
 const int = (n: number) => new A.Int(n) as unknown as number;

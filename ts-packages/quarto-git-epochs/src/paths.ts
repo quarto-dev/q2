@@ -13,6 +13,6 @@ export function relativeProjectPath(root: string, file: string): string | null {
   const windowsShaped = /^[a-zA-Z]:/.test(toForwardSlashes(root)) || toForwardSlashes(root).startsWith('//');
   const eq = (a: string, b: string) => (windowsShaped ? a.toLowerCase() === b.toLowerCase() : a === b);
   if (f.length < r.length) return null;
-  for (let i = 0; i < r.length; i++) if (!eq(r[i], f[i])) return null;
+  for (let i = 0; i < r.length; i++) if (!eq(r[i]!, f[i]!)) return null;
   return f.slice(r.length).join('/');
 }

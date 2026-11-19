@@ -5,7 +5,7 @@
 import * as vscode from 'vscode';
 import type { DocHandle } from '@automerge/automerge-repo/slim';
 import { Binding } from './binding';
-import type { BufferBinding, BufferHost, FileWatcher, Notifier } from './core/host';
+import type { BindHooks, BufferBinding, BufferHost, FileWatcher, Notifier } from './core/host';
 import type { Identity } from './core/presence';
 import type { TextDoc } from './core/text-binding';
 
@@ -47,6 +47,9 @@ export class VscodeBufferHost implements BufferHost {
   getText(absPath: string): string | null {
     return this.docOf(absPath)?.getText() ?? null;
   }
+  isDirty(absPath: string): boolean {
+    return this.docOf(absPath)?.isDirty ?? false;
+  }
   openPaths(): string[] {
     return vscode.workspace.textDocuments.filter((d) => d.uri.scheme === 'file').map((d) => d.uri.fsPath);
   }
@@ -56,11 +59,15 @@ export class VscodeBufferHost implements BufferHost {
   onClose(cb: (absPath: string) => void): void {
     this.disposables.push(vscode.workspace.onDidCloseTextDocument((d) => d.uri.scheme === 'file' && cb(d.uri.fsPath)));
   }
-  bind(absPath: string, handle: DocHandle<TextDoc>, identity: Identity): BufferBinding | null {
+  bind(absPath: string, handle: DocHandle<TextDoc>, identity: Identity, hooks?: BindHooks): BufferBinding | null {
     const document = this.docOf(absPath);
     if (!document) return null;
-    const binding = new Binding(document, handle, identity);
-    return { dispose: () => binding.dispose() };
+    const binding = new Binding(document, handle, identity, hooks);
+    return {
+      dispose: () => binding.dispose(),
+      sendMoved: () => binding.sendMoved(),
+      reconcile: () => binding.reconcile(),
+    };
   }
   dispose(): void {
     this.disposables.forEach((d) => d.dispose());

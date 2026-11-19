@@ -17,8 +17,8 @@ export function makeRepo(root: string, syncServer: string | null): Repo {
   });
 }
 
-export async function findDoc<T>(repo: Repo, docId: string): Promise<DocHandle<T>> {
-  const handle = await repo.find<T>(`automerge:${docId}` as never, { signal: AbortSignal.timeout(30_000) });
+export async function findDoc<T>(repo: Repo, docId: string, signal?: AbortSignal): Promise<DocHandle<T>> {
+  const handle = await repo.find<T>(`automerge:${docId}` as never, { signal: signal ?? AbortSignal.timeout(30_000) });
   await handle.whenReady();
   return handle;
 }

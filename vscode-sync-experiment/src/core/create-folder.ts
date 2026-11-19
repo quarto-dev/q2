@@ -100,7 +100,7 @@ export async function createProjectFolder(
     const base = await projectFolderName(repo, files, indexDocId);
     root = path.join(parentDir, base);
     for (let n = 2; await fs.stat(root).then(() => true, () => false); n++) root = path.join(parentDir, `${base}-${n}`);
-    const meta: ProjectMeta = { indexDocId, syncServer, createdAt: new Date().toISOString() };
+    const meta: ProjectMeta = { indexDocId, syncServer, createdAt: new Date().toISOString(), mode: 'mirror' };
     await writeProjectMeta(tmpRoot, meta);
     await writeProjectFiles(repo, tmpRoot, index.doc(), log);
     // Open files are written by VS Code's autosave (see ownership rule in

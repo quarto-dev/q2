@@ -66,6 +66,9 @@ export class NoBuffers implements BufferHost {
   getText(): null {
     return null;
   }
+  isDirty(): boolean {
+    return false;
+  }
   openPaths(): string[] {
     return [];
   }

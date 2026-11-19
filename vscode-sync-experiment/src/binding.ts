@@ -5,6 +5,7 @@
  */
 import * as vscode from 'vscode';
 import type { DocHandle } from '@automerge/automerge-repo/slim';
+import type { BindHooks } from './core/host';
 import { Presence, type Identity, type RemoteCursor } from './core/presence';
 import { TextBindingCore, type TextDoc } from './core/text-binding';
 
@@ -29,11 +30,17 @@ export class Binding {
     readonly document: vscode.TextDocument,
     readonly handle: DocHandle<TextDoc>,
     identity: Identity,
+    hooks: BindHooks = {},
   ) {
-    this.presence = new Presence(handle, identity, (cursors) => {
-      this.cursors = cursors;
-      this.render();
-    });
+    this.presence = new Presence(
+      handle,
+      identity,
+      (cursors) => {
+        this.cursors = cursors;
+        this.render();
+      },
+      hooks.onMoved,
+    );
     this.sync = new TextBindingCore(handle, {
       getText: () => document.getText(),
       applyReplace: async (start, end, text) => {
@@ -45,6 +52,8 @@ export class Binding {
     // Cursor offsets were re-resolved against the new doc while the buffer
     // was still the old text (render skipped them); draw them now.
     this.sync.afterApply = () => this.render();
+    this.sync.onLocalEditBatch = () => hooks.onLocalEdit?.();
+    this.sync.suspended = hooks.suspended ?? null;
     bindings.set(document.uri.toString(), this);
     this.sync.start(); // the buffer may lag the doc at bind time
   }
@@ -58,6 +67,16 @@ export class Binding {
       d.selection.dispose();
     }
     this.decorations.clear();
+  }
+
+  /** Tell the others this peer is leaving the doc for a new version (G25). */
+  sendMoved(): void {
+    this.presence.sendMoved();
+  }
+
+  /** Bring the buffer to the doc's text now. */
+  reconcile(): void {
+    void this.sync.applyRemote();
   }
 
   /** Local keystrokes -> Automerge splices. */

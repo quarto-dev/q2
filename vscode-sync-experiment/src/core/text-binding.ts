@@ -68,8 +68,10 @@ export class TextBindingCore {
   private mirror: string;
   /** Edits rejected by the mirror check (a diagnostic for tests and the log). */
   rejectedEdits = 0;
-  /** Called for each local edit that is counted as stranded by the host (see `ProjectSync`). */
+  /** Called for each accepted local edit batch, after it is spliced into the doc. */
   onLocalEditBatch: ((changes: readonly TextChange[]) => void) | null = null;
+  /** While true the binding is suspended (the editor-only gate): local edits are dropped and the doc is not written into the buffer. */
+  suspended: (() => boolean) | null = null;
 
   constructor(
     readonly handle: DocHandle<TextDoc>,
@@ -94,13 +96,13 @@ export class TextBindingCore {
   /** Local keystrokes -> Automerge splices. */
   onLocalEdit(changes: readonly TextChange[]): void {
     if (this.applyingRemote || changes.length === 0) return;
+    if (this.suspended?.()) return; // dropped: the gate is closed
     const expected = applyChanges(this.mirror, changes);
     if (expected === null || expected !== this.buffer.getText()) {
       this.rejectedEdits++;
       void this.applyRemote(); // reconcile the buffer to the doc by content
       return;
     }
-    this.onLocalEditBatch?.(changes);
     // An editor reports a single event's changes against the pre-edit text in
     // descending offset order, so applying them sequentially needs no
     // adjustment (the same contract hub-client relies on with Monaco).
@@ -108,10 +110,12 @@ export class TextBindingCore {
       for (const c of changes) splice(doc, ['text'], c.rangeOffset, c.rangeLength, c.text);
     });
     this.mirror = this.handle.doc()?.text ?? expected;
+    this.onLocalEditBatch?.(changes);
   }
 
   /** Automerge changes -> buffer. One replace covering the changed span. */
   async applyRemote(): Promise<void> {
+    if (this.suspended?.()) return; // never write the doc into a buffer that git is rewriting
     const target = this.handle.doc()?.text;
     if (target === undefined) return;
     const replace = computeReplace(this.buffer.getText(), target);

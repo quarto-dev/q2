@@ -305,7 +305,7 @@ export class NoticeAggregator {
       parts.push(
         openFile === undefined || openFile === only
           ? REPLACED_THIS_FILE
-          : formatNotice(REPLACED_ONE_FILE, { path: only }),
+          : formatNotice(REPLACED_ONE_FILE, { path: only! }),
       );
     } else if (paths.length > 1) {
       parts.push(formatNotice(REPLACED_MANY_FILES, { n: paths.length }));

@@ -33,15 +33,27 @@ import {
   type IndexDocument,
 } from '@quarto/quarto-automerge-schema';
 import { writeFileDoc, type FileDoc } from './create-folder';
+import { Follower, type Clock } from './follower';
 import type { BufferBinding, SyncHost } from './host';
 import { META_DIR, isIgnoredPath } from './ignore';
-import { META_FILE, type ProjectMeta } from './meta';
+import { META_FILE, type ProjectMeta, type ProjectMode } from './meta';
 import type { Identity } from './presence';
+import { movedNotice } from '@quarto/quarto-git-epochs';
 import { findDoc, makeRepo, webSocketAdapter } from './repo';
 import { UnsafePathError, safeJoin } from './safe-path';
 import type { TextDoc } from './text-binding';
 
+/** Knobs the tests (and later plans) turn; every one has a product default. */
+export interface SyncOptions {
+  /** How long a follower swap may wait for the new doc before it reports `unavailable` (G32: 5000). */
+  swapTimeoutMs?: number;
+  /** Timers for the swap coordinator; default: the real ones. */
+  clock?: Clock;
+}
+
 export class ProjectSync {
+  readonly mode: Exclude<ProjectMode, 'clone'>;
+  private follower!: Follower;
   private repo!: Repo;
   private index!: DocHandle<IndexDocument>;
   private readonly handles = new Map<string, DocHandle<FileDoc>>(); // rel path -> handle
@@ -61,7 +73,15 @@ export class ProjectSync {
     private readonly meta: ProjectMeta,
     private readonly identity: Identity,
     private readonly host: SyncHost,
-  ) {}
+    private readonly options: SyncOptions = {},
+  ) {
+    if (meta.mode === 'clone') throw new Error('clone mode is not available in this version of the extension');
+    this.mode = meta.mode ?? 'mirror';
+  }
+
+  private get writesDisk(): boolean {
+    return this.mode === 'mirror';
+  }
 
   private get log() {
     return this.host.log;
@@ -78,7 +98,7 @@ export class ProjectSync {
       if ((await this.safePath(rel)) === null) continue;
       this.track(rel, await findDoc<FileDoc>(this.repo, docId));
     }
-    await this.reconcileDisk();
+    if (this.writesDisk) await this.reconcileDisk();
     this.knownFolders = new Set(Object.keys(this.index.doc()?.folders ?? {}));
 
     // Phase 2: go online. From here on, changes flow both ways live.
@@ -87,10 +107,26 @@ export class ProjectSync {
     this.index.on('change', onIndex);
     this.cleanups.push(() => this.index.off('change', onIndex));
 
+    this.follower = new Follower(
+      {
+        currentHandle: (rel) => this.handles.get(rel),
+        loadDoc: (docId, signal) => this.loadDoc(docId, signal),
+        rebind: (rel, newHandle, oldHandle) => this.rebind(rel, newHandle, oldHandle),
+        isOpen: (rel) => this.host.buffers.getText(this.absOf(rel)) !== null,
+        notifier: this.host.notifier,
+        log: (line) => this.log.appendLine(line),
+        clock: this.options.clock ?? { setTimeout, clearTimeout },
+      },
+      { swapTimeoutMs: this.options.swapTimeoutMs },
+    );
+    this.cleanups.push(() => this.follower.dispose());
+
     const { watcher, buffers } = this.host;
-    watcher.onChange((p) => void this.onDiskChange(p));
-    watcher.onCreate((p) => void this.onDiskCreate(p));
-    watcher.onDelete((p) => void this.onDiskDelete(p));
+    if (this.writesDisk) {
+      watcher.onChange((p) => void this.onDiskChange(p));
+      watcher.onCreate((p) => void this.onDiskCreate(p));
+      watcher.onDelete((p) => void this.onDiskDelete(p));
+    }
     buffers.onOpen((p) => this.bind(p));
     buffers.onClose((p) => this.unbind(p));
     this.cleanups.push(() => watcher.dispose(), () => buffers.dispose());
@@ -167,8 +203,13 @@ export class ProjectSync {
     }
   }
 
-  private async logEvent(event: 'created' | 'deleted' | 'edited-offline' | 'rejected', rel: string, source: 'hub' | 'local'): Promise<void> {
-    const line = JSON.stringify({ at: new Date().toISOString(), event, path: rel, source }) + '\n';
+  private async logEvent(
+    event: 'created' | 'deleted' | 'edited-offline' | 'rejected' | 'flipped',
+    rel: string,
+    source: 'hub' | 'local',
+    extra: { from?: string; to?: string } = {},
+  ): Promise<void> {
+    const line = JSON.stringify({ at: new Date().toISOString(), event, path: rel, source, ...extra }) + '\n';
     await fs.appendFile(path.join(this.root, META_DIR, 'events.jsonl'), line).catch(() => {});
     this.log.appendLine(`${source}: ${event} ${rel}`);
   }
@@ -178,7 +219,12 @@ export class ProjectSync {
     if (!rel || this.bound.has(abs)) return;
     const handle = this.handles.get(rel);
     if (!handle || !isTextDocument(handle.doc())) return;
-    const binding = this.host.buffers.bind(abs, handle as DocHandle<TextDoc>, this.identity);
+    const binding = this.host.buffers.bind(abs, handle as DocHandle<TextDoc>, this.identity, {
+      // The Binding keeps the handle it was created with; the base doc id tells the follower
+      // whether an edit landed in a doc that is being, or has been, replaced.
+      onLocalEdit: () => this.follower?.noteLocalEdit(rel, handle.documentId),
+      onMoved: (name) => this.host.notifier.status(movedNotice(name), 3000),
+    });
     if (binding) this.bound.set(abs, binding);
   }
 
@@ -246,28 +292,36 @@ export class ProjectSync {
 
   // --- hub -> disk -------------------------------------------------------------
 
-  // PINNED by project-sync.test.ts, replaced by GE-9: every index entry whose
-  // doc id differs is untracked, retracked, and written to disk with no look
-  // at what the disk holds.
+  /**
+   * The owner's pointer moved. A path with no tracked handle is a new entry
+   * (written to disk in a mirror, never in editor-only). A path whose doc id
+   * differs is a version switch and goes through the swap coordinator (G26):
+   * the old doc stays bound until the new one has loaded, edits typed meanwhile
+   * stay with the old doc and are counted, and one aggregate notice follows.
+   * A path that left the index is removed (the file too, in a mirror).
+   */
   private async syncIndex(): Promise<void> {
     const files = this.index.doc()?.files ?? {};
     for (const rel of [...this.handles.keys()]) {
       if (!(rel in files)) {
         this.untrack(rel);
         const abs = await this.safePath(rel);
-        if (abs !== null) await fs.rm(abs, { force: true });
+        if (abs !== null && this.writesDisk) await fs.rm(abs, { force: true });
         await this.logEvent('deleted', rel, 'hub');
       }
     }
     for (const [rel, docId] of Object.entries(files)) {
       if ((await this.safePath(rel)) === null) continue;
       const existing = this.handles.get(rel);
-      if (existing && existing.documentId === docId) continue;
-      if (existing) this.untrack(rel); // path now points at a different document
+      if (existing) {
+        this.follower.indexChanged(rel, docId); // a no-op when the doc is the one already bound
+        continue;
+      }
       const handle = await findDoc<FileDoc>(this.repo, docId);
+      if (this.handles.has(rel)) continue; // another pass got here first
       this.track(rel, handle);
       const doc = handle.doc();
-      if (doc) await writeFileDoc(this.root, rel, doc);
+      if (doc && this.writesDisk) await writeFileDoc(this.root, rel, doc);
       await this.logEvent('created', rel, 'hub');
     }
     const folders = new Set(Object.keys(this.index.doc()?.folders ?? {}));
@@ -285,9 +339,45 @@ export class ProjectSync {
     this.knownFolders = folders;
   }
 
+  /**
+   * Load the doc a version switch points at. The server answers "unavailable"
+   * at once for a doc it has not received yet (the owner may still be
+   * uploading it), so keep asking until the swap's signal aborts: the swap
+   * timeout (5 s, G32) is what decides the doc is unavailable.
+   */
+  private async loadDoc(docId: string, signal: AbortSignal): Promise<DocHandle<FileDoc>> {
+    for (;;) {
+      try {
+        return await findDoc<FileDoc>(this.repo, docId, signal);
+      } catch (err) {
+        if (signal.aborted) throw err;
+        await new Promise<void>((resolve) => {
+          const t = setTimeout(resolve, 150);
+          signal.addEventListener('abort', () => (clearTimeout(t), resolve()), { once: true });
+        });
+        if (signal.aborted) throw err;
+      }
+    }
+  }
+
+  /**
+   * The swap's host step: the path now maps to `newHandle`. The moved message
+   * goes out on the old doc before the old Binding is disposed (G25).
+   */
+  private async rebind(rel: string, newHandle: DocHandle<FileDoc>, oldHandle: DocHandle<FileDoc> | undefined): Promise<void> {
+    const abs = this.absOf(rel);
+    this.bound.get(abs)?.sendMoved?.();
+    this.untrack(rel); // disposes the old Binding
+    this.track(rel, newHandle); // binds an open buffer to the new doc
+    const doc = newHandle.doc();
+    if (doc && this.writesDisk) await writeFileDoc(this.root, rel, doc);
+    await this.logEvent('flipped', rel, 'hub', { from: oldHandle?.documentId, to: newHandle.documentId });
+  }
+
   // PINNED by project-sync.test.ts, gated by GE-10: a doc change rewrites a
   // file that is missing on disk.
   private async onDocChange(rel: string): Promise<void> {
+    if (!this.writesDisk) return; // editor-only: the hub owns the disk
     if (this.isBound(rel)) return; // the binding + autosave own this file
     const doc = this.handles.get(rel)?.doc();
     if (!doc) return;

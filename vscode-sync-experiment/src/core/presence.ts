@@ -19,7 +19,7 @@ interface PresenceMessage extends Identity {
   cursor: string | null;
   selection: { start: string; end: string } | null;
 }
-type Message = PresenceMessage | { type: 'leave'; peerId: string };
+type Message = PresenceMessage | { type: 'leave'; peerId: string } | { type: 'moved'; peerId: string };
 
 export interface RemoteCursor extends Identity {
   peerId: string;
@@ -38,6 +38,8 @@ export class Presence {
     private readonly handle: DocHandle<TextDoc>,
     private readonly me: Identity,
     private readonly onChange: (cursors: RemoteCursor[]) => void,
+    /** A peer left this doc because of a version switch; `name` when its presence is known. */
+    private readonly onMoved?: (name: string | undefined) => void,
   ) {
     handle.on('ephemeral-message', this.receive);
     handle.on('change', this.notify); // tokens resolve to new offsets after edits
@@ -63,6 +65,15 @@ export class Presence {
     this.handle.broadcast(msg);
   }
 
+  /** Tell the others this peer is leaving the doc because of a version switch (G25; the type is GE-6's `MovedMessage`). */
+  sendMoved(): void {
+    try {
+      this.handle.broadcast({ type: 'moved', peerId: this.peerId } satisfies Message);
+    } catch {
+      /* socket may be gone */
+    }
+  }
+
   dispose(): void {
     clearInterval(this.timer);
     this.handle.off('ephemeral-message', this.receive);
@@ -76,8 +87,12 @@ export class Presence {
 
   private receive = ({ message }: { message: unknown }) => {
     const m = message as Message;
-    if (!m || typeof m !== 'object' || m.peerId === this.peerId) return;
-    if (m.type === 'leave') this.remote.delete(m.peerId);
+    if (!m || typeof m !== 'object' || typeof m.peerId !== 'string' || m.peerId === this.peerId) return;
+    if (m.type === 'moved') {
+      const name = this.remote.get(m.peerId)?.msg.userName;
+      this.remote.delete(m.peerId);
+      this.onMoved?.(typeof name === 'string' && name ? name : undefined);
+    } else if (m.type === 'leave') this.remote.delete(m.peerId);
     else if (m.type === 'presence') this.remote.set(m.peerId, { msg: m, seen: Date.now() });
     this.notify();
   };
