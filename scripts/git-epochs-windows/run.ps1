@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-  GE-15, the Windows run A: runs the new Rust and hub tests of the git epochs epic and writes one results file.
+  GE-15 and GE-16, the Windows runs A and B: runs the new Rust and hub tests (items a0 to a6) and the new TypeScript
+  and extension tests (items b1 to b7) of the git epochs epic and writes one results file.
   Temporary tooling on windows/git-epochs; it never lands on feature/git-epochs.
 
 .DESCRIPTION
@@ -12,7 +13,8 @@
   Full logs go under results/logs/ (not committed).
 
 .PARAMETER Only
-  Run only these item ids (for example -Only a1,a5). Default: all.
+  Run only these item ids (for example -Only a1,a5 or -Only b1,b2,b3,b4,b5,b6,b7). Default: all. A b-only run needs
+  no Rust toolchain, NASM, or CMake; an a-only run needs no Node.
 .PARAMETER WithTools
   Download pandoc and typst (the versions CI pins in .github/workflows/test-suite.yml) as portable zips into
   results/tools and put them on PATH for this run. Without them, tests that need pandoc or typst fail, which says
@@ -33,6 +35,11 @@ param(
 
 $ErrorActionPreference = 'Continue'   # native stderr must not abort the script (PS 5.1)
 Set-StrictMode -Version 2
+
+$wantA = (-not $Only) -or (@($Only | Where-Object { $_ -like 'a*' }).Count -gt 0)
+$wantB = (-not $Only) -or (@($Only | Where-Object { $_ -like 'b*' }).Count -gt 0)
+$ra = if ($wantA) { 'yes' } else { 'no' }
+$rb = if ($wantB) { 'yes' } else { 'no' }
 
 $repo = (& git -C $PSScriptRoot rev-parse --show-toplevel).Trim()
 if (-not $repo) { Write-Host 'Run this from inside the q2 checkout.'; exit 2 }
@@ -168,14 +175,31 @@ foreach ($cand in @(
 Write-Host "== Toolchain ($runId) =="
 $tools = @()
 $tools += Test-Tool 'git'    'yes' 'winget install Git.Git   (Git for Windows; the probe is tested against it)'
-$tools += Test-Tool 'rustc'  'yes' 'winget install Rustlang.Rustup   (then: rustup default stable-x86_64-pc-windows-msvc)'
-$tools += Test-Tool 'cargo'  'yes' 'comes with rustup'
-$tools += Test-Tool 'cargo-nextest' 'yes' 'cargo install cargo-nextest --locked'
-$tools += Test-Tool 'uv'     'yes' 'winget install astral-sh.uv   (runs make_large_tree.py and extract_failures.py)'
-$tools += Test-Tool 'nasm'   'yes' 'winget install NASM.NASM   (the aws-lc-sys crates in quarto-hub need it)'
-$tools += Test-Tool 'cmake'  'yes' 'winget install Kitware.CMake   (the aws-lc-sys crates in quarto-hub need it)'
+$tools += Test-Tool 'rustc'  $ra 'winget install Rustlang.Rustup   (then: rustup default stable-x86_64-pc-windows-msvc)'
+$tools += Test-Tool 'cargo'  $ra 'comes with rustup'
+$tools += Test-Tool 'cargo-nextest' $ra 'cargo install cargo-nextest --locked'
+$tools += Test-Tool 'uv'     $ra 'winget install astral-sh.uv   (runs make_large_tree.py and extract_failures.py)'
+$tools += Test-Tool 'nasm'   $ra 'winget install NASM.NASM   (the aws-lc-sys crates in quarto-hub need it)'
+$tools += Test-Tool 'cmake'  $ra 'winget install Kitware.CMake   (the aws-lc-sys crates in quarto-hub need it)'
 $tools += Test-Tool 'link'   'no'  'Visual Studio Build Tools, "Desktop development with C++" (cargo finds link.exe itself, so absent from PATH is normal; install only if the build says "linker not found")'
-$tools += Test-Tool 'node'   'no'  'fnm/nvm; Node major per .nvmrc (only some quarto tests use it)'
+$tools += Test-Tool 'node'   $rb 'fnm/nvm; Node major per .nvmrc (items b1 to b7)'
+$tools += Test-Tool 'npm'    $rb 'comes with Node'
+$tools += Test-Tool 'jj'     'no'  'optional: winget install jj-vcs.jj (the jj scenarios of b1 skip without it)'
+
+$nodeVersion = ''
+$nodeCaveat = ''
+if (Get-Command node -ErrorAction SilentlyContinue) {
+    $nodeVersion = (& node --version).Trim()
+    $want = ''
+    $nvmrc = Join-Path $repo '.nvmrc'
+    if (Test-Path $nvmrc) { $want = ((Get-Content -Path $nvmrc -TotalCount 1) -replace '[^0-9.]', '').Split('.')[0] }
+    $have = ($nodeVersion -replace '^v', '').Split('.')[0]
+    Write-Host ('  node ' + $nodeVersion + '  (.nvmrc major: ' + $want + ')')
+    if ($want -and $have -ne $want) {
+        $nodeCaveat = 'Node ' + $nodeVersion + ' is not the .nvmrc major ' + $want + '; npm ci refuses other majors (engine-strict), so b7 and everything after it will fail for that reason alone.'
+        Write-Host ('  WARNING: ' + $nodeCaveat) -ForegroundColor Red
+    }
+}
 
 $hostTriple = ''
 if (Get-Command rustc -ErrorAction SilentlyContinue) {
@@ -254,7 +278,7 @@ if ($WithTools) {
 # --------------------------------------------------------------------------------------------
 
 $pkgs = ($crates | ForEach-Object { '-p ' + $_ }) -join ' '
-if (-not $SkipBuild) {
+if ($wantA -and -not $SkipBuild) {
     Write-Host '== a0: build test binaries (the first build is slow) =='
     $r = Invoke-Logged 'a0-build' ('cargo nextest run ' + $pkgs + ' --no-run')
     if ($r.Exit -ne 0) {
@@ -325,20 +349,144 @@ if (Test-Selected 'a6') {
 }
 
 # --------------------------------------------------------------------------------------------
+# b1 to b7 (GE-16): the TypeScript package and the VS Code extension's vscode-free core
+# --------------------------------------------------------------------------------------------
+
+function Get-VitestCounts {
+    # Sums the "Tests  N failed | N passed | N skipped (N)" line of one vitest run. $null when there is none.
+    param([string]$Text)
+    $clean = $Text -replace '\x1b\[[0-9;]*m', ''
+    $m = [regex]::Match($clean, '(?m)^\s*Tests\s+(.+)$')
+    if (-not $m.Success) { return $null }
+    $line = $m.Groups[1].Value
+    $c = @{ failed = 0; passed = 0; skipped = 0 }
+    foreach ($k in @('failed', 'passed', 'skipped')) {
+        $mm = [regex]::Match($line, '(\d+) ' + $k)
+        if ($mm.Success) { $c[$k] = [int]$mm.Groups[1].Value }
+    }
+    return $c
+}
+
+function Invoke-BItem {
+    # One item = one or more steps (each a command line, run through Invoke-Logged). The item passes when every
+    # step exits 0 with no failed test and the passed total reaches $MinTests (0 = no count guard, for npm ci).
+    param([string]$Id, [string]$Catalog, [string]$Title, $Steps, [int]$MinTests,
+          [string]$Proves, [string]$NotProves, [string]$Caveat = '')
+    if (-not (Test-Selected $Id)) { return }
+    if (-not $script:npmReady -and $Id -ne 'b7') {
+        Add-Result $Id $Title 'SKIP' 'npm ci did not succeed (see b7 or b0); the TypeScript items need node_modules' $Proves $NotProves '' '' $false '' $Catalog
+        return
+    }
+    $passed = 0; $skipped = 0; $failedTests = 0; $badStep = ''; $lastLog = ''; $tail = ''
+    $n = 0
+    foreach ($st in $Steps) {
+        $n++
+        $r = Invoke-Logged ($Id + '-' + $st.Name) $st.Cmd
+        $lastLog = $r.Log
+        $text = Get-LogText $r.Log
+        $cnt = Get-VitestCounts $text
+        if ($st.Counts -and $null -eq $cnt -and $r.Exit -eq 0) { $badStep = $st.Name + ': no vitest summary line'; $tail = Get-Tail $r.Log 30; continue }
+        if ($cnt) { $passed += $cnt.passed; $skipped += $cnt.skipped; $failedTests += $cnt.failed }
+        if ($r.Exit -ne 0 -or ($cnt -and $cnt.failed -gt 0)) {
+            if (-not $badStep) { $badStep = $st.Name + ': exit code ' + $r.Exit; $tail = Get-Tail $r.Log 60 }
+        }
+    }
+    $summary = $passed.ToString() + ' tests passed, ' + $skipped.ToString() + ' skipped'
+    if ($badStep) {
+        Add-Result $Id $Title 'FAIL' ($badStep + '; ' + $summary + ', ' + $failedTests.ToString() + ' failed') $Proves $NotProves $tail $Caveat $false $lastLog $Catalog
+    } elseif ($passed -lt $MinTests) {
+        Add-Result $Id $Title 'FAIL' ('expected at least ' + $MinTests + ' passed tests, saw ' + $passed + ' (a path or filter matched too little)') $Proves $NotProves $tail $Caveat $false $lastLog $Catalog
+    } else {
+        Add-Result $Id $Title 'PASS' $summary $Proves $NotProves '' $Caveat $false $lastLog $Catalog
+    }
+}
+
+$script:npmReady = $false
+if ($wantB) {
+    Write-Host '== b: TypeScript and extension items =='
+    $crlfCaveat = ''
+    if ($autocrlf -ne 'true') {
+        $crlfCaveat = 'core.autocrlf is ' + $autocrlf + ', not true: the CRLF-checkout case was not exercised from the checkout. The tests set autocrlf=true in their own temp repos, so they still check the comparison, but clone with: git clone -c core.autocrlf=true ... for the full item.'
+    }
+    $pkgGE = '@quarto/quarto-git-epochs'
+    $pkgX  = 'quarto-hub-vscode'
+    $vt = { param($pkg, $files) 'npm exec -w ' + $pkg + ' -- vitest run ' + $files }
+
+    # b7 first: the clean install the other items stand on.
+    if ($true) {
+        $tsWs = @(Get-ChildItem -Directory (Join-Path $repo 'ts-packages') | Where-Object { Test-Path (Join-Path $_.FullName 'package.json') } | Sort-Object Name | ForEach-Object { '-w ts-packages/' + $_.Name }) -join ' '
+        $installOk = $true
+        $ri = $null
+        $needInstall = (Test-Selected 'b7') -or -not (Test-Path (Join-Path $repo 'node_modules'))
+        if ($needInstall) {
+            Write-Host '== b7: npm ci (root) =='
+            $ri = Invoke-Logged 'b7-npm-ci' 'npm ci'
+            $installOk = ($ri.Exit -eq 0)
+        }
+        $script:npmReady = $installOk
+        if (Test-Selected 'b7') {
+            $steps = @()
+            if ($installOk) {
+                $steps += @{ Name = 'typecheck'; Cmd = 'npm run typecheck -w ' + $pkgX; Counts = $false }
+                $steps += @{ Name = 'build-extension'; Cmd = 'npm run build -w ' + $pkgX; Counts = $false }
+                $steps += @{ Name = 'build-ts-packages'; Cmd = 'npm run build --if-present ' + $tsWs; Counts = $false }
+            }
+            if (-not $installOk) {
+                Add-Result 'b7' 'clean root install, extension typecheck and bundle, ts-packages builds' 'FAIL' ('npm ci exit code ' + $ri.Exit) 'The extension joined the workspaces cleanly and its bundle builds on Windows.' 'vsce package; installing a .vsix; the hub-client and preview-SPA builds.' (Get-Tail $ri.Log 40) $nodeCaveat $false $ri.Log ''
+            } else {
+                Invoke-BItem 'b7' '' 'clean root install, extension typecheck and bundle, ts-packages builds' $steps 0 'npm ci succeeded at the pinned Node; the extension typechecks (including e2e), its esbuild bundle builds, and every ts-packages workspace builds on Windows.' 'vsce package; installing a .vsix; the hub-client and preview-SPA builds (they need the WASM and a pandoc download).' $nodeCaveat
+            }
+        }
+    }
+
+    Invoke-BItem 'b1' 'W6' 'git probe, controller, and scenarios of the TypeScript package on Git for Windows' @(
+        @{ Name = 'package'; Cmd = 'npm test -w ' + $pkgGE; Counts = $true }) 150 `
+        'The probe parses Git for Windows output (C:/... from --git-path, ls-tree -z quoting, reflog); the controller sees real index.lock and rebase-merge markers; the shared scenario step lists run against real repositories in %TEMP%. jj scenarios skip when jj is absent.' `
+        'Other Git builds; jj on Windows unless it is installed.'
+
+    Invoke-BItem 'b2' 'W4' 'keys and paths: registry keys, ignore rules, safeJoin NTFS forms, junction, long path' @(
+        @{ Name = 'package'; Cmd = (& $vt $pkgGE 'src/paths.test.ts src/registry.test.ts'); Counts = $true },
+        @{ Name = 'extension'; Cmd = (& $vt $pkgX 'src/core/safe-path.test.ts src/core/ignore.test.ts'); Counts = $true }) 80 `
+        'The TypeScript key normalization, ignore rules, and safeJoin hold for Windows path forms: / keys, drive letters and UNC prefixes, case collisions, nested .quarto-hub and .git segments, .git. and .git::$INDEX_ALLOCATION, a directory junction pointing outside the root, a path over 260 characters, and (where the volume has 8.3 names) GIT~1.' `
+        'Filesystems other than NTFS; Dev Drive or OneDrive behavior. The 8.3 row skips on a volume with short names disabled.'
+
+    Invoke-BItem 'b3' 'W3' 'core.autocrlf=true: content rule, arrival, and the dirty check' @(
+        @{ Name = 'package'; Cmd = (& $vt $pkgGE 'src/arrival.test.ts src/classify.test.ts src/paths.test.ts src/scenarios.test.ts'); Counts = $true },
+        @{ Name = 'extension'; Cmd = (& $vt $pkgX 'src/core/clone/arrival.test.ts src/core/origination/dirty.test.ts'); Counts = $true }) 70 `
+        'A CRLF checkout does not look dirty, and comparisons normalize as the macOS tests assume (the autocrlf-checkout scenario, arrival step 3, the origination dirty check).' `
+        '.gitattributes filters (LFS, ident); autocrlf=input.' $crlfCaveat
+
+    Invoke-BItem 'b4' '' 'extension core engine and headless peer: watcher, disk writes, rebind, atomic record write' @(
+        @{ Name = 'core'; Cmd = (& $vt $pkgX 'src/core/follower.test.ts src/core/clone src/core/project-sync.test.ts src/core/text-binding.test.ts src/core/presence.test.ts src/core/meta.test.ts src/core/editor-only.test.ts src/core/git-exclude.test.ts src/core/no-vscode.test.ts src/headless/peer.test.ts src/package-manifest.test.ts'); Counts = $true }) 100 `
+        'The engine runs on Windows: the injected watcher, writes to disk, rebind deleting the Automerge store after the repo is shut down (no EBUSY), and the atomic write of git-epochs.json retrying a rename refused with EPERM or EBUSY.' `
+        'VS Code''s own file watcher; a real scanner or watcher holding the file (the EPERM test injects the error).'
+
+    Invoke-BItem 'b5' 'W7' 'Join: q2 spawn through a stub q2.cmd, readiness, stdin close, tree kill, ticket hygiene' @(
+        @{ Name = 'join'; Cmd = (& $vt $pkgX 'src/core/join.test.ts src/core/join-proxy.test.ts'); Counts = $true }) 45 `
+        'Spawn and kill semantics on Windows: the ticket in argv, a free port, the readiness poll of the stub /health, stdin close ending the stub, kill of the whole process tree on Leave, stderr surfaced, no ticket in any log; .cmd is spawned through a shell.' `
+        'The iroh tunnel across real networks. The optional real q2 preview --share host and --join guest is not scripted: run it by hand if the network allows.'
+
+    Invoke-BItem 'b6' '' 'origination: offline publish, resume, second peer reads every file' @(
+        @{ Name = 'origination'; Cmd = (& $vt $pkgX 'src/headless/owner.test.ts src/headless/publish-git.test.ts src/core/origination'); Counts = $true }) 50 `
+        'Publish order and resume on NTFS paths and Node file handles: docs and registry entries exist before the connect, the share link only after the heads are confirmed, an interrupted publish resumes from local storage, and a second peer reads every file.' `
+        'An out-of-process q2 hub (these tests run an in-process hub); the public server; very large uploads.'
+}
+
+# --------------------------------------------------------------------------------------------
 # write results
 # --------------------------------------------------------------------------------------------
 $out = New-Object PSObject -Property ([ordered]@{
     run_id = $runId; branch = $branch; commit = $commit; base = $baseNote; host_triple = $hostTriple
     os = (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).Caption
-    git = $gitVersion; autocrlf = $autocrlf; longpaths = $longpaths
+    git = $gitVersion; node = $nodeVersion; autocrlf = $autocrlf; longpaths = $longpaths
     tools = $tools; items = @($results) })
 $jsonPath = Join-Path $resultsDir ('gea-' + $runId + '.json')
 $out | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 $jsonPath
 
 $md = New-Object System.Collections.ArrayList
-[void]$md.Add('# GE-15 Windows run ' + $runId)
+[void]$md.Add('# GE-15 and GE-16 Windows run ' + $runId)
 [void]$md.Add('')
-[void]$md.Add('Branch ' + $branch + ' at ' + $commit + ' (' + $baseNote + '); host ' + $hostTriple + '; ' + $gitVersion + '; autocrlf ' + $autocrlf + '; longpaths ' + $longpaths + '.')
+[void]$md.Add('Branch ' + $branch + ' at ' + $commit + ' (' + $baseNote + '); host ' + $hostTriple + '; ' + $gitVersion + '; node ' + $nodeVersion + '; autocrlf ' + $autocrlf + '; longpaths ' + $longpaths + '.')
 [void]$md.Add('')
 [void]$md.Add('| item | catalog | status | reason |')
 [void]$md.Add('|---|---|---|---|')
@@ -365,10 +513,10 @@ if ($nf -gt 0) {
     Write-Host 'To explain the failures: uv run scripts/git-epochs-windows/extract_failures.py   (then commit its output with the results)'
 }
 
-$pushCmd = 'git add scripts/git-epochs-windows/results/*.json scripts/git-epochs-windows/results/*.md; git commit -m "GE-15: Windows results"; git push origin HEAD:windows/git-epochs'
+$pushCmd = 'git add scripts/git-epochs-windows/results/*.json scripts/git-epochs-windows/results/*.md; git commit -m "GE-15/GE-16: Windows results"; git push origin HEAD:windows/git-epochs'
 if ($Publish) {
     & git add $jsonPath $mdPath
-    & git commit -m ('GE-15: Windows results ' + $runId)
+    & git commit -m ('GE-15/GE-16: Windows results ' + $runId)
     & git push origin 'HEAD:windows/git-epochs'
     Write-Host 'Pushed. Tell the macOS agent: results are pushed.'
 } else {

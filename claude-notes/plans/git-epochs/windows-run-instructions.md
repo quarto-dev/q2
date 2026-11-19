@@ -1,10 +1,11 @@
 ---
-title: 'GE-15 Windows run A: getting started'
+title: 'GE-15 and GE-16 Windows runs: getting started'
 date: 2026-11-19
-description: 'What to do on the Windows machine for the git epochs Rust and hub items: get the branch, run one script, and send the results back through the branch. Also what each item proves and the failures to ignore.'
+description: 'What to do on the Windows machine for the git epochs Rust, hub, TypeScript, and extension items: get the branch, run one script, and send the results back through the branch. Also what each item proves and the failures to ignore.'
 ---
 
-**Plan:** [GE-15](ge-15-windows-run-a.md). This page and the scripts under `scripts/git-epochs-windows/` exist only on
+**Plans:** [GE-15](ge-15-windows-run-a.md) (items `a0` to `a6`, run A) and [GE-16](ge-16-windows-run-b.md) (items `b1` to
+`b7`, run B; section 9). This page and the scripts under `scripts/git-epochs-windows/` exist only on
 the temporary branch `windows/git-epochs`; the branch never lands on `feature/git-epochs`, and only the plan\'s "Notes
 from the run" stays.
 
@@ -25,7 +26,8 @@ winget install Kitware.CMake
 git config --global core.longpaths true
 ```
 
-Node at the major in `.nvmrc` is optional here; a few `quarto` tests use it and skip without it.
+Node at the major in `.nvmrc` is optional for run A (a few `quarto` tests use it and skip without it) and required for
+run B (section 9).
 
 ## 2. Get the branch
 
@@ -118,3 +120,50 @@ message, a failure count per test module, and the full output of the failing tes
 
 When the macOS side changes the tests or the scripts, it merges `feature/git-epochs` into `windows/git-epochs` and
 pushes; it never rebases a pushed branch. Pull with `git pull origin windows/git-epochs`.
+
+## 9. Run B: the TypeScript and extension items (GE-16)
+
+Run B uses the same script and the same branch. It checks only the new TypeScript package
+(`ts-packages/quarto-git-epochs`) and the VS Code extension\'s vscode-free core (`vscode-sync-experiment/`). It needs no
+Rust toolchain, NASM, or CMake: when you pass only `b` items, the script requires just Git for Windows, Node, and npm.
+
+**Setup beyond section 1.**
+
+- **Node at the `.nvmrc` major (currently 24).** `npm ci` refuses other majors (`engine-strict`). Use `fnm` or `nvm`
+  (`winget install Schniz.fnm`, then `fnm use`); do not rely on a Node that a package manager may relink. The script
+  prints a warning when the major differs.
+- **A clean clone** made with `core.autocrlf=true` and `core.longpaths=true`, as in section 2
+  (`git config --global core.longpaths true` before cloning). The script prints both values and marks a caveat when
+  `core.autocrlf` is not `true`.
+- **Optional: `jj`** (`winget install jj-vcs.jj`). Without it the jj scenarios of `b1` skip, which is not a failure.
+- **Optional: `-SkipBuild`** only matters when you run the `a` items as well and `target\` is already built.
+
+**Run it.** From the repository root:
+
+```powershell
+git pull origin windows/git-epochs
+powershell -ExecutionPolicy Bypass -File scripts\git-epochs-windows\run.ps1 -Only b1,b2,b3,b4,b5,b6,b7 -Publish
+```
+
+`b7` runs first and does a clean `npm ci` at the root; the other items stand on it. Expect a few minutes for the install
+and the builds and about a minute for each vitest item. If `node_modules\` already exists and you pass no `b7`, the
+script reuses it. The results file is the same shape as run A, so section 4 and the extractor of section 7 apply. The
+extractor reads nextest logs only; for a vitest failure, read the `output_tail` of the item in the `.json` (it holds the
+last 60 lines of the failing step) or the full log under `results\logs\`.
+
+**What each item checks.**
+
+| Item | Catalog | How it is tested | What a PASS proves | What it does not prove |
+|---|---|---|---|---|
+| `b1` | W6 | `npm test -w @quarto/quarto-git-epochs` with `git.exe` on `PATH` | The probe parses Git for Windows output (`C:/...` from `--git-path`, `ls-tree -z` quoting, reflog); the controller sees real `index.lock` and `rebase-merge`; the shared scenario step lists run on real repositories in `%TEMP%`. | Other Git builds; jj on Windows unless installed. |
+| `b2` | W4 | the package\'s `paths` and `registry` tests, the extension\'s `safe-path` and `ignore` tests | `/` keys, case collisions, drive letters and UNC prefixes, nested `.quarto-hub` and `.git` segments, the `safeJoin` NTFS forms (`.git.`, trailing space, `.git::$INDEX_ALLOCATION`, `GIT~1` where the volume has short names), a directory junction outside the root, a path over 260 characters. | Filesystems other than NTFS; Dev Drive or OneDrive. The `GIT~1` row skips when short names are off. |
+| `b3` | W3 | the package\'s `arrival`, `classify`, `paths`, and `scenarios` tests (including the `autocrlf-checkout` scenario) and the extension\'s clone `arrival` and origination `dirty` tests | A CRLF checkout does not look dirty; comparisons normalize as the macOS tests assume. | `.gitattributes` filters; `autocrlf=input`. |
+| `b4` | none | the extension core and the headless peer | The engine runs on Windows: the injected watcher, writes to disk, rebind deleting the Automerge store after shutdown (no `EBUSY`), the atomic `git-epochs.json` write retrying `EPERM` or `EBUSY`. | VS Code\'s own file watcher; a real scanner holding the file. |
+| `b5` | W7 | `join` and `join-proxy` tests against a stub `q2.cmd` | The ticket in argv, a free port, the readiness poll, stdin close ending the stub, tree kill on Leave, stderr surfaced, no ticket in any log; `.cmd` spawned through a shell. | The iroh tunnel across real networks. |
+| `b6` | none | the headless owner and publish tests and the origination tests, on an in-process hub | Publish order and resume on NTFS paths; the share link only after the heads are confirmed; a second peer reads every file. | An out-of-process `q2 hub`; the public server; very large uploads. |
+| `b7` | none | `npm ci`, then typecheck and build of the extension and build of every `ts-packages` workspace | The extension joined the workspaces cleanly and its bundle builds. | `vsce package`; installing a `.vsix`; the hub-client and preview-SPA builds. |
+
+**Optional, by hand.** If the network allows, run a real `q2 preview --share` host and a `q2 preview --join` guest on
+this machine and write down what happened. It is not scripted.
+
+**Known failures to ignore.** None at the start of run B. Anything that fails is a finding.
