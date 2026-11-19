@@ -1256,7 +1256,8 @@ async fn reconcile_files_with_index(
 
     // Reconcile text files (config + qmd)
     for file_path in project_files.text_files() {
-        let path_str = file_path.to_string_lossy();
+        // Index keys are `/`-separated on every platform (GE-17: a native key is rejected by sync_all).
+        let path_str = quarto_util::to_forward_slashes(file_path);
 
         // Skip if already in index
         if index.has_file(&path_str) {
@@ -1303,7 +1304,8 @@ async fn reconcile_files_with_index(
 
     // Reconcile binary files
     for file_path in &project_files.binary_files {
-        let path_str = file_path.to_string_lossy();
+        // Index keys are `/`-separated on every platform (GE-17: a native key is rejected by sync_all).
+        let path_str = quarto_util::to_forward_slashes(file_path);
 
         // Skip if already in index
         if index.has_file(&path_str) {
@@ -1500,6 +1502,37 @@ mod tests {
         })
         .unwrap();
         doc
+    }
+
+    /// GE-17 `c1` on Windows: discovery handed the index a native path, so a nested file got the
+    /// key `d00\\f0000.qmd`, which `sync_all` (GE-3's backslash rule) rejects, and no peer ever saw
+    /// the file. Keys must be `/`-separated whatever the platform. On a POSIX host a backslash in a
+    /// file name stands in for the Windows separator: it is the same string `to_string_lossy` gave.
+    #[tokio::test]
+    async fn discovery_indexes_nested_files_with_forward_slash_keys() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path().join("project");
+        std::fs::create_dir(&project_root).unwrap();
+        std::fs::write(project_root.join("index.qmd"), "# Hello").unwrap();
+        std::fs::write(project_root.join("d00\\f0000.qmd"), "# Nested").unwrap();
+        std::fs::write(
+            project_root.join("d00\\img.png"),
+            [0x89, b'P', b'N', b'G', 0, 1, 2],
+        )
+        .unwrap();
+
+        let storage = StorageManager::new(&project_root).unwrap();
+        let ctx = HubContext::new(storage, HubConfig::default())
+            .await
+            .unwrap();
+
+        let mut keys: Vec<String> = ctx.index().get_all_files().into_keys().collect();
+        keys.sort();
+        assert!(
+            keys.iter().all(|k| !k.contains('\\')),
+            "index keys must use `/`, saw {keys:?}"
+        );
+        assert!(keys.contains(&"d00/f0000.qmd".to_string()), "{keys:?}");
     }
 
     /// A poisoned index key with `..` must not let an attacker overwrite a file

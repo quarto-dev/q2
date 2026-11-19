@@ -157,4 +157,70 @@ say so instead of claiming success.
 
 ## Notes from the run
 
-Not started.
+**Session 1 (lane A, 2026-11-19).** Branch `ge/17a-windows-fixes` off `feature/git-epochs` (`32478b2b8`). GE-14, GE-15, GE-16, and
+GE-16a were done when the session started. The plan is **not done**: `c1` found a product defect, fixed below, and its
+rerun on Windows is the open step.
+
+**Tooling** (`windows/git-epochs`, merged with `feature/git-epochs`, never rebased; temporary, never lands). Items `c1`,
+`c2`, and `c3` in `run.ps1`; the scenario `scripts/git-epochs-windows/c1/windows-scenario.e2e.ts` (a Playwright-driven
+script with no browser; `run.mjs`; `ctrl-c.ps1` for step 9); instructions page section 10. `c1` ran green on macOS before
+the handoff: `node scripts/git-epochs-windows/c1/run.mjs` with 4,005 tracked files, 2 tests passed, step 9 saw the marker,
+sent SIGINT, logged "the shutdown flush was skipped", and a restarted hub served the switched tree with no markers.
+`pwsh` is not installed on this host, so `run.ps1` was never parsed before Windows; it ran on first use.
+Deviations: the scenario is a `.e2e.ts` run by Playwright's runner (not a plain Node script) so it can reuse the
+extension\'s TypeScript helpers; the `feature` branch also rewrites 800 bulk files so a `git switch` holds the lock
+long enough to poll. Registry entries are keyed by path and blob, so after a switch `a.qmd` has one entry per branch;
+the scenario asserts on the entry at the HEAD blob.
+
+**Runs on the Windows machine** (Windows 11 Pro, `x86_64-pc-windows-msvc`, git 2.47.1.windows.1, node v24.21.0,
+`core.autocrlf=true`, `core.longpaths` unset, no `jj`, VS Code 1.101.2 downloaded by the harness):
+
+| Run | Item | Result |
+|---|---|---|
+| `20261119-091925` (base `c91a63522`) | `c1` | FAIL: step 3 never finished (10 min test timeout); step 9 timed out waiting for the mirror to hold every file |
+| | `c2` | extension flows 17 of 19 passed; timing test passed with a gap of **84 ms** (window 1,000 ms); cross-client scenarios not run (no embed build) |
+| `20261119-095638` (base `b6c4cb95e`) | `c1` | FAIL: the mirror held **4 files of 4,005** after 480 s, with the hub alive; hub log: `Index path escapes project root, rejecting path=d37\f2637.qmd` (hundreds of lines) |
+| | `c2` | PASS: 20 passed, 0 skipped; gap 84 ms; cross-client scenarios not run |
+| (`a6` console, not published) | `a6` | 1,878 of 1,896 passed, 18 failed (list below); not yet compared with the baseline |
+
+**Defect found by `c1` (product, fixed on this branch).** `reconcile_files_with_index` built index keys with
+`file_path.to_string_lossy()`, which on Windows gives `d00\f0000.qmd`. GE-3 added a rule to `contained_join` that rejects
+any key containing a backslash (G36), so `sync_all` skipped every nested file: the hub never wrote or served it, and a
+joining peer received only the four root-level files (`_quarto.yml`, `index.qmd`, `a.qmd`, `c.qmd`; `img/logo.png` was
+missing too). `sync_file_by_path_gated` had the same native key for the watcher\'s index lookup, so disk edits to nested
+files would not have reached their docs either. The native-key code dates from 2025; GE-3\'s hardening made it fatal,
+and every Windows test before `c1` passed because the unit tests build keys by joining components with `/` and never
+went through discovery. Fix: both sites use `quarto_util::to_forward_slashes`
+(`crates/quarto-hub/src/context.rs`, `sync.rs`; commit `5c0ccc508`). Tests, red then green: 
+`context::tests::discovery_indexes_nested_files_with_forward_slash_keys` and
+`sync::tests::sync_file_by_path_finds_a_nested_file_by_its_forward_slash_key` (a backslash in a POSIX file name stands
+in for the Windows separator). `cargo nextest run -p quarto-hub` 542 of 542, clippy clean, `cargo xtask lint` clean.
+The `a4` item\'s `path_keys::` tests could not catch this: they exercise `contained_join`, not the producers of keys.
+**Not seen fixed on Windows:** the proof is `c1` on the next run.
+
+**`c2` classification.** The first run had two failures that did not repeat in the second run (20 of 20):
+- `join.e2e.ts (b)` read `index.qmd` from `.quarto-hub-tmp-*`, the staging folder `createProjectFolder` renames into
+  place: its `waitFor` accepts any folder with `.quarto-hub/project.json`, which the staging folder has before the
+  rename. A **test race**; the fix is to skip `.quarto-hub-tmp-*` in that scan. Not changed here (tests only, and it
+  passed on the rerun).
+- `clone-mode.e2e.ts "Stay detached"` found no toast button within 30 s. **Unexplained**: the run\'s
+  `error-context.md` was not pushed, and it passed on the rerun. Treat as an intermittent Windows timing issue
+  unless it recurs.
+Timing (G20): a gap of 84 ms from `index.lock` release to the last buffer reload; editor-only does not need the
+experimental fallback on this machine.
+
+**`a6` failures (18 of 1,896), first look.** In `quarto`: `convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes`, four `lmd_snapshots`, two `render_scripts_cli`, `render_dry_run::would_render_lines_are_project_relative`,
+`smoke_all`; in `quarto-preview`: `route_tests` (two), `book_downloads`, `render_scripts_boot`, `live_reexecute`; in
+`quarto-hub`: `storage::test_storage_manager_prevents_double_lock` and its standalone twin; in `quarto-git-epochs`:
+`probe_real_repo::index_lock_is_resolved_through_git_path_for_a_linked_worktree` and
+`probe_real_repo::is_shallow_is_false_for_a_repo_and_true_for_a_depth_one_clone_through_a_file_url`. The two probe
+tests are in the epic\'s own crate and are the ones to explain first; none of the 18 is classified until the
+`main` baseline (`run.ps1 -Only a6` at the merge base) and the failure text are in hand.
+
+**Open (Gordon, on the Windows machine).**
+1. Pull `windows/git-epochs` after the macOS side merges `ge/17a-windows-fixes` into it; run `run.ps1 -Only c1 -Publish`.
+2. `run.ps1 -Only c3 -Publish` (all `a` and `b` items together), then the `a6` baseline on `main`, `b5,b6` with
+   Developer Mode on, and `b4` with `QUARTO_HUB_DEBUG=1`.
+3. Optionally `c2` with `-BuildEmbed` for the cross-client scenarios.
+
+**The final statement, end-to-end record, and landing are not written**: they wait for a green `c1`.
