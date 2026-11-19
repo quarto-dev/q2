@@ -103,6 +103,17 @@ test.describe('gitRepo helper', () => {
     expect(repo.git('status', '--porcelain').trim()).toBe('');
   });
 
+  test('the fixture repo gives the same blob ids on every build (GE-14)', async () => {
+    const other = await mkdtemp(path.join(tmpdir(), 'q2-gitrepo-check-'));
+    try {
+      const ids = (r: GitRepo) =>
+        ['main', 'feature'].map((b) => r.git('ls-tree', '-r', b).trim().split('\n').map((l) => l.replace(/^\d+ blob /, '')).sort().join('\n')).join('\n--\n');
+      expect(ids(buildFixtureRepo(dir))).toBe(ids(buildFixtureRepo(other)));
+    } finally {
+      await rm(other, { recursive: true, force: true });
+    }
+  });
+
   test('jjAvailable is false when jj cannot run', () => {
     const saved = process.env.PATH;
     process.env.PATH = dir; // an empty directory: no jj on it
