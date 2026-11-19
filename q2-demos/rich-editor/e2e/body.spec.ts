@@ -988,12 +988,25 @@ test.describe('scrolling', () => {
     expect(await caretInView(editor)).toBe(true)
   })
 
-  // Today the page stays where it was, with the caret out of view.
-  test.fixme('a key that moves the caret out of view scrolls to it', async ({ page }) => {
+  test('a key that moves the caret out of view scrolls to it', async ({ page }) => {
     const editor = await (await createDocument(long)).open(page)
 
     await page.keyboard.press(`${mod}+ArrowDown`)
 
+    await expect.poll(() => caretInView(editor)).toBe(true)
+  })
+
+  test('Down and Up, pressed again and again, keep the caret in view', async ({ page }) => {
+    const editor = await (await createDocument(long)).open(page)
+    await editor.placeCaretInParagraph(0, 0)
+
+    for (let i = 0; i < 60; i++) await page.keyboard.press('ArrowDown')
+    await editor.expectParagraphCaret(60, 0)
+    await expect.poll(() => caretInView(editor)).toBe(true)
+
+    await editor.frame.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+    for (let i = 0; i < 60; i++) await page.keyboard.press('ArrowUp')
+    await editor.expectParagraphCaret(0, 0)
     await expect.poll(() => caretInView(editor)).toBe(true)
   })
 

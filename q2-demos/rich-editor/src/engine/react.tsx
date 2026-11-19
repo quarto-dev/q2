@@ -767,7 +767,10 @@ export function useFieldEditor(
         // Not once the caret has left the fields: reading the page's
         // selection back would put the caret (and the focus) back in them.
         const moved = arrow(e)
-        if (moved === true) syncSelection()
+        if (moved === true) {
+          syncSelection()
+          revealCaret(doc)
+        }
       }
     }
 
@@ -934,6 +937,39 @@ function onFirstLine(field: HTMLElement, node: Node, offset: number): boolean {
   const style = getComputedStyle(field)
   const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2
   return caretTop - field.getBoundingClientRect().top < lineHeight * 0.75
+}
+
+/**
+ * Scroll, as little as it takes, to show the selection's focus. A caret
+ * moved by script (`Selection.modify`, `setBaseAndExtent`) isn't scrolled to
+ * the way one moved by the browser is: Chromium and WebKit leave it out of
+ * view.
+ */
+function revealCaret(doc: Document) {
+  const selection = doc.getSelection()
+  const node = selection?.focusNode
+  if (!node) return
+  const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
+  if (!element) return
+  const range = doc.createRange()
+  range.setStart(node, selection.focusOffset)
+  const caretRect = range.getClientRects()[0] ?? element.getBoundingClientRect()
+  let { top, bottom } = caretRect
+  // How far to scroll so that [top, bottom] is inside [from, to], in whole
+  // pixels (Chromium drops a fraction of one).
+  const delta = (from: number, to: number) =>
+    top < from ? Math.floor(top - from) : bottom > to ? Math.ceil(Math.min(bottom - to, top - from)) : 0
+  for (let el = element.parentElement; el && el !== doc.documentElement && el !== doc.body; el = el.parentElement) {
+    const overflow = getComputedStyle(el).overflowY
+    if ((overflow !== 'auto' && overflow !== 'scroll') || el.scrollHeight <= el.clientHeight) continue
+    const box = el.getBoundingClientRect()
+    const before = el.scrollTop
+    el.scrollTop += delta(box.top, box.top + el.clientHeight)
+    top -= el.scrollTop - before
+    bottom -= el.scrollTop - before
+  }
+  const view = doc.defaultView
+  if (view) view.scrollBy(0, delta(0, view.innerHeight))
 }
 
 /** The horizontal position of a caret at a DOM point. */
