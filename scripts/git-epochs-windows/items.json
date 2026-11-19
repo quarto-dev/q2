@@ -1,0 +1,54 @@
+[
+  {
+    "id": "a1",
+    "catalog": "W1",
+    "title": "git probe on Git for Windows",
+    "packages": "-p quarto-git-epochs",
+    "filter": "package(quarto-git-epochs) & test(probe_real_repo::)",
+    "min_tests": 10,
+    "proves": "rev-parse --git-path output with a drive letter (C:/...) and from a linked worktree parses; ls-tree -r -z with a project prefix returns the right paths; symlink entries (mode 120000) are filtered; cat-file --batch frames binary content correctly; reflog subjects parse.",
+    "does_not_prove": "Any Git build other than Git for Windows, or colocated jj."
+  },
+  {
+    "id": "a2",
+    "catalog": "W2",
+    "title": "the gate during a real git switch of a 4,000-file tree",
+    "packages": "-p quarto-git-epochs",
+    "filter": "package(quarto-git-epochs) & binary(integration) & test(large_tree::)",
+    "min_tests": 2,
+    "large_tree": true,
+    "proves": "The controller reports the gate closed for every real marker git creates during a switch of a large tree, and releases it afterward (six switches). The skip-never-delete behavior for an unreadable file is a hub behavior, covered by a5.",
+    "does_not_prove": "Antivirus or OneDrive interplay, or timings on a cold cache."
+  },
+  {
+    "id": "a3",
+    "catalog": "W3",
+    "title": "core.autocrlf=true: classifier and arrival comparisons",
+    "packages": "-p quarto-git-epochs",
+    "filter": "package(quarto-git-epochs) & (test(classify::) | test(arrival::))",
+    "min_tests": 15,
+    "needs_autocrlf": true,
+    "proves": "A CRLF-checked-out file compares equal to its blob content after normalization, through the classifier and the arrival comparison, for text; binaries compare by bytes.",
+    "does_not_prove": ".gitattributes filters (LFS, ident), or the CRLF case if autocrlf was not true (the script marks that caveat)."
+  },
+  {
+    "id": "a4",
+    "catalog": "W4",
+    "title": "paths and keys: registry keys and hub path_keys",
+    "packages": "-p quarto-git-epochs -p quarto-hub",
+    "filter": "(package(quarto-git-epochs) & test(registry::)) | (package(quarto-hub) & test(path_keys::))",
+    "min_tests": 8,
+    "proves": "Registry keys use /; a case-insensitive collision of two keys falls back to ordinary sync; drive letters, UNC prefixes, and long paths (with core.longpaths) round-trip.",
+    "does_not_prove": "NTFS 8.3 short names or Unicode normalization differences."
+  },
+  {
+    "id": "a5",
+    "catalog": "W5",
+    "title": "hub gate and checkpoint integration with a real repo",
+    "packages": "-p quarto-hub",
+    "filter": "package(quarto-hub) & binary(integration) & test(git_epochs::)",
+    "min_tests": 20,
+    "proves": "The gate inside sync_all holds with a real repo; the checkpoint is written before the pointer flips; no code path renames a directory while it holds a handle in it; the unreadable-file test (an injected PermissionDenied, a skip and never a delete) passes on Windows. The injected error stands in for a real sharing violation; a real one needs a second process holding the file open.",
+    "does_not_prove": "Network filesystems or Dev Drive behavior."
+  }
+]
