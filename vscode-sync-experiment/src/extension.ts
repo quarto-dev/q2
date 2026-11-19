@@ -8,19 +8,17 @@
  * Both share the buffer binding and remote cursors in binding.ts.
  */
 import * as os from 'node:os';
-import * as path from 'node:path';
 import * as vscode from 'vscode';
-// Slim entrypoints: no wasm is compiled at module load. The wasm is
-// initialised asynchronously on first use (see ensureWasm), which keeps
-// activation instant and avoids synchronous WebAssembly compilation, which
-// Electron forbids in some process types.
+// Slim entrypoints: no wasm is compiled at module load; see core/wasm.ts.
 import { Repo, type AnyDocumentId, type DocHandle } from '@automerge/automerge-repo/slim';
-import { initializeBase64Wasm, isWasmInitialized } from '@automerge/automerge/slim';
-import { automergeWasmBase64 } from '@automerge/automerge/automerge.wasm.base64';
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
 import { Binding, bindings, registerBindingEvents, type TextDoc } from './binding';
-import type { Identity } from './presence';
-import { ProjectSync, createProjectFolder, readProjectMeta } from './project';
+import { createProjectFolder } from './core/create-folder';
+import { readProjectMeta } from './core/meta';
+import type { Identity } from './core/presence';
+import { ProjectSync } from './core/project-sync';
+import { ensureWasm } from './core/wasm';
+import { VscodeBufferHost, VscodeFileWatcher, VscodeNotifier } from './vscode-host';
 
 const SCHEME = 'quartohub';
 const SYNC_SERVER = 'wss://sync.automerge.org';
@@ -30,11 +28,6 @@ const singleFiles = new Map<string, { repo: Repo; handle: DocHandle<TextDoc> }>(
 /** Project mode: workspace folder path -> sync. */
 const projects = new Map<string, ProjectSync>();
 let log: vscode.OutputChannel;
-
-async function ensureWasm(): Promise<void> {
-  if (isWasmInitialized()) return;
-  await initializeBase64Wasm(automergeWasmBase64);
-}
 
 // ---------------------------------------------------------------------------
 // Activation
@@ -102,7 +95,9 @@ async function createFolder(): Promise<void> {
     await ensureWasm();
     root = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: `Creating folder from project ${indexDocId}…` },
-      () => createProjectFolder(indexDocId, parentDir, log),
+      // QUARTO_HUB_TEST_SYNC_SERVER is a test-only seam for the Playwright
+      // smoke tests (GE-8); GE-11 replaces it with the real per-folder binding.
+      () => createProjectFolder(indexDocId, parentDir, log, { syncServer: process.env.QUARTO_HUB_TEST_SYNC_SERVER || undefined }),
     );
   } catch (err) {
     showError('create folder failed', err);
@@ -118,10 +113,10 @@ async function startProject(root: string, context: vscode.ExtensionContext): Pro
   if (!meta) return;
   try {
     await ensureWasm();
-    const sync = new ProjectSync(root, meta, getIdentity(context), log);
+    const host = { log, watcher: new VscodeFileWatcher(root), buffers: new VscodeBufferHost(), notifier: new VscodeNotifier() };
+    const sync = new ProjectSync(root, meta, getIdentity(context), host);
     projects.set(root, sync);
     await sync.start();
-    vscode.window.setStatusBarMessage(`$(sync) Quarto Hub: syncing ${path.basename(root)}`, 5000);
   } catch (err) {
     projects.delete(root);
     showError(`project sync failed for ${root}`, err);

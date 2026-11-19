@@ -4,10 +4,11 @@
  * single-file `quartohub:` buffers and files inside a synced project folder.
  */
 import * as vscode from 'vscode';
-import { splice, type DocHandle } from '@automerge/automerge-repo/slim';
-import { Presence, type Identity, type RemoteCursor } from './presence';
+import type { DocHandle } from '@automerge/automerge-repo/slim';
+import { Presence, type Identity, type RemoteCursor } from './core/presence';
+import { TextBindingCore, type TextDoc } from './core/text-binding';
 
-export type TextDoc = { text: string };
+export type { TextDoc };
 
 interface PeerDecorations {
   cursor: vscode.TextEditorDecorationType;
@@ -21,9 +22,8 @@ export class Binding {
   private readonly presence: Presence;
   private cursors: RemoteCursor[] = [];
   private readonly decorations = new Map<string, PeerDecorations>();
-  /** Set while we write remote changes into the buffer, so they aren't echoed back. */
-  private applyingRemote = false;
-  private readonly onChange = () => void this.applyRemote();
+  /** The vscode-free text sync: diff, splice, echo guard, convergence pass. */
+  private readonly sync: TextBindingCore;
 
   constructor(
     readonly document: vscode.TextDocument,
@@ -34,14 +34,24 @@ export class Binding {
       this.cursors = cursors;
       this.render();
     });
-    handle.on('change', this.onChange);
+    this.sync = new TextBindingCore(handle, {
+      getText: () => document.getText(),
+      applyReplace: async (start, end, text) => {
+        const edit = new vscode.WorkspaceEdit();
+        edit.replace(document.uri, new vscode.Range(document.positionAt(start), document.positionAt(end)), text);
+        await vscode.workspace.applyEdit(edit);
+      },
+    });
+    // Cursor offsets were re-resolved against the new doc while the buffer
+    // was still the old text (render skipped them); draw them now.
+    this.sync.afterApply = () => this.render();
     bindings.set(document.uri.toString(), this);
-    void this.applyRemote(); // buffer may lag the doc at bind time
+    this.sync.start(); // the buffer may lag the doc at bind time
   }
 
   dispose(): void {
     bindings.delete(this.document.uri.toString());
-    this.handle.off('change', this.onChange);
+    this.sync.dispose();
     this.presence.dispose();
     for (const d of this.decorations.values()) {
       d.cursor.dispose();
@@ -52,13 +62,7 @@ export class Binding {
 
   /** Local keystrokes -> Automerge splices. */
   onLocalEdit(e: vscode.TextDocumentChangeEvent): void {
-    if (this.applyingRemote || e.contentChanges.length === 0) return;
-    // VS Code reports a single event's changes against the pre-edit text in
-    // descending offset order, so applying them sequentially needs no
-    // adjustment (the same contract hub-client relies on with Monaco).
-    this.handle.change((doc) => {
-      for (const c of e.contentChanges) splice(doc, ['text'], c.rangeOffset, c.rangeLength, c.text);
-    });
+    this.sync.onLocalEdit(e.contentChanges);
   }
 
   onSelection(e: vscode.TextEditorSelectionChangeEvent): void {
@@ -68,38 +72,6 @@ export class Binding {
     const start = d.offsetAt(sel.start);
     const end = d.offsetAt(sel.end);
     this.presence.update(d.offsetAt(sel.active), start === end ? null : { start, end });
-  }
-
-  /** Automerge changes -> buffer. One replace covering the changed span. */
-  private async applyRemote(): Promise<void> {
-    const target = this.handle.doc()?.text;
-    if (target === undefined) return;
-    const buffer = this.document;
-    const current = buffer.getText();
-    if (current === target) return; // our own edit echoing back, or nothing new
-
-    let prefix = 0;
-    const max = Math.min(current.length, target.length);
-    while (prefix < max && current[prefix] === target[prefix]) prefix++;
-    let suffix = 0;
-    while (suffix < max - prefix && current[current.length - 1 - suffix] === target[target.length - 1 - suffix]) suffix++;
-
-    const range = new vscode.Range(buffer.positionAt(prefix), buffer.positionAt(current.length - suffix));
-    const edit = new vscode.WorkspaceEdit();
-    edit.replace(buffer.uri, range, target.slice(prefix, target.length - suffix));
-
-    this.applyingRemote = true;
-    try {
-      await vscode.workspace.applyEdit(edit);
-    } finally {
-      this.applyingRemote = false;
-    }
-    // Cursor offsets were re-resolved against the new doc while the buffer
-    // was still the old text (render skipped them); draw them now.
-    this.render();
-    // A keystroke that landed mid-apply was dropped by the guard above; if the
-    // two sides now disagree, run again so the buffer converges on the doc.
-    if (buffer.getText() !== (this.handle.doc()?.text ?? '')) void this.applyRemote();
   }
 
   render(): void {

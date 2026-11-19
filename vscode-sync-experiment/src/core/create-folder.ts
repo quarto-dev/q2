@@ -1,0 +1,109 @@
+/** Create a new project folder from a project's index document. No `vscode` import. */
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import type { Repo } from '@automerge/automerge-repo/slim';
+import {
+  isBinaryDocument,
+  isTextDocument,
+  type BinaryDocumentContent,
+  type IndexDocument,
+} from '@quarto/quarto-automerge-schema';
+import type { Logger } from './host';
+import { META_DIR } from './ignore';
+import { DEFAULT_SYNC_SERVER, writeProjectMeta, type ProjectMeta } from './meta';
+import { findDoc, makeRepo } from './repo';
+import { UnsafePathError, safeJoin } from './safe-path';
+import type { TextDoc } from './text-binding';
+
+export type FileDoc = TextDoc | BinaryDocumentContent;
+
+/** Write one file doc under `root`; `rel` comes from a doc, so it is validated (G36). */
+export async function writeFileDoc(root: string, rel: string, doc: FileDoc): Promise<void> {
+  const abs = await safeJoin(root, rel);
+  await fs.mkdir(path.dirname(abs), { recursive: true });
+  if (isTextDocument(doc)) await fs.writeFile(abs, doc.text, 'utf8');
+  else if (isBinaryDocument(doc)) await fs.writeFile(abs, doc.content);
+}
+
+/**
+ * Folder name for a project. The hub's display name lives in each user's
+ * project-set document, not in the index, so the best available source is
+ * the `title:` in `_quarto.yml`; otherwise fall back to the id.
+ */
+async function projectFolderName(repo: Repo, files: Record<string, string>, indexDocId: string): Promise<string> {
+  let title: string | undefined;
+  if (files['_quarto.yml']) {
+    const yml = (await findDoc<FileDoc>(repo, files['_quarto.yml'])).doc();
+    if (isTextDocument(yml)) title = /^\s*title:\s*["']?(.+?)["']?\s*$/m.exec(yml.text)?.[1];
+  }
+  // Same sanitisation as hub-client's export (quarto-sync-client/project-folder-name.ts).
+  const cleaned = (title ?? '')
+    .replace(/[\u0000- <>:"/\\|?*]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/[-. ]+$/, '');
+  return cleaned || `quarto-hub-${indexDocId.slice(0, 8)}`;
+}
+
+export interface CreateFolderOptions {
+  /** The sync server to dial and to record in `project.json`. */
+  syncServer?: string;
+}
+
+/** Create `<parentDir>/<project name>` from the project and return its path. */
+export async function createProjectFolder(
+  indexDocId: string,
+  parentDir: string,
+  log: Logger,
+  options: CreateFolderOptions = {},
+): Promise<string> {
+  const syncServer = options.syncServer ?? DEFAULT_SYNC_SERVER;
+  // The storage dir is only known once we have a name; sync to a temp store
+  // first, then move it into place.
+  const tmpRoot = await fs.mkdtemp(path.join(parentDir, '.quarto-hub-tmp-'));
+  await fs.mkdir(path.join(tmpRoot, META_DIR, 'automerge'), { recursive: true });
+  const repo = makeRepo(tmpRoot, syncServer);
+  let root = tmpRoot;
+  try {
+    const index = await findDoc<IndexDocument>(repo, indexDocId);
+    const files = index.doc()?.files ?? {};
+    const base = await projectFolderName(repo, files, indexDocId);
+    root = path.join(parentDir, base);
+    for (let n = 2; await fs.stat(root).then(() => true, () => false); n++) root = path.join(parentDir, `${base}-${n}`);
+    const meta: ProjectMeta = { indexDocId, syncServer, createdAt: new Date().toISOString() };
+    await writeProjectMeta(tmpRoot, meta);
+    for (const [rel, docId] of Object.entries(files)) {
+      try {
+        await safeJoin(tmpRoot, rel);
+      } catch (err) {
+        if (!(err instanceof UnsafePathError)) throw err;
+        log.appendLine(`skipped index key: ${err.message}`);
+        continue;
+      }
+      const handle = await findDoc<FileDoc>(repo, docId);
+      const doc = handle.doc();
+      if (doc) await writeFileDoc(tmpRoot, rel, doc);
+      log.appendLine(`wrote ${rel}`);
+    }
+    for (const folder of Object.keys(index.doc()?.folders ?? {})) {
+      try {
+        await fs.mkdir(await safeJoin(tmpRoot, folder), { recursive: true });
+      } catch (err) {
+        if (!(err instanceof UnsafePathError)) throw err;
+        log.appendLine(`skipped index folder: ${err.message}`);
+      }
+    }
+    // Open files are written by VS Code's autosave (see ownership rule in
+    // project-sync.ts); a formatter would broadcast its reflow to every collaborator.
+    await fs.mkdir(path.join(tmpRoot, '.vscode'), { recursive: true });
+    await fs.writeFile(
+      path.join(tmpRoot, '.vscode', 'settings.json'),
+      JSON.stringify({ 'files.autoSave': 'afterDelay', 'files.autoSaveDelay': 300, 'editor.formatOnSave': false }, null, 2) + '\n',
+    );
+    await repo.flush();
+  } finally {
+    await repo.shutdown().catch(() => {});
+  }
+  await fs.rename(tmpRoot, root);
+  return root;
+}
