@@ -119,6 +119,7 @@
     "@types/vscode": "^1.90.0",
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.28.0",
+    "tsx": "^4.21.0",
     "typescript": "~5.9.3",
     "vitest": "^4.0.17",
     "@types/ws": "^8.18.1"

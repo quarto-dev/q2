@@ -7,7 +7,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import { chmodSync, existsSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createRequire } from 'node:module';
@@ -36,6 +36,8 @@ export interface TerminalServerOptions {
   shell?: string;
   /** The page served at `/` (the xterm.js page); the token is in the URL the launcher opens. */
   pageHtml?: (wsUrl: string) => string;
+  /** Static files the page loads, by URL path (token required, like everything else). */
+  assets?: Record<string, { file: string; type: string }>;
 }
 
 export interface TerminalServer {
@@ -47,6 +49,10 @@ export interface TerminalServer {
   /** The page URL the browser opens. */
   pageUrl: string;
   onCommand(cb: (line: string) => void): void;
+  /** Everything the PTY has printed so far (bounded), for checks and for late-connecting pages. */
+  output(): string;
+  /** Called for every keystroke message a page sends (not for `type`/`write`): the key pacing of the driver. */
+  onInput(cb: () => void): void;
   /** Show text on the terminal display without sending it to the PTY. */
   display(data: string): void;
   strip(lines: string[]): void;
@@ -64,7 +70,10 @@ export async function startTerminalServer(o: TerminalServerOptions): Promise<Ter
   const clients = new Set<WebSocket>();
 
   const shell = o.shell ?? process.env.SHELL ?? '/bin/zsh';
-  const term = pty.spawn(shell, ['-i'], {
+  // No startup files: the prompt is `$ ` and nothing in the user's setup disturbs the demo.
+  const shellArgs = shell.endsWith('zsh') ? ['-f', '-i'] : shell.endsWith('bash') ? ['--norc', '--noprofile', '-i'] : ['-i'];
+  let scrollback = '';
+  const term = pty.spawn(shell, shellArgs, {
     cwd: o.cwd,
     cols: 100,
     rows: 24,
@@ -72,10 +81,13 @@ export async function startTerminalServer(o: TerminalServerOptions): Promise<Ter
     env: { ...(process.env as Record<string, string>), PS1: '$ ', PROMPT: '$ ', ...o.env },
   });
   term.onData((data) => {
+    scrollback = (scrollback + data).slice(-200_000);
     const msg = JSON.stringify({ type: 'output', data });
     for (const c of clients) c.send(msg);
   });
 
+  const inputs: (() => void)[] = [];
+  let lastStrip: string[] | undefined;
   let lineBuf = '';
   const feed = (data: string) => {
     for (const ch of data) {
@@ -90,7 +102,11 @@ export async function startTerminalServer(o: TerminalServerOptions): Promise<Ter
 
   const http: Server = createServer((req, res) => {
     const u = new URL(req.url ?? '/', 'http://127.0.0.1');
-    if (u.pathname === '/' && u.searchParams.get('token') === token && o.pageHtml) {
+    const asset = o.assets?.[u.pathname];
+    if (asset && u.searchParams.get('token') === token) {
+      res.setHeader('content-type', asset.type);
+      res.end(readFileSync(asset.file));
+    } else if (u.pathname === '/' && u.searchParams.get('token') === token && o.pageHtml) {
       res.setHeader('content-type', 'text/html');
       res.end(o.pageHtml(`ws://127.0.0.1:${(http.address() as AddressInfo).port}/ws?token=${token}`));
     } else {
@@ -107,6 +123,8 @@ export async function startTerminalServer(o: TerminalServerOptions): Promise<Ter
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
+      if (scrollback) ws.send(JSON.stringify({ type: 'output', data: scrollback }));
+      if (lastStrip) ws.send(JSON.stringify({ type: 'strip', lines: lastStrip }));
       clients.add(ws);
       ws.on('close', () => clients.delete(ws));
       ws.on('message', (raw) => {
@@ -117,6 +135,7 @@ export async function startTerminalServer(o: TerminalServerOptions): Promise<Ter
           return;
         }
         if (m.type === 'input' && typeof m.data === 'string') {
+          inputs.forEach((cb) => cb());
           feed(m.data);
           term.write(m.data);
         } else if (m.type === 'resize' && m.cols && m.rows) term.resize(m.cols, m.rows);
@@ -138,8 +157,13 @@ export async function startTerminalServer(o: TerminalServerOptions): Promise<Ter
     url: `ws://127.0.0.1:${port}/ws?token=${token}`,
     pageUrl: `http://127.0.0.1:${port}/?token=${token}`,
     onCommand: (cb) => void commands.push(cb),
+    output: () => scrollback,
+    onInput: (cb) => void inputs.push(cb),
     display: (data) => broadcast({ type: 'display', data }),
-    strip: (lines) => broadcast({ type: 'strip', lines }),
+    strip: (lines) => {
+      lastStrip = lines;
+      broadcast({ type: 'strip', lines });
+    },
     write: (data) => {
       feed(data);
       term.write(data);
