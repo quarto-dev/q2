@@ -50,11 +50,11 @@ interface Props {
    */
   attributionGenerating?: boolean;
   /**
-   * When true the pill renders greyed-out and non-interactive. Used
-   * for formats that don't surface attribution visually
-   * (everything but q2-debug / q2-preview today). The `attributionOn`
-   * state is preserved across the disabled period so toggling back
-   * to a supported format restores the user's previous preference.
+   * When true the pill is not rendered. Used for formats that don't
+   * surface attribution visually (everything but q2-debug /
+   * q2-preview today). The `attributionOn` state is preserved while
+   * the pill is hidden so switching back to a supported format
+   * restores the user's previous preference.
    */
   attributionDisabled?: boolean;
   /**
@@ -181,10 +181,9 @@ interface AttributionToggleProps {
   attributionOn: boolean;
   onAttributionChange: (next: boolean) => void;
   generating: boolean;
-  disabled: boolean;
 }
 
-function AttributionToggle({ attributionOn, onAttributionChange, generating, disabled }: AttributionToggleProps) {
+function AttributionToggle({ attributionOn, onAttributionChange, generating }: AttributionToggleProps) {
   // Drive the multicolor ring's conic-gradient angle with eased angular
   // velocity: ramps up when generation starts and coasts to a stop when
   // it ends (CSS animation-play-state can only hard start/stop).
@@ -200,7 +199,7 @@ function AttributionToggle({ attributionOn, onAttributionChange, generating, dis
     ) {
       return;
     }
-    const TARGET = generating && !disabled ? 180 : 0; // 180deg/s = 2s/rev
+    const TARGET = generating ? 180 : 0; // 180deg/s = 2s/rev
     let raf = 0;
     let last = performance.now();
     const tick = (now: number) => {
@@ -220,24 +219,17 @@ function AttributionToggle({ attributionOn, onAttributionChange, generating, dis
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [generating, disabled]);
+  }, [generating]);
   const classes = [
     'replay-drawer__pill',
     'replay-drawer__attribution',
-    attributionOn && !disabled && 'replay-drawer__pill--on',
-    attributionOn && !disabled && 'replay-drawer__attribution--on',
-    generating && !disabled && 'replay-drawer__attribution--generating',
+    attributionOn && 'replay-drawer__pill--on',
+    attributionOn && 'replay-drawer__attribution--on',
+    generating && 'replay-drawer__attribution--generating',
   ]
     .filter(Boolean)
     .join(' ');
-  const titleText = disabled
-    ? 'Authors overlay is not available for this format'
-    : attributionOn
-      ? 'Hide authors overlay'
-      : 'Show authors overlay';
-  const ariaLabel = disabled
-    ? 'Authors overlay unavailable for this format'
-    : `Authors overlay ${attributionOn ? 'on' : 'off'}`;
+  const titleText = attributionOn ? 'Hide authors overlay' : 'Show authors overlay';
   return (
     // Full-height cell around the pill — border/divider styling lands
     // here, never on the pill itself.
@@ -251,10 +243,9 @@ function AttributionToggle({ attributionOn, onAttributionChange, generating, dis
           e.stopPropagation();
           onAttributionChange(!attributionOn);
         }}
-        disabled={disabled}
-        aria-pressed={disabled ? undefined : attributionOn}
-        aria-label={ariaLabel}
-        aria-busy={generating && !disabled || undefined}
+        aria-pressed={attributionOn}
+        aria-label={`Authors overlay ${attributionOn ? 'on' : 'off'}`}
+        aria-busy={generating || undefined}
       >
         <span className="replay-drawer__pill-dot" />
         <span className="replay-drawer__pill-label">Authors</span>
@@ -365,7 +356,7 @@ export default function ReplayDrawer({
   const showEditToggle =
     previewEditing !== undefined && onPreviewEditingChange !== undefined;
   const showAttributionToggle =
-    attributionOn !== undefined && onAttributionChange !== undefined;
+    attributionOn !== undefined && onAttributionChange !== undefined && !attributionDisabled;
   const showCommentsToggle =
     commentsMode !== undefined && onCommentsModeChange !== undefined;
   const currentActorId = getAuthorId();
@@ -493,7 +484,6 @@ export default function ReplayDrawer({
             attributionOn={attributionOn!}
             onAttributionChange={onAttributionChange!}
             generating={!!attributionGenerating}
-            disabled={!!attributionDisabled}
           />
         )}
         {showCommentsToggle && (
@@ -580,7 +570,6 @@ export default function ReplayDrawer({
             attributionOn={attributionOn!}
             onAttributionChange={onAttributionChange!}
             generating={!!attributionGenerating}
-            disabled={!!attributionDisabled}
           />
         )}
         {showCommentsToggle && (
