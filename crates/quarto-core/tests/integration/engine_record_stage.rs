@@ -822,16 +822,15 @@ fn plain_render_to_file_creates_no_execution_records_directory() {
 #[test]
 fn an_unwritable_record_location_warns_and_the_render_succeeds() {
     let tmp = TempDir::new().unwrap();
-    let input = write_doc(tmp.path(), RECORD_TRUE);
+    // Windows reaches the temp dir through an 8.3 short name (`GORDON~1`) that the render
+    // resolves to the long form, so build every path from the resolved directory.
+    let dir = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
+    let input = write_doc(&dir, RECORD_TRUE);
     // `.quarto/execution-records` is a regular file, which fails the write on every
     // platform with no permission bits. (A file at `.quarto` itself fails earlier, in
     // "Failed to create .quarto directory", with or without `record: true`.)
-    std::fs::create_dir_all(tmp.path().join(".quarto")).unwrap();
-    std::fs::write(
-        tmp.path().join(".quarto").join("execution-records"),
-        b"in the way",
-    )
-    .unwrap();
+    std::fs::create_dir_all(dir.join(".quarto")).unwrap();
+    std::fs::write(dir.join(".quarto").join("execution-records"), b"in the way").unwrap();
     let engine = StubRecordEngine::arc("stub-a", "stub-a", true);
 
     let result = render_through_render_document_to_file(&input, engine)
@@ -848,8 +847,7 @@ fn an_unwritable_record_location_warns_and_the_render_succeeds() {
     assert!(
         warnings.iter().any(|w| w.contains("execution record")
             && w.contains(
-                &tmp.path()
-                    .join(".quarto")
+                &dir.join(".quarto")
                     .join("execution-records")
                     .display()
                     .to_string()

@@ -58,7 +58,7 @@ struct Doc {
 
 fn doc(qmd_text: &str, record: Option<&str>) -> Doc {
     let tmp = TempDir::new().unwrap();
-    let dir = tmp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
     let qmd = dir.join("doc.qmd");
     std::fs::write(&qmd, qmd_text).unwrap();
     if let Some(rec) = record {

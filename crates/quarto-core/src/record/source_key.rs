@@ -433,7 +433,7 @@ mod tests {
     /// directory at the project root and one under `a/`.
     fn fx(project_extra: &str, dir_extra: &str, doc_extra: &str) -> Fx {
         let tmp = TempDir::new().unwrap();
-        let root = tmp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
         write(
             &root.join("_quarto.yml"),
             &format!("project:\n  type: default\n{project_extra}"),

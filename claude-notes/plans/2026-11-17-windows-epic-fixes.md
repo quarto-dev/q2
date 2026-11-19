@@ -31,17 +31,17 @@ list below is the candidates, not the confirmed set. The first task produces the
 - [x] Box 1 (not a defect on this code; the probe test passes, so port nothing): `quarto-hub-provider/src/execute.rs` lines 349, 549, 644 call `canonicalize()`, which yields a `\\?\` path.
       Failing test: `a_figure_reported_under_the_materialized_root_is_captured` (probe test, kept on the tooling
       branch; port it here). Fix with `quarto_system_runtime::canonical::canonicalize`.
-- [ ] Box 4: `convert_positron_cli.rs:61` canonicalizes in the test helper. Fix the test, since the product output
+- [x] Box 4 (test now uses the plain canonical path; needs a Windows run to confirm): `convert_positron_cli.rs:61` canonicalizes in the test helper. Fix the test, since the product output
       (`C:/...`) is right.
 - [x] Box 6 (passes on Windows now, 56 of 56): diagnose `capture_driver::tests::a_record_only_cache_entry_is_published` (`Cannot start a runtime from
       within a runtime`), then fix it. Cause unknown; look at what RIU-2 made the test call from async code.
 
 **Phase 2: other tests the epics added (candidates; confirm on the rerun)**
 
-- [ ] OPR-5: `metadata_layers::tests::layered_value_returns_the_highest_layer_that_sets_the_path` and the two
+- [x] OPR-5 (the tests' temp root now uses `quarto_system_runtime::canonicalize`; needs a Windows run): `metadata_layers::tests::layered_value_returns_the_highest_layer_that_sets_the_path` and the two
       `record::source_key::tests` (`a_directory_resolves_against_the_declaring_layer`,
       `directories_outside_the_project_or_missing_are_errors`): `\\?\` against plain paths.
-- [ ] RIU-1: `engine_record_stage::an_unwritable_record_location_warns_and_the_render_succeeds`.
+- [x] RIU-1 (test builds paths from the resolved temp dir, since `GORDON~1` short names differ from the long form; a hypothesis until Windows runs it): `engine_record_stage::an_unwritable_record_location_warns_and_the_render_succeeds`.
 - [ ] EXR: `front_matter_provenance::merged_front_matter_root_file_ids_identify_the_documents_own_keys`
       (a file id not registered) and, if they still fail, the Jupyter record goldens.
 - [x] The three `execute::` tests and the julia handshake test pass on Windows now.
