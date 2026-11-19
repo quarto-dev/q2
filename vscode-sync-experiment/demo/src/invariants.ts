@@ -43,3 +43,27 @@ export function checkInvariants(s: Snapshot): Violation[] {
   }
   return out;
 }
+
+/**
+ * The pointed texts that have not changed for `windowMs`. The hub writes a doc's text to its disk after a debounce, so a
+ * difference between the two is a defect only once the pointed text has held still longer than that write-back. `since`
+ * is the caller's memory between polls; paths absent from `current` are forgotten.
+ */
+export function stablePointerTexts(
+  since: Map<string, { text: string; since: number }>,
+  current: Record<string, string>,
+  now: number,
+  windowMs: number,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const k of [...since.keys()]) if (!(k in current)) since.delete(k);
+  for (const [p, text] of Object.entries(current)) {
+    const prev = since.get(p);
+    if (!prev || prev.text !== text) {
+      since.set(p, { text, since: now });
+      continue;
+    }
+    if (now - prev.since >= windowMs) out[p] = text;
+  }
+  return out;
+}

@@ -11,7 +11,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from '@playwri
 import { routeMessage, StripBuffer, type Where } from './captions';
 import { buildJournal, gitEnv } from './journal';
 import { computeLayout, type Layout, type Rect } from './layout';
-import { checkInvariants, type Snapshot } from './invariants';
+import { checkInvariants, stablePointerTexts, type Snapshot } from './invariants';
 import { deriveEvents, narrate, type DemoEvent, type StatusBody } from './observer';
 import { missingToolAdvice, setupCommands } from './setup';
 import { startTerminalServer, type TerminalServer } from './terminal-server';
@@ -117,6 +117,7 @@ export class Demo {
   private seen = new Map<string, number>();
   /** Test seam: replaces the raw-Repo reader of the pointed docs. */
   docReader?: DocReader;
+  private pointerSince = new Map<string, { text: string; since: number }>();
   private rLibrary = '';
   layout!: Layout;
 
@@ -688,6 +689,7 @@ export class Demo {
     // A new hub is a new project: the reader reconnects on the next poll.
     void this.docReader?.close();
     this.docReader = undefined;
+    this.pointerSince.clear();
   }
 
   async status(): Promise<StatusBody> {
@@ -720,7 +722,9 @@ export class Demo {
     if (quiet && this.hubHttp && this.o.preset !== 'hubless') {
       try {
         this.docReader ??= await connectDocReader(this.wsUrl, this.projectId);
-        pointerDocs = await this.docReader.pointerTexts(docs.map((d) => d.path));
+        const current = await this.docReader.pointerTexts(docs.map((d) => d.path));
+        // The hub writes a doc to disk after a debounce, so only a pointed text that has held still is compared.
+        pointerDocs = stablePointerTexts(this.pointerSince, current, Date.now(), 3000);
         for (const d of docs) if (d.path in pointerDocs) hubDisk[d.path] = d.text;
       } catch {
         pointerDocs = {};
@@ -742,7 +746,17 @@ export class Demo {
       this.seen.set(key, n);
       if (n < 2 || this.warned.has(key)) continue;
       this.warned.add(key);
-      this.record('invariant', v.id, v.summary);
+      const details: Record<string, unknown> = {};
+      if (v.id === 'disk-differs-from-pointer') {
+        const m = /for (.+)$/.exec(v.summary);
+        const p = m?.[1] ?? '';
+        const a = snap.hubDisk[p] ?? '';
+        const b = snap.pointerDocs[p] ?? '';
+        let i = 0;
+        while (i < a.length && i < b.length && a[i] === b[i]) i++;
+        Object.assign(details, { diskLength: a.length, pointerLength: b.length, firstDifference: i, disk: a.slice(i, i + 40), pointer: b.slice(i, i + 40) });
+      }
+      this.record('invariant', v.id, v.summary, details);
       this.say('warning', `invariant: ${v.summary}`);
     }
     for (const k of [...this.seen.keys()]) if (!present.has(k)) this.seen.delete(k);
@@ -871,6 +885,7 @@ export class Demo {
     this.stopObserver();
     await this.docReader?.close();
     this.docReader = undefined;
+    this.pointerSince.clear();
     await this.closeVscode();
     await this.browser?.close().catch(() => {});
     await this.stopHub();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkInvariants, type Snapshot } from '../../src/invariants';
+import { checkInvariants, stablePointerTexts, type Snapshot } from '../../src/invariants';
 
 const good = (): Snapshot => ({
   quiet: true,
@@ -50,5 +50,23 @@ describe('invariants (DM8)', () => {
     expect(ids(s)).toEqual(['follower-stale']);
     s.quiet = false;
     expect(ids(s)).toEqual([]);
+  });
+});
+
+describe('stablePointerTexts', () => {
+  it('releases a pointed text only after it has been unchanged for the window', () => {
+    const since = new Map<string, { text: string; since: number }>();
+    expect(stablePointerTexts(since, { 'a.qmd': 'one' }, 1000, 3000)).toEqual({});
+    expect(stablePointerTexts(since, { 'a.qmd': 'one' }, 3999, 3000)).toEqual({});
+    expect(stablePointerTexts(since, { 'a.qmd': 'one' }, 4000, 3000)).toEqual({ 'a.qmd': 'one' });
+  });
+
+  it('restarts the window when the text changes, and forgets a path that left', () => {
+    const since = new Map<string, { text: string; since: number }>();
+    stablePointerTexts(since, { 'a.qmd': 'one', 'b.qmd': 'x' }, 0, 3000);
+    expect(stablePointerTexts(since, { 'a.qmd': 'two', 'b.qmd': 'x' }, 3500, 3000)).toEqual({ 'b.qmd': 'x' });
+    expect(stablePointerTexts(since, { 'a.qmd': 'two' }, 6400, 3000)).toEqual({});
+    expect(since.has('b.qmd')).toBe(false);
+    expect(stablePointerTexts(since, { 'a.qmd': 'two' }, 6500, 3000)).toEqual({ 'a.qmd': 'two' });
   });
 });
