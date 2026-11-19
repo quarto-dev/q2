@@ -231,17 +231,17 @@ rules of `.claude/rules/hub-client-tests.md` apply to every end-to-end test; no 
 
 - [x] Add the dependencies (xterm.js and its fit addon, node-pty, ws if needed) to `quarto-hub-vscode`; regenerate
   `package-lock.json` with `npm install` from the repository root.
-- [ ] Write the unit tests of the table above and the end-to-end tests E1 to E8; see them fail (missing modules, then
-  wrong behavior).
+- [ ] Write the unit tests of the table above (done) and the end-to-end tests E1 to E8 (not yet); see them fail (missing
+  modules, then wrong behavior).
 
 **Phase 2: the environment**
 
 - [x] The journal builder and content: the papers (prose, numbers, R and Python code with fixed seeds), the
   micrograph on both branches (generated once by an R script kept in `demo/journal/`, committed as PNG), the
   branches, `_quarto.yml`, the rv and uv project files and locks.
-- [ ] Setup: `rv sync`, `uv sync`, the kernelspec, the checks and advice.
+- [ ] Setup (decisions and advice done in `setup.ts`; the runner is not): `rv sync`, `uv sync`, the kernelspec, the checks and advice.
 - [ ] The terminal server and page, captions and the strip.
-- [ ] The layout and window placement.
+- [ ] The layout (`layout.ts` done) and window placement (not yet).
 - [ ] The launcher and preset `hub-browser`, free play only.
 - [ ] The observer, the log, the invariant checker.
 - [ ] `demo reset`.
@@ -339,5 +339,7 @@ Landed on the branch: the dependencies (`@xterm/xterm` 6.0.0, `@xterm/addon-fit`
 invariants, setup, and the journal builder (30 tests). The journal content is in `demo/src/journal-content.ts`; the
 micrograph PNGs, `micrograph.R`, `pyproject.toml`, `uv.lock`, `rproject.toml`, and `rv.lock` are under `demo/journal/`.
 The R paper uses only `ggplot2` and base `stats` (`lm`), not lme4, because the rv project installs only
-ggplot2, knitr, and jsonlite. Still unwritten from the Phase 1 test list: terminal server, observer, driver, reset
-unit tests, and the end-to-end tests E1 to E8.
+ggplot2, knitr, and jsonlite. The terminal server, driver, reset, and observer unit tests and modules followed in the same session (49 unit tests
+in all; the terminal server's tests and module were written in one pass, so that one test file was not run red first). The
+unit-test table of this plan is complete. Not started: the end-to-end tests E1 to E8, the xterm.js page, the launcher and
+its presets, the observer polling loop, the stories, and the README.
