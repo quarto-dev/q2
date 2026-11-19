@@ -185,12 +185,12 @@ record an answer instead of passing or failing (see part two).
 
 ### Schema, Rust
 
-- [ ] Tests first. Read `index.rs` creation (`:467`) and make it write `files`, `version` 4, `identities`, and
+- [x] Tests first. Read `index.rs` creation (`:467`) and make it write `files`, `version` 4, `identities`, and
   `folders`; add the key constants and typed accessors for `epochs`, `owner`, and `repo` (GE-3 uses them); the
   accessors read both string forms (see Scalar forms in the contract).
-- [ ] The unknown-keys test enumerates every `pub fn` on `IndexDocument` that reads or writes the doc (`add_file`,
+- [x] The unknown-keys test enumerates every `pub fn` on `IndexDocument` that reads or writes the doc (`add_file`,
   `remove_file`, `has_file`, the capture setters, and any folder or identity function) and calls each one.
-- [ ] `cargo clippy -p quarto-hub --all-targets -- -D warnings` and `cargo nextest run -p quarto-hub`.
+- [x] `cargo clippy -p quarto-hub --all-targets -- -D warnings` and `cargo nextest run -p quarto-hub`.
 
 ### Fixtures
 
@@ -235,7 +235,7 @@ record an answer instead of passing or failing (see part two).
   `q2 preview --hub-url wss://sync.automerge.org --project <id>` (this covers TLS), confirm it loads, then create a doc
   later and re-point a file at it from the JS client and confirm a client of the mirror follows. Record also whether a
   raw `Repo` client sees remote heads from the public server (as in item 1).
-- [ ] **5.** The Rust unknown-keys test passes (see Test specifications) and a read of `index.rs` finds no accessor that
+- [x] **5.** The Rust unknown-keys test passes (see Test specifications) and a read of `index.rs` finds no accessor that
   rebuilds the document.
 - [ ] **10.** `git` is on `PATH` where the extension runs, from a real extension host (a scratch extension launched with
   `@vscode/test-electron`, since GE-8\'s harness does not exist yet; item 12 uses the same one); the
@@ -344,4 +344,17 @@ The logic itself (GE-2, GE-5), the swap module and the notice texts (GE-6), adop
   tests pass and typecheck is clean. `createNewProject` still builds its own literal but reads
   `CURRENT_SCHEMA_VERSION`, so new projects are already version 4; GE-7 adopts the helper. Golden
   `fixtures/golden/index-v4.json` written (hand-written to equal the helper\'s output; the test compares them).
+- Rust schema done test-first (`crates/quarto-hub/src/index.rs`): the four new tests compiled red (missing API), then
+  with the accessors in and `create` unchanged exactly `create_writes_the_version_4_content_of_the_golden_file`
+  failed at runtime, then passed once `create` wrote `files`, `version` (an Automerge `int`), `identities`, and
+  `folders`. Added `epochs_doc_id`/`owner`/`repo_identity` readers (both string forms, `repo.roots` items too),
+  scalar-form setters `set_epochs_doc_id`/`set_owner`/`set_repo_identity` (GE-3 uses them), `RepoIdentity`, and
+  `CURRENT_SCHEMA_VERSION`. The unknown-keys test calls every public `IndexDocument` function (there are no folder or
+  identity functions in the Rust type) and compares `version`, `epochs`, `owner`, `repo`, and an invented
+  `future_key` as JSON before and after; I compared decoded values, not literal bytes. `cargo clippy -p quarto-hub
+  --all-targets -- -D warnings` clean; `cargo nextest run -p quarto-hub`: 502 passed. **Gate 0 item 5** holds: only
+  `create` builds a document (`Automerge::new()` in non-test code, `index.rs:149`); every accessor edits in place.
+  **Windows cross-clippy not possible:** `cargo clippy -p quarto-hub --all-targets --target
+  x86_64-pc-windows-msvc` fails in the `aws-lc-sys` C build on this macOS host; the new code uses no platform API.
+  The Rust half of Gate 0 item 6 (permanent concurrency tests with two actors) is still to write.
 - Not started: Gate 0 part two; the contract, package, schemas, fixtures. No repository code changed yet.

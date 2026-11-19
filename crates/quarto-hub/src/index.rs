@@ -31,6 +31,38 @@ const FILES_KEY: &str = "files";
 /// Key in the ROOT map where the capture sidecar lives (V2+).
 const CAPTURES_KEY: &str = "captures";
 
+/// Key in the ROOT map for the schema version.
+const VERSION_KEY: &str = "version";
+
+/// Key in the ROOT map for the identities map (V1+).
+const IDENTITIES_KEY: &str = "identities";
+
+/// Key in the ROOT map for the explicit-folder set (V3+).
+const FOLDERS_KEY: &str = "folders";
+
+/// Key in the ROOT map holding the git-epochs sidecar docId (V4+).
+const EPOCHS_KEY: &str = "epochs";
+
+/// Key in the ROOT map holding the originating folder's `ownerId` (V4+).
+const OWNER_KEY: &str = "owner";
+
+/// Key in the ROOT map holding the git repository identity (V4+).
+const REPO_KEY: &str = "repo";
+
+/// Current index schema version. Mirrors `CURRENT_SCHEMA_VERSION` in
+/// `@quarto/quarto-automerge-schema`; the contract is
+/// `claude-notes/designs/git-epoch-registry-contract.md`.
+pub const CURRENT_SCHEMA_VERSION: i64 = 4;
+
+/// The `repo` entry of a V4 index: the repository's root commit hashes and
+/// the project's path inside the repository (empty for the repo root).
+/// Mirrors `RepoIdentity` in `@quarto/quarto-automerge-schema`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepoIdentity {
+    pub roots: Vec<String>,
+    pub prefix: String,
+}
+
 /// Server-side state of an engine capture, mirrored in the sidecar.
 ///
 /// Stored as a short string in automerge so the SPA can read it without
@@ -116,8 +148,12 @@ impl IndexDocument {
         // Create the initial document structure
         let mut doc = Automerge::new();
         doc.transact::<_, _, automerge::AutomergeError>(|tx| {
-            // Create the files map at ROOT
+            // Version 4 content, the same four keys as the TypeScript
+            // `createIndexDocumentContent()`: files, version, identities, folders.
             tx.put_object(ROOT, FILES_KEY, ObjType::Map)?;
+            tx.put(ROOT, VERSION_KEY, CURRENT_SCHEMA_VERSION)?;
+            tx.put_object(ROOT, IDENTITIES_KEY, ObjType::Map)?;
+            tx.put_object(ROOT, FOLDERS_KEY, ObjType::Map)?;
             Ok(())
         })
         .map_err(|e| Error::IndexDocument(format!("failed to initialize index: {:?}", e)))?;
@@ -215,6 +251,78 @@ impl IndexDocument {
         self.handle.with_document(|doc| {
             let (_, files_obj) = doc.get(ROOT, FILES_KEY).ok().flatten()?;
             read_str_or_text(doc, &files_obj, path)
+        })
+    }
+
+    /// The git-epochs sidecar docId (V4+), if a git-aware peer has set one.
+    /// Reads both the scalar-string and the Text form.
+    pub fn epochs_doc_id(&self) -> Option<String> {
+        self.handle
+            .with_document(|doc| read_str_or_text(doc, &ROOT, EPOCHS_KEY))
+    }
+
+    /// Point the index at the sidecar doc (written in the scalar form).
+    pub fn set_epochs_doc_id(&self, doc_id: &str) -> Result<()> {
+        self.put_root_str(EPOCHS_KEY, doc_id, "epochs")
+    }
+
+    /// The originating folder's `ownerId` (V4+); `None` for hub-owned projects.
+    pub fn owner(&self) -> Option<String> {
+        self.handle
+            .with_document(|doc| read_str_or_text(doc, &ROOT, OWNER_KEY))
+    }
+
+    /// Set the owner id (written in the scalar form).
+    pub fn set_owner(&self, owner_id: &str) -> Result<()> {
+        self.put_root_str(OWNER_KEY, owner_id, "owner")
+    }
+
+    /// The git repository identity (V4+), if one was written. Returns `None`
+    /// when the key is absent or malformed (no `prefix` string).
+    pub fn repo_identity(&self) -> Option<RepoIdentity> {
+        self.handle.with_document(|doc| {
+            let (_, repo_obj) = doc.get(ROOT, REPO_KEY).ok().flatten()?;
+            let prefix = read_str_or_text(doc, &repo_obj, "prefix")?;
+            let (_, roots_obj) = doc.get(&repo_obj, "roots").ok().flatten()?;
+            let mut roots = Vec::new();
+            for i in 0..doc.length(&roots_obj) {
+                let (value, id) = doc.get(&roots_obj, i).ok().flatten()?;
+                if let Some(s) = value.as_str() {
+                    roots.push(s.to_string());
+                } else if matches!(value, automerge::Value::Object(ObjType::Text)) {
+                    roots.push(doc.text(&id).ok()?);
+                }
+            }
+            Some(RepoIdentity { roots, prefix })
+        })
+    }
+
+    /// Write the `repo` entry (scalar strings). Replaces the entry's own
+    /// `roots` and `prefix`; touches no other key.
+    pub fn set_repo_identity(&self, identity: &RepoIdentity) -> Result<()> {
+        self.handle.with_document(|doc| {
+            doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+                let repo_obj = tx.put_object(ROOT, REPO_KEY, ObjType::Map)?;
+                let roots = tx.put_object(&repo_obj, "roots", ObjType::List)?;
+                for (i, r) in identity.roots.iter().enumerate() {
+                    tx.insert(&roots, i, r.as_str())?;
+                }
+                tx.put(&repo_obj, "prefix", identity.prefix.as_str())?;
+                Ok(())
+            })
+            .map(|_| ())
+            .map_err(|e| Error::IndexDocument(format!("failed to set repo: {:?}", e)))
+        })
+    }
+
+    fn put_root_str(&self, key: &str, value: &str, what: &str) -> Result<()> {
+        self.handle.with_document(|doc| {
+            doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+                tx.put(ROOT, key, value)?;
+                Ok(())
+            })
+            .map(|_| ())
+            .map_err(|e| Error::IndexDocument(format!("failed to set {}: {:?}", what, e)))
         })
     }
 
@@ -744,5 +852,222 @@ mod tests {
                 );
             }
         });
+    }
+
+    // ---- Version 4 schema (git epochs, GE-1) -------------------------------
+
+    /// Render an automerge value as JSON: maps and lists recursively, text
+    /// objects and scalar strings both as strings, ints as numbers.
+    fn value_json<D: ReadDoc>(doc: &D, obj: &automerge::ObjId) -> serde_json::Value {
+        use serde_json::{Map, Value as J};
+        match doc.object_type(obj).unwrap() {
+            ObjType::Map | ObjType::Table => {
+                let mut m = Map::new();
+                let mut keys: Vec<String> = doc.keys(obj).collect();
+                keys.sort();
+                for k in keys {
+                    let (v, id) = doc.get(obj, &k).unwrap().unwrap();
+                    m.insert(k, one_json(doc, v, id));
+                }
+                J::Object(m)
+            }
+            ObjType::List => {
+                let n = doc.length(obj);
+                J::Array(
+                    (0..n)
+                        .map(|i| {
+                            let (v, id) = doc.get(obj, i).unwrap().unwrap();
+                            one_json(doc, v, id)
+                        })
+                        .collect(),
+                )
+            }
+            ObjType::Text => J::String(doc.text(obj).unwrap()),
+        }
+    }
+
+    fn one_json<D: ReadDoc>(
+        doc: &D,
+        v: automerge::Value<'_>,
+        id: automerge::ObjId,
+    ) -> serde_json::Value {
+        use serde_json::Value as J;
+        match v {
+            automerge::Value::Object(_) => value_json(doc, &id),
+            automerge::Value::Scalar(sc) => match sc.as_ref() {
+                automerge::ScalarValue::Str(s) => J::String(s.to_string()),
+                automerge::ScalarValue::Int(i) => J::from(*i),
+                automerge::ScalarValue::Uint(u) => J::from(*u),
+                other => panic!("unexpected scalar {other:?}"),
+            },
+        }
+    }
+
+    fn root_json(index: &IndexDocument) -> serde_json::Value {
+        index.handle().with_document(|doc| value_json(doc, &ROOT))
+    }
+
+    fn golden_index_v4() -> serde_json::Value {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../ts-packages/quarto-git-epochs/fixtures/golden/index-v4.json"
+        );
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn create_writes_the_version_4_content_of_the_golden_file() {
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+        let json = root_json(&index);
+        assert_eq!(
+            json,
+            golden_index_v4(),
+            "Rust creation must equal createIndexDocumentContent()"
+        );
+        // The version is an Automerge int, not a float or a string.
+        index.handle().with_document(|doc| {
+            let (v, _) = doc.get(ROOT, "version").unwrap().unwrap();
+            assert!(matches!(
+                v,
+                automerge::Value::Scalar(ref s) if matches!(s.as_ref(), automerge::ScalarValue::Int(4))
+            ));
+        });
+    }
+
+    /// A doc with the new keys (in the Rust scalar form) and an invented
+    /// future key that this code has never heard of.
+    async fn index_with_unknown_keys(repo: &Repo) -> IndexDocument {
+        let mut doc = Automerge::new();
+        doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+            tx.put_object(ROOT, FILES_KEY, ObjType::Map)?;
+            tx.put(ROOT, "version", 4_i64)?;
+            tx.put(ROOT, "epochs", "sidecar-doc")?;
+            tx.put(ROOT, "owner", "owner-1")?;
+            let repo_obj = tx.put_object(ROOT, "repo", ObjType::Map)?;
+            let roots = tx.put_object(&repo_obj, "roots", ObjType::List)?;
+            tx.insert(&roots, 0, "abc")?;
+            tx.put(&repo_obj, "prefix", "docs")?;
+            let fut = tx.put_object(ROOT, "future_key", ObjType::Map)?;
+            tx.put(&fut, "nested", "value")?;
+            tx.put(&fut, "n", 7_i64)?;
+            Ok(())
+        })
+        .unwrap();
+        let handle = repo.create(doc).await.unwrap();
+        IndexDocument::load(repo, &handle.document_id().to_string())
+            .await
+            .unwrap()
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn every_public_mutator_and_accessor_preserves_unknown_keys() {
+        let repo = create_test_repo().await;
+        let index = index_with_unknown_keys(&repo).await;
+        let unknown = |j: &serde_json::Value| {
+            let o = j.as_object().unwrap();
+            ["version", "epochs", "owner", "repo", "future_key"]
+                .iter()
+                .map(|k| (k.to_string(), o.get(*k).cloned()))
+                .collect::<Vec<_>>()
+        };
+        let before = unknown(&root_json(&index));
+
+        // Accessors.
+        let _ = index.document_id();
+        let _ = index.get_all_files();
+        let _ = index.has_file("a.qmd");
+        let _ = index.get_file("a.qmd");
+        let _ = index.get_all_captures();
+        let _ = index.get_capture("a.qmd");
+        let _ = index.has_capture("a.qmd");
+        let _ = index.epochs_doc_id();
+        let _ = index.owner();
+        let _ = index.repo_identity();
+        // Mutators.
+        index.add_file("a.qmd", "doc-a").unwrap();
+        index.add_file("b.qmd", "doc-b").unwrap();
+        index.remove_file("b.qmd").unwrap();
+        let cap = CaptureRef {
+            capture_doc_id: "cap".to_string(),
+            staleness: Some(false),
+            state: Some(CaptureState::Idle),
+            last_error: None,
+        };
+        index.set_capture("a.qmd", &cap).unwrap();
+        index.remove_capture("a.qmd").unwrap();
+        index.set_epochs_doc_id("sidecar-doc").unwrap();
+        index.set_owner("owner-1").unwrap();
+        index
+            .set_repo_identity(&RepoIdentity {
+                roots: vec!["abc".to_string()],
+                prefix: "docs".to_string(),
+            })
+            .unwrap();
+
+        assert_eq!(unknown(&root_json(&index)), before);
+    }
+
+    #[tokio::test]
+    async fn epochs_owner_and_repo_read_in_both_string_forms() {
+        let repo = create_test_repo().await;
+
+        // JS form: every string is a Text object.
+        let mut js = Automerge::new();
+        js.transact::<_, _, automerge::AutomergeError>(|tx| {
+            tx.put_object(ROOT, FILES_KEY, ObjType::Map)?;
+            for (k, v) in [("epochs", "sidecar-doc"), ("owner", "owner-1")] {
+                let t = tx.put_object(ROOT, k, ObjType::Text)?;
+                tx.update_text(&t, v)?;
+            }
+            let r = tx.put_object(ROOT, "repo", ObjType::Map)?;
+            let roots = tx.put_object(&r, "roots", ObjType::List)?;
+            let t0 = tx.insert_object(&roots, 0, ObjType::Text)?;
+            tx.update_text(&t0, "abc")?;
+            let t1 = tx.insert_object(&roots, 1, ObjType::Text)?;
+            tx.update_text(&t1, "def")?;
+            let p = tx.put_object(&r, "prefix", ObjType::Text)?;
+            tx.update_text(&p, "docs/site")?;
+            Ok(())
+        })
+        .unwrap();
+        let h = repo.create(js).await.unwrap();
+        let js_index = IndexDocument::load(&repo, &h.document_id().to_string())
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Rust form: scalar strings.
+        let (rs_index, _) = IndexDocument::create(&repo).await.unwrap();
+        rs_index.set_epochs_doc_id("sidecar-doc").unwrap();
+        rs_index.set_owner("owner-1").unwrap();
+        rs_index
+            .set_repo_identity(&RepoIdentity {
+                roots: vec!["abc".to_string(), "def".to_string()],
+                prefix: "docs/site".to_string(),
+            })
+            .unwrap();
+
+        for index in [&js_index, &rs_index] {
+            assert_eq!(index.epochs_doc_id().as_deref(), Some("sidecar-doc"));
+            assert_eq!(index.owner().as_deref(), Some("owner-1"));
+            assert_eq!(
+                index.repo_identity(),
+                Some(RepoIdentity {
+                    roots: vec!["abc".to_string(), "def".to_string()],
+                    prefix: "docs/site".to_string(),
+                })
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn absent_new_keys_read_as_none() {
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+        assert_eq!(index.epochs_doc_id(), None);
+        assert_eq!(index.owner(), None);
+        assert_eq!(index.repo_identity(), None);
     }
 }
