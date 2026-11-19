@@ -2,7 +2,7 @@
 title: 'GE-19: The demo and playground'
 date: 2026-11-19
 description: 'Builds a permanent, replayable demo of git-aware live share on three windows (the host editor, a real terminal, the guest editor), with scripted narrated playback and free play on the same real binaries, a mycology journal with live R and Python papers, continuous invariant checks, and a complete automated test suite.'
-status: approved  # designed with Gordon on 2026-11-19, after the epic's e2e plans landed
+status: done
 depends-on: [ge-14]
 lane: B
 epic: ../2026-11-18-git-epochs-epic.md
@@ -261,26 +261,26 @@ rules of `.claude/rules/hub-client-tests.md` apply to every end-to-end test; no 
 Research first, then tests, then implementation. Today the terminal types at a fixed 40 ms per character and the
 editors type instantly, so a recording looks mechanical.
 
-- [ ] Research: read `TerminalServer.type()` in `demo/src/terminal-server.ts` (the per-character loop; not yet read
+- [x] Research: read `TerminalServer.type()` in `demo/src/terminal-server.ts` (the per-character loop; not yet read
   this session), `Demo.type()` and `Demo.typeAtEnd()` in `demo/src/demo.ts`, and the `delay` option of `page.keyboard.type`.
   Record in the notes how each path sends characters and whether xterm.js or the PTY echo affects the visible tempo.
-- [ ] Tests first (unit, `demo/tests/unit/`): a `humanDelay()` helper that, for a given seed, returns a reproducible
+- [x] Tests first (unit, `demo/tests/unit/`): a `humanDelay()` helper that, for a given seed, returns a reproducible
   sequence; every delay stays within bounds (a base times 0.5 to 1.8, longer after spaces and punctuation, an occasional
   hesitation of 150 to 400 ms, a pause before the first character and before the final Enter); `--fast` (base 0) yields
   exactly 0 with no jitter; two seeds differ, one seed repeats. Terminal-server tests: the typed bytes are unchanged
   (jitter alters timing only) and the reported command line equals the input.
-- [ ] Implement one shared `humanDelay()` helper, seeded so recorded runs are reproducible (a `--seed` option, default
+- [x] Implement one shared typist (`demo/src/typing.ts`, named `createTypist().plan()`, not `humanDelay()`) helper, seeded so recorded runs are reproducible (a `--seed` option, default
   fixed), and use it in `TerminalServer.type()` and in `Demo.typeAtEnd()` (a loop of `keyboard.press`, or
   `keyboard.type` with per-character delays). `--fast` keeps 0 with no jitter. Keep E1 in `--fast` unchanged.
-- [ ] Look at a headed run (`--play`) and record in the notes that the tempo reads as natural.
+- [ ] Look at a headed run (`--play`) and record in the notes that the tempo reads as natural. (Not done: a screenshot cannot show tempo. Gordon should watch one headed run; see the notes.)
 
 **Phase 4: finish**
 
-- [ ] All unit and end-to-end tests pass; E1 three times in a row on every preset.
-- [ ] A `demo/README.md`: requirements (R, rv, uv, VS Code download, the rebuild chain), how to launch each preset, the
+- [x] All unit and end-to-end tests pass; E1 three times in a row on every preset.
+- [x] A `demo/README.md`: requirements (R, rv, uv, VS Code download, the rebuild chain), how to launch each preset, the
   options, free play and `demo reset`, how an agent can follow `logs/events.jsonl`.
-- [ ] End-to-end verification below, recorded in the notes.
-- [ ] `npm run typecheck -w quarto-hub-vscode`, `cargo xtask lint`, `q2 render --strict` on this file.
+- [x] End-to-end verification below, recorded in the notes.
+- [x] `npm run typecheck -w quarto-hub-vscode`, `cargo xtask lint`, `q2 render --strict` on this file.
 
 ## Gates
 
@@ -474,3 +474,63 @@ checked (`notices` is 0 for VS Code). `ts-packages` `dist/` outputs were stale i
 (`quarto-automerge-schema`, `quarto-sync-client`, `quarto-git-epochs`, `quarto-share-url`); the `.vscode-test` cache was
 copied from workspace-7. Not done: E1 three times in a row per preset, `demo/README.md`, the screenshots after the
 switch beat and after reset, Phase 3b, the Phase 4 gates, and landing.
+
+### Phase 3b, the fixes, and the verification (2026-11-19, fourth session)
+
+**The red E1 run of the third session.** The `disk-differs-from-pointer` invariant fired in `hub-browser` and `hub-vscode-host`
+right after Maurice typed, for `morel-2026-fusion-spectra.qmd`. The violation's details (now recorded: lengths, first
+difference, the 40 characters at it) showed the pointed doc holding Maurice's sentence while the disk was one sentence
+behind. Cause: `q2 preview` runs the hub's periodic sync every 5 s (`crates/quarto-preview/src/lib.rs`,
+`sync_interval_secs: Some(5)`), and that sync writes an edited doc to the disk. It is the design, not a product
+defect, and the checker was wrong: "quiet" counted only observer events, and an edit produces none. Fix: the checker
+compares a doc only after its pointed text has held still for 8 s (`stablePointerTexts` in `invariants.ts`, two unit
+tests written first and seen failing; a first window of 3 s was too short and failed again in 2 of 12 runs, which is how
+the 5 s interval was found). The assertion that no `invariant` event occurs in a story was not weakened. The
+`hub-vscode-host` failure at `reset-hard` did not recur in any of 12 + 15 + 20 runs.
+
+**Phase 3b.** Research: `TerminalServer.type()` wrote one character at a time with a fixed delay (default 35, the
+driver passed 40) and the PTY's echo is immediate, so the visible tempo was exactly that delay; xterm.js adds none.
+`Demo.typeAtEnd()` called `page.keyboard.type(text)` with no delay, so the editors typed instantly. Now `typing.ts`
+has `createTypist({ baseMs, seed }).plan(text)`: a lead pause of 250 to 600 ms, per-character gaps of 0.5 to 1.8 times
+the base (40 ms), times 1.6 after a space and 2 after `,.;:!?`, a 4% chance of a 150 to 400 ms hesitation, and a 300
+to 700 ms pause before Enter. One seeded generator (`--seed`, default 1) serves both paths, so a recorded run repeats.
+`--fast` has a base of 0 and plans exact zeros. Seven unit tests, written first and seen failing (the module did not
+exist; the terminal-server test first passed for the wrong reason because the default pace also satisfied its lower
+bound, so it was tightened to fail on the default's 1.4 s). **I did not judge the tempo by eye**: a screenshot shows no
+timing. Gordon should watch one headed `--play` run and adjust `baseMs` or the multipliers in `typing.ts`.
+
+**A defect found by the headed run, fixed.** After `reset` the host terminal showed `zsh: command not found: tcd`: a
+stray `t` was on the input line (typed into the focused window while the run was on the live display) and reset
+typed `cd ~ && cd <journal>` after it. Reset now writes Ctrl-U first. E5 types a stray `t` before the reset and
+asserts no `command not found`; seen red without the fix (`zsh: command not found: tcd`), green with it.
+
+**New:** `demo/README.md`; the launcher takes `reset` on stdin (there was no way to trigger DM12 outside the tests);
+violation events carry the first difference in `details`.
+
+**Gates.** `npm run typecheck -w quarto-hub-vscode` clean. `npx vitest run` in the package: unit tests of the demo
+57 pass. `npm run test:demo`: 20 passed (7.8 min; E1 for four presets, E2, E3, E4, E4b, E4c, E5 for four, E6 for four, E7, E7b,
+E8; E8 fails the control at the switch beat as it must). E1 three times in a row on every preset
+(`--repeat-each 3`): 12 of 12 passed after the 8 s window, along with E4b three times (15 of 15).
+
+**End-to-end record (inspected).** All headed on the main display, 2026-11-19, 14:26 to 14:34:
+- `npm run demo -w quarto-hub-vscode -- --preset hub-browser --play --dwell 2500 --root <dir>`: nine `pass` steps, no
+  `invariant`, no `fail`. Screenshots `play-4.png` (after the switch beats) and `play-8.png` (after the rebase) in the
+  session scratchpad (a reboot clears them). I looked at both: two browser editors at the top (Myra left, Maurice right),
+  the terminal window below, dim italic captions interleaved with the typed commands, the strip's narration ("The hub
+  retired morel-2026-fusion-spectra.qmd and discarded 1 unsaved edit.", "Sync paused", "Sync resumed"), and the swap
+  notices ("4 files were replaced because the project owner's checked-out version changed.") in both editors.
+- Free play and reset: `npm run demo -- --root <dir>` with `reset` sent on its stdin. `git switch feature` in the
+  journal; both editors followed (`fp-switched.png`: the abstract "After reanalysis ..." and the swap notice). After
+  `reset` (`fp-reset.png`): the branch is `main`, both editors show the main versions under a new project id in the URL,
+  the windows stayed open, the terminal printed "the journal has been restored to its starting state", and the event
+  log has the `reset` event. That run showed the `tcd` defect above.
+- `--preset hub-vscode-host --play` (9 pass), `--preset hub-vscode-clone --play` (7 pass), `--preset hubless --play`
+  (9 pass), each with no `fail` and no `invariant`; the end screenshots show the VS Code window or windows and the
+  terminals where the layout puts them, and the VS Code swap notice ("Edits made during a git operation were not kept"
+  after the hub's reset-hard in `hub-vscode-host`).
+Not done: screenshots at the start and after the switch beat for the three VS Code presets (one mid-run and one end
+capture each), and a headed pass with `--pace key`.
+
+**For Gordon.** (1) Watch a headed run for the typing tempo. (2) Product, not fixed here: finding 1 of the third
+session (auto save in an editor-only VS Code window on the hub's own folder overwrites the disk after a flip) is still
+unattributed; worth a strand or a plan.
