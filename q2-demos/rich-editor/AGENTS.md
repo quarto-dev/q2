@@ -22,9 +22,11 @@ someone with only the specs should be able to build the editor again.
 
 Run them with `npm run test:e2e` (needs the WASM build; see `README.md`).
 While iterating, run Chromium only, on the specs you're changing:
-`npm run test:e2e:chromium -- e2e/<file>.spec.ts`. Run every browser on those
-specs before committing a finished piece of work, and the whole suite in every
-browser before merging. Always use the npm scripts, not `npx playwright test`:
+`npm run test:e2e:chromium -- e2e/<file>.spec.ts`. Before committing a
+finished piece of work, run the whole suite in Chromium
+(`npm run test:e2e:chromium`), and every browser on the specs you changed:
+a change breaks specs you didn't think were related far more often than it
+breaks one browser only. Run the whole suite in every browser before merging. Always use the npm scripts, not `npx playwright test`:
 they queue runs across worktrees so that agents running the suite at once
 don't slow each other down. Small runs (a spec file or a `-g` filter) have a
 lane of their own and don't wait for a whole suite. Time spent waiting in the

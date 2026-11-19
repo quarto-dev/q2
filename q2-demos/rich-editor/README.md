@@ -114,7 +114,8 @@ A figure of one image is shown as `q2 render` shows it, with its caption
 under it (a `#fig-` label's number isn't shown yet), and is edited as in
 Google Docs: the image is one unit in the text, and the caption a line of
 text under it, typed and formatted in place. A selection takes the image
-whole and as much of the caption as it covers. Deleting the image
+whole and as much of the caption as it covers, and a drag that ends on
+an image takes it in. Deleting the image
 (Backspace at the start of the caption, or deleting a selection that
 takes it in) leaves the caption's text as a paragraph, joined to the line
 the selection started in. Enter at the end of a caption starts a
@@ -350,9 +351,10 @@ npm run test:desktop   # the desktop app's Rust side (src-tauri/)
 ```
 
 While iterating, run Chromium only, on the specs you're changing
-(`npm run test:e2e:chromium -- e2e/body.spec.ts`). Run every browser on
-those specs before committing a finished piece of work, and the whole suite
-in every browser before merging.
+(`npm run test:e2e:chromium -- e2e/body.spec.ts`). Before committing a
+finished piece of work, run the whole suite in Chromium
+(`npm run test:e2e:chromium`), and every browser on the specs you changed.
+Run the whole suite in every browser before merging.
 
 The e2e tests are the most valuable part of this prototype. They are the
 specification of the editing experience, written against what a person
