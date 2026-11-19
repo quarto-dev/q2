@@ -157,7 +157,7 @@ export class ProjectSync {
     this.cleanups.push(() => watcher.dispose(), () => buffers.dispose());
     buffers.openPaths().forEach((p) => this.bind(p));
     this.log.appendLine(`project sync running: ${this.root} (${this.handles.size} files)`);
-    this.host.notifier.status(MODE_LABEL[this.mode]); // the persistent status bar item
+    this.updateStatus(); // the persistent status bar item: the mode, plus a clone's detached count
     this.host.notifier.status(`$(sync) Quarto Hub: syncing ${path.basename(this.root)}`, 5000);
   }
 
@@ -183,12 +183,14 @@ export class ProjectSync {
     const { createGitProbe } = await import('@quarto/quarto-git-epochs/probe');
     const probe = createGitProbe({ cwd: this.root });
     await excludeMetaDir(this.root).catch(() => false);
+    const registry = new RegistryClient(this.repo, this.index);
+    registry.log = (line) => this.log.appendLine(line);
     const clone = new CloneSync(this.cloneHost(), {
       identity: this.meta.repo,
       probe,
       controllerProbe: this.options.clone?.probe,
       clock: this.options.clone?.clock ?? { now: () => Date.now(), setTimeout, clearTimeout },
-      registry: new RegistryClient(this.repo, this.index),
+      registry,
       pointer: this.options.clone?.pointer ?? NOOP_POINTER_WRITER,
       isIgnored: (rel) => isIgnoredPath(rel, this.boundSubfolders),
     });

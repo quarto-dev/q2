@@ -101,6 +101,8 @@ export function docKey(doc: FileDoc | undefined): string | undefined {
 export interface CloneState {
   head: string | null;
   gateClosed: boolean;
+  /** Why: the gate's mode, pending flag, and markers. Diagnostics only. */
+  gate: string;
   /** rel path -> attached doc id. */
   attached: Record<string, string>;
   detached: string[];
@@ -159,6 +161,7 @@ export class CloneSync {
     return {
       head: this.head,
       gateClosed: this.isClosed(),
+      gate: this.gate?.describe() ?? 'not started',
       attached,
       detached: [...this.detached].sort(),
       superseded: [...this.superseded].sort(),
@@ -204,6 +207,9 @@ export class CloneSync {
     }
     this.head = await probe.headSha();
     if (this.head === null) throw new CloneRefusedError('The repository has no commits yet.');
+    // Follow the index key before the sidecar exists, so another peer's concurrent creation cannot slip past between
+    // our own write and our subscription.
+    this.unsubscribes.push(this.o.registry.follow());
     await this.o.registry.ensure();
     if (this.o.identity) {
       const v = await verifyIdentity(
@@ -214,7 +220,7 @@ export class CloneSync {
       if (!v.ok) throw new CloneRefusedError(`${v.message} Rebind the folder to start over.`);
     }
     this.o.registry.onSidecarSwitched = () => void this.onSidecarSwitched();
-    this.unsubscribes.push(this.o.registry.onChange(() => void this.reevaluate()), this.o.registry.follow());
+    this.unsubscribes.push(this.o.registry.onChange(() => void this.reevaluate()));
 
     const tree = await this.participating();
     const record = await readRecord(this.h.root);
@@ -296,6 +302,7 @@ export class CloneSync {
   // --- the controller's decision (G2, G9) -----------------------------------------------------------------------
 
   private snapshotAtTrigger(): string[] {
+    this.h.log(`clone gate went pending (reflog ${JSON.stringify(this.probe.cheapState().reflog)}, markers ${this.probe.cheapState().markers.map((m) => m.name).join(',')})`);
     this.snapshot = new Map();
     const held: string[] = [];
     for (const rel of this.h.attachedPaths()) {
@@ -384,6 +391,12 @@ export class CloneSync {
       this.deciding = false;
     }
     if (this.reevalWanted) void this.reevaluate();
+    this.retryReattach();
+  }
+
+  /** A re-attach skipped while the gate was closed gets another look once git is quiet. */
+  private retryReattach(): void {
+    for (const rel of [...this.detached]) void this.maybeReattach(rel);
   }
 
   // --- arrival for one file (G9) ----------------------------------------------------------------------------------

@@ -11,6 +11,7 @@ import { META_DIR } from '../ignore';
 
 export const RECORD_FILE = 'git-epochs.json';
 const VERSION = 1;
+let counter = 0;
 
 export type EpochRecord = StartupRecord & { version: number };
 
@@ -30,7 +31,7 @@ export async function readRecord(root: string): Promise<EpochRecord | null> {
 export async function writeRecord(root: string, rec: StartupRecord): Promise<void> {
   const target = file(root);
   await fs.mkdir(path.dirname(target), { recursive: true });
-  const tmp = `${target}.${process.pid}.tmp`;
+  const tmp = `${target}.${process.pid}.${counter++}.tmp`; // unique per write: persists can overlap
   const body: EpochRecord = { version: VERSION, head: rec.head, blobs: rec.blobs, detached: [...(rec.detached ?? [])].sort() };
   await fs.writeFile(tmp, JSON.stringify(body, null, 2) + '\n');
   for (let attempt = 0; ; attempt++) {

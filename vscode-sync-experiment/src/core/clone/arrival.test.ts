@@ -249,3 +249,33 @@ describe('jj (spec 15)', () => {
     expect(e.sync.cloneState()!.attached['a.qmd']).toBe(attachedBefore['a.qmd']); // not switched to the shared doc
   });
 });
+
+describe('the owner hook', () => {
+  it('is called once per decision with the flips, removals, and additions, and never writes the pointer itself', async () => {
+    const batches: import('./pointer-writer').PointerBatch[] = [];
+    const e = await makeCloneEnv(hub, { 'a.qmd': 'A\n', 'b.qmd': 'B\n' }, {
+      pointer: { applyDecision: async (b) => void batches.push(b) },
+      prepare: (clone) => {
+        git(clone, 'switch', '-q', '-c', 'side');
+        put(clone, 'new.qmd', 'NEW\n');
+        git(clone, 'rm', '-q', 'b.qmd');
+        commitAll(clone, 'side');
+        git(clone, 'switch', '-q', 'main');
+      },
+    });
+    envs.push(e);
+    batches.length = 0;
+    const pointerBefore = JSON.stringify((await (await import('../repo')).findDoc<{ files: object }>(e.other.repo, e.pub.indexDocId)).doc()!.files);
+    git(e.clone, 'switch', '-q', 'side');
+    await e.settle();
+    await waitFor(() => batches.length > 0, 'the owner hook call');
+    const b = batches[0]!;
+    expect(b.removals).toEqual(['b.qmd']);
+    expect(b.additions).toEqual(['new.qmd']);
+    expect(b.flips.map((f) => f.path)).toEqual(['new.qmd']);
+    expect(b.flips[0]!.docId).toBe(docIdOf(e, 'new.qmd'));
+    await sleep(300);
+    const pointerAfter = JSON.stringify((await (await import('../repo')).findDoc<{ files: object }>(e.other.repo, e.pub.indexDocId)).doc()!.files);
+    expect(pointerAfter).toBe(pointerBefore);
+  });
+});

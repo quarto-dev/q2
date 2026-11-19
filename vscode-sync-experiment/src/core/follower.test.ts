@@ -94,7 +94,7 @@ describe('mirror follower', () => {
 
     await owner.publishOffline();
     await waitFor(() => host.buffers.texts.get(abs) === 'A2\n', 'the buffer converging on the new doc');
-    expect(await readText(abs)).toBe('A2\n');
+    await waitFor(async () => (await readText(abs)) === 'A2\n', 'the disk write after the swap'); // written after the buffer converges
     await waitFor(() => messages().length === 1, 'the aggregate notice');
     expect(messages()[0]).toBe(`${REPLACED_THIS_FILE} ${formatNotice(STRANDED_EDITS, { n: 2 })}`);
     expect(await hubText(oldDoc)).toBe('A1\ntyped more'); // the stranded edits stay in the old doc

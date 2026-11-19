@@ -98,6 +98,8 @@ export interface EnvOptions {
   /** Publish with no registry sidecar (a project whose first git-aware peer creates it). */
   noRegistry?: boolean;
   options?: SyncOptions;
+  /** The owner hook (GE-12 supplies the real one). */
+  pointer?: import('./pointer-writer').PointerWriter;
 }
 
 export async function makeCloneEnv(hub: TestHub, files: Record<string, string | Buffer>, opts: EnvOptions = {}): Promise<CloneEnv> {
@@ -110,7 +112,7 @@ export async function makeCloneEnv(hub: TestHub, files: Record<string, string | 
   const meta = (await readProjectMeta(clone))!;
   const host = makeFakeHost();
   const clock = new ManualClock();
-  const sync = new ProjectSync(clone, meta, identity, host, { clone: { clock }, ...opts.options });
+  const sync = new ProjectSync(clone, meta, identity, host, { ...opts.options, clone: { clock, pointer: opts.pointer } });
   const other = new OtherPeer(hub);
   await other.open(pub.indexDocId);
   if (!opts.noStart) await sync.start();
@@ -138,7 +140,7 @@ export async function makeCloneEnv(hub: TestHub, files: Record<string, string | 
     async restart() {
       await env.sync.dispose().catch(() => {});
       env.host.notifier.messages.length = 0;
-      env.sync = new ProjectSync(clone, (await readProjectMeta(clone))!, identity, host, { clone: { clock }, ...opts.options });
+      env.sync = new ProjectSync(clone, (await readProjectMeta(clone))!, identity, host, { ...opts.options, clone: { clock, pointer: opts.pointer } });
       await env.sync.start();
     },
     async stop() {

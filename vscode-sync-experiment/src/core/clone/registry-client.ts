@@ -20,8 +20,15 @@ import {
 } from '@quarto/quarto-git-epochs';
 import { findDoc } from '../repo';
 
+/** How long a sidecar another peer just created may stay unavailable before a read gives up (the contract's 5 s rule is per file; a sidecar is worth waiting longer for). */
+const SIDECAR_WAIT_MS = 30_000;
+
 export class RegistryClient {
   private handle: DocHandle<Sidecar> | null = null;
+  private refreshing: Promise<void> | null = null;
+  private disposed = false;
+  /** One-line diagnostics (the extension's output channel). */
+  log: (line: string) => void = () => {};
   private changeListeners = new Set<() => void>();
   private readonly onSidecarChange = () => this.changeListeners.forEach((cb) => cb());
   /** Called when the index key resolved to a sidecar other than the one this client held: re-register attached docs. */
@@ -46,12 +53,13 @@ export class RegistryClient {
     if (this.handle) return this.handle;
     const key = this.indexKey();
     if (key) {
-      this.use(await findDoc<Sidecar>(this.repo, key));
+      this.use(await this.findSidecar(key));
       return this.handle!;
     }
     // Both maps are created in this one change by this one writer (contract: "Creating the maps").
     const created = this.repo.create<Sidecar>({ version: 1, entries: {}, retired: {} } as Sidecar);
     this.use(created);
+    this.log(`registry: created sidecar ${created.documentId}`);
     this.index.change((d) => {
       if ((d as { epochs?: unknown }).epochs == null) (d as { epochs?: string }).epochs = created.documentId;
     });
@@ -59,13 +67,41 @@ export class RegistryClient {
     return this.handle!;
   }
 
-  /** Re-read the index key; adopt another peer's sidecar when its key won. */
-  async refresh(): Promise<void> {
-    const key = this.indexKey();
-    if (!key || (this.handle && key === this.handle.documentId)) return;
-    const previous = this.handle?.documentId ?? null;
-    this.use(await findDoc<Sidecar>(this.repo, key));
-    if (previous !== null) this.onSidecarSwitched?.(key, previous);
+  /**
+   * A sidecar another peer created a moment ago can be rejected as `unavailable` at once, because the server has not
+   * received it yet (contract: "Unavailable canonical doc"). Ask again until it arrives.
+   */
+  private async findSidecar(id: string): Promise<DocHandle<Sidecar>> {
+    const deadline = Date.now() + SIDECAR_WAIT_MS;
+    for (;;) {
+      try {
+        return await findDoc<Sidecar>(this.repo, id, AbortSignal.timeout(2_000));
+      } catch (err) {
+        if (this.disposed || Date.now() > deadline) throw err;
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    }
+  }
+
+  /** Re-read the index key; adopt another peer's sidecar when its key won. One refresh runs at a time and re-checks the key when it ends. */
+  refresh(): Promise<void> {
+    if (!this.refreshing) {
+      this.refreshing = this.refreshOnce().finally(() => {
+        this.refreshing = null;
+      });
+    }
+    return this.refreshing;
+  }
+
+  private async refreshOnce(): Promise<void> {
+    for (;;) {
+      const key = this.indexKey();
+      if (this.disposed || !key || (this.handle && key === this.handle.documentId)) return;
+      const previous = this.handle?.documentId ?? null;
+      this.use(await this.findSidecar(key));
+      this.log(`registry: adopted sidecar ${key} (was ${previous})`);
+      if (previous !== null) this.onSidecarSwitched?.(key, previous);
+    }
   }
 
   private use(h: DocHandle<Sidecar>): void {
@@ -76,8 +112,9 @@ export class RegistryClient {
 
   /** Re-read the index key whenever the index changes, so a lost sidecar race is noticed (G6). Returns the unsubscribe. */
   follow(): () => void {
-    const onIndex = () => void this.refresh().catch(() => {});
+    const onIndex = () => void this.refresh().catch((e) => this.log(`registry: could not adopt the index's sidecar: ${e instanceof Error ? e.message : String(e)}`));
     this.index.on('change', onIndex);
+    onIndex(); // the key may already differ from the sidecar this client holds
     return () => this.index.off('change', onIndex);
   }
 
@@ -88,6 +125,7 @@ export class RegistryClient {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.handle?.off('change', this.onSidecarChange);
     this.changeListeners.clear();
   }

@@ -219,7 +219,7 @@ describe('the registry races and retirement (specs 11, 13)', () => {
     expect(winner).toBeTruthy();
   });
 
-  it('two peers creating the sidecar at once end on one sidecar and one doc per file', async () => {
+  it('two peers creating the sidecar at once end on one sidecar and one doc per file', { timeout: 90_000 }, async () => {
     const origin = (await import('./git-fixtures')).repoWith({ 'a.qmd': 'A\n', 'b.qmd': 'B\n' });
     const pub = await publishGit(origin, hub.url, hub, { registry: false });
     const { cloneRepo } = await import('./git-fixtures');
@@ -237,20 +237,17 @@ describe('the registry races and retirement (specs 11, 13)', () => {
           await s.start();
         }),
       );
-      try {
-        await waitFor(
-          () =>
-            ['a.qmd', 'b.qmd'].every((f) => peers[0]!.cloneState()!.attached[f] === peers[1]!.cloneState()!.attached[f]) &&
-            peers[0]!.registryView().entries.length > 0,
-          'both peers on the same docs',
-          20_000,
-        );
-      } catch (err) {
-        console.log(JSON.stringify(peers.map((p) => [p.cloneState(), p.registryView()]), null, 1));
-        throw err;
-      }
-      const index = await findDoc<{ epochs?: unknown }>(peers[0]!['repo' as never] as never, pub.indexDocId).catch(() => null);
-      void index;
+      await waitFor(
+        () =>
+          ['a.qmd', 'b.qmd'].every((f) => peers[0]!.cloneState()!.attached[f] === peers[1]!.cloneState()!.attached[f]) &&
+          peers[0]!.registryView().entries.length > 0,
+        'both peers on the same docs',
+        45_000,
+      );
+      const sidecars = peers.map((p) => (p as unknown as { index: { doc(): { epochs?: unknown } } }).index.doc().epochs);
+      expect(String(sidecars[0])).toBe(String(sidecars[1])); // one sidecar
+      for (const p of peers) expect(p.registryView().retired).toEqual([]);
+
     } finally {
       for (const s of peers) await s.dispose().catch(() => {});
       await pub.stop();

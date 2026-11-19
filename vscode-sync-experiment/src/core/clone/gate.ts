@@ -24,6 +24,8 @@ export class CloneGate {
   private watchTimer: unknown = null;
   private deciding = false;
   private disposed = false;
+  /** False until the controller has its baseline: before that the gate has nothing to compare with and must stay open. */
+  private ready = false;
   private lastState: GateState = { mode: 'open', pending: false, markers: [], held: [] };
 
   constructor(private readonly o: CloneGateOptions) {
@@ -36,6 +38,7 @@ export class CloneGate {
 
   async start(): Promise<void> {
     await this.controller.init();
+    this.ready = true;
     this.scheduleTick(NUMBERS.controllerTickPendingMs);
     this.scheduleWatch();
   }
@@ -47,7 +50,7 @@ export class CloneGate {
 
   /** Synchronous. True while git works, for the quiet window after, and while a decision is being applied. */
   isClosed(): boolean {
-    if (this.disposed) return false;
+    if (this.disposed || !this.ready) return false;
     if (this.deciding) return true;
     this.lastState = this.controller.check();
     return this.lastState.mode === 'closed';
@@ -56,6 +59,11 @@ export class CloneGate {
   /** The gate is `off` (git unavailable or unborn): ordinary sync applies. */
   isOff(): boolean {
     return this.lastState.mode === 'off';
+  }
+
+  /** The markers holding the gate, or why it is closed (diagnostics for `cloneState`). */
+  describe(): string {
+    return `${this.deciding ? 'deciding ' : ''}${this.lastState.mode}${this.lastState.pending ? ' pending' : ''} [${this.lastState.markers.join(',')}]`;
   }
 
   heldPaths(): string[] {
