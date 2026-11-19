@@ -139,6 +139,16 @@ plot(cars)
 ```
 ````
 
+A Mermaid or Graphviz diagram block is a card too, and takes `title` the
+same way (the only card option a diagram accepts):
+
+````markdown
+```dot
+//| title: "Order flow"
+digraph G { rankdir=LR; placed -> paid -> shipped }
+```
+````
+
 Any markdown can go in a card through a `.card` div:
 
 ```markdown

@@ -1,0 +1,51 @@
+---
+title: Diagram Cards
+format: dashboard
+_quarto:
+  tests:
+    dashboard:
+      # A dot or mermaid diagram block is a card, as a Quarto 1 {dot} /
+      # {mermaid} cell is: bare in a row it gets its own card, and alone in
+      # a .card div it fills that card's body under the div's title.
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "div.bslib-card > div.card-body > pre.graphviz",
+            "div.bslib-card > div.card-body > pre.mermaid",
+            "div.bslib-card > div.card-header > div.card-title",
+          ]
+        - [
+            "div.bslib-grid > pre",
+            "div.card[title]",
+          ]
+---
+
+## Row
+
+```dot
+digraph G { rankdir=LR; a -> b }
+```
+
+```mermaid
+flowchart LR
+  A --> B
+```
+
+## Row
+
+::: {.card title="Flow card"}
+
+```dot
+digraph G { rankdir=LR; start -> middle -> finish }
+```
+
+:::
+
+::: {.card title="Mermaid card"}
+
+```mermaid
+flowchart LR
+  C --> D
+```
+
+:::

@@ -258,6 +258,13 @@ pub use website_canonical_url::WebsiteCanonicalUrlTransform;
 pub use website_favicon::WebsiteFaviconTransform;
 pub use website_title_prefix::WebsiteTitlePrefixTransform;
 
+/// Whether `raw` is the `<pre>` that `mermaid-render` or `graphviz-render`
+/// put in place of a diagram code block. Those transforms run before the
+/// dashboard one, which must still treat the diagram as card content.
+pub(crate) fn is_rendered_diagram(raw: &quarto_pandoc_types::block::RawBlock) -> bool {
+    mermaid::is_mermaid_pre(raw) || graphviz::is_graphviz_pre(raw)
+}
+
 /// Append an HTML literal to the canonical `rendered.includes.<slot>`
 /// list (`slot` is `"header"`, `"before-body"`, or `"after-body"`) —
 /// the location populated by

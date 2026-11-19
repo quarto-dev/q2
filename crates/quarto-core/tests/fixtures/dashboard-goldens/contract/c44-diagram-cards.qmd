@@ -1,0 +1,35 @@
+---
+# contract: a dot or mermaid diagram block is a card like a Quarto 1 dot or mermaid cell, bare or alone in a .card div
+title: "C44 Diagram Cards"
+format: dashboard
+---
+
+## Row
+
+```dot
+digraph G { rankdir=LR; a -> b }
+```
+
+```mermaid
+flowchart LR
+  A --> B
+```
+
+## Row
+
+::: {.card title="C44-DOT"}
+
+```dot
+digraph G { rankdir=LR; c -> d }
+```
+
+:::
+
+::: {.card title="C44-MERMAID"}
+
+```mermaid
+flowchart LR
+  C --> D
+```
+
+:::

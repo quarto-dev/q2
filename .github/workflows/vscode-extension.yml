@@ -1,0 +1,78 @@
+# VS Code extension (editors/vscode, npm workspace `quarto2-vscode`;
+# epic bd-xnpyb2vv, plan claude-notes/plans/2026-11-17-q2-vscode-extension.md).
+#
+# Typechecks, unit-tests and packages the extension, and uploads the .vsix
+# as a build artifact (the v1 distribution channel: there is no Marketplace
+# publishing yet). Same shape as Quarto 1's apps/vscode build.yaml.
+#
+# The real-VS-Code smoke test (`npm run test:smoke`) needs a q2 build and a
+# display, so it is not run here; run it locally (see editors/vscode/README.md).
+# The server half (semantic tokens, quarto/preview*) is covered by the Rust
+# suites in test-suite.yml.
+
+name: VS Code extension
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'editors/vscode/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/vscode-extension.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'editors/vscode/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/vscode-extension.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and package
+    runs-on: ubuntu-latest
+    if: github.repository == 'quarto-dev/q2'
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck -w quarto2-vscode
+
+      - name: Unit tests
+        run: npm test -w quarto2-vscode
+
+      - name: Package
+        id: package
+        working-directory: editors/vscode
+        run: |
+          version=$(node -p "require('./package.json').version")
+          out="quarto2-vscode-${version}-${GITHUB_SHA::8}.vsix"
+          npx --yes @vscode/vsce@3 package --no-dependencies --out "$out"
+          echo "vsix=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Upload .vsix
+        uses: actions/upload-artifact@v7
+        with:
+          name: quarto2-vscode
+          path: editors/vscode/${{ steps.package.outputs.vsix }}
+          if-no-files-found: error

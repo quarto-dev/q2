@@ -35,6 +35,9 @@
 
 pub mod capabilities;
 pub mod convert;
+pub mod preview;
+pub mod semantic_tokens;
 pub mod server;
+pub mod stdio;
 
 pub use server::run_server;

@@ -6,7 +6,9 @@
 //! `format: dashboard` (bd-dashboard-format-k21hd4vy; plan
 //! `claude-notes/plans/2026-11-03-dashboard-format-port.md`).
 //!
-//! Two transforms, run last and adjacent in the transform list:
+//! [`DashboardDiagramTitleTransform`] runs earlier, just before the
+//! diagram transforms ([`diagram_title`]). Then two transforms, run last and
+//! adjacent in the transform list:
 //!
 //! - [`DashboardTransform`] builds the typed structure — pages, row/column
 //!   containers, cards — as `CustomNode`s ([`model`]) from the sectioned
@@ -17,6 +19,7 @@
 //!   and then makes the interactive elements view nodes ([`view`]) that the
 //!   React preview renders.
 
+pub mod diagram_title;
 pub mod inputs;
 pub mod model;
 pub mod navbar;
@@ -34,6 +37,7 @@ use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 
+pub use diagram_title::DashboardDiagramTitleTransform;
 use model::Orientation;
 use structure::DashboardOptions;
 

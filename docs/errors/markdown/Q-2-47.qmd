@@ -28,9 +28,9 @@ flowchart LR
 ```
 ````
 
-Diagram cells accept exactly five: `label`, `fig-cap`, `fig-scap`,
-`fig-alt`, and `fig-align`. Anything else raises this warning, and the
-option is dropped.
+Diagram cells accept exactly six: `label`, `fig-cap`, `fig-scap`,
+`fig-alt`, `fig-align`, and `title` (a dashboard card title). Anything
+else raises this warning, and the option is dropped.
 
 A Graphviz ```` ```dot ```` block writes its options after `//|`, and
 accepts one more, `graph-layout`, which chooses the layout engine. This

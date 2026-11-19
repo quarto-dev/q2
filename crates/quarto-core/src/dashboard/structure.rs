@@ -183,13 +183,15 @@ pub(crate) fn read_card_options(attr: &Attr, source: &SourceInfo) -> (CardOption
 }
 
 /// Q1 `hasRealLookingContent`: something other than raw blocks and knitr
-/// `preserve<hex>` placeholders (or nothing at all).
+/// `preserve<hex>` placeholders (or nothing at all). A rendered diagram is
+/// real: it was a code block (Q1: a `{dot}` / `{mermaid}` cell) until the
+/// diagram transforms, which run first, made it a raw `<pre>`.
 fn has_real_looking_content(blocks: &[Block]) -> bool {
     if blocks.is_empty() {
         return true;
     }
     blocks.iter().any(|b| match b {
-        Block::RawBlock(_) => false,
+        Block::RawBlock(raw) => crate::transforms::is_rendered_diagram(raw),
         Block::Paragraph(p) => !is_preserve_placeholder(&p.content),
         _ => true,
     })
@@ -495,9 +497,26 @@ pub fn build_cards(
 ) -> Blocks {
     let mut out = Vec::with_capacity(blocks.len());
     for block in blocks {
-        let Block::Div(mut d) = block else {
-            out.push(block);
-            continue;
+        let mut d = match block {
+            Block::Div(d) => d,
+            // A diagram is a card of its own, like the Q1 cell it stands
+            // for, rather than loose content for a flow card.
+            Block::RawBlock(raw) if crate::transforms::is_rendered_diagram(&raw) => {
+                let source = raw.source_info.clone();
+                let block = Block::RawBlock(raw);
+                out.extend(make_card(
+                    vec![block],
+                    Vec::new(),
+                    CardOptions::default(),
+                    doc,
+                    source,
+                ));
+                continue;
+            }
+            other => {
+                out.push(other);
+                continue;
+            }
         };
         if has_class(&d.attr, "cell") && has_class(&d.attr, "markdown") {
             // Notebook markdown cells unwrap (Q1 #9056).
