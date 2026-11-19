@@ -100,7 +100,7 @@ record an answer instead of passing or failing (see part two).
   write these tests first and watch a nested variant fail); a concurrent delete and put of one key leaves the put; a
   retired entry is never removed. A NUL byte in a key and an integer generation survive a save and load in both
   languages (the second review saw both; this makes them permanent tests).
-- [ ] **7.** In temp repos, record the reflog subjects of `cherry-pick`, `revert`, `commit --amend`, `reset --hard`,
+- [x] **7.** In temp repos, record the reflog subjects of `cherry-pick`, `revert`, `commit --amend`, `reset --hard`,
   `pull --ff-only`, `git stash` push, and a stopped `rebase`; whether `sequencer/` and `BISECT_LOG` appear; and the
   order of lock, file writes, and ref update for `switch`, `reset --hard`, `pull`, and `rebase` on a 3,000-file tree
   at millisecond resolution (a tight stat loop or `strace`/`dtruss`; the second review saw only 100 ms polling),
@@ -294,6 +294,15 @@ The logic itself (GE-2, GE-5), the swap module and the notice texts (GE-6), adop
   `reset: moving to HEAD` for both `git stash` and a plain `git reset --hard`, so the two are indistinguishable by
   subject, as the second review found. A repo with `core.logAllRefUpdates=false` has no `.git/logs`. In a linked
   worktree, `git rev-parse --git-path logs/HEAD` and `index.lock` resolve under `.git/worktrees/<name>/`.
-  **Not done:** `pull --ff-only` and stopped-`rebase` subjects, `sequencer/` and `BISECT_LOG` presence, and the
-  millisecond lock/file/ref ordering on a 3,000-file tree.
+  Remainder, same host: `pull --ff-only` logs `pull -q --ff-only: Fast-forward` (the subject carries the arguments
+  as typed); a stopped `rebase` logs `rebase (start): checkout main` and leaves `.git/rebase-merge/`; a stopped
+  single-commit `cherry-pick` leaves `CHERRY_PICK_HEAD` (a `sequencer/` directory is only expected for multi-commit
+  picks, not checked); `git bisect start` leaves `BISECT_LOG` (and `BISECT_START`, `BISECT_TERMS`, and others). A
+  stopped `revert` was not exercised (my test did not conflict). Millisecond ordering, 3,000-file tree, polling
+  `stat` in a tight loop: `index.lock` appears first (about 10 ms), working files change next, then the lock is
+  released and `.git/index` changes in the same millisecond, and the `logs/HEAD` write follows the lock release by
+  0.7 to 1.3 ms (`switch`, `reset --hard`; `rebase` repeats this per step). So git does release the lock before it
+  writes the reflog, and G1's 500 ms mtime skip applies. For `reset --hard` the branch ref write follows the reflog
+  by about 0.1 ms; `switch` writes no branch ref (only HEAD). `pull --ff-only` was a near-instant no-op in my run, so
+  its ordering is not measured.
 - Not started: Gate 0 items 6, 8, 9 and part two; the contract, package, schemas, fixtures. No code changed.
