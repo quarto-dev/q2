@@ -20,8 +20,8 @@
  * caret is in a link, which opens the link form. Outside the body, it's
  * disabled, but for its undo and redo buttons, which come first and work
  * wherever the caret is, as the keyboard's undo and redo do. At its right
- * end, where the page has one, is the Developer tools button, which shows
- * and hides the source pane.
+ * end, where the page has one, is the Show source button, which shows the
+ * source pane, and is then the Hide source button.
  *
  * Resting the mouse on a button shows a tooltip with its name and keyboard
  * shortcut (`Tooltip.tsx`), and the style menu gives each style's shortcut
@@ -413,9 +413,8 @@ export function Toolbar({
         <button
           type="button"
           className="qe-icon qe-dev-tools"
-          aria-label="Developer tools"
+          aria-label={devTools.open ? 'Hide source' : 'Show source'}
           {...tip(devTools.open ? 'Hide source' : 'Show source')}
-          aria-pressed={devTools.open}
           onClick={() => {
             setOpen(false)
             devTools.toggle()

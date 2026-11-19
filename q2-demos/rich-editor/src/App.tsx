@@ -7,7 +7,7 @@
  * `index.qmd`. Without `doc`, the page makes a new project on the server
  * from the tutorial (`tutorial.qmd`), and puts it in the URL, so that
  * reloading opens it again and the URL can be shared.
- * The visual editor fills the page; the toolbar's Developer tools button
+ * The visual editor fills the page; the toolbar's Show source button
  * shows the source pane beside it.
  */
 

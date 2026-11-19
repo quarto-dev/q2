@@ -227,7 +227,7 @@ test.describe('the toolbar', () => {
       'Decrease indent',
       'Increase indent',
       'Quote',
-      'Developer tools',
+      'Show source',
     ])
   })
 

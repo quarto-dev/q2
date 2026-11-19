@@ -70,7 +70,7 @@ import { matches, SHORTCUTS, styleShortcut } from './shortcuts.ts'
 
 interface VisualEditorProps {
   file: QmdFile
-  /** The toolbar's Developer tools button (absent: no source pane to show). */
+  /** The toolbar's Show source button (absent: no source pane to show). */
   devTools?: { open: boolean; toggle: () => void }
 }
 
