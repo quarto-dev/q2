@@ -1,0 +1,19 @@
+{
+  "name": "q2-custom-editor",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Prototype: a minimal custom editor that connects to `q2 preview --ui custom`.",
+  "scripts": {
+    "start": "node ../../scripts/q2-preview-custom.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@quarto/quarto-sync-client": "*"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4",
+    "vite-plugin-wasm": "^3.5.0"
+  }
+}

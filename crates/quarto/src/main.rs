@@ -1227,12 +1227,16 @@ enum PreviewUiArg {
     Viewer,
     /// The full hub-client editor. Does not imply --allow-edit.
     Editor,
+    /// Bring your own frontend (prototype): serves no UI, opens no
+    /// browser, and prints one JSON line with the server URLs on stdout
+    /// for a custom frontend to connect to.
+    Custom,
 }
 
 impl From<PreviewUiArg> for quarto_preview::PreviewUi {
     fn from(arg: PreviewUiArg) -> Self {
         match arg {
-            PreviewUiArg::Viewer => quarto_preview::PreviewUi::Viewer,
+            PreviewUiArg::Viewer | PreviewUiArg::Custom => quarto_preview::PreviewUi::Viewer,
             PreviewUiArg::Editor => quarto_preview::PreviewUi::Editor,
         }
     }
@@ -2028,6 +2032,7 @@ fn run() -> Result<()> {
                     browser,
                 })
             } else {
+                let custom = ui == PreviewUiArg::Custom;
                 let ui = ui.into();
                 // clap cannot condition on the value of `--ui`.
                 commands::preview::reject_render_flags_with_editor(
@@ -2048,6 +2053,7 @@ fn run() -> Result<()> {
                     allow_edit,
                     share,
                     ui,
+                    custom,
                     to,
                     metadata,
                     profile,

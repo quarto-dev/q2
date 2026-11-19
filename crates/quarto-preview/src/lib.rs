@@ -212,6 +212,22 @@ pub fn set_editor_boot(info: EditorBootInfo) {
     let _ = EDITOR_BOOT.set(info);
 }
 
+/// `--ui custom` (prototype): the session serves no frontend at all, so
+/// the SPA fallback answers 404. Set by the CLI via [`disable_ui`]
+/// before the server runs.
+static UI_DISABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Serve no frontend for this session (`--ui custom`): the sync and
+/// `/api/preview/*` routes still work, and a custom frontend is served
+/// from elsewhere.
+pub fn disable_ui() {
+    UI_DISABLED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn ui_disabled() -> bool {
+    UI_DISABLED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Which embedded frontend the preview server serves (`--ui`,
 /// live-share plan Phase 4, bd-jt1etjbn).
 ///
@@ -388,7 +404,7 @@ where
     // serving path (see prewarm_shared_wasm_gz) so the session's first
     // WASM fetch doesn't stall on ~36 MB of compression. Skipped under
     // an SPA disk override, where the embedded gz is never served.
-    if !matches!(SPA_DIR_OVERRIDE.get(), Some(Some(_))) {
+    if !matches!(SPA_DIR_OVERRIDE.get(), Some(Some(_))) && !ui_disabled() {
         let ui = config.ui;
         tokio::task::spawn_blocking(move || prewarm_shared_wasm_gz(ui));
     }
@@ -945,6 +961,9 @@ async fn spa_handler(req: axum::http::Request<axum::body::Body>) -> Response {
         accept_encoding: req.headers().get(header::ACCEPT_ENCODING),
         is_head: req.method() == Method::HEAD,
     };
+    if ui_disabled() {
+        return (StatusCode::NOT_FOUND, "no ui (--ui custom)").into_response();
+    }
     let path = req.uri().path();
     let rel = path.trim_start_matches('/');
     let rel = if rel.is_empty() { "index.html" } else { rel };
@@ -1148,6 +1167,9 @@ fn pdfjs_embedded_response(ui: PreviewUi, rel: &str, ctx: AssetRequestCtx<'_>) -
 /// fall-through (a non-resource `/.quarto/…` path got `index.html` before this
 /// route existed, so preserve that).
 async fn serve_spa_index(ctx: AssetRequestCtx<'_>) -> Response {
+    if ui_disabled() {
+        return (StatusCode::NOT_FOUND, "no ui (--ui custom)").into_response();
+    }
     if let Some(Some(override_dir)) = SPA_DIR_OVERRIDE.get() {
         return serve_from_disk(override_dir, "index.html", ctx).await;
     }

@@ -59,6 +59,10 @@ pub struct PreviewArgs {
     /// plan Phase 4, bd-jt1etjbn): the read-only preview SPA (default)
     /// or the full hub-client editor. Never changes the write policy.
     pub ui: quarto_preview::PreviewUi,
+    /// `--ui custom` (prototype): serve no frontend, open no browser, and
+    /// print one JSON line with the server URLs on stdout so a custom
+    /// frontend can connect.
+    pub custom: bool,
     /// `--to`, as `q2 render --to` (F8). Applies to the viewer UI only.
     pub to: Option<String>,
     /// `-M/--metadata` arguments, unparsed, as `q2 render -M` (F8).
@@ -374,6 +378,8 @@ async fn run(args: PreviewArgs) -> Result<()> {
     // server's `on_ready` callback below (which fires before the
     // listener binds, the same print-before-accept contract as here).
     match args.ui {
+        // `--ui custom` prints its JSON line once the server is up (below).
+        quarto_preview::PreviewUi::Viewer if args.custom => {}
         quarto_preview::PreviewUi::Viewer => {
             let url = build_boot_url(&host, port, initial_page.as_deref());
             info!(%url, "starting q2 preview server");
@@ -470,6 +476,30 @@ async fn run(args: PreviewArgs) -> Result<()> {
     // shutdown critical path — keeps a fast teardown from exiting the
     // process before the line appears (bd-wj9smyxg).
     match args.ui {
+        quarto_preview::PreviewUi::Viewer if args.custom => {
+            // The index document id exists only once the hub is up, so
+            // the JSON line is built in `on_ready` and printed once the
+            // port accepts connections.
+            let host = config.host.clone();
+            let allow_edit = args.allow_edit;
+            quarto_preview::disable_ui();
+            quarto_preview::run_with_on_ready(config, move |ctx| {
+                let paths: Vec<String> = ctx.index().get_all_files().into_keys().collect();
+                let file = pick_editor_file(initial_page.as_deref(), &paths);
+                let info = serde_json::json!({
+                    "url": format!("http://{host}:{port}/"),
+                    "wsUrl": format!("ws://{host}:{port}/ws"),
+                    "indexDocId": ctx.index().document_id(),
+                    "file": file,
+                    "allowEdit": allow_edit,
+                });
+                tokio::spawn(async move {
+                    wait_until_accepting(&host, port, Duration::from_secs(10)).await;
+                    println!("{info}");
+                });
+            })
+            .await
+        }
         quarto_preview::PreviewUi::Viewer => quarto_preview::run(config).await,
         quarto_preview::PreviewUi::Editor => {
             // Phase 4 (bd-jt1etjbn): the share-route boot URL needs the

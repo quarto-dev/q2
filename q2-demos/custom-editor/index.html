@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>q2 custom editor</title>
+    <style>
+      html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
+      body { display: grid; grid-template-rows: auto 1fr; }
+      header { display: flex; gap: 12px; align-items: center; padding: 6px 10px; border-bottom: 1px solid #ccc; }
+      main { display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+      textarea { border: 0; border-right: 1px solid #ccc; padding: 10px; resize: none; font: 13px/1.5 ui-monospace, monospace; outline: none; }
+      pre { margin: 0; padding: 10px; overflow: auto; font: 12px/1.4 ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <select id="files"></select>
+      <span id="status">connecting…</span>
+    </header>
+    <main>
+      <textarea id="editor" spellcheck="false"></textarea>
+      <pre id="ast"></pre>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
