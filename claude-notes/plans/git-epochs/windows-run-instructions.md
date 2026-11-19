@@ -1,11 +1,11 @@
 ---
-title: 'GE-15 and GE-16 Windows runs: getting started'
+title: 'GE-15, GE-16, and GE-17 Windows runs: getting started'
 date: 2026-11-19
 description: 'What to do on the Windows machine for the git epochs Rust, hub, TypeScript, and extension items: get the branch, run one script, and send the results back through the branch. Also what each item proves and the failures to ignore.'
 ---
 
-**Plans:** [GE-15](ge-15-windows-run-a.md) (items `a0` to `a6`, run A) and [GE-16](ge-16-windows-run-b.md) (items `b1` to
-`b7`, run B; section 9). This page and the scripts under `scripts/git-epochs-windows/` exist only on
+**Plans:** [GE-15](ge-15-windows-run-a.md) (items `a0` to `a6`, run A), [GE-16](ge-16-windows-run-b.md) (items `b1` to
+`b7`, run B; section 9), and [GE-17](ge-17-windows-run-c.md) (items `c1` to `c3`, run C; section 10). This page and the scripts under `scripts/git-epochs-windows/` exist only on
 the temporary branch `windows/git-epochs`; the branch never lands on `feature/git-epochs`, and only the plan\'s "Notes
 from the run" stays.
 
@@ -167,3 +167,54 @@ last 60 lines of the failing step) or the full log under `results\logs\`.
 this machine and write down what happened. It is not scripted.
 
 **Known failures to ignore.** None at the start of run B. Anything that fails is a finding.
+
+## 10. Run C: the scripted scenario, the Playwright subset, and everything together (GE-17)
+
+Run C uses the same script and branch. It runs the whole feature end to end with the real `q2.exe`, then the
+extension\'s VS Code surfaces, then every earlier item again on the final code.
+
+**Setup beyond sections 1 and 9.**
+
+- **Node at the `.nvmrc` major (currently 24)**, `core.autocrlf=true`, `core.longpaths=true`, and optionally `jj`, as in
+  section 9.
+- **The pinned VS Code build.** Item `c2` downloads VS Code **1.101.2** (the harness\'s `VSCODE_VERSION`; the same
+  version as on Linux and macOS) through `downloadAndUnzipVSCode` into `vscode-sync-experiment\.vscode-test`. It needs
+  network access the first time.
+- **Optional for `c2`\'s cross-client scenarios: the hub-client embed.** Those scenarios drive a real chromium and
+  need `q2.exe` built with the editor embed, which needs the WASM toolchain (`wasm-pack`, `wasm-bindgen-cli`,
+  `tree-sitter`, `binaryen`, `clang`; the steps are in `.github/workflows/vscode-extension-e2e.yml`). Without it,
+  pass nothing extra and `c2` runs the extension flows and the timing test and records, as a caveat, that the
+  cross-client scenarios did not run. With the toolchain, pass `-BuildEmbed`. Run `npx playwright install chromium`
+  once first.
+
+**Run it.** From the repository root:
+
+```powershell
+git pull origin windows/git-epochs
+powershell -ExecutionPolicy Bypass -File scripts\git-epochs-windows\run.ps1 -Only c1,c2 -Publish
+```
+
+Then the whole set in one invocation (`c3` expands to every `a` and `b` item and checks that they are green together;
+pass `-WithTools` as for run A):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\git-epochs-windows\run.ps1 -Only c3 -WithTools -Publish
+```
+
+Also run, once each, and note the result next to the run:
+
+- `run.ps1 -Only a6` on a checkout of `main` at the merge base (the baseline; each failure there predates the epic).
+- `run.ps1 -Only b5,b6` on a machine with Developer Mode on, so the two symlink tests run instead of skipping.
+- `$env:QUARTO_HUB_DEBUG='1'; run.ps1 -Only b4`, and send the log (the `debug: disk` lines explain the `clone-modes` event
+  log failure if it still occurs).
+
+**What each item checks.**
+
+| Item | Catalog | How it is tested | What a PASS proves | What it does not prove |
+|---|---|---|---|---|
+| `c1` | W9 | `c1\run.mjs`: a Playwright-driven script with no browser. It generates a repo of about 4,000 files, starts `q2.exe preview --git track --allow-edit --ui editor`, attaches a headless clone and mirror, and drives real `git commit`, `git switch`, and `git reset --hard`, polling `index.lock` and `/api/preview/git-status` every 20 ms; step 9 stops a second hub with `CTRL_C_EVENT` (`c1\ctrl-c.ps1`) during a `git switch` and restarts it. It writes a JSON transcript. | The gate, the classifier, the registry, the flips, the unlists, a binary file, and shutdown with a marker set, end to end on Windows. | jj on Windows; other Git builds; a long soak. |
+| `c2` | W8 | `npm run test:e2e`, `test:e2e:cross` (with `-BuildEmbed`), and `test:e2e:timing` in the extension workspace, with the pinned VS Code. | The extension\'s VS Code surfaces work with `Code.exe`; editor-only\'s quiet window is measured (a gap above 1 s is a finding for the experimental fallback, not a failure). | VS Code Insiders or other versions; the exploratory scenarios. |
+| `c3` | none | Every `a` and `b` item in one invocation. | Nothing regressed on Windows after the fix plans. | Anything the items did not already cover. |
+
+If `c1` step 9 reports `not run`, `GenerateConsoleCtrlEvent` could not reach the hub; the skipped-flush behavior is then
+covered only by the hub-level test of GE-3.

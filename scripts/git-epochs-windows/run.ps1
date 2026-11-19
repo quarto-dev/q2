@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  GE-15 and GE-16, the Windows runs A and B: runs the new Rust and hub tests (items a0 to a6) and the new TypeScript
+  GE-15, GE-16, and GE-17, the Windows runs A, B, and C: runs the new Rust and hub tests (items a0 to a6) and the new TypeScript
   and extension tests (items b1 to b7) of the git epochs epic and writes one results file.
   Temporary tooling on windows/git-epochs; it never lands on feature/git-epochs.
 
@@ -22,6 +22,9 @@
 .PARAMETER Publish
   After the run, commit results/*.json and results/*.md and push the current branch to origin as windows/git-epochs.
   Without it the script prints the commands.
+.PARAMETER BuildEmbed
+  Item c2 only: run `cargo xtask build-hub-client-embed` and rebuild q2 so the cross-client Playwright scenarios
+  have the real editor embed. Needs the WASM toolchain (see instructions page); without it c2 skips that step.
 .PARAMETER SkipBuild
   Skip the up-front build item a0 (use when you have just built).
 #>
@@ -30,7 +33,8 @@ param(
     [string[]]$Only,
     [switch]$WithTools,
     [switch]$Publish,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$BuildEmbed
 )
 
 $ErrorActionPreference = 'Continue'   # native stderr must not abort the script (PS 5.1)
@@ -38,6 +42,12 @@ Set-StrictMode -Version 2
 
 # `powershell -File run.ps1 -Only b1,b2` delivers one string 'b1,b2' (Windows PowerShell 5.1), so split on commas.
 if ($Only) { $Only = @($Only | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+
+# c3 means "every a and b item on the final code": expand it so one invocation runs them all.
+if ($Only -and ($Only -contains 'c3')) {
+    $Only = @($Only + @('a0','a1','a2','a3','a4','a5','a6','b1','b2','b3','b4','b5','b6','b7') | Select-Object -Unique)
+}
+$wantC = (-not $Only) -or (@($Only | Where-Object { $_ -like 'c*' }).Count -gt 0)
 
 $wantA = (-not $Only) -or (@($Only | Where-Object { $_ -like 'a*' }).Count -gt 0)
 $wantB = (-not $Only) -or (@($Only | Where-Object { $_ -like 'b*' }).Count -gt 0)
@@ -476,6 +486,134 @@ if ($wantB) {
 }
 
 # --------------------------------------------------------------------------------------------
+# c1 to c3 (GE-17): the scripted scenario, the Playwright subset, and the whole set together
+# --------------------------------------------------------------------------------------------
+
+function Get-PlaywrightCounts {
+    # "  3 passed (2.4m)" / "  1 failed" / "  2 skipped" lines of one Playwright list-reporter run.
+    param([string]$Text)
+    $clean = $Text -replace '\x1b\[[0-9;]*m', ''
+    $c = @{ passed = 0; failed = 0; skipped = 0 }
+    foreach ($k in @('passed', 'failed', 'skipped', 'flaky')) {
+        $m = [regex]::Matches($clean, '(?m)^\s+(\d+) ' + $k + '\b')
+        if ($m.Count -gt 0 -and $c.ContainsKey($k)) { $c[$k] = [int]$m[$m.Count - 1].Groups[1].Value }
+    }
+    return $c
+}
+
+if ($wantC -and ((Test-Selected 'c1') -or (Test-Selected 'c2'))) {
+    Write-Host '== c: scenario and Playwright items =='
+    $cReady = $true
+    if (-not (Test-Path (Join-Path $repo 'node_modules'))) {
+        $ri = Invoke-Logged 'c-npm-ci' 'npm ci'
+        $cReady = ($ri.Exit -eq 0)
+    }
+    $q2Exe = Join-Path $repo 'target\debug\q2.exe'
+    $q2Ok = $false
+    if ($cReady) {
+        $rb = Invoke-Logged 'c-build-q2' 'cargo build --bin q2'
+        $q2Ok = ($rb.Exit -eq 0) -and (Test-Path $q2Exe)
+    }
+    $pkgX = 'quarto-hub-vscode'
+
+    if (Test-Selected 'c1') {
+        $c1Proves = 'The whole feature works end to end on Windows through the real q2.exe and git.exe on a generated repo in %TEMP% (about 4,000 tracked files): the gate pauses during a real git switch, the classifier treats a commit as a move-forward and a switch as a flip, a changed file flips, a removed file is unlisted, an added file is listed, a binary changes, arrival re-attaches the earlier docs without a fork, reset --hard keeps the dirty text in the retired doc, and a hub stopped during a switch skips the flush and leaves no conflict markers.'
+        $c1Not = 'jj on Windows; other Git builds; a long soak; the browser (c2 covers the editor surfaces).'
+        if (-not $q2Ok) {
+            Add-Result 'c1' 'scripted end-to-end scenario against q2.exe and git.exe' 'FAIL' 'npm ci or cargo build --bin q2 failed (see c-npm-ci.log and c-build-q2.log)' $c1Proves $c1Not '' '' $false '' 'W9'
+        } else {
+            $transcript = Join-Path $resultsDir ('c1-transcript-' + $runId + '.json')
+            $env:C1_OUT = $transcript
+            $env:Q2_BINARY = $q2Exe
+            $r = Invoke-Logged 'c1-scenario' ('node "' + (Join-Path $PSScriptRoot 'c1\run.mjs') + '"')
+            Remove-Item Env:\C1_OUT -ErrorAction SilentlyContinue
+            Remove-Item Env:\Q2_BINARY -ErrorAction SilentlyContinue
+            $cnt = Get-PlaywrightCounts (Get-LogText $r.Log)
+            $text = (Get-LogText $r.Log) -replace '\x1b\[[0-9;]*m', ''
+            $step9 = ''
+            if ($text -match 'step 9 not run') { $step9 = 'Step 9 was NOT run on this machine: Ctrl+C could not be delivered to the hub (see the transcript); the skipped-flush behavior is then covered only by the GE-3 hub test.' }
+            if ($r.Exit -eq 0 -and $cnt.failed -eq 0 -and $cnt.passed -ge 1) {
+                Add-Result 'c1' 'scripted end-to-end scenario against q2.exe and git.exe' 'PASS' ($cnt.passed.ToString() + ' passed, ' + $cnt.skipped.ToString() + ' skipped; transcript ' + (Split-Path $transcript -Leaf)) $c1Proves $c1Not '' $step9 $false $r.Log 'W9'
+            } else {
+                Add-Result 'c1' 'scripted end-to-end scenario against q2.exe and git.exe' 'FAIL' ('exit code ' + $r.Exit + '; ' + $cnt.passed + ' passed, ' + $cnt.failed + ' failed; the transcript names the failing step') $c1Proves $c1Not (Get-Tail $r.Log 60) $step9 $false $r.Log 'W9'
+            }
+        }
+    }
+
+    if (Test-Selected 'c2') {
+        $c2Proves = 'The extension''s VS Code surfaces (commands, notifications, status bar, buffers) work with the pinned Code.exe the harness downloads; the permanent cross-client scenarios (H1 to H7, L1 to L4, the registry check) pass on Windows; editor-only''s quiet window is measured against a real Windows buffer reload (a gap above 1 s is a finding for the experimental fallback in G20, not a failure).'
+        $c2Not = 'VS Code Insiders or other versions; the unmarked exploratory scenarios.'
+        if (-not $cReady) {
+            Add-Result 'c2' 'Playwright subset with the pinned VS Code build and the timing test' 'FAIL' 'npm ci failed (see c-npm-ci.log)' $c2Proves $c2Not '' '' $false '' 'W8'
+        } else {
+            $failed = @(); $passed = 0; $skippedN = 0; $lastLog = ''; $tail = ''; $caveat = ''
+            # The e2e harness loads vscode-sync-experiment\dist\extension.js; a fresh checkout has none (commands are then 'not found').
+            $rx = Invoke-Logged 'c2-build-extension' ('npm run build -w ' + $pkgX)
+            if ($rx.Exit -ne 0) { $failed += 'extension build (c2-build-extension.log)'; $tail = Get-Tail $rx.Log 40 }
+            $steps = @(
+                @{ Name = 'extension-flows'; Cmd = 'npm run test:e2e -w ' + $pkgX },
+                @{ Name = 'timing'; Cmd = 'npm run test:e2e:timing -w ' + $pkgX; Timing = $true })
+            if ($BuildEmbed) {
+                $re = Invoke-Logged 'c2-build-embed' 'cargo xtask build-hub-client-embed'
+                $rq = Invoke-Logged 'c2-rebuild-q2' 'cargo build --bin q2'
+                if ($re.Exit -ne 0 -or $rq.Exit -ne 0) {
+                    $failed += 'embed build (c2-build-embed.log, c2-rebuild-q2.log)'
+                    $tail = Get-Tail $re.Log 40
+                } else {
+                    $steps = @(@{ Name = 'extension-flows'; Cmd = 'npm run test:e2e -w ' + $pkgX },
+                               @{ Name = 'cross-client'; Cmd = 'npm run test:e2e:cross -w ' + $pkgX },
+                               @{ Name = 'timing'; Cmd = 'npm run test:e2e:timing -w ' + $pkgX; Timing = $true })
+                }
+            } else {
+                $caveat = 'The cross-client Playwright scenarios were NOT run: they need the hub-client embed in q2.exe (rerun with -BuildEmbed on a machine with the WASM toolchain; see the instructions page).'
+            }
+            $gap = ''
+            foreach ($st in $steps) {
+                $r = Invoke-Logged ('c2-' + $st.Name) $st.Cmd
+                $lastLog = $r.Log
+                $cnt = Get-PlaywrightCounts (Get-LogText $r.Log)
+                $passed += $cnt.passed; $skippedN += $cnt.skipped
+                $gm = [regex]::Match((Get-LogText $r.Log), 'lock-release to last-reload gap: (\d+) ms')
+                if ($gm.Success) { $gap = $gm.Groups[1].Value + ' ms' }
+                if ($st.ContainsKey('Timing') -and $st.Timing) {
+                    # A timing gap above the window is a finding (G20), not a failed run; any other failure still counts.
+                    $txt = Get-LogText $r.Log
+                    if ($r.Exit -ne 0 -and $gm.Success -and $txt -match 'toBeLessThanOrEqual') {
+                        $caveat += ' Timing test: the measured gap of ' + $gap + ' is above the 1000 ms window: a finding for the experimental fallback in G20.'
+                    } elseif ($r.Exit -ne 0) { $failed += $st.Name; $tail = Get-Tail $r.Log 60 }
+                } elseif ($r.Exit -ne 0 -or $cnt.failed -gt 0) {
+                    $failed += $st.Name; if (-not $tail) { $tail = Get-Tail $r.Log 60 }
+                }
+            }
+            if ($gap) { $caveat += ' Measured lock-release to last-reload gap: ' + $gap + '.' }
+            $caveat = $caveat.Trim()
+            if ($failed.Count -eq 0) {
+                Add-Result 'c2' 'Playwright subset with the pinned VS Code build and the timing test' 'PASS' ($passed.ToString() + ' passed, ' + $skippedN.ToString() + ' skipped') $c2Proves $c2Not '' $caveat $false $lastLog 'W8'
+            } else {
+                Add-Result 'c2' 'Playwright subset with the pinned VS Code build and the timing test' 'FAIL' ('failed: ' + ($failed -join ', ') + '; ' + $passed + ' passed') $c2Proves $c2Not $tail $caveat $false $lastLog 'W8'
+            }
+        }
+    }
+}
+
+if (Test-Selected 'c3') {
+    # c3: the a and b items of this same invocation, all green together on the final code.
+    $ab = @($results | Where-Object { $_.id -like 'a*' -or $_.id -like 'b*' })
+    $expected = @('a0','a1','a2','a3','a4','a5','a6','b1','b2','b3','b4','b5','b6','b7')
+    $missingIds = @($expected | Where-Object { $id = $_; -not ($ab | Where-Object { $_.id -eq $id }) })
+    $bad = @($ab | Where-Object { $_.status -ne 'PASS' -and -not $_.known_unrelated })
+    $c3Proves = 'Nothing regressed on Windows after the fix plans: every a and b item ran in one invocation on the final code and is green together.'
+    $c3Not = 'Anything the items did not already cover.'
+    if ($missingIds.Count -gt 0) {
+        Add-Result 'c3' 'every a and b item together on the final code' 'FAIL' ('items did not run: ' + ($missingIds -join ', ') + ' (with -SkipBuild a0 is absent)') $c3Proves $c3Not '' '' $false '' ''
+    } elseif ($bad.Count -gt 0) {
+        Add-Result 'c3' 'every a and b item together on the final code' 'FAIL' ('not passing: ' + (($bad | ForEach-Object { $_.id + '=' + $_.status }) -join ', ')) $c3Proves $c3Not '' '' $false '' ''
+    } else {
+        Add-Result 'c3' 'every a and b item together on the final code' 'PASS' (($ab.Count).ToString() + ' items green together') $c3Proves $c3Not '' '' $false '' ''
+    }
+}
+
+# --------------------------------------------------------------------------------------------
 # write results
 # --------------------------------------------------------------------------------------------
 $out = New-Object PSObject -Property ([ordered]@{
@@ -487,7 +625,7 @@ $jsonPath = Join-Path $resultsDir ('gea-' + $runId + '.json')
 $out | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 $jsonPath
 
 $md = New-Object System.Collections.ArrayList
-[void]$md.Add('# GE-15 and GE-16 Windows run ' + $runId)
+[void]$md.Add('# GE-15, GE-16, and GE-17 Windows run ' + $runId)
 [void]$md.Add('')
 [void]$md.Add('Branch ' + $branch + ' at ' + $commit + ' (' + $baseNote + '); host ' + $hostTriple + '; ' + $gitVersion + '; node ' + $nodeVersion + '; autocrlf ' + $autocrlf + '; longpaths ' + $longpaths + '.')
 [void]$md.Add('')
