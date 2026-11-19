@@ -1,3 +1,4 @@
+import { createTypist } from '../../src/typing';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { mkdtempSync, realpathSync } from 'node:fs';
@@ -99,11 +100,28 @@ describe('terminal server (DM2)', () => {
     const c = await connect(s.url);
     const text = 'echo ' + 'timed'.repeat(7); // 40 characters: the default pace would take 1.4 s
     const started = Date.now();
-    await s.type(text, { timing: { lead: 150, gaps: new Array(text.length).fill(0), beforeEnter: 150 } });
+    await s.type(text, { timing: { lead: 150, steps: [...text].map((c) => ({ wait: 0, text: c })), beforeEnter: 150 } });
     const took = Date.now() - started;
     expect(took).toBeGreaterThanOrEqual(295);
     expect(took).toBeLessThan(900);
     await until(() => c.out().includes('timedtimedtimed'));
+    await until(() => lines.includes(text));
+    c.ws.close();
+  });
+
+  it('reports the intended line when the plan has a typo and a paste in it', async () => {
+    const { s } = await start();
+    const lines: string[] = [];
+    s.onCommand((l) => lines.push(l));
+    const c = await connect(s.url);
+    const text = 'echo corrected abcdefghijklmnopqrstuvwxyz0123456789';
+    // typoRate 1 forces a slip in the first eligible word; the 36-character token is pasted.
+    const typist = createTypist({ baseMs: 1, seed: 3, typoRate: 1 });
+    const plan = typist.plan(text);
+    expect(plan.steps.some((st) => st.backspace)).toBe(true);
+    expect(plan.steps.some((st) => st.paste)).toBe(true);
+    await s.type(text, { timing: { ...plan, lead: 0, beforeEnter: 0 } });
+    await until(() => c.out().includes('abcdefghijklmnopqrstuvwxyz0123456789'));
     await until(() => lines.includes(text));
     c.ws.close();
   });

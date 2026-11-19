@@ -173,15 +173,21 @@ export async function startTerminalServer(o: TerminalServerOptions): Promise<Ter
     async type(text, opts = {}) {
       const delay = opts.charDelayMs ?? 35;
       const wait = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
-      if (opts.timing) await wait(opts.timing.lead);
-      let i = 0;
-      for (const ch of text) {
-        // Jitter alters timing only: the same bytes reach the PTY and the same line is reported.
-        if (opts.timing) await wait(opts.timing.gaps[i] ?? 0);
-        feed(ch);
-        term.write(ch);
-        if (!opts.timing) await wait(delay);
-        i++;
+      if (opts.timing) {
+        // A planned run: jitter and corrections change what is typed and when, never the final line.
+        await wait(opts.timing.lead);
+        for (const step of opts.timing.steps) {
+          await wait(step.wait);
+          const data = step.backspace ? '\x7f' : (step.text ?? '');
+          feed(data);
+          term.write(data); // a paste is one write: it appears at once
+        }
+      } else {
+        for (const ch of text) {
+          feed(ch);
+          term.write(ch);
+          await wait(delay);
+        }
       }
       if (opts.timing && opts.enter !== false) await wait(opts.timing.beforeEnter);
       if (opts.enter !== false) {

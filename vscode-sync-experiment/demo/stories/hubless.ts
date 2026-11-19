@@ -47,6 +47,7 @@ export function hublessStory(d: Demo): Step[] {
       caption: 'Maurice pastes the command into his terminal and opens the preview.',
       command: () => d.guestPreviewCommandLine(),
       who: 'guest',
+      paste: 'all', // copied from the share dialog
       action: async () => {
         await d.waitForGuestPreview();
         await d.openGuestBrowser(d.guestPreviewUrl);

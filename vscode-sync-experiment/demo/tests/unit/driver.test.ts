@@ -57,4 +57,19 @@ describe('driver (DM4)', () => {
       expect.objectContaining({ id: 's2', caption: 'two', result: 'pass' }),
     ]);
   });
+
+  it('hands a step\'s paste setting to the environment (default left to it)', async () => {
+    const seen: (string | undefined)[] = [];
+    const { env } = fakeEnv();
+    env.type = async (_c, _w, paste) => void seen.push(paste);
+    await runStory(
+      [
+        { id: 'a', caption: 'a', command: 'x', check: async () => {} },
+        { id: 'b', caption: 'b', command: 'y', paste: 'all', check: async () => {} },
+      ],
+      env,
+      { pace: 'auto', dwellMs: 0, fast: true },
+    );
+    expect(seen).toEqual([undefined, 'all']);
+  });
 });

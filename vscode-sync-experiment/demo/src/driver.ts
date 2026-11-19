@@ -6,6 +6,8 @@ export interface Step {
   /** Typed into a terminal at a human pace (the host's unless `who` says otherwise). */
   command?: string | (() => string);
   who?: 'host' | 'guest';
+  /** `all`: the command was copied, so it appears at once; default `auto` pastes only long tokens. */
+  paste?: 'auto' | 'all' | 'none';
   /** A non-terminal action (a click in an editor, a command palette entry). */
   action?: () => Promise<void>;
   /** A retrying check; throws when the effect does not appear in time. */
@@ -14,7 +16,7 @@ export interface Step {
 
 export interface DriverEnv {
   caption(text: string): void;
-  type(command: string, who?: 'host' | 'guest'): Promise<void>;
+  type(command: string, who?: 'host' | 'guest', paste?: 'auto' | 'all' | 'none'): Promise<void>;
   /** Show a failure in the terminal. */
   fail(text: string): void;
   sleep(ms: number): Promise<void>;
@@ -41,7 +43,7 @@ export async function runStory(steps: Step[], env: DriverEnv, o: DriverOptions):
     const entry = { id: s.id, caption: s.caption, command, at: new Date().toISOString() };
     if (!o.fast) env.caption(s.caption);
     try {
-      if (command !== undefined) await env.type(command, s.who ?? 'host');
+      if (command !== undefined) await env.type(command, s.who ?? 'host', s.paste);
       if (s.action) await s.action();
       await s.check();
     } catch (e) {
