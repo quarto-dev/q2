@@ -838,6 +838,8 @@ export class Demo {
         },
         rebuildJournal: async () => {
           // The shell must not sit inside the directory while it is rebuilt.
+          // Ctrl-U first: a half-typed line (a stray key) must not turn the command into `tcd: command not found`.
+          this.hostTerminal.write('\x15');
           await this.hostTerminal.type('cd ~ && cd ' + JSON.stringify(this.journal), { charDelayMs: 0 });
           await this.waitPrompt();
           this.writeJournal();
@@ -846,6 +848,7 @@ export class Demo {
           mkdirSync(path.join(this.root, 'data'), { recursive: true });
         },
         rebuildGuestClone: async () => {
+          this.guestTerminal!.write('\x15');
           await this.guestTerminal!.type('cd ~ && cd ' + JSON.stringify(this.guestDir), { charDelayMs: 0 });
           await this.waitPrompt(60_000, 'guest');
           this.cloneJournal();

@@ -84,7 +84,9 @@ test('E5: hub-browser: reset restores the journal and a fresh hub; the windows s
   const firstId = d.projectId;
   d.git('switch', 'feature');
   await expect(editorText(d.hostEditor!.page)).toContainText('After reanalysis', { timeout: 60_000 });
+  d.hostTerminal.write('t'); // a stray key left on the input line must not break the reset's own `cd`
   await d.reset();
+  expect(d.hostTerminal.output()).not.toContain('command not found');
   expect(d.git('branch', '--show-current').trim()).toBe('main');
   expect(d.projectId).not.toBe(firstId);
   expect(d.hostEditor!.page.isClosed()).toBe(false);
