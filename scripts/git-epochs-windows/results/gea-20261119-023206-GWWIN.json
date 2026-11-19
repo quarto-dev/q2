@@ -1,0 +1,173 @@
+﻿{
+    "run_id":  "20261119-023206-GWWIN",
+    "branch":  "windows/git-epochs",
+    "commit":  "d33c03064bcde86ea18c22dc67c382f8a9dfefdb",
+    "base":  "current tip of origin/windows/git-epochs",
+    "host_triple":  "x86_64-pc-windows-msvc",
+    "os":  "Microsoft Windows 11 Pro",
+    "git":  "git version 2.47.1.windows.1",
+    "autocrlf":  "input",
+    "longpaths":  "(unset)",
+    "tools":  [
+                  {
+                      "tool":  "git",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Git.Git   (Git for Windows; the probe is tested against it)"
+                  },
+                  {
+                      "tool":  "rustc",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Rustlang.Rustup   (then: rustup default stable-x86_64-pc-windows-msvc)"
+                  },
+                  {
+                      "tool":  "cargo",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "comes with rustup"
+                  },
+                  {
+                      "tool":  "cargo-nextest",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "cargo install cargo-nextest --locked"
+                  },
+                  {
+                      "tool":  "uv",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install astral-sh.uv   (runs make_large_tree.py and extract_failures.py)"
+                  },
+                  {
+                      "tool":  "nasm",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install NASM.NASM   (the aws-lc-sys crates in quarto-hub need it)"
+                  },
+                  {
+                      "tool":  "cmake",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Kitware.CMake   (the aws-lc-sys crates in quarto-hub need it)"
+                  },
+                  {
+                      "tool":  "link",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "Visual Studio Build Tools, \"Desktop development with C++\" (cargo finds link.exe itself, so absent from PATH is normal; install only if the build says \"linker not found\")"
+                  },
+                  {
+                      "tool":  "node",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "fnm/nvm; Node major per .nvmrc (only some quarto tests use it)"
+                  }
+              ],
+    "items":  [
+                  {
+                      "id":  "a0",
+                      "catalog":  "",
+                      "title":  "build the test binaries for the four crates",
+                      "status":  "PASS",
+                      "reason":  "built",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "",
+                      "does_not_prove":  "",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-023206-GWWIN\\a0-build.log"
+                  },
+                  {
+                      "id":  "a1",
+                      "catalog":  "W1",
+                      "title":  "git probe on Git for Windows",
+                      "status":  "FAIL",
+                      "reason":  "exit code 100",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "rev-parse --git-path output with a drive letter (C:/...) and from a linked worktree parses; ls-tree -r -z with a project prefix returns the right paths; symlink entries (mode 120000) are filtered; cat-file --batch frames binary content correctly; reflog subjects parse.",
+                      "does_not_prove":  "Any Git build other than Git for Windows, or colocated jj.",
+                      "output_tail":  "  stdout ───\n\n    running 1 test\n    test probe_real_repo::index_lock_is_resolved_through_git_path_for_a_linked_worktree ... FAILED\n\n    failures:\n\n    failures:\n        probe_real_repo::index_lock_is_resolved_through_git_path_for_a_linked_worktree\n\n    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 85 filtered out; finished in 2.10s\n\n  stderr ───\n\n    thread \u0027probe_real_repo::index_lock_is_resolved_through_git_path_for_a_linked_worktree\u0027 (7284) panicked at crates\\quarto-git-epochs\\tests\\integration\\support.rs:24:5:\n    git [\"worktree\", \"add\", \"-q\", \"\\\\\\\\?\\\\C:\\\\Users\\\\GordonWoodhull\\\\AppData\\\\Local\\\\Temp\\\\.tmpcQhprk\\\\wt\", \"-b\", \"wt-branch\"] failed: fatal: could not create leading directories of \u0027//?/C:/Users/GordonWoodhull/AppData/Local/Temp/.tmpcQhprk/wt/.git\u0027: Invalid argument\n\n    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n        PASS [   2.336s] ( 5/21) quarto-git-epochs::integration probe_real_repo::ls_tree_lists_nothing_for_an_unborn_repository\n        PASS [   2.848s] ( 6/21) quarto-git-epochs::integration probe_real_repo::show_prefix_is_empty_at_the_root_and_the_subpath_in_a_subdirectory\n        PASS [   2.957s] ( 7/21) quarto-git-epochs::integration probe_real_repo::the_colocated_jj_lock_is_a_lock_marker\n        PASS [   3.078s] ( 8/21) quarto-git-epochs::integration probe_real_repo::no_reflog_is_none_and_cheap_state_reports_it_without_error\n        FAIL [   3.132s] ( 9/21) quarto-git-epochs::integration probe_real_repo::is_shallow_is_false_for_a_repo_and_true_for_a_depth_one_clone_through_a_file_url\n  stdout ───\n\n    running 1 test\n    test probe_real_repo::is_shallow_is_false_for_a_repo_and_true_for_a_depth_one_clone_through_a_file_url ... FAILED\n\n    failures:\n\n    failures:\n        probe_real_repo::is_shallow_is_false_for_a_repo_and_true_for_a_depth_one_clone_through_a_file_url\n\n    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 85 filtered out; finished in 3.07s\n\n  stderr ───\n\n    thread \u0027probe_real_repo::is_shallow_is_false_for_a_repo_and_true_for_a_depth_one_clone_through_a_file_url\u0027 (5500) panicked at crates\\quarto-git-epochs\\tests\\integration\\support.rs:24:5:\n    git [\"clone\", \"-q\", \"--depth\", \"1\", \"file:////?/C:/Users/GordonWoodhull/AppData/Local/Temp/.tmpu10Fbk\", \"\\\\\\\\?\\\\C:\\\\Users\\\\GordonWoodhull\\\\AppData\\\\Local\\\\Temp\\\\.tmp9xx9KI\\\\clone\"] failed: fatal: could not create work tree dir \u0027\\\\?\\C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\.tmp9xx9KI\\clone\u0027: Invalid argument\n\n    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n        PASS [   3.415s] (10/21) quarto-git-epochs::integration probe_real_repo::head_is_none_for_an_unborn_repo_and_the_commit_after_the_first_commit\n        PASS [   3.483s] (11/21) quarto-git-epochs::integration probe_real_repo::ls_tree_lists_regular_files_under_the_prefix_only_and_filters_symlinks_and_submodules\n        PASS [   3.150s] (12/21) quarto-git-epochs::integration probe_real_repo::without_autocrlf_crlf_bytes_are_stored_as_written\n        PASS [   3.542s] (13/21) quarto-git-epochs::integration probe_real_repo::reflog_returns_every_subject_for_a_null_mark_and_the_tail_of_the_newest_entry\n        PASS [   3.573s] (14/21) quarto-git-epochs::integration probe_real_repo::reflog_with_an_absent_sha_returns_everything_and_mark_found_false\n        PASS [   3.603s] (15/21) quarto-git-epochs::integration probe_real_repo::cat_file_batch_returns_blob_bytes_and_a_missing_id_is_absent\n        PASS [   3.719s] (16/21) quarto-git-epochs::integration probe_real_repo::reflog_mark_that_appears_twice_uses_the_last_occurrence_or_the_exact_line\n        PASS [   3.755s] (17/21) quarto-git-epochs::integration probe_real_repo::root_commits_finds_two_roots\n        PASS [   3.911s] (18/21) quarto-git-epochs::integration probe_real_repo::reflog_picks_up_entries_appended_after_a_recorded_tail\n        PASS [   4.408s] (19/21) quarto-git-epochs::integration probe_real_repo::the_probe_runs_no_repository_configured_program\n        PASS [   4.541s] (20/21) quarto-git-epochs::integration probe_real_repo::a_merge_in_progress_shows_merge_head\n        PASS [   5.118s] (21/21) quarto-git-epochs::integration probe_real_repo::a_stopped_rebase_shows_the_rebase_marker_as_a_state_marker\n────────────\n     Summary [   5.120s] 21 tests run: 19 passed, 2 failed, 65 skipped\n        FAIL [   2.158s] ( 4/21) quarto-git-epochs::integration probe_real_repo::index_lock_is_resolved_through_git_path_for_a_linked_worktree\n        FAIL [   3.132s] ( 9/21) quarto-git-epochs::integration probe_real_repo::is_shallow_is_false_for_a_repo_and_true_for_a_depth_one_clone_through_a_file_url\nerror: test run failed",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-023206-GWWIN\\a1.log"
+                  },
+                  {
+                      "id":  "a2",
+                      "catalog":  "W2",
+                      "title":  "the gate during a real git switch of a 4,000-file tree",
+                      "status":  "FAIL",
+                      "reason":  "exit code 100",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The controller reports the gate closed for every real marker git creates during a switch of a large tree, and releases it afterward (six switches). The skip-never-delete behavior for an unreadable file is a hub behavior, covered by a5.",
+                      "does_not_prove":  "Antivirus or OneDrive interplay, or timings on a cold cache.",
+                      "output_tail":  "    Finished `test` profile [optimized + debuginfo] target(s) in 0.51s\n────────────\n Nextest run ID 596cb006-9774-48cd-a71b-6a6ee529010e with nextest profile: default\n    Starting 2 tests across 1 binary (84 tests and 1 binary skipped)\n        FAIL [   0.109s] (1/2) quarto-git-epochs::integration large_tree::the_generated_tree_has_the_expected_size_and_two_branches\n  stdout ───\n\n    running 1 test\n    test large_tree::the_generated_tree_has_the_expected_size_and_two_branches ... FAILED\n\n    failures:\n\n    failures:\n        large_tree::the_generated_tree_has_the_expected_size_and_two_branches\n\n    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 85 filtered out; finished in 0.08s\n\n  stderr ───\n\n    thread \u0027large_tree::the_generated_tree_has_the_expected_size_and_two_branches\u0027 (27656) panicked at crates\\quarto-git-epochs\\tests\\integration\\support.rs:24:5:\n    git [\"switch\", \"-q\", \"a\"] failed: fatal: Unable to create \u0027C:/Users/GordonWoodhull/src/q2/scripts/git-epochs-windows/results/large-tree-20261119-023206-GWWIN/.git/index.lock\u0027: File exists.\n\n    Another git process seems to be running in this repository, e.g.\n    an editor opened by \u0027git commit\u0027. Please make sure all processes\n    are terminated then try again. If it still fails, a git process\n    may have crashed in this repository earlier:\n    remove the file manually to continue.\n\n    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n        PASS [  17.194s] (2/2) quarto-git-epochs::integration large_tree::the_gate_closes_for_real_markers_during_a_switch_and_releases_after\n────────────\n     Summary [  17.194s] 2 tests run: 1 passed, 1 failed, 84 skipped\n        FAIL [   0.109s] (1/2) quarto-git-epochs::integration large_tree::the_generated_tree_has_the_expected_size_and_two_branches\nerror: test run failed",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-023206-GWWIN\\a2.log"
+                  },
+                  {
+                      "id":  "a3",
+                      "catalog":  "W3",
+                      "title":  "core.autocrlf=true: classifier and arrival comparisons",
+                      "status":  "PASS",
+                      "reason":  "17 tests ran and passed",
+                      "caveat":  "core.autocrlf is input, not true: the CRLF-checkout case was not exercised from the checkout. The tests set autocrlf=true in their own temp repos, so they still check the comparison, but reclone with: git clone -c core.autocrlf=true ... for the full item.",
+                      "known_unrelated":  false,
+                      "proves":  "A CRLF-checked-out file compares equal to its blob content after normalization, through the classifier and the arrival comparison, for text; binaries compare by bytes.",
+                      "does_not_prove":  ".gitattributes filters (LFS, ident), or the CRLF case if autocrlf was not true (the script marks that caveat).",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-023206-GWWIN\\a3.log"
+                  },
+                  {
+                      "id":  "a4",
+                      "catalog":  "W4",
+                      "title":  "paths and keys: registry keys and hub path_keys",
+                      "status":  "PASS",
+                      "reason":  "16 tests ran and passed",
+                      "caveat":  "core.longpaths is (unset), not true: git operations on paths over 260 characters may fail for reasons unrelated to the code.",
+                      "known_unrelated":  false,
+                      "proves":  "Registry keys use /; a case-insensitive collision of two keys falls back to ordinary sync; drive letters, UNC prefixes, and long paths (with core.longpaths) round-trip.",
+                      "does_not_prove":  "NTFS 8.3 short names or Unicode normalization differences.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-023206-GWWIN\\a4.log"
+                  },
+                  {
+                      "id":  "a5",
+                      "catalog":  "W5",
+                      "title":  "hub gate and checkpoint integration with a real repo",
+                      "status":  "PASS",
+                      "reason":  "26 tests ran and passed",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The gate inside sync_all holds with a real repo; the checkpoint is written before the pointer flips; no code path renames a directory while it holds a handle in it; the unreadable-file test (an injected PermissionDenied, a skip and never a delete) passes on Windows. The injected error stands in for a real sharing violation; a real one needs a second process holding the file open.",
+                      "does_not_prove":  "Network filesystems or Dev Drive behavior.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-023206-GWWIN\\a5.log"
+                  },
+                  {
+                      "id":  "a6-clippy",
+                      "catalog":  "W10",
+                      "title":  "clippy -D warnings, four crates",
+                      "status":  "PASS",
+                      "reason":  "clean",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The epic\u0027s own gate is green on the Windows host target.",
+                      "does_not_prove":  "Tests that need pandoc or typst unless -WithTools was given. Failures that also appear in the macOS baseline are listed as known unrelated in the plan notes.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-023206-GWWIN\\a6-clippy.log"
+                  },
+                  {
+                      "id":  "a6-nextest",
+                      "catalog":  "W10",
+                      "title":  "nextest, four crates",
+                      "status":  "FAIL",
+                      "reason":  "18 failing: quarto::bin/q2 commands::render_dry_run::tests::would_render_lines_are_project_relative, quarto::integration convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes, quarto::integration lmd_snapshots::lmd_blog_project_renders_as_snapshotted, quarto::integration lmd_snapshots::lmd_fixtures_render_as_snapshotted, quarto::integration lmd_snapshots::lmd_html_fixtures_render_as_snapshotted, quarto::integration lmd_snapshots::lmd_project_renders_as_snapshotted, quarto::integration render_scripts_cli::explicit_interpreter_command_line_with_args, quarto::integration render_scripts_cli::list_form_runs_scripts_in_order, quarto::integration smoke_all::smoke_all, quarto-git-epochs::integration probe_real_repo::index_lock_is_resolved_through_git_path_for_a_linked_worktree, quarto-git-epochs::integration probe_real_repo::is_shallow_is_false_for_a_repo_and_true_for_a_depth_one_clone_through_a_file_url, quarto-hub storage::tests::test_storage_manager_prevents_double_lock, quarto-hub storage::tests::test_storage_manager_standalone_prevents_double_lock, quarto-preview route_tests::a_book_request_reaches_the_book_seam_with_every_capture, quarto-preview route_tests::pdf_is_inline_with_stats_and_the_typst_pdf_target, quarto-preview::integration book_downloads::a_chapters_recorded_plot_reaches_the_book, quarto-preview::integration live_reexecute::the_cache_does_not_answer_a_re_execute_under_engine_only_sources, quarto-preview::integration render_scripts_boot::pre_render_scripts_run_once_at_boot",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "The epic\u0027s own gate is green on the Windows host target.",
+                      "does_not_prove":  "Tests that need pandoc or typst unless -WithTools was given. Failures that also appear in the macOS baseline are listed as known unrelated in the plan notes.",
+                      "output_tail":  "        typst [render]: Error: Execution failed in jupyter: code cell at C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\margin-layout\\margin-table-great-tables-fenced-div.qmd:40:4 raised ModuleNotFoundError: No module named \u0027great_tables\u0027\n    Use `#| error: true` on the cell (or `execute: error: true` in the document metadata) to show the error in the output instead.\n\n\n      typst\\margin-layout\\margin-table-great-tables-shift.qmd:\n        typst [render]: Error: Execution failed in jupyter: code cell at C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\margin-layout\\margin-table-great-tables-shift.qmd:40:2 raised ModuleNotFoundError: No module named \u0027great_tables\u0027\n    Use `#| error: true` on the cell (or `execute: error: true` in the document metadata) to show the error in the output instead.\n\n\n      typst\\margin-layout\\margin-table-great-tables.qmd:\n        typst [render]: Error: Execution failed in jupyter: code cell at C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\margin-layout\\margin-table-great-tables.qmd:45:1 raised ModuleNotFoundError: No module named \u0027great_tables\u0027\n    Use `#| error: true` on the cell (or `execute: error: true` in the document metadata) to show the error in the output instead.\n\n\n      typst\\syntax-highlighting\\brand-monospace-block\\brand-monospace-block.qmd:\n        typst [ensureTypstFileRegexMatches]: 3 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-block\\brand-monospace-block.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 400, size: 10pt, fill: rgb\\(\"#cdd6f4\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set block\\(fill: rgb\\(\"#1e1e2e\"\\)\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.85em\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-block-no-bg\\brand-monospace-block-no-bg.qmd:\n        typst [ensureTypstFileRegexMatches]: 2 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-block-no-bg\\brand-monospace-block-no-bg.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 500, size: 10pt, fill: rgb\\(\"#2d3748\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.75em\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-idiomatic\\brand-monospace-idiomatic.qmd:\n        typst [ensureTypstFileRegexMatches]: 5 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-idiomatic\\brand-monospace-idiomatic.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 400, size: 11pt, fill: rgb\\(\"#1a365d\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set block\\(fill: rgb\\(\"#f0f4f8\"\\)\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.75em\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): set text\\(weight: 600, size: 0\\.9em, fill: rgb\\(\"#9b2c2c\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): content =\u003e highlight\\(fill: rgb\\(\"#fed7d7\"\\), content\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-inheritance\\brand-monospace-inheritance.qmd:\n        typst [ensureTypstFileRegexMatches]: 6 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-inheritance\\brand-monospace-inheritance.typ:\n      - Required pattern not found: codefont: \\(\"Fira Code\",\\),$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 400, size: 0\\.85em, fill: rgb\\(\"#2d3748\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set block\\(fill: rgb\\(\"#edf2f7\"\\)\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.75em\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): set text\\(weight: 700, size: 0\\.85em, fill: rgb\\(\"#2d3748\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): content =\u003e highlight\\(fill: rgb\\(\"#fefcbf\"\\), content\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-inline\\brand-monospace-inline.qmd:\n        typst [ensureTypstFileRegexMatches]: 2 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-inline\\brand-monospace-inline.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): set text\\(weight: 600, size: 0\\.85em, fill: rgb\\(\"#664d03\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): content =\u003e highlight\\(fill: rgb\\(\"#fff3cd\"\\), content\\)$\n\n      typst\\syntax-highlighting\\brand-monospace-with-theme\\brand-monospace-with-theme.qmd:\n        typst [ensureTypstFileRegexMatches]: 5 regex mismatch(es) in C:\\Users\\GordonWoodhull\\src\\q2\\crates\\quarto\\tests\\smoke-all\\typst\\syntax-highlighting\\brand-monospace-with-theme\\brand-monospace-with-theme.typ:\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set text\\(weight: 400, size: 9pt, fill: rgb\\(\"#f8f8f2\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set block\\(fill: rgb\\(\"#282a36\"\\)\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: true\\): set par\\(leading: 0\\.65em\\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): set text\\(weight: 500, fill: rgb\\(\"#6c3483\"\\), \\)$\n      - Required pattern not found: ^#show raw\\.where\\(block: false\\): content =\u003e highlight\\(fill: rgb\\(\"#e8e0f0\"\\), content\\)$\n\n    thread \u0027smoke_all::smoke_all\u0027 (6276) panicked at crates\\quarto\\tests\\integration\\smoke_all.rs:141:9:\n    13 smoke-all test(s) failed (see output above)\n    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n────────────\n     Summary [ 634.831s] 1896 tests run: 1878 passed (4 slow, 1 leaky), 18 failed, 1 skipped\n        FAIL [   3.233s] ( 141/1896) quarto::integration convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes\n        FAIL [  12.585s] ( 266/1896) quarto::integration lmd_snapshots::lmd_blog_project_renders_as_snapshotted\n        FAIL [  11.236s] ( 267/1896) quarto::integration lmd_snapshots::lmd_html_fixtures_render_as_snapshotted\n        FAIL [  10.716s] ( 271/1896) quarto::integration lmd_snapshots::lmd_project_renders_as_snapshotted\n        FAIL [  46.545s] ( 348/1896) quarto::integration lmd_snapshots::lmd_fixtures_render_as_snapshotted\n        FAIL [  11.680s] ( 459/1896) quarto::integration render_scripts_cli::explicit_interpreter_command_line_with_args\n        FAIL [  12.126s] ( 473/1896) quarto::integration render_scripts_cli::list_form_runs_scripts_in_order\n        FAIL [   0.191s] ( 822/1896) quarto::bin/q2 commands::render_dry_run::tests::would_render_lines_are_project_relative\n        FAIL [   3.133s] ( 926/1896) quarto-git-epochs::integration probe_real_repo::index_lock_is_resolved_through_git_path_for_a_linked_worktree\n        FAIL [   3.903s] ( 929/1896) quarto-git-epochs::integration probe_real_repo::is_shallow_is_false_for_a_repo_and_true_for_a_depth_one_clone_through_a_file_url\n        FAIL [   0.369s] (1260/1896) quarto-hub storage::tests::test_storage_manager_prevents_double_lock\n        FAIL [   0.145s] (1264/1896) quarto-hub storage::tests::test_storage_manager_standalone_prevents_double_lock\n        FAIL [   1.982s] (1663/1896) quarto-preview route_tests::a_book_request_reaches_the_book_seam_with_every_capture\n        FAIL [   2.185s] (1712/1896) quarto-preview route_tests::pdf_is_inline_with_stats_and_the_typst_pdf_target\n        FAIL [  28.286s] (1777/1896) quarto-preview::integration book_downloads::a_chapters_recorded_plot_reaches_the_book\n        FAIL [   4.444s] (1860/1896) quarto-preview::integration render_scripts_boot::pre_render_scripts_run_once_at_boot\n        FAIL [  20.560s] (1895/1896) quarto-preview::integration live_reexecute::the_cache_does_not_answer_a_re_execute_under_engine_only_sources\n        FAIL [ 458.452s] (1896/1896) quarto::integration smoke_all::smoke_all\nerror: test run failed",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-023206-GWWIN\\a6-nextest.log"
+                  }
+              ]
+}
