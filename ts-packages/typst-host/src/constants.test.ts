@@ -25,7 +25,7 @@ describe('resources/typst-wasm.json pins the compiler', () => {
 
   it('pins the typst-assets crate to the version Cargo.lock uses', () => {
     const lock = readFileSync(path.join(repo, 'Cargo.lock'), 'utf8');
-    const m = /name = "typst-assets"\nversion = "([^"]+)"\nsource = "[^"]+"\nchecksum = "([0-9a-f]+)"/.exec(lock);
+    const m = /name = "typst-assets"\r?\nversion = "([^"]+)"\r?\nsource = "[^"]+"\r?\nchecksum = "([0-9a-f]+)"/.exec(lock);
     expect(m?.[1]).toBe(constants.fonts_crate.version);
     expect(m?.[2]).toBe(constants.fonts_crate.crate_sha256);
     expect(constants.typst_version).toBe(constants.fonts_crate.version);
