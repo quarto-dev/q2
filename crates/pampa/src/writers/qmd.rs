@@ -3427,7 +3427,24 @@ pub fn write_single_inline<T: std::io::Write>(
     inline: &crate::pandoc::Inline,
     buf: &mut T,
 ) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
+    write_single_inline_in_emphasis(inline, &[], buf)
+}
+
+/// Like [`write_single_inline`], for an inline that will be placed inside
+/// emphasis containers the writer does not emit itself.
+///
+/// `enclosing` lists those containers' delimiters, outermost first. The
+/// incremental writer uses this when it splices a new inline between
+/// delimiters copied from the original source: without them, a new `Emph`
+/// directly inside a kept `**…**` picks `*` and the result reads `***x***`
+/// (GH #1268).
+pub fn write_single_inline_in_emphasis<T: std::io::Write>(
+    inline: &crate::pandoc::Inline,
+    enclosing: &[EmphasisStackFrame],
+    buf: &mut T,
+) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
     let mut ctx = QmdWriterContext::new();
+    ctx.emphasis_stack = enclosing.to_vec();
     if let Err(e) = write_inline(inline, buf, &mut ctx) {
         return Err(vec![
             quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
