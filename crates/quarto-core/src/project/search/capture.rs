@@ -90,15 +90,26 @@ pub fn artifact_key(href: &str) -> String {
 
 /// Is this profile's page a candidate for the index? Linkable (not a
 /// draft hidden by its `draft-mode`, see [`crate::project::drafts`]),
-/// non-404, `.html` output in the plain `html` format family (a
-/// revealjs deck renders to `.html` but is not a page to search).
-/// The per-page `search: false` opt-out is a metadata decision the
-/// stage makes separately ([`super::page_search_enabled`]).
+/// non-404, `.html` output in the `html` or `revealjs` format family
+/// (Quarto 1 indexes every HTML output, decks included: one record per
+/// slide, see [`prepare_deck_body`]). The per-page `search: false`
+/// opt-out is a metadata decision the stage makes separately
+/// ([`super::page_search_enabled`]).
 pub fn profile_is_indexable(index: &ProjectIndex, profile: &DocumentProfile) -> bool {
     index.is_linkable(profile)
         && profile.output_href != HREF_404
         && profile.output_href.ends_with(".html")
-        && crate::format::lua_format_for(&profile.format_id) == "html"
+        && is_indexable_format(&profile.format_id)
+}
+
+/// The format families whose pages go into the search index.
+pub fn is_indexable_format(format_id: &str) -> bool {
+    is_deck_format(format_id) || crate::format::lua_format_for(format_id) == "html"
+}
+
+/// Is this a RevealJS deck (captured through [`prepare_deck_body`])?
+pub fn is_deck_format(format_id: &str) -> bool {
+    crate::format::lua_format_for(format_id) == "revealjs"
 }
 
 /// Plain-text title for a page: its own title, else the site title,
@@ -200,6 +211,103 @@ fn sidebar_contains_href(entries: &[SidebarEntry], href: &str) -> bool {
         } => section_href.as_deref() == Some(href) || sidebar_contains_href(contents, href),
         _ => false,
     })
+}
+
+/// Reshape a RevealJS deck's rendered slides into the page shape the
+/// search capture expects, the way Quarto 1's index sees a deck.
+///
+/// Quarto 1 has no deck-specific indexing: a deck's slides are
+/// `section.slide.level2` elements, so its generic pass makes one
+/// record per slide (`deck.html#slide-id`, the slide heading as the
+/// section, speaker notes included), takes the deck title from
+/// `h1.title`, and never indexes the title slide. q2 writes slides as
+/// `<section id class="section">` with no level class, so this:
+///
+/// - removes the title slide (`section.title-slide`; the deck title
+///   still reaches the index as the page title);
+/// - marks each slide, an id-bearing `<section>` whose first child
+///   element is a heading, with `level2`, so `search.json` gets one
+///   record per slide. A divider stack (`<section id>` wrapping the
+///   divider slide) stays transparent, like Quarto 1's `level1`.
+///
+/// Only the captured copy changes; the deck output is untouched. The
+/// result still goes through [`restore_heading_ids`], which gives each
+/// slide heading its slide's id, so Pagefind makes one sub-result per
+/// slide. reveal.js opens `deck.html#slide-id` on that slide.
+pub fn prepare_deck_body(body_html: &str) -> Result<String, String> {
+    use lol_html::{HtmlRewriter, Settings, element};
+    use std::cell::RefCell;
+    use std::collections::HashSet;
+    use std::rc::Rc;
+
+    let to_err = |e: lol_html::errors::RewritingError| {
+        format!("could not prepare deck HTML for search indexing: {e}")
+    };
+
+    // Pass 1: which section ids open with a heading? `pending` is the
+    // innermost section that has not seen its first child element yet.
+    let pending: Rc<RefCell<Option<Option<String>>>> = Rc::new(RefCell::new(None));
+    let slides: Rc<RefCell<HashSet<String>>> = Rc::new(RefCell::new(HashSet::new()));
+    {
+        let pending = Rc::clone(&pending);
+        let slides = Rc::clone(&slides);
+        let mut scan = HtmlRewriter::new(
+            Settings {
+                element_content_handlers: vec![element!("*", move |el| {
+                    let tag = el.tag_name();
+                    if tag == "section" {
+                        *pending.borrow_mut() = Some(el.get_attribute("id"));
+                    } else if let Some(section_id) = pending.borrow_mut().take()
+                        && matches!(tag.as_str(), "h1" | "h2" | "h3" | "h4" | "h5" | "h6")
+                        && let Some(id) = section_id
+                    {
+                        slides.borrow_mut().insert(id);
+                    }
+                    Ok(())
+                })],
+                ..Settings::new()
+            },
+            |_: &[u8]| {},
+        );
+        scan.write(body_html.as_bytes())
+            .and_then(|()| scan.end())
+            .map_err(to_err)?;
+    }
+
+    // Pass 2: drop the title slide, mark the slides.
+    let slides = Rc::clone(&slides);
+    let mut out = Vec::with_capacity(body_html.len() + 64);
+    let mut rewriter = HtmlRewriter::new(
+        Settings {
+            element_content_handlers: vec![
+                element!("section.title-slide", |el| {
+                    el.remove();
+                    Ok(())
+                }),
+                element!("section[id]", move |el| {
+                    let is_slide = el
+                        .get_attribute("id")
+                        .is_some_and(|id| slides.borrow().contains(&id));
+                    if is_slide {
+                        let class = match el.get_attribute("class") {
+                            Some(c) if !c.trim().is_empty() => format!("{c} level2"),
+                            _ => "level2".to_string(),
+                        };
+                        el.set_attribute("class", &class)
+                            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+                    }
+                    Ok(())
+                }),
+            ],
+            ..Settings::new()
+        },
+        |chunk: &[u8]| out.extend_from_slice(chunk),
+    );
+    rewriter
+        .write(body_html.as_bytes())
+        .and_then(|()| rewriter.end())
+        .map_err(to_err)?;
+    String::from_utf8(out).map_err(|e| format!("search capture produced invalid UTF-8: {e}"))
 }
 
 /// Copy each `<section id="…">` wrapper's id onto the heading that
@@ -307,6 +415,42 @@ mod tests {
             "{out}"
         );
         assert!(out.starts_with("<p>Intro</p>"));
+    }
+
+    /// The deck shape q2 renders: title slide, a divider stack with an
+    /// id-less divider slide, a slide, a heading-less slide, a slide
+    /// with notes.
+    #[test]
+    fn deck_body_drops_title_slide_and_marks_slides() {
+        let body = "<section id=\"title-slide\" class=\"section title-slide center\">\
+            <h1 class=\"title\">Deck</h1><div class=\"subtitle\"><p>Sub</p></div></section>\
+            <section id=\"part-one\" class=\"section\">\
+            <section class=\"section\"><h1>Part one</h1><p>Divider.</p></section>\
+            <section id=\"alpha\" class=\"section\"><h2>Alpha</h2><p>A.</p></section>\
+            <section class=\"section\"><p>No heading.</p></section>\
+            <section id=\"beta\" class=\"section custom\"><h2>Beta</h2>\
+            <aside class=\"notes\"><p>Notes.</p></aside></section></section>";
+        let out = restore_heading_ids(&prepare_deck_body(body).unwrap()).unwrap();
+        assert!(!out.contains("title-slide"), "{out}");
+        assert!(!out.contains("Sub"), "title slide content removed: {out}");
+        assert!(
+            out.contains(
+                "<section id=\"alpha\" class=\"section level2\"><h2 id=\"alpha\">Alpha</h2>"
+            ),
+            "{out}"
+        );
+        assert!(
+            out.contains(
+                "<section id=\"beta\" class=\"section custom level2\"><h2 id=\"beta\">Beta</h2>"
+            ),
+            "{out}"
+        );
+        assert!(
+            out.contains("<section id=\"part-one\" class=\"section\">"),
+            "a divider stack is not a slide record: {out}"
+        );
+        assert!(out.contains("Notes."), "speaker notes stay indexed: {out}");
+        assert!(out.contains("No heading."), "{out}");
     }
 
     #[test]

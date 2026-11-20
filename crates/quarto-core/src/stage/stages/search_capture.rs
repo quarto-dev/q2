@@ -33,8 +33,8 @@ use quarto_error_reporting::DiagnosticMessageBuilder;
 use crate::artifact::{Artifact, ArtifactScope};
 use crate::project::ProjectKind;
 use crate::project::search::capture::{
-    CaptureRecord, PageCapture, artifact_key, crumbs_for_page, page_title, profile_is_indexable,
-    restore_heading_ids,
+    CaptureRecord, PageCapture, artifact_key, crumbs_for_page, is_deck_format, is_indexable_format,
+    page_title, prepare_deck_body, profile_is_indexable, restore_heading_ids,
 };
 use crate::project::search::{page_search_enabled, resolve_website_search};
 use crate::stage::{
@@ -128,12 +128,22 @@ fn capture_record(
     let profile = index.lookup_by_source(Path::new(&source))?;
     let href = profile.output_href.clone();
 
-    let is_html = crate::format::lua_format_for(&ctx.format.target_format) == "html";
-    if !is_html || !profile_is_indexable(&index, profile) || !page_search_enabled(meta) {
+    let target = &ctx.format.target_format;
+    if !is_indexable_format(target)
+        || !profile_is_indexable(&index, profile)
+        || !page_search_enabled(meta)
+    {
         return Some((href, CaptureRecord::Excluded));
     }
 
-    let body_html = match restore_heading_ids(&rendered.content) {
+    // A deck is indexed per slide, as Quarto 1 does (see
+    // `prepare_deck_body`).
+    let body = if is_deck_format(target) {
+        prepare_deck_body(&rendered.content).and_then(|b| restore_heading_ids(&b))
+    } else {
+        restore_heading_ids(&rendered.content)
+    };
+    let body_html = match body {
         Ok(body) => body,
         Err(err) => {
             ctx.diagnostics.push(

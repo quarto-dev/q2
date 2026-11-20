@@ -261,7 +261,21 @@ impl PageFooter {
 /// (Quarto 1 compatible). Top-level wins on overlapping fields.
 /// `!prefer` on either layer escapes the default field-wise merge.
 pub fn resolve_page_footer(meta: &ConfigValue) -> Option<PageFooter> {
-    let cv = resolve_website_value(meta, "page-footer")?;
+    page_footer_from_value(resolve_website_value(meta, "page-footer")?)
+}
+
+/// Resolve only the top-level `page-footer:` from `ast.meta`, ignoring
+/// `website.page-footer:`.
+///
+/// For outputs that are not website pages but can live in a website
+/// (RevealJS decks): the website footer is site chrome, which Quarto 1
+/// never puts on a deck, while the feature-scoped top-level key (and a
+/// deck's own `footer:`, aliased to it) still applies.
+pub fn resolve_top_level_page_footer(meta: &ConfigValue) -> Option<PageFooter> {
+    page_footer_from_value(meta.get("page-footer")?.clone())
+}
+
+fn page_footer_from_value(cv: ConfigValue) -> Option<PageFooter> {
     if cv.as_bool() == Some(false) {
         return None;
     }
@@ -321,6 +335,37 @@ mod tests {
         };
         let region = FooterRegion::from_config_value(Some(&blocks_cv));
         assert!(matches!(region, FooterRegion::Text(_)), "got {:?}", region);
+    }
+
+    /// A deck in a website reads only the top-level key: the website
+    /// footer is site chrome, not a slide footer.
+    #[test]
+    fn top_level_page_footer_ignores_website_scope() {
+        let website_only = map(vec![(
+            "website",
+            map(vec![("page-footer", map(vec![("center", s("Site"))]))]),
+        )]);
+        assert!(resolve_page_footer(&website_only).is_some());
+        assert!(resolve_top_level_page_footer(&website_only).is_none());
+
+        let both = map(vec![
+            ("page-footer", map(vec![("left", s("Deck"))])),
+            (
+                "website",
+                map(vec![("page-footer", map(vec![("center", s("Site"))]))]),
+            ),
+        ]);
+        let footer = resolve_top_level_page_footer(&both).unwrap();
+        assert!(
+            !matches!(footer.left, FooterRegion::Empty),
+            "got {:?}",
+            footer.left
+        );
+        assert!(
+            matches!(footer.center, FooterRegion::Empty),
+            "the website center region must not merge in; got {:?}",
+            footer.center
+        );
     }
 
     /// Defect 2 (bd-page-footer-items-f4th80mj) — a bare string in a

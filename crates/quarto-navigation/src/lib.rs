@@ -33,7 +33,9 @@ pub use announcement::{
     Announcement, AnnouncementPosition, AnnouncementType, AnnouncementWarning, resolve_announcement,
 };
 pub use breakpoint::Breakpoint;
-pub use footer::{FooterBorder, FooterRegion, PageFooter, resolve_page_footer};
+pub use footer::{
+    FooterBorder, FooterRegion, PageFooter, resolve_page_footer, resolve_top_level_page_footer,
+};
 pub use item::{BareScalar, NavigationItem, ResponsiveTextWarning, responsive_text_warnings};
 pub use navbar::{
     CollapseBelow, LogoVariant, Navbar, NavbarLogo, NavbarTitle, TogglePosition, resolve_navbar,
