@@ -114,16 +114,37 @@ cannot fuse.
 
 ## Outcome / recommended next step
 
-Filed **bd-szy5r3wk** (bug, P1). Fix in the incremental writer. To start, run
-the ignored tests:
-
-```bash
-cargo nextest run -p pampa --run-ignored only -E 'test(triple_delimit)'
-```
-
-Then remove the `#[ignore]` attributes once they pass. Also filed
+Filed **bd-szy5r3wk** (bug, P1) and fixed it on this branch.
+`assemble_inline_content` and `assemble_recursed_container` now carry the
+delimiters of the kept emphasis containers (read from each container's
+opening bytes in the source). Spliced inlines are written through
+`qmd::write_single_inline_in_emphasis`, seeded with that stack. The
+repro tests are no longer ignored, and they pin the exact output, for
+example `This is *a* **_Quarto_** *website*.` for the issue's case. Also filed
 **bd-3l05bz1g** (feature, P3, related) for nesting-aware mark serialization in
 the rich-text editor.
+
+## End-to-end verification of the fix
+
+Built the branch's WASM, preview SPA, and editor embed, then the binary:
+
+```bash
+(cd hub-client && npm run build:wasm)
+cargo xtask build-q2-preview-spa
+cargo xtask build-hub-client-embed
+cargo build --bin q2
+target/debug/q2 preview --allow-edit --ui editor <copy of repro-site>
+```
+
+In Chrome, I ran the two-commit sequence again (bold "Quarto", commit,
+reopen, italicise "a Quarto website", commit). I inspected the file on disk
+and the rendered preview:
+
+- after commit 1: `This is a **Quarto** website.`
+- after commit 2: `This is *a* **_Quarto_** *website*.` (before the fix it was
+  `This is *a* ***Quarto*** *website*.`)
+- preview paragraph:
+  `This is <em>a</em> <strong><em>Quarto</em></strong> <em>website</em>.`
 
 ## Verification commands used
 
