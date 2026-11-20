@@ -758,3 +758,82 @@ fn pipeline_section_toggles_are_localized_buttons() {
         "toggles must not be navigation landmarks; got: {sidebar}"
     );
 }
+
+// === GH #1217 =============================================================
+
+/// GH #1217 — a page's `sidebar: <id>` selects that sidebar (Quarto 1
+/// semantics), even for a page outside its contents. It must not
+/// replace `website.sidebar` with the bare string.
+#[test]
+fn pipeline_page_level_sidebar_id_selects_sidebar() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  navbar:\n    left: [index.qmd, a.qmd, c.qmd]\n  sidebar:\n    - id: main\n      contents: [index.qmd, a.qmd]\n\
+             \n    - id: reference\n      contents: [r.qmd]\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nHome.\n",
+        );
+        write(
+            &project_dir.join("a.qmd"),
+            "---\ntitle: A\nsidebar: main\n---\n\nA.\n",
+        );
+        write(&project_dir.join("r.qmd"), "---\ntitle: R\n---\n\nR.\n");
+        // c.qmd is in no sidebar's contents; its id picks `reference`.
+        write(
+            &project_dir.join("c.qmd"),
+            "---\ntitle: C\nsidebar: reference\n---\n\nC.\n",
+        );
+    });
+
+    let a_html = find_html(&outputs, "a");
+    assert!(
+        a_html.contains("id=\"quarto-sidebar\""),
+        "a.html should keep its sidebar"
+    );
+    assert!(
+        a_html.contains("id=\"quarto-header\""),
+        "a.html should keep its navbar"
+    );
+
+    let c_html = find_html(&outputs, "c");
+    assert!(
+        c_html.contains("id=\"quarto-sidebar\""),
+        "c.html should get the `reference` sidebar"
+    );
+    assert!(c_html.contains("href=\"r.html\""));
+}
+
+/// GH #1217 — a page's `navbar: true` keeps the site's navbar; only
+/// `false` turns it off (Quarto 1 semantics).
+#[test]
+fn pipeline_page_level_navbar_true_keeps_navbar() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  navbar:\n    left: [index.qmd, b.qmd, c.qmd]\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nHome.\n",
+        );
+        write(
+            &project_dir.join("b.qmd"),
+            "---\ntitle: B\nnavbar: true\n---\n\nB.\n",
+        );
+        write(
+            &project_dir.join("c.qmd"),
+            "---\ntitle: C\nnavbar: false\n---\n\nC.\n",
+        );
+    });
+
+    assert!(find_html(&outputs, "b").contains("id=\"quarto-header\""));
+    assert!(
+        !find_html(&outputs, "c").contains("id=\"quarto-header\""),
+        "`navbar: false` still disables the navbar"
+    );
+}
