@@ -74,4 +74,36 @@ describe('HeadlessPeer', () => {
     const index = await hub.repo.find<{ files: Record<string, string> }>(`automerge:${a.indexDocId}` as never);
     expect(Object.keys(index.doc()!.files)).toEqual(['a.qmd']);
   });
+
+  it('a failed background sync is logged, not an unhandled rejection (GE-17, c1 on Windows)', async () => {
+    // On Windows the mirror folder was deleted (delete-pending, EPERM on realpath) while an index change was still
+    // being applied; the rejection escaped `void this.syncIndex()` and failed the test. A symlink loop at the root
+    // fails realpath with ELOOP, which is not "missing" either, on every platform.
+    const dirA = await newDir();
+    await fs.writeFile(path.join(dirA, 'a.qmd'), 'A\n');
+    const a = await HeadlessPeer.publish(dirA, hub.url);
+    peers.push(a);
+    for (const { docId, heads } of a.inventory()) expect(await hub.hubHasHeads(docId, heads, 15_000)).toBe(true);
+
+    const dirB = await newDir();
+    const b = await HeadlessPeer.join(hub.url, a.indexDocId, dirB);
+    peers.push(b);
+    expect(await readText(path.join(dirB, 'a.qmd'))).toBe('A\n');
+
+    const rejections: unknown[] = [];
+    const onRejection = (e: unknown) => rejections.push(e);
+    process.on('unhandledRejection', onRejection);
+    try {
+      await fs.rename(dirB, `${dirB}-moved`);
+      dirs.push(`${dirB}-moved`);
+      await fs.symlink(path.basename(dirB), dirB); // dirB -> dirB: ELOOP
+      await fs.writeFile(path.join(dirA, 'b.qmd'), 'B\n');
+      await waitFor(async () => b.host.log.lines.some((l) => /(index sync|doc change|disk \w+) failed/.test(l)), 'the failed sync to be logged');
+      await new Promise((r) => setTimeout(r, 500)); // let a stray rejection surface
+    } finally {
+      process.off('unhandledRejection', onRejection);
+      await fs.rm(dirB, { force: true });
+    }
+    expect(rejections).toEqual([]);
+  });
 });
