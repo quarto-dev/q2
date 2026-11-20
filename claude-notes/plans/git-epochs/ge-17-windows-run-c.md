@@ -354,5 +354,21 @@ not record whether Developer Mode was on, so the two symlink tests (GE-16a `B2`)
 **`c1` step 7 (intermittent).** Across five runs on identical code, one failed (`143919`); `150923` and `165053` passed. The
 diagnostics have not fired. One more `c1` pair was requested.
 
+**Decisions (a) and (b), done (Gordon said go).**
+
+- **(a) The unreachable-docs test counts fetches, not seconds** (commit `3be8a8573`). `GitTestHooks` gains
+  `attach_in_flight` and `attach_max_in_flight`, recorded by an RAII guard around each canonical-doc fetch in
+  `arrive` (production never reads them). The test asserts the peak is 3 for three unreachable docs. Red check: with the
+  `join_all` replaced by a sequential loop the peak is 1 and the test fails with `left: 1, right: 3`; restored, it passes. The
+  count does not depend on load, because `join_all` polls every future once before any timeout can fire. Gates:
+  `cargo clippy -p quarto-hub --all-targets -- -D warnings` clean, `cargo nextest run -p quarto-hub` 542 of 542,
+  `cargo xtask lint` clean. This changes a test hook in product code, the one place this plan touches `src/` beyond the two
+  defect fixes.
+- **(b) `join.e2e (b)` skips `.quarto-hub-tmp-*`** (commit `54cd0f3b6`). A race, so there is no red step: it cannot be forced
+  on demand. The extension suite is 338 passed, 1 skipped; `npm run typecheck` (both configs) is clean. The e2e itself was
+  not run here (it needs the VS Code download); the Windows `c2` run is its check.
+- Both are on the tooling branch (tip `189745689`), pushed. That branch was integrated with `git pull --rebase` after the
+  merge, which flattened my unpushed merge into linear copies of the plan commits; the remote history was not rewritten.
+
 **The final statement, end-to-end record, and landing are not written**: they wait for the `a6` classification with
 pandoc 3.13, `c3`, and the step 7 and step 9 outcomes.
