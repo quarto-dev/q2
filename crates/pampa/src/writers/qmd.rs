@@ -353,9 +353,12 @@ fn config_value_to_yaml(value: &ConfigValue) -> std::io::Result<Yaml> {
             // Render inlines using the qmd writer
             let mut buffer = Vec::<u8>::new();
             let mut ctx = QmdWriterContext::new(); // Errors in metadata inlines are unexpected
-            for inline in content {
-                write_inline(inline, &mut buffer, &mut ctx)?;
-            }
+            // The value is read back as a markdown document of its own, so
+            // its first inline begins a line, as a paragraph's does: text
+            // like `- x` or `1. x` there must be escaped, or it reads back
+            // as a list.
+            ctx.at_line_start = true;
+            write_prose_inlines(content, &mut buffer, &mut ctx)?;
             // If any errors accumulated, this is truly unexpected in metadata
             if !ctx.errors.is_empty() {
                 return Err(std::io::Error::other(format!(
