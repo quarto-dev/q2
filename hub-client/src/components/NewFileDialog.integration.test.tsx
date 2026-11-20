@@ -284,6 +284,56 @@ describe('NewFileDialog', () => {
     });
   });
 
+  describe('file type', () => {
+    function createWith(type: string, name: string) {
+      fireEvent.click(screen.getByRole('radio', { name: type }));
+      fireEvent.change(screen.getByLabelText('Filename:'), { target: { value: name } });
+      fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    }
+
+    it('appends the extension of a specific file type', () => {
+      render(<NewFileDialog {...defaultProps} />);
+
+      createWith('.md', 'intro');
+
+      expect(defaultProps.onCreateTextFile).toHaveBeenCalledWith('intro.md', '');
+    });
+
+    it('creates a file without an extension as typed when Other is chosen', () => {
+      render(<NewFileDialog {...defaultProps} />);
+
+      createWith('Other', '.python-version');
+
+      expect(defaultProps.onCreateTextFile).toHaveBeenCalledWith('.python-version', '');
+    });
+
+    it('keeps the name as typed when Other is chosen', () => {
+      render(<NewFileDialog {...defaultProps} />);
+
+      fireEvent.click(screen.getByRole('radio', { name: 'Other' }));
+      expect(screen.queryByLabelText('Extension:')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Filename:')).toHaveAttribute(
+        'placeholder',
+        'e.g., styles.css'
+      );
+
+      createWith('Other', 'styles.css');
+
+      expect(defaultProps.onCreateTextFile).toHaveBeenCalledWith('styles.css', '');
+    });
+
+    it('seeds Other with the full name when the initial file has an unknown extension', () => {
+      render(<NewFileDialog {...defaultProps} initialFilename="notes/styles.css" />);
+
+      expect(screen.getByRole('radio', { name: 'Other' })).toHaveAttribute('aria-checked', 'true');
+      expect((screen.getByLabelText('Filename:') as HTMLInputElement).value).toBe('styles.css');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+      expect(defaultProps.onCreateTextFile).toHaveBeenCalledWith('notes/styles.css', '');
+    });
+  });
+
   describe('state reset (remount-per-open contract, bd-cp9wzu6o)', () => {
     // Real parents mount the dialog only while it is open, so every open is
     // a fresh mount with pristine form state; there is no in-place reset to

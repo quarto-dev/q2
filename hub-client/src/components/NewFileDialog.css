@@ -88,25 +88,6 @@
   color: var(--editor-text-muted);
 }
 
-.file-type-custom {
-  grid-column: 2;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
-}
-
-.file-type-custom label {
-  margin-bottom: 0;
-  flex-shrink: 0;
-}
-
-.file-type-custom input {
-  flex: 1;
-  min-width: 0;
-  max-width: 160px;
-}
-
 .text-file-form .folder-input > .folder-picker,
 .text-file-form .filename-input > input {
   flex: 1;
