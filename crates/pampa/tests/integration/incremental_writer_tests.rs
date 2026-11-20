@@ -2231,18 +2231,44 @@ fn assert_incremental_edit_roundtrips(original: &str, edited: &str) -> String {
 }
 
 #[test]
-#[ignore = "GH #1268: fails until the recursed-container writer seeds the emphasis stack"]
 fn new_emph_inside_original_strong_does_not_triple_delimit() {
     // What the hub rich-text editor sends after italicising "a Quarto website"
     // in a paragraph whose source already has `**Quarto**`.
-    assert_incremental_edit_roundtrips(
+    let result = assert_incremental_edit_roundtrips(
         "This is a **Quarto** website.\n",
         "This is _a_ **_Quarto_** _website_.\n",
     );
+    assert_eq!(result, "This is *a* **_Quarto_** *website*.\n");
 }
 
 #[test]
-#[ignore = "GH #1268: fails until the recursed-container writer seeds the emphasis stack"]
 fn new_strong_inside_original_emph_does_not_triple_delimit() {
-    assert_incremental_edit_roundtrips("This is *Quarto*.\n", "This is *__Quarto__*.\n");
+    let result =
+        assert_incremental_edit_roundtrips("This is *Quarto*.\n", "This is *__Quarto__*.\n");
+    assert_eq!(result, "This is *__Quarto__*.\n");
+}
+
+#[test]
+fn new_strong_two_levels_inside_kept_emphasis_does_not_triple_delimit() {
+    // Two kept containers (`**…**` around `*…*`): the spliced Strong must see
+    // the innermost one, not just the outermost.
+    let result = assert_incremental_edit_roundtrips(
+        "Intro text here. **a *b c d* f** outro text.\n",
+        "Intro text here. **a *b c __d__* f** outro text.\n",
+    );
+    assert_eq!(result, "Intro text here. **a *b c __d__* f** outro text.\n");
+}
+
+#[test]
+fn new_strong_two_levels_inside_kept_emphasis_keeps_structure() {
+    // Same shape with the new Strong mid-run: `__` keeps it distinct from the
+    // enclosing `**…**`.
+    let result = assert_incremental_edit_roundtrips(
+        "Intro text here. **a *b c d e* f** outro text.\n",
+        "Intro text here. **a *b c __d__ e* f** outro text.\n",
+    );
+    assert_eq!(
+        result,
+        "Intro text here. **a *b c __d__ e* f** outro text.\n"
+    );
 }

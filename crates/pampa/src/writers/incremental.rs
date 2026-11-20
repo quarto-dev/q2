@@ -19,7 +19,7 @@ use quarto_pandoc_types::config_value::{ConfigMapEntry, ConfigValue, ConfigValue
 use quarto_source_map::{FileId, SourceInfo};
 use std::ops::Range;
 
-use super::qmd;
+use super::qmd::{self, EmphasisDelimiter, EmphasisStackFrame};
 
 // =============================================================================
 // Types
@@ -780,6 +780,7 @@ fn assemble_inline_splice(
         new_inlines,
         plan,
         target_file_id,
+        &mut Vec::new(),
     )?
     else {
         return Ok(None);
@@ -795,6 +796,11 @@ fn assemble_inline_splice(
 /// - UseAfter: writing the new inline to a string
 /// - RecurseIntoContainer: preserving delimiters, recursing into children
 ///
+/// `enclosing` holds the delimiters of the kept emphasis containers this run
+/// sits inside, outermost first. A new inline is written with them as its
+/// emphasis context, so it picks the delimiters the full writer would
+/// (GH #1268).
+///
 /// Returns `Ok(None)` when some kept inline or container boundary has no
 /// usable byte preimage in the target file — foreign provenance
 /// (include-spliced nodes), gappy Concats, or synthetic nodes. The caller
@@ -807,6 +813,7 @@ fn assemble_inline_content(
     new_inlines: &[Inline],
     plan: &InlineReconciliationPlan,
     target_file_id: FileId,
+    enclosing: &mut Vec<EmphasisStackFrame>,
 ) -> Result<Option<String>, Vec<quarto_error_reporting::DiagnosticMessage>> {
     let mut result = String::new();
 
@@ -845,7 +852,7 @@ fn assemble_inline_content(
                 result.push_str(text);
             }
             InlineAlignment::UseAfter(after_idx) => {
-                let text = write_inline_to_string(&new_inlines[*after_idx])?;
+                let text = write_inline_to_string_in_emphasis(&new_inlines[*after_idx], enclosing)?;
                 result.push_str(&text);
             }
             InlineAlignment::RecurseIntoContainer {
@@ -858,6 +865,7 @@ fn assemble_inline_content(
                     &new_inlines[*after_idx],
                     plan.inline_container_plans.get(&result_idx),
                     target_file_id,
+                    enclosing,
                 )?
                 else {
                     return Ok(None);
@@ -886,6 +894,7 @@ fn assemble_recursed_container(
     new_inline: &Inline,
     nested_plan: Option<&InlineReconciliationPlan>,
     target_file_id: FileId,
+    enclosing: &mut Vec<EmphasisStackFrame>,
 ) -> Result<Option<String>, Vec<quarto_error_reporting::DiagnosticMessage>> {
     let Some(orig_span) = orig_inline.source_info().preimage_in(target_file_id) else {
         return Ok(None);
@@ -938,15 +947,25 @@ fn assemble_recursed_container(
         return Ok(None);
     };
 
-    // Recursively assemble children
-    let Some(children_text) = assemble_inline_content(
+    // The children sit inside this container's original delimiters. When it
+    // is emphasis, record which delimiter the source used so new children
+    // avoid it (GH #1268).
+    let frame = kept_emphasis_frame(orig_inline, opening);
+    if let Some(frame) = &frame {
+        enclosing.push(frame.clone());
+    }
+    let children = assemble_inline_content(
         original_qmd,
         orig_children,
         new_children,
         plan,
         target_file_id,
-    )?
-    else {
+        enclosing,
+    );
+    if frame.is_some() {
+        enclosing.pop();
+    }
+    let Some(children_text) = children? else {
         return Ok(None);
     };
 
@@ -1065,8 +1084,41 @@ pub fn inline_source_span(inline: &Inline) -> Range<usize> {
 pub fn write_inline_to_string(
     inline: &Inline,
 ) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    write_inline_to_string_in_emphasis(inline, &[])
+}
+
+/// The emphasis frame for a kept `Emph`/`Strong` container, read from the
+/// delimiter its source actually opens with (`*`/`**` or `_`/`__`).
+///
+/// `None` for any other container, which adds no emphasis context — the same
+/// as the full writer, where only `Emph`/`Strong` push onto the stack.
+fn kept_emphasis_frame(container: &Inline, opening: &str) -> Option<EmphasisStackFrame> {
+    let is_strong = match container {
+        Inline::Emph(_) => false,
+        Inline::Strong(_) => true,
+        _ => return None,
+    };
+    let delimiter = match opening.as_bytes().first()? {
+        b'*' => EmphasisDelimiter::Asterisk,
+        b'_' => EmphasisDelimiter::Underscore,
+        _ => return None,
+    };
+    Some(EmphasisStackFrame {
+        delimiter,
+        is_strong,
+    })
+}
+
+/// Write a single inline that will sit inside the `enclosing` emphasis
+/// containers (outermost first), whose delimiters come from elsewhere.
+///
+/// Same newline contract as [`write_inline_to_string`].
+fn write_inline_to_string_in_emphasis(
+    inline: &Inline,
+    enclosing: &[EmphasisStackFrame],
+) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
     let mut buf = Vec::new();
-    qmd::write_single_inline(inline, &mut buf)?;
+    qmd::write_single_inline_in_emphasis(inline, enclosing, &mut buf)?;
     let result = String::from_utf8(buf).map_err(|e| {
         vec![
             quarto_error_reporting::DiagnosticMessageBuilder::error("UTF-8 error during write")
