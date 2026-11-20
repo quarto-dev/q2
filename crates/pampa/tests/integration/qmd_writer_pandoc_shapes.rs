@@ -231,7 +231,7 @@ fn check_all(what: &str, texts: &[&str], build: impl Fn(&str) -> Value) {
         .iter()
         .filter_map(|text| {
             let t = trip(&build(text));
-            (blocks_of(&t.before) != blocks_of(&t.after))
+            (t.before["meta"] != t.after["meta"] || blocks_of(&t.before) != blocks_of(&t.after))
                 .then(|| format!("{text:?} -> {:?}", t.qmd))
         })
         .collect();
@@ -283,6 +283,17 @@ fn ordered_item_start() {
 fn block_quote_start() {
     check_all("block quote start", LINE_START_TEXTS, |t| {
         doc(vec![block_quote(vec![para_text(t)])])
+    });
+}
+
+#[test]
+fn metadata_value_start() {
+    check_all("metadata value start", LINE_START_TEXTS, |t| {
+        json!({
+            "pandoc-api-version": [1, 23, 1],
+            "meta": {"title": {"t": "MetaInlines", "c": inl(t)}},
+            "blocks": [],
+        })
     });
 }
 
