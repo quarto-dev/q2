@@ -67,10 +67,11 @@ export default function NewFileDialog({
     initialFilename ? splitInitial(initialFilename) : { folder: '', name: '', ext: '' }
   );
   const seedChoice: FileTypeChoice = seed.ext ? choiceForExtension(seed.ext) : 'qmd';
-  const [filename, setFilename] = useState(seed.name);
+  const [filename, setFilename] = useState(
+    seedChoice === 'other' ? `${seed.name}.${seed.ext}` : seed.name
+  );
   const [folder, setFolder] = useState(seed.folder);
   const [fileType, setFileType] = useState<FileTypeChoice>(seedChoice);
-  const [customExtension, setCustomExtension] = useState(seedChoice === 'other' ? seed.ext : '');
   const [error, setError] = useState<string | null>(null);
 
   // Template state
@@ -113,22 +114,18 @@ export default function NewFileDialog({
     [existingPaths]
   );
 
-  // Extension from the type picker; empty means "other" with nothing typed.
-  const extension =
-    fileType === 'other' ? customExtension.trim().replace(/^\.+/, '').toLowerCase() : fileType;
-
   const handleCreateTextFile = useCallback(() => {
-    if (!extension) {
-      setError(dialogs.newFile.errorExtensionRequired);
-      return;
-    }
     const base = filename.trim();
     if (!base) {
       setError(dialogs.newFile.errorRequired);
       return;
     }
-    // Don't double the extension if the user typed it into the name too.
-    const withExt = base.toLowerCase().endsWith(`.${extension}`) ? base : `${base}.${extension}`;
+    // "other" takes the name as typed. A specific type appends its
+    // extension unless the user typed it into the name too.
+    const withExt =
+      fileType === 'other' || base.toLowerCase().endsWith(`.${fileType}`)
+        ? base
+        : `${base}.${fileType}`;
     const path = normalizeProjectPath(folder ? `${folder}/${withExt}` : withExt);
     const validationError = validateFilename(path);
     if (validationError) {
@@ -138,7 +135,7 @@ export default function NewFileDialog({
     const content = selectedTemplate?.strippedContent ?? '';
     onCreateTextFile(path, content);
     onClose();
-  }, [folder, filename, extension, selectedTemplate, validateFilename, onCreateTextFile, onClose]);
+  }, [folder, filename, fileType, selectedTemplate, validateFilename, onCreateTextFile, onClose]);
 
   // Enter submits; Escape and Tab containment are owned by ModalDialog.
   const handleKeyDown = useCallback(
@@ -211,11 +208,6 @@ export default function NewFileDialog({
                   setFileType(t);
                   setError(null);
                 }}
-                customExtension={customExtension}
-                onCustomExtensionChange={(e) => {
-                  setCustomExtension(e);
-                  setError(null);
-                }}
               />
             </div>
             <div className="filename-input">
@@ -235,7 +227,11 @@ export default function NewFileDialog({
                   setFilename(e.target.value);
                   setError(null);
                 }}
-                placeholder={dialogs.newFile.filenamePlaceholder}
+                placeholder={
+                  fileType === 'other'
+                    ? dialogs.newFile.filenamePlaceholderOther
+                    : dialogs.newFile.filenamePlaceholder
+                }
               />
             </div>
             {error && <div className="qh-error inline">{error}</div>}
