@@ -1,0 +1,95 @@
+{
+  "run_id": "20261120-140245-GWWIN",
+  "branch": "windows/git-epochs",
+  "commit": "43cb0ded9c4e8220dda2b09572e12e14fa74ce6f",
+  "base": "current tip of origin/windows/git-epochs",
+  "host_triple": "x86_64-pc-windows-msvc",
+  "os": "Microsoft Windows 11 Pro",
+  "git": "git version 2.47.1.windows.1",
+  "node": "v24.21.0",
+  "autocrlf": "true",
+  "longpaths": "true",
+  "tools": [
+    {
+      "tool": "git",
+      "required": "yes",
+      "found": true,
+      "install": "winget install Git.Git   (Git for Windows; the probe is tested against it)"
+    },
+    {
+      "tool": "rustc",
+      "required": "no",
+      "found": true,
+      "install": "winget install Rustlang.Rustup   (then: rustup default stable-x86_64-pc-windows-msvc)"
+    },
+    {
+      "tool": "cargo",
+      "required": "no",
+      "found": true,
+      "install": "comes with rustup"
+    },
+    {
+      "tool": "cargo-nextest",
+      "required": "no",
+      "found": true,
+      "install": "cargo install cargo-nextest --locked"
+    },
+    {
+      "tool": "uv",
+      "required": "no",
+      "found": true,
+      "install": "winget install astral-sh.uv   (runs make_large_tree.py and extract_failures.py)"
+    },
+    {
+      "tool": "nasm",
+      "required": "no",
+      "found": true,
+      "install": "winget install NASM.NASM   (the aws-lc-sys crates in quarto-hub need it)"
+    },
+    {
+      "tool": "cmake",
+      "required": "no",
+      "found": true,
+      "install": "winget install Kitware.CMake   (the aws-lc-sys crates in quarto-hub need it)"
+    },
+    {
+      "tool": "link",
+      "required": "no",
+      "found": false,
+      "install": "Visual Studio Build Tools, \"Desktop development with C++\" (cargo finds link.exe itself, so absent from PATH is normal; install only if the build says \"linker not found\")"
+    },
+    {
+      "tool": "node",
+      "required": "no",
+      "found": true,
+      "install": "fnm/nvm; Node major per .nvmrc (items b1 to b7)"
+    },
+    {
+      "tool": "npm",
+      "required": "no",
+      "found": true,
+      "install": "comes with Node"
+    },
+    {
+      "tool": "jj",
+      "required": "no",
+      "found": false,
+      "install": "optional: winget install jj-vcs.jj (the jj scenarios of b1 skip without it)"
+    }
+  ],
+  "items": [
+    {
+      "id": "c2",
+      "catalog": "W8",
+      "title": "Playwright subset with the pinned VS Code build and the timing test",
+      "status": "FAIL",
+      "reason": "failed: extension-flows, cross-client; 25 passed",
+      "caveat": "Measured lock-release to last-reload gap: 98 ms.",
+      "known_unrelated": false,
+      "proves": "The extension's VS Code surfaces (commands, notifications, status bar, buffers) work with the pinned Code.exe the harness downloads; the permanent cross-client scenarios (H1 to H7, L1 to L4, the registry check) pass on Windows; editor-only's quiet window is measured against a real Windows buffer reload (a gap above 1 s is a finding for the experimental fallback in G20, not a failure).",
+      "does_not_prove": "VS Code Insiders or other versions; the unmarked exploratory scenarios.",
+      "output_tail": "✔ Found existing install in C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\\.vscode-test\\vscode-win32-x64-archive-1.101.2\nhub doc text: \"# Home\\n\\nfrom A, edited\\ntyped in VS Code\"\n  ✓  18 e2e\\tests\\smoke.e2e.ts:45:1 › A: a folder bound to the test hub auto-starts sync, in both directions (5.2s)\n- Resolving version...\n✔ Validated version: 1.101.2\n✔ Found existing install in C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\\.vscode-test\\vscode-win32-x64-archive-1.101.2\n  ✓  19 e2e\\tests\\smoke.e2e.ts:88:1 › B: \"Quarto Hub: Create Folder from Project\" creates the folder, project.json, and the files (4.5s)\n\n\n  1) e2e\\tests\\share-folder.e2e.ts:56:1 › share a git folder, read the confirm, copy the id, and join it as a clone and as a mirror \n\n    Error: timed out waiting for the q2 preview command on the clipboard\n\n       at ..\\..\\src\\core\\test-support.ts:167\n\n      165 |     const v = await check();\n      166 |     if (v) return v as NonNullable<T>;\n    > 167 |     if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);\n          |                                      ^\n      168 |     await sleep(50);\n      169 |   }\n      170 | }\n        at waitFor (C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\\src\\core\\test-support.ts:167:38)\n        at C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\\e2e\\tests\\share-folder.e2e.ts:80:19\n\n    Error Context: test-results\\share-folder.e2e.ts-share--38e95--as-a-clone-and-as-a-mirror\\error-context.md\n\n    Error Context: test-results\\share-folder.e2e.ts-share--38e95--as-a-clone-and-as-a-mirror\\error-context.md\n\n  2) e2e\\tests\\share-folder.e2e.ts:115:1 › the copied q2 preview command serves the project, and git switch re-points it \n\n    Error: timed out waiting for the q2 preview command on the clipboard\n\n       at ..\\..\\src\\core\\test-support.ts:167\n\n      165 |     const v = await check();\n      166 |     if (v) return v as NonNullable<T>;\n    > 167 |     if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);\n          |                                      ^\n      168 |     await sleep(50);\n      169 |   }\n      170 | }\n        at waitFor (C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\\src\\core\\test-support.ts:167:38)\n        at C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\\e2e\\tests\\share-folder.e2e.ts:132:19\n\n    Error Context: test-results\\share-folder.e2e.ts-the-co-9ea75-and-git-switch-re-points-it\\error-context.md\n\n    Error Context: test-results\\share-folder.e2e.ts-the-co-9ea75-and-git-switch-re-points-it\\error-context.md\n\n  2 failed\n    e2e\\tests\\share-folder.e2e.ts:56:1 › share a git folder, read the confirm, copy the id, and join it as a clone and as a mirror \n    e2e\\tests\\share-folder.e2e.ts:115:1 › the copied q2 preview command serves the project, and git switch re-points it \n  17 passed (3.4m)\nnpm error Lifecycle script `test:e2e` failed with error:\nnpm error code 1\nnpm error path C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\nnpm error workspace quarto-hub-vscode@0.0.1\nnpm error location C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\nnpm error command failed\nnpm error command C:\\WINDOWS\\system32\\cmd.exe /d /s /c node e2e/run.mjs",
+      "log": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261120-140245-GWWIN\\c2-timing.log"
+    }
+  ]
+}

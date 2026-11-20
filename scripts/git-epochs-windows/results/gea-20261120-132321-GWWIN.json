@@ -1,0 +1,95 @@
+{
+  "run_id": "20261120-132321-GWWIN",
+  "branch": "windows/git-epochs",
+  "commit": "43cb0ded9c4e8220dda2b09572e12e14fa74ce6f",
+  "base": "current tip of origin/windows/git-epochs",
+  "host_triple": "x86_64-pc-windows-msvc",
+  "os": "Microsoft Windows 11 Pro",
+  "git": "git version 2.47.1.windows.1",
+  "node": "v24.21.0",
+  "autocrlf": "true",
+  "longpaths": "true",
+  "tools": [
+    {
+      "tool": "git",
+      "required": "yes",
+      "found": true,
+      "install": "winget install Git.Git   (Git for Windows; the probe is tested against it)"
+    },
+    {
+      "tool": "rustc",
+      "required": "no",
+      "found": true,
+      "install": "winget install Rustlang.Rustup   (then: rustup default stable-x86_64-pc-windows-msvc)"
+    },
+    {
+      "tool": "cargo",
+      "required": "no",
+      "found": true,
+      "install": "comes with rustup"
+    },
+    {
+      "tool": "cargo-nextest",
+      "required": "no",
+      "found": true,
+      "install": "cargo install cargo-nextest --locked"
+    },
+    {
+      "tool": "uv",
+      "required": "no",
+      "found": true,
+      "install": "winget install astral-sh.uv   (runs make_large_tree.py and extract_failures.py)"
+    },
+    {
+      "tool": "nasm",
+      "required": "no",
+      "found": true,
+      "install": "winget install NASM.NASM   (the aws-lc-sys crates in quarto-hub need it)"
+    },
+    {
+      "tool": "cmake",
+      "required": "no",
+      "found": true,
+      "install": "winget install Kitware.CMake   (the aws-lc-sys crates in quarto-hub need it)"
+    },
+    {
+      "tool": "link",
+      "required": "no",
+      "found": false,
+      "install": "Visual Studio Build Tools, \"Desktop development with C++\" (cargo finds link.exe itself, so absent from PATH is normal; install only if the build says \"linker not found\")"
+    },
+    {
+      "tool": "node",
+      "required": "no",
+      "found": true,
+      "install": "fnm/nvm; Node major per .nvmrc (items b1 to b7)"
+    },
+    {
+      "tool": "npm",
+      "required": "no",
+      "found": true,
+      "install": "comes with Node"
+    },
+    {
+      "tool": "jj",
+      "required": "no",
+      "found": false,
+      "install": "optional: winget install jj-vcs.jj (the jj scenarios of b1 skip without it)"
+    }
+  ],
+  "items": [
+    {
+      "id": "c2",
+      "catalog": "W8",
+      "title": "Playwright subset with the pinned VS Code build and the timing test",
+      "status": "FAIL",
+      "reason": "failed: cross-client; 21 passed",
+      "caveat": "Measured lock-release to last-reload gap: 60 ms.",
+      "known_unrelated": false,
+      "proves": "The extension's VS Code surfaces (commands, notifications, status bar, buffers) work with the pinned Code.exe the harness downloads; the permanent cross-client scenarios (H1 to H7, L1 to L4, the registry check) pass on Windows; editor-only's quiet window is measured against a real Windows buffer reload (a gap above 1 s is a finding for the experimental fallback in G20, not a failure).",
+      "does_not_prove": "VS Code Insiders or other versions; the unmarked exploratory scenarios.",
+      "output_tail": "    \ta.qmd\n    Please commit your changes or stash them before you switch branches.\n    Aborting\n\n\n      279 |   hub.repo.switch('feature');\n      280 |   await decision(hub.handle.url, ['flipped', 'seeded']);\n    > 281 |   execFileSync('git', ['switch', '--quiet', 'feature'], { cwd: folder });\n          |   ^\n      282 |   await expect.poll(() => activeEditorText(page), { timeout: 60_000 }).toContain('Version FEATURE of a.');\n      283 |   expect(await activeEditorText(page)).not.toContain('Version MAIN of a.');\n      284 |   // Nothing from the window's own git rewrite was spliced into the hub's doc.\n        at C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\\e2e\\tests\\cross-client\\hub-demo.e2e.ts:281:3\n\n    Error Context: test-results\\hub-demo.e2e.ts-H2e-perman-15974-plices-nothing-into-the-hub\\error-context.md\n\n  8) e2e\\tests\\cross-client\\hubless-demo.e2e.ts:84:1 › L1-L4 @permanent: originate from VS Code, show it in a browser through --hub-url, join a clone and a mirror, and follow a branch switch through the relay \n\n    Error: browserType.launch: Executable doesn't exist at C:\\Users\\GordonWoodhull\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1254\\chrome-headless-shell-win64\\chrome-headless-shell.exe\n    ╔════════════════════════════════════════════════════════════╗\n    ║ Looks like Playwright was just installed or updated.       ║\n    ║ Please run the following command to download new browsers: ║\n    ║                                                            ║\n    ║     npx playwright install                                 ║\n    ║                                                            ║\n    ║ <3 Playwright Team                                         ║\n    ╚════════════════════════════════════════════════════════════╝\n\n       at ..\\..\\helpers\\cross-client.ts:80\n\n      78 |\n      79 |   browser(): Promise<Browser> {\n    > 80 |     this.browserPromise ??= chromium.launch().then((b) => {\n         |                                      ^\n      81 |       this.cleanups.push(() => b.close());\n      82 |       return b;\n      83 |     });\n        at Scene.browser (C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\\e2e\\helpers\\cross-client.ts:80:38)\n        at Scene.guest (C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\\e2e\\helpers\\cross-client.ts:120:32)\n        at C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\\e2e\\tests\\cross-client\\hubless-demo.e2e.ts:91:29\n\n    Error Context: test-results\\hubless-demo.e2e.ts-L1-L4--cca99-ch-switch-through-the-relay\\error-context.md\n\n  8 failed\n    e2e\\tests\\cross-client\\hub-demo.e2e.ts:45:1 › H1 @permanent: a hub commit while every peer types causes no swap and no notice, and the registry moves the doc forward \n    e2e\\tests\\cross-client\\hub-demo.e2e.ts:99:1 › H2 @permanent: git switch feature swaps the browser with the owner notice, rewrites the mirror, leaves a clone on main alone, and a clone on feature joins the new doc \n    e2e\\tests\\cross-client\\hub-demo.e2e.ts:127:1 › H3 @permanent: a clone on the hub's branch and the browser exchange edits both ways \n    e2e\\tests\\cross-client\\hub-demo.e2e.ts:140:1 › H5 @permanent: git reset --hard after a browser edit retires the doc: no revert merges in as an author edit, the pointer moves to a doc equal to disk, the edit stays in the retired doc \n    e2e\\tests\\cross-client\\hub-demo.e2e.ts:171:1 › H6 @permanent: switching to feature and back lists and unlists b.qmd and c.qmd in the browser and the mirror; a clone on main keeps c.qmd \n    e2e\\tests\\cross-client\\hub-demo.e2e.ts:193:1 › H7 @permanent: a tracked binary follows the switch in the browser tree's hub and the mirror, and a clone on main keeps its own bytes \n    e2e\\tests\\cross-client\\hub-demo.e2e.ts:261:1 › H2e @permanent: an editor-only VS Code window on a clone of the hub repository suspends during its own checkout, rebinds to the hub's feature doc, shows the feature text, and splices nothing into the hub \n    e2e\\tests\\cross-client\\hubless-demo.e2e.ts:84:1 › L1-L4 @permanent: originate from VS Code, show it in a browser through --hub-url, join a clone and a mirror, and follow a branch switch through the relay \n  1 passed (45.3s)\nnpm error Lifecycle script `test:e2e:cross` failed with error:\nnpm error code 1\nnpm error path C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\nnpm error workspace quarto-hub-vscode@0.0.1\nnpm error location C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\vscode-sync-experiment\nnpm error command failed\nnpm error command C:\\WINDOWS\\system32\\cmd.exe /d /s /c node e2e/run.mjs --cross",
+      "log": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261120-132321-GWWIN\\c2-timing.log"
+    }
+  ]
+}

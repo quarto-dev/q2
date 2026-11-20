@@ -1,0 +1,289 @@
+From 337dc8c8ce392420aa838a30181576fed254280d Mon Sep 17 00:00:00 2001
+From: Gordon Woodhull <gordon.woodhull@posit.co>
+Date: Fri, 20 Nov 2026 14:26:29 -0500
+Subject: [PATCH] hub-client: use cross-env for inline env vars in npm scripts
+ (Windows)
+
+npm runs scripts through cmd.exe on Windows, which cannot parse the POSIX
+`VAR=value command` form, so `npm run build:preview-embed` (and so
+`cargo xtask build-hub-client-embed`) failed with "'BUILD_TARGET' is not
+recognized as an internal or external command".
+
+Prefix the inline-env commands with cross-env in the three scripts that
+sit on the build:all / preview-embed path:
+
+  - hub-client: build, build:preview-embed
+  - quarto-hub-sandboxed-preview: build:sw
+
+quarto-hub-sandboxed-preview is not an npm workspace member (its own
+package-lock.json, installed by build:sandboxed), so it gets its own
+devDependency. Scripts left on the POSIX form: test:e2e, test:e2e:author-id,
+test:e2e:ui, test:harness (not exercised here).
+
+Verified on Windows 11: build:sw, build, build:all, and
+`cargo xtask build-hub-client-embed` all exit 0; the embed output has the
+/ws sync default baked in, no sw.js, no pandoc/, and no Google client id.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ hub-client/package.json                       |  5 +-
+ .../package-lock.json                         | 97 +++++++++++++++++++
+ .../quarto-hub-sandboxed-preview/package.json |  3 +-
+ package-lock.json                             | 26 +++++
+ 4 files changed, 128 insertions(+), 3 deletions(-)
+
+diff --git a/hub-client/package.json b/hub-client/package.json
+index d3bdf9720..710ad5a53 100644
+--- a/hub-client/package.json
++++ b/hub-client/package.json
+@@ -7,7 +7,7 @@
+     "dev": "vite",
+     "dev:fresh": "npm run preflight && vite",
+     "preflight": "npm run build:wasm && npm run build:sandboxed && npm run typecheck",
+-    "build": "tsc -b && NODE_OPTIONS=--max-old-space-size=4096 vite build",
++    "build": "tsc -b && cross-env NODE_OPTIONS=--max-old-space-size=4096 vite build",
+     "build:wasm": "node scripts/build-wasm.js",
+     "fetch:pandoc": "node ../scripts/fetch-pandoc-wasm.mjs --require",
+     "build:sandboxed": "cd quarto-hub-sandboxed-preview && npm install --silent && npm run build",
+@@ -15,7 +15,7 @@
+     "check:sw-precache": "node ../scripts/check-sw-precache.mjs dist",
+     "build:local-prod": "../scripts/build-local-prod.sh",
+     "build:local-prod:client": "../scripts/build-local-prod.sh --client-only",
+-    "build:preview-embed": "npm run build:wasm && npm run build:sandboxed && tsc -b && VITE_GOOGLE_CLIENT_ID= VITE_DISABLE_PWA=1 VITE_EPHEMERAL_STORAGE=1 VITE_PREVIEW_EMBED=1 VITE_PANDOC_WASM=0 VITE_DEFAULT_SYNC_SERVER=/ws NODE_OPTIONS=--max-old-space-size=4096 vite build --outDir dist-preview-embed && node ../scripts/prune-embed-dist.mjs dist-preview-embed && node ../scripts/precompress-dist.mjs dist-preview-embed",
++    "build:preview-embed": "npm run build:wasm && npm run build:sandboxed && tsc -b && cross-env VITE_GOOGLE_CLIENT_ID= VITE_DISABLE_PWA=1 VITE_EPHEMERAL_STORAGE=1 VITE_PREVIEW_EMBED=1 VITE_PANDOC_WASM=0 VITE_DEFAULT_SYNC_SERVER=/ws NODE_OPTIONS=--max-old-space-size=4096 vite build --outDir dist-preview-embed && node ../scripts/prune-embed-dist.mjs dist-preview-embed && node ../scripts/precompress-dist.mjs dist-preview-embed",
+     "postinstall": "cd quarto-hub-sandboxed-preview && npm install --silent",
+     "typecheck": "tsc -p tsconfig.app.json --noEmit",
+     "lint": "eslint .",
+@@ -88,6 +88,7 @@
+     "@vitest/coverage-v8": "^4.0.17",
+     "common-tags": "^1.8.2",
+     "compression": "^1.8.1",
++    "cross-env": "^10.1.0",
+     "eslint": "^9.39.1",
+     "eslint-plugin-react-hooks": "^7.0.1",
+     "eslint-plugin-react-refresh": "^0.4.24",
+diff --git a/hub-client/quarto-hub-sandboxed-preview/package-lock.json b/hub-client/quarto-hub-sandboxed-preview/package-lock.json
+index 177677754..dff024a43 100644
+--- a/hub-client/quarto-hub-sandboxed-preview/package-lock.json
++++ b/hub-client/quarto-hub-sandboxed-preview/package-lock.json
+@@ -17,6 +17,7 @@
+         "@types/react": "^19.2.0",
+         "@types/react-dom": "^19.2.0",
+         "@vitejs/plugin-react": "^4.3.4",
++        "cross-env": "^10.1.0",
+         "typescript": "~5.6.3",
+         "vite": "^6.0.11"
+       }
+@@ -303,6 +304,13 @@
+         "node": ">=6.9.0"
+       }
+     },
++    "node_modules/@epic-web/invariant": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/@epic-web/invariant/-/invariant-1.0.0.tgz",
++      "integrity": "sha512-lrTPqgvfFQtR/eY/qkIzp98OGdNJu0m5ji3q/nJI8v3SXkRKEnWiOxMmbvcSoAIzv/cGiuvRy57k4suKQSAdwA==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/@esbuild/aix-ppc64": {
+       "version": "0.25.12",
+       "resolved": "https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.25.12.tgz",
+@@ -1336,6 +1344,39 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/cross-env": {
++      "version": "10.1.0",
++      "resolved": "https://registry.npmjs.org/cross-env/-/cross-env-10.1.0.tgz",
++      "integrity": "sha512-GsYosgnACZTADcmEyJctkJIoqAhHjttw7RsFrVoJNXbsWWqaq6Ym+7kZjq6mS45O0jij6vtiReppKQEtqWy6Dw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@epic-web/invariant": "^1.0.0",
++        "cross-spawn": "^7.0.6"
++      },
++      "bin": {
++        "cross-env": "dist/bin/cross-env.js",
++        "cross-env-shell": "dist/bin/cross-env-shell.js"
++      },
++      "engines": {
++        "node": ">=20"
++      }
++    },
++    "node_modules/cross-spawn": {
++      "version": "7.0.6",
++      "resolved": "https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz",
++      "integrity": "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "path-key": "^3.1.0",
++        "shebang-command": "^2.0.0",
++        "which": "^2.0.1"
++      },
++      "engines": {
++        "node": ">= 8"
++      }
++    },
+     "node_modules/csstype": {
+       "version": "3.2.3",
+       "resolved": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz",
+@@ -1463,6 +1504,13 @@
+         "node": ">=6.9.0"
+       }
+     },
++    "node_modules/isexe": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/isexe/-/isexe-2.0.0.tgz",
++      "integrity": "sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==",
++      "dev": true,
++      "license": "ISC"
++    },
+     "node_modules/js-tokens": {
+       "version": "4.0.0",
+       "resolved": "https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz",
+@@ -1558,6 +1606,16 @@
+         "node": ">=18"
+       }
+     },
++    "node_modules/path-key": {
++      "version": "3.1.1",
++      "resolved": "https://registry.npmjs.org/path-key/-/path-key-3.1.1.tgz",
++      "integrity": "sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=8"
++      }
++    },
+     "node_modules/picocolors": {
+       "version": "1.1.1",
+       "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+@@ -1699,6 +1757,29 @@
+         "semver": "bin/semver.js"
+       }
+     },
++    "node_modules/shebang-command": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/shebang-command/-/shebang-command-2.0.0.tgz",
++      "integrity": "sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "shebang-regex": "^3.0.0"
++      },
++      "engines": {
++        "node": ">=8"
++      }
++    },
++    "node_modules/shebang-regex": {
++      "version": "3.0.0",
++      "resolved": "https://registry.npmjs.org/shebang-regex/-/shebang-regex-3.0.0.tgz",
++      "integrity": "sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=8"
++      }
++    },
+     "node_modules/source-map-js": {
+       "version": "1.2.1",
+       "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz",
+@@ -1846,6 +1927,22 @@
+         }
+       }
+     },
++    "node_modules/which": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/which/-/which-2.0.2.tgz",
++      "integrity": "sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==",
++      "dev": true,
++      "license": "ISC",
++      "dependencies": {
++        "isexe": "^2.0.0"
++      },
++      "bin": {
++        "node-which": "bin/node-which"
++      },
++      "engines": {
++        "node": ">= 8"
++      }
++    },
+     "node_modules/yallist": {
+       "version": "3.1.1",
+       "resolved": "https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz",
+diff --git a/hub-client/quarto-hub-sandboxed-preview/package.json b/hub-client/quarto-hub-sandboxed-preview/package.json
+index 41b282eeb..98f763593 100644
+--- a/hub-client/quarto-hub-sandboxed-preview/package.json
++++ b/hub-client/quarto-hub-sandboxed-preview/package.json
+@@ -7,7 +7,7 @@
+     "dev": "npm run build",
+     "build": "npm run build:main && npm run build:sw",
+     "build:main": "vite build",
+-    "build:sw": "BUILD_TARGET=service-worker vite build",
++    "build:sw": "cross-env BUILD_TARGET=service-worker vite build",
+     "preview": "vite preview"
+   },
+   "dependencies": {
+@@ -20,6 +20,7 @@
+     "@types/react": "^19.2.0",
+     "@types/react-dom": "^19.2.0",
+     "@vitejs/plugin-react": "^4.3.4",
++    "cross-env": "^10.1.0",
+     "typescript": "~5.6.3",
+     "vite": "^6.0.11"
+   }
+diff --git a/package-lock.json b/package-lock.json
+index 6f6440728..1b46904db 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -83,6 +83,7 @@
+         "@vitest/coverage-v8": "^4.0.17",
+         "common-tags": "^1.8.2",
+         "compression": "^1.8.1",
++        "cross-env": "^10.1.0",
+         "eslint": "^9.39.1",
+         "eslint-plugin-react-hooks": "^7.0.1",
+         "eslint-plugin-react-refresh": "^0.4.24",
+@@ -2175,6 +2176,13 @@
+         "react": ">=16.8.0"
+       }
+     },
++    "node_modules/@epic-web/invariant": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/@epic-web/invariant/-/invariant-1.0.0.tgz",
++      "integrity": "sha512-lrTPqgvfFQtR/eY/qkIzp98OGdNJu0m5ji3q/nJI8v3SXkRKEnWiOxMmbvcSoAIzv/cGiuvRy57k4suKQSAdwA==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/@esbuild/aix-ppc64": {
+       "version": "0.28.0",
+       "resolved": "https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.28.0.tgz",
+@@ -8051,6 +8059,24 @@
+         "url": "https://opencollective.com/express"
+       }
+     },
++    "node_modules/cross-env": {
++      "version": "10.1.0",
++      "resolved": "https://registry.npmjs.org/cross-env/-/cross-env-10.1.0.tgz",
++      "integrity": "sha512-GsYosgnACZTADcmEyJctkJIoqAhHjttw7RsFrVoJNXbsWWqaq6Ym+7kZjq6mS45O0jij6vtiReppKQEtqWy6Dw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@epic-web/invariant": "^1.0.0",
++        "cross-spawn": "^7.0.6"
++      },
++      "bin": {
++        "cross-env": "dist/bin/cross-env.js",
++        "cross-env-shell": "dist/bin/cross-env-shell.js"
++      },
++      "engines": {
++        "node": ">=20"
++      }
++    },
+     "node_modules/cross-spawn": {
+       "version": "7.0.6",
+       "resolved": "https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz",
+-- 
+2.47.1.windows.1
+
