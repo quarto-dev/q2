@@ -509,6 +509,74 @@ const COVER_PNG: &[u8] = &[
 /// DOM-level fixup. The file itself must be copied into the output tree
 /// (via the ordinary resource-collector, since the Image is now in the
 /// AST), so the `src` resolves without any special-casing.
+/// Every local stylesheet and script a chapter page links must exist on
+/// disk, for a chapter at the book root and for one in a subfolder. The
+/// shared assets live under `_book/site_libs/`, so a root page links
+/// `site_libs/...` and a subfolder page `../site_libs/...`. Before the
+/// fix the resume leg linked bare `quarto/...` paths, which do not exist,
+/// and every book page loaded without CSS or JavaScript.
+#[test]
+fn chapter_pages_link_assets_that_exist_under_site_libs() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        r#"project:
+  type: book
+
+book:
+  title: "Asset Book"
+  chapters:
+    - index.qmd
+    - part1/deep.qmd
+"#,
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "# Welcome {.unnumbered}\n\nWelcome.\n",
+    );
+    write(
+        &project_dir.join("part1").join("deep.qmd"),
+        "# Deep\n\nA chapter in a subfolder.\n",
+    );
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+
+    for (stem, prefix) in [("index", "site_libs/"), ("deep", "../site_libs/")] {
+        let page = outputs
+            .iter()
+            .find(|p| p.file_stem().is_some_and(|s| s == stem))
+            .unwrap_or_else(|| panic!("no output for {stem}: {outputs:?}"));
+        let html = std::fs::read_to_string(page).unwrap();
+        let page_dir = page.parent().unwrap();
+
+        let mut local_assets = Vec::new();
+        for attr in ["href=\"", "src=\""] {
+            for chunk in html.split(attr).skip(1) {
+                let url = chunk.split('"').next().unwrap();
+                let is_asset = url.ends_with(".css") || url.ends_with(".js");
+                let is_remote = url.contains("://") || url.starts_with("//");
+                if is_asset && !is_remote {
+                    local_assets.push(url.to_string());
+                }
+            }
+        }
+        assert!(
+            local_assets.iter().any(|u| u.contains("quarto-theme-")),
+            "{stem}: expected a theme stylesheet link, got {local_assets:?}"
+        );
+        for url in &local_assets {
+            assert!(
+                url.starts_with(prefix),
+                "{stem}: asset `{url}` must be linked under `{prefix}`"
+            );
+            assert!(
+                page_dir.join(url).exists(),
+                "{stem}: linked asset `{url}` does not exist on disk"
+            );
+        }
+    }
+}
+
 #[test]
 fn cover_image_renders_inside_preface_first_section() {
     let temp = TempDir::new().unwrap();

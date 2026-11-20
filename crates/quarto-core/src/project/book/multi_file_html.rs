@@ -26,8 +26,9 @@ use crate::crossref::project_index::{ChapterCrossrefInventory, aggregate_chapter
 use crate::error::QuartoError;
 use crate::format::Format;
 use crate::pipeline::{
-    BookChapterPauseState, PartialKind, RenderOutput, build_html_pipeline_finishing_stages,
-    render_qmd_to_ast_partial, run_pipeline_from_ast,
+    BookChapterPauseState, PartialKind, RenderOutput,
+    build_html_pipeline_finishing_stages_with_options, render_qmd_to_ast_partial,
+    run_pipeline_from_ast,
 };
 use crate::project::book::render_item::{BookRenderItem, BookRenderItemKind};
 use crate::project::book::{aggregate_chapter_citations, build_merged_bibliography};
@@ -41,6 +42,7 @@ use crate::render_to_file::{
 };
 use crate::resource_resolver::ResourceResolverContext;
 use crate::stage::DocumentAst;
+use crate::stage::stages::ApplyTemplateConfig;
 use crate::transform::TransformPhase;
 
 /// Everything one chapter's pause leg produced that the resume leg needs:
@@ -419,7 +421,13 @@ pub(crate) async fn render_book_multi_file_html(
         }
         ctx = ctx.with_cross_chapter_crossref_registry(registry.clone());
 
-        let finishing_stages = build_html_pipeline_finishing_stages(TransformPhase::Finalization);
+        // `ApplyTemplateStage` runs on this leg, so it needs the chapter's
+        // resolver to link the shared CSS / JS under `site_libs/` (with
+        // the right `../` depth) rather than by bare artifact path.
+        let finishing_stages = build_html_pipeline_finishing_stages_with_options(
+            TransformPhase::Finalization,
+            Some(ApplyTemplateConfig::new().with_resolver(chapter.resolver.clone())),
+        );
         let (finished, finishing_diagnostics) = match run_pipeline_from_ast(
             chapter.paused,
             &mut ctx,
