@@ -38,7 +38,7 @@ pub fn parse_config_string_as_markdown(
 ) -> ConfigValueKind {
     let mut collector = crate::utils::diagnostic_collector::DiagnosticCollector::new();
     let mut kind =
-        parse_yaml_string_as_markdown_to_config(value, source_info, false, &mut collector);
+        parse_yaml_string_as_markdown_to_config(value, source_info, false, false, &mut collector);
     diagnostics.extend(collector.into_diagnostics());
     unwrap_lone_figure(&mut kind);
     kind
@@ -137,6 +137,63 @@ fn fold_child_diagnostics(
     builder
 }
 
+/// `value` as a document of inlines only (`$._inline_document_start` in the
+/// qmd grammar): the U+FDD0 that marks one, then `value`. The parse's
+/// offsets count the marker, so the parent span starts that much earlier,
+/// to keep the text's spans on the text. `None` when the parent can't start
+/// earlier.
+///
+/// PROPOSAL: widening the parent relies on the text not starting a file.
+/// A real version would teach the reader to discount the marker.
+fn inline_document(
+    value: &str,
+    source_info: &quarto_source_map::SourceInfo,
+) -> Option<(String, quarto_source_map::SourceInfo)> {
+    const MARKER: char = '\u{FDD0}';
+    let parent = start_earlier(source_info, MARKER.len_utf8())?;
+    Some((format!("{MARKER}{value}"), parent))
+}
+
+/// `source_info`, starting `shift` bytes earlier in its source.
+fn start_earlier(
+    source_info: &quarto_source_map::SourceInfo,
+    shift: usize,
+) -> Option<quarto_source_map::SourceInfo> {
+    use quarto_source_map::SourceInfo;
+
+    Some(match source_info {
+        SourceInfo::Original {
+            file_id,
+            start_offset,
+            end_offset,
+        } if *start_offset >= shift => {
+            SourceInfo::original(*file_id, start_offset - shift, *end_offset)
+        }
+        SourceInfo::Substring {
+            parent,
+            start_offset,
+            end_offset,
+        } if *start_offset >= shift => {
+            SourceInfo::substring((**parent).clone(), start_offset - shift, *end_offset)
+        }
+        // Text decoded from several pieces of source (YAML escapes): the
+        // first piece starts earlier.
+        SourceInfo::Concat { pieces } => {
+            let (first, rest) = pieces.split_first()?;
+            let first = (
+                start_earlier(&first.source_info, shift)?,
+                first.length + shift,
+            );
+            SourceInfo::concat(
+                std::iter::once(first)
+                    .chain(rest.iter().map(|p| (p.source_info.clone(), p.length)))
+                    .collect(),
+            )
+        }
+        _ => return None,
+    })
+}
+
 /// Parse a YAML string as markdown and return ConfigValue with PandocInlines/PandocBlocks.
 ///
 /// - If `is_explicit_md` is true: This is a !md tagged value, ERROR on parse failure
@@ -145,19 +202,32 @@ fn parse_yaml_string_as_markdown_to_config(
     value: &str,
     source_info: &quarto_source_map::SourceInfo,
     is_explicit_md: bool,
+    inline_strings: bool,
     diagnostics: &mut crate::utils::diagnostic_collector::DiagnosticCollector,
 ) -> ConfigValueKind {
     use crate::readers;
     use quarto_error_reporting::DiagnosticMessageBuilder;
 
+    // As in Pandoc, a plain or quoted string is inlines; only a block
+    // scalar (`|`, `>`), which ends in a newline, is blocks.
+    let inline_input = (inline_strings
+        && !value.trim().is_empty()
+        && !value.trim_end_matches([' ', '\t']).ends_with('\n'))
+    .then(|| inline_document(value, source_info))
+    .flatten();
+    let (input, parent) = match &inline_input {
+        Some((input, parent)) => (input.as_str(), parent.clone()),
+        None => (value, source_info.clone()),
+    };
+
     let mut output_stream = VerboseOutput::Sink(io::sink());
     let result = readers::qmd::read(
-        value.as_bytes(),
+        input.as_bytes(),
         false,
         "<metadata>",
         &mut output_stream,
         true,
-        Some(source_info.clone()),
+        Some(parent),
     );
 
     match result {
@@ -378,7 +448,13 @@ fn yaml_to_config_value_at(
                 }
                 Some(quarto_config::Interpretation::Markdown) => {
                     // !md: Parse as markdown
-                    parse_yaml_string_as_markdown_to_config(&s, markdown_base, true, diagnostics)
+                    parse_yaml_string_as_markdown_to_config(
+                        &s,
+                        markdown_base,
+                        true,
+                        false,
+                        diagnostics,
+                    )
                 }
                 None => {
                     // Check if there are unknown tag components to preserve
@@ -427,6 +503,7 @@ fn yaml_to_config_value_at(
                                     &s,
                                     markdown_base,
                                     true,
+                                    false,
                                     diagnostics,
                                 )
                             }
@@ -440,6 +517,7 @@ fn yaml_to_config_value_at(
                                     &s,
                                     markdown_base,
                                     false,
+                                    true,
                                     diagnostics,
                                 )
                             }
@@ -1001,6 +1079,7 @@ mod tests {
             "![lone image](images/logo.svg)",
             &si(),
             true,
+            false,
             &mut collector,
         );
         let ConfigValueKind::PandocBlocks(blocks) = &kind else {
@@ -1288,8 +1367,13 @@ mod tests {
         let parent =
             quarto_source_map::SourceInfo::original(FileId(7), 100, 100 + KV_BEFORE_CLASS.len());
         let mut collector = crate::utils::diagnostic_collector::DiagnosticCollector::new();
-        let _ =
-            parse_yaml_string_as_markdown_to_config(KV_BEFORE_CLASS, &parent, true, &mut collector);
+        let _ = parse_yaml_string_as_markdown_to_config(
+            KV_BEFORE_CLASS,
+            &parent,
+            true,
+            false,
+            &mut collector,
+        );
         let diagnostics = collector.into_diagnostics();
 
         assert_eq!(diagnostics.len(), 1, "got {:#?}", diagnostics);

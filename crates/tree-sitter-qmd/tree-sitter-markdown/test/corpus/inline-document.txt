@@ -1,0 +1,23 @@
+================================================================================
+Inline document: a line that starts like a block is text
+================================================================================
+﷐1. x
+# y
+
+> z
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))

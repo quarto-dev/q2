@@ -3,47 +3,73 @@
   "name": "markdown",
   "rules": {
     "document": {
-      "type": "SEQ",
+      "type": "CHOICE",
       "members": [
         {
-          "type": "CHOICE",
+          "type": "SEQ",
           "members": [
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "minus_metadata"
+                  },
+                  "named": true,
+                  "value": "metadata"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            },
             {
               "type": "ALIAS",
               "content": {
-                "type": "SYMBOL",
-                "name": "minus_metadata"
+                "type": "PREC_RIGHT",
+                "value": 0,
+                "content": {
+                  "type": "REPEAT",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_block_not_section"
+                  }
+                }
               },
               "named": true,
-              "value": "metadata"
+              "value": "section"
             },
             {
-              "type": "BLANK"
+              "type": "REPEAT",
+              "content": {
+                "type": "SYMBOL",
+                "name": "section"
+              }
             }
           ]
         },
         {
-          "type": "ALIAS",
-          "content": {
-            "type": "PREC_RIGHT",
-            "value": 0,
-            "content": {
-              "type": "REPEAT",
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_inline_document_start"
+            },
+            {
+              "type": "ALIAS",
               "content": {
-                "type": "SYMBOL",
-                "name": "_block_not_section"
-              }
+                "type": "REPEAT1",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "pandoc_paragraph"
+                }
+              },
+              "named": true,
+              "value": "section"
             }
-          },
-          "named": true,
-          "value": "section"
-        },
-        {
-          "type": "REPEAT",
-          "content": {
-            "type": "SYMBOL",
-            "name": "section"
-          }
+          ]
         }
       ]
     },
@@ -5602,6 +5628,10 @@
     {
       "type": "SYMBOL",
       "name": "_span_apostrophe"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_inline_document_start"
     }
   ],
   "inline": [],

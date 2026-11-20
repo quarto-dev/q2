@@ -214,3 +214,86 @@ fn test_yaml_markdown_parse_behavior() {
         );
     }
 }
+
+/// The `title` of `qmd`'s front matter.
+fn title_of(qmd: &str) -> quarto_pandoc_types::ConfigValue {
+    let (doc, _, _) = readers::qmd::read(
+        qmd.as_bytes(),
+        false,
+        "t.qmd",
+        &mut std::io::sink(),
+        true,
+        None,
+    )
+    .unwrap_or_else(|errors| panic!("failed to read {qmd:?}: {errors:#?}"));
+    let ConfigValueKind::Map(entries) = doc.meta.value else {
+        panic!("metadata is not a map");
+    };
+    entries
+        .into_iter()
+        .find(|e| e.key == "title")
+        .expect("no title")
+        .value
+}
+
+/// The plain text of `inlines`.
+fn text_of(inlines: &[Inline]) -> String {
+    inlines
+        .iter()
+        .map(|inline| match inline {
+            Inline::Str(s) => s.text.clone(),
+            Inline::Space(_) => " ".to_string(),
+            Inline::SoftBreak(_) => "\n".to_string(),
+            other => panic!("unexpected inline {other:?}"),
+        })
+        .collect()
+}
+
+/// As in Pandoc and Quarto 1, a plain or quoted string is inlines: text
+/// that starts like a block is still text.
+#[test]
+fn string_starting_like_a_block_is_text() {
+    for (yaml, text) in [
+        ("1. x", "1. x"),
+        ("\"- x\"", "- x"),
+        ("\"# x\"", "# x"),
+        ("\"> x\"", "> x"),
+        ("\"::: x\"", "::: x"),
+        ("\"| x\"", "| x"),
+        ("\"a\\n- b\"", "a\n- b"),
+    ] {
+        let title = title_of(&format!("---\ntitle: {yaml}\n---\n"));
+        let ConfigValueKind::PandocInlines(inlines) = &title.value else {
+            panic!("title: {yaml} is not inlines: {:?}", title.value);
+        };
+        assert_eq!(text_of(inlines), text, "title: {yaml}");
+    }
+}
+
+/// A block scalar (`|`) is blocks, so its markers are markdown.
+#[test]
+fn block_scalar_is_blocks() {
+    let title = title_of("---\ntitle: |\n  1. x\n---\n");
+    let ConfigValueKind::PandocBlocks(blocks) = &title.value else {
+        panic!("title is not blocks: {:?}", title.value);
+    };
+    assert!(
+        matches!(blocks.as_slice(), [pampa::pandoc::Block::OrderedList(_)]),
+        "{blocks:?}"
+    );
+}
+
+/// The text's source offsets point at the text in the file.
+#[test]
+fn string_text_maps_to_its_place_in_the_file() {
+    let qmd = "---\ntitle: 1. x\n---\n";
+    let title = title_of(qmd);
+    let ConfigValueKind::PandocInlines(inlines) = &title.value else {
+        panic!("title is not inlines: {:?}", title.value);
+    };
+    let Inline::Str(first) = &inlines[0] else {
+        panic!("{inlines:?}");
+    };
+    let (_, start, end) = first.source_info.resolve_byte_range().expect("resolves");
+    assert_eq!(&qmd[start..end], "1.");
+}

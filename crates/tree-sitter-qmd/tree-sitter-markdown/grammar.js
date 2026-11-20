@@ -165,10 +165,13 @@ module.exports = grammar({
         ///////////////////////////////////////////////////////////////////////////////////////////
         // document
 
-        document: $ => seq(
-            optional(alias($.minus_metadata, $.metadata)),
-            alias(prec.right(repeat($._block_not_section)), $.section),
-            repeat($.section),
+        document: $ => choice(
+            seq(
+                optional(alias($.minus_metadata, $.metadata)),
+                alias(prec.right(repeat($._block_not_section)), $.section),
+                repeat($.section),
+            ),
+            seq($._inline_document_start, alias(repeat1($.pandoc_paragraph), $.section)),
         ),
 
         // YAML metadata block (`---` ... `---`). All four delimiting tokens
@@ -1407,6 +1410,14 @@ module.exports = grammar({
         // after a `_closable_inline` (see `_inline_element`); aliased to
         // `pandoc_str`. Emission site: scanner.c, parse_single_quote.
         $._span_apostrophe,
+
+        // A document of inlines only: emitted for a U+FDD0 (a Unicode
+        // noncharacter, reserved for internal use) at the very start of the
+        // input. pampa prepends it to a metadata string that Pandoc reads as
+        // inlines, so a line that starts like a block (`1. x`, `# x`) is
+        // text. The rest of the input is one paragraph; see
+        // parse_inline_document_start in scanner.c.
+        $._inline_document_start,
     ],
     precedences: $ => [],
     extras: $ => [],

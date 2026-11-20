@@ -184,6 +184,8 @@ typedef enum {
     // The grammar makes it valid only in that position; see
     // `_inline_element` in grammar.js and parse_single_quote below.
     SPAN_APOSTROPHE,
+    // See `$._inline_document_start` in grammar.js.
+    INLINE_DOCUMENT_START,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -304,6 +306,7 @@ static char* token_names[] = {
     "CAPTION_START",
     "PARAGRAPH_START",
     "SPAN_APOSTROPHE",
+    "INLINE_DOCUMENT_START",
 };
 
 #endif
@@ -387,6 +390,9 @@ static const uint8_t STATE_INSIDE_ATX = 0x1 << 2;
 static const uint8_t STATE_IN_MINUS_METADATA = 0x1 << 3;
 // Block should be closed after next line break
 static const uint8_t STATE_CLOSE_BLOCK = 0x1 << 4;
+// The document is inlines only (`$._inline_document_start`): no line opens
+// a block, and every line break is a soft one.
+static const uint8_t STATE_INLINE_ONLY = 0x1 << 5;
 
 static size_t roundup_32(size_t x) {
     x--;
@@ -3161,6 +3167,43 @@ static int match_line(Scanner *s, TSLexer *lexer) {
     return partial_success | (might_be_soft_break << 1);
 }
 
+// The U+FDD0 that starts a document of inlines only (see
+// `$._inline_document_start` in grammar.js).
+static bool parse_inline_document_start(Scanner *s, TSLexer *lexer) {
+    advance(s, lexer);
+    mark_end(s, lexer);
+    s->state |= STATE_INLINE_ONLY;
+    EMIT_TOKEN(INLINE_DOCUMENT_START);
+}
+
+// A line break in a document of inlines only. Blank lines and indentation
+// after it are part of the break, so a following line is never a block. The
+// break before the end of the input ends the paragraph.
+static bool parse_inline_only_line_ending(Scanner *s, TSLexer *lexer) {
+    if (lexer->lookahead == '\r') {
+        advance(s, lexer);
+    }
+    if (lexer->lookahead == '\n') {
+        advance(s, lexer);
+    }
+    mark_end(s, lexer);
+    s->indentation = 0;
+    s->column = 0;
+    while (lexer->lookahead == ' ' || lexer->lookahead == '\t' ||
+           lexer->lookahead == '\n' || lexer->lookahead == '\r') {
+        advance(s, lexer);
+    }
+    if (lexer->eof(lexer)) {
+        s->state &= (~STATE_WAS_SOFT_LINE_BREAK);
+        EMIT_TOKEN(LINE_ENDING);
+    }
+    mark_end(s, lexer);
+    s->indentation = 0;
+    note_line_content_start(s, lexer);
+    s->state |= STATE_WAS_SOFT_LINE_BREAK;
+    EMIT_TOKEN(SOFT_LINE_ENDING);
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     s->ws_before_token = 0;
     #ifdef SCAN_DEBUG
@@ -3177,6 +3220,10 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
          valid_symbols[MINUS_METADATA_BODY] ||
          valid_symbols[MINUS_METADATA_END])) {
         return parse_minus_metadata_interior(s, lexer, valid_symbols);
+    }
+
+    if (valid_symbols[INLINE_DOCUMENT_START] && lexer->lookahead == 0xFDD0) {
+        return parse_inline_document_start(s, lexer);
     }
 
     // A normal tree-sitter rule decided that the current branch is invalid and
@@ -3483,6 +3530,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // GH #943: a word followed by an apostrophe, in inline content.
     if (word_apostrophe_candidate(s, lexer, valid_symbols)) {
         return parse_word_apostrophe(lexer, valid_symbols);
+    }
+
+    if ((s->state & STATE_INLINE_ONLY) && valid_symbols[SOFT_LINE_ENDING] &&
+        (lexer->lookahead == '\n' || lexer->lookahead == '\r')) {
+        return parse_inline_only_line_ending(s, lexer);
     }
 
     // The parser just encountered a line break. Setup the state correspondingly
