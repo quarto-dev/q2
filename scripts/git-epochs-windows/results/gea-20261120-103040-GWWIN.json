@@ -1,0 +1,121 @@
+﻿{
+    "run_id":  "20261120-103040-GWWIN",
+    "branch":  "windows/git-epochs",
+    "commit":  "f80ff5dfcca636769c93ab5040e9226d502b5397",
+    "base":  "STALE: origin/windows/git-epochs is at d99ead8a3, this checkout is at f80ff5dfc",
+    "host_triple":  "x86_64-pc-windows-msvc",
+    "os":  "Microsoft Windows 11 Pro",
+    "git":  "git version 2.47.1.windows.1",
+    "node":  "v24.21.0",
+    "autocrlf":  "true",
+    "longpaths":  "true",
+    "tools":  [
+                  {
+                      "tool":  "git",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Git.Git   (Git for Windows; the probe is tested against it)"
+                  },
+                  {
+                      "tool":  "rustc",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Rustlang.Rustup   (then: rustup default stable-x86_64-pc-windows-msvc)"
+                  },
+                  {
+                      "tool":  "cargo",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "comes with rustup"
+                  },
+                  {
+                      "tool":  "cargo-nextest",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "cargo install cargo-nextest --locked"
+                  },
+                  {
+                      "tool":  "uv",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install astral-sh.uv   (runs make_large_tree.py and extract_failures.py)"
+                  },
+                  {
+                      "tool":  "nasm",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install NASM.NASM   (the aws-lc-sys crates in quarto-hub need it)"
+                  },
+                  {
+                      "tool":  "cmake",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Kitware.CMake   (the aws-lc-sys crates in quarto-hub need it)"
+                  },
+                  {
+                      "tool":  "link",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "Visual Studio Build Tools, \"Desktop development with C++\" (cargo finds link.exe itself, so absent from PATH is normal; install only if the build says \"linker not found\")"
+                  },
+                  {
+                      "tool":  "node",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "fnm/nvm; Node major per .nvmrc (items b1 to b7)"
+                  },
+                  {
+                      "tool":  "npm",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "comes with Node"
+                  },
+                  {
+                      "tool":  "jj",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "optional: winget install jj-vcs.jj (the jj scenarios of b1 skip without it)"
+                  }
+              ],
+    "items":  [
+                  {
+                      "id":  "a0",
+                      "catalog":  "",
+                      "title":  "build the test binaries for the four crates",
+                      "status":  "PASS",
+                      "reason":  "built",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "",
+                      "does_not_prove":  "",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261120-103040-GWWIN\\a0-build.log"
+                  },
+                  {
+                      "id":  "a4",
+                      "catalog":  "W4",
+                      "title":  "paths and keys: registry keys and hub path_keys",
+                      "status":  "PASS",
+                      "reason":  "16 tests ran and passed",
+                      "caveat":  "",
+                      "known_unrelated":  false,
+                      "proves":  "Registry keys use /; a case-insensitive collision of two keys falls back to ordinary sync; drive letters, UNC prefixes, and long paths (with core.longpaths) round-trip.",
+                      "does_not_prove":  "NTFS 8.3 short names or Unicode normalization differences.",
+                      "output_tail":  "",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261120-103040-GWWIN\\a4.log"
+                  },
+                  {
+                      "id":  "c2",
+                      "catalog":  "W8",
+                      "title":  "Playwright subset with the pinned VS Code build and the timing test",
+                      "status":  "FAIL",
+                      "reason":  "failed: embed build (c2-build-embed.log, c2-rebuild-q2.log), extension-flows; 19 passed",
+                      "caveat":  "Measured lock-release to last-reload gap: 55 ms.",
+                      "known_unrelated":  false,
+                      "proves":  "The extension\u0027s VS Code surfaces (commands, notifications, status bar, buffers) work with the pinned Code.exe the harness downloads; the permanent cross-client scenarios (H1 to H7, L1 to L4, the registry check) pass on Windows; editor-only\u0027s quiet window is measured against a real Windows buffer reload (a gap above 1 s is a finding for the experimental fallback in G20, not a failure).",
+                      "does_not_prove":  "VS Code Insiders or other versions; the unmarked exploratory scenarios.",
+                      "output_tail":  "   --\u003e C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto-core\\src\\project\\orchestrator.rs:180:15\n    |\n180 | pub(crate) fn pass2_threads_record() {\n    |               ^^^^^^^^^^^^^^^^^^^^\n\nwarning: function `pass2_record` is never used\n   --\u003e C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto-core\\src\\project\\orchestrator.rs:189:15\n    |\n189 | pub(crate) fn pass2_record(docs: usize, wall_nanos: u64) {\n    |               ^^^^^^^^^^^^\n\n   Compiling quarto-lsp-core v0.47.0 (C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\quarto-lsp-core)\nwarning: `quarto-lsp-core` (lib) generated 1 warning (1 duplicate)\nwarning: `quarto-core` (lib) generated 7 warnings (1 duplicate)\n   Compiling wasm-quarto-hub-client v0.1.0 (C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\wasm-quarto-hub-client)\nwarning: `wasm-quarto-hub-client` (lib) generated 1 warning (1 duplicate)\n    Finished `release` profile [optimized] target(s) in 3m 24s\n\nStep 2/3: wasm-bindgen --target web\n  $ wasm-bindgen --target web --out-dir C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\wasm-quarto-hub-client\\pkg C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\wasm-quarto-hub-client\\target\\wasm32-unknown-unknown\\release\\wasm_quarto_hub_client.wasm\nError: wasm-opt (binaryen) not found.\nInstall with: brew install binaryen     (macOS)\n              npm install -g binaryen   (any OS with node)\nOr run: cargo dev-setup\nnpm error Lifecycle script `build:wasm` failed with error:\nnpm error code 1\nnpm error path C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\hub-client\nnpm error workspace hub-client@0.0.0\nnpm error location C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\hub-client\nnpm error command failed\nnpm error command C:\\WINDOWS\\system32\\cmd.exe /d /s /c node scripts/build-wasm.js\nnpm error Lifecycle script `build:preview-embed` failed with error:\nnpm error code 1\nnpm error path C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\hub-client\nnpm error workspace hub-client@0.0.0\nnpm error location C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\hub-client\nnpm error command failed\nnpm error command C:\\WINDOWS\\system32\\cmd.exe /d /s /c npm run build:wasm \u0026\u0026 npm run build:sandboxed \u0026\u0026 tsc -b \u0026\u0026 VITE_GOOGLE_CLIENT_ID= VITE_DISABLE_PWA=1 VITE_EPHEMERAL_STORAGE=1 VITE_PREVIEW_EMBED=1 VITE_PANDOC_WASM=0 VITE_DEFAULT_SYNC_SERVER=/ws NODE_OPTIONS=--max-old-space-size=4096 vite build --outDir dist-preview-embed \u0026\u0026 node ../scripts/prune-embed-dist.mjs dist-preview-embed \u0026\u0026 node ../scripts/precompress-dist.mjs dist-preview-embed\nError: hub-client preview-embed build failed\nerror: process didn\u0027t exit successfully: `target\\debug\\xtask.exe build-hub-client-embed` (exit code: 1)",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261120-103040-GWWIN\\c2-timing.log"
+                  }
+              ]
+}
