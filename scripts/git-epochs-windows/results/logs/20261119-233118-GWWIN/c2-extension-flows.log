@@ -1,0 +1,176 @@
+
+> quarto-hub-vscode@0.0.1 test:e2e
+> node e2e/run.mjs
+
+
+Running 19 tests using 1 worker
+
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+  ✓   1 e2e\tests\clone-mode.e2e.ts:81:1 › attach succeeds and the status bar says clone (9.0s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+  ✓   2 e2e\tests\clone-mode.e2e.ts:92:1 › attach to an unrelated repository is refused and a mirror is offered (6.9s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+  ✓   3 e2e\tests\clone-mode.e2e.ts:102:1 › a git switch to a branch another peer already created attaches to that doc and shows the join notice (11.0s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+  ✓   4 e2e\tests\clone-mode.e2e.ts:117:1 › a dirty file detaches, "Adopt" asks first and then takes the doc (13.1s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+  ✓   5 e2e\tests\clone-mode.e2e.ts:135:1 › "Stay detached" survives closing and reopening the window (16.0s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+  ✓   6 e2e\tests\clone-mode.e2e.ts:153:1 › an offline git switch while the window is closed runs arrival at startup and nothing from disk reaches a doc (15.1s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+mirror notice: "Quarto Hub: This file was replaced because the project owner's checked-out version changed. 3 of your recent edits stayed with the previous version.\nReload and Enable Extensions\nAll installed extensions are temporarily disabled."
+  ✓   7 e2e\tests\follower-modes.e2e.ts:78:1 › a mirror with an open dirty buffer follows a flip: stranded edits are counted, the buffer and disk converge (6.3s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+  ✓   8 e2e\tests\follower-modes.e2e.ts:109:1 › a folder with no mode in project.json opens as a mirror (4.5s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+  ✓   9 e2e\tests\follower-modes.e2e.ts:122:1 › the moved message from another peer appears briefly in the window (11.4s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+editor-only: new doc text after resume: "A2\ntyped"
+  ✓  10 e2e\tests\follower-modes.e2e.ts:163:1 › editor-only in a git repo: a git rewrite under a lock sends no edit, and the hub flip rebinds the buffer (14.4s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+editor-only warning: "Source: Quarto Hub\nKeep waiting\nDismiss\nQuarto Hub: The project owner has not switched versions yet. Keep waiting?\nReload and Enable Extensions\nAll installed extensions are temporarily disabled."
+  ✓  11 e2e\tests\follower-modes.e2e.ts:203:1 › editor-only without a flip warns when the wait ends and keeps the buffer on the git text (10.9s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+  ✓  12 e2e\tests\join.e2e.ts:63:1 › (a) an http address of the hub's own directory offers Editor only first, with a confirm (6.2s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+  ✓  13 e2e\tests\join.e2e.ts:83:1 › (b) a ws URL from another folder creates a mirror inside the workspace folder and opens it (8.9s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+  ✓  14 e2e\tests\join.e2e.ts:106:1 › (c) and (e) a ticket joins through the spawned proxy, leaves no ticket on disk, and Leave ends the proxy (7.5s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+  ✓  15 e2e\tests\join.e2e.ts:154:1 › (d) a bound folder is offered rebind first (3.5s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+confirm title: Share this folder on ws://127.0.0.1:65172/ws?
+confirm body:
+This publishes a copy of your project to that server. Anyone with access to that server and the project link can read and edit it.
+
+Project: Shared Site (git repo, branch main)
+Files: 3 tracked files, 1 KB
+Uncommitted: 1 file will be shared as it is on disk:
+guides/a.qmd
+afterEach: vscode closed after 1996 ms
+  ✘  16 e2e\tests\share-folder.e2e.ts:56:1 › share a git folder, read the confirm, copy the id, and join it as a clone and as a mirror (23.4s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+afterEach: vscode closed after 2004 ms
+  ✘  17 e2e\tests\share-folder.e2e.ts:115:1 › the copied q2 preview command serves the project, and git switch re-points it (23.6s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+  ✘  18 e2e\tests\smoke.e2e.ts:45:1 › A: a folder bound to the test hub auto-starts sync, in both directions (35.1s)
+- Resolving version...
+✔ Validated version: 1.101.2
+✔ Found existing install in C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\.vscode-test\vscode-win32-x64-archive-1.101.2
+  ✓  19 e2e\tests\smoke.e2e.ts:88:1 › B: "Quarto Hub: Create Folder from Project" creates the folder, project.json, and the files (3.5s)
+
+
+  1) e2e\tests\share-folder.e2e.ts:56:1 › share a git folder, read the confirm, copy the id, and join it as a clone and as a mirror 
+
+    Error: timed out waiting for the q2 preview command on the clipboard
+
+       at ..\..\src\core\test-support.ts:167
+
+      165 |     const v = await check();
+      166 |     if (v) return v as NonNullable<T>;
+    > 167 |     if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+          |                                      ^
+      168 |     await sleep(50);
+      169 |   }
+      170 | }
+        at waitFor (C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\src\core\test-support.ts:167:38)
+        at C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\e2e\tests\share-folder.e2e.ts:80:19
+
+    Error Context: test-results\share-folder.e2e.ts-share--38e95--as-a-clone-and-as-a-mirror\error-context.md
+
+    Error Context: test-results\share-folder.e2e.ts-share--38e95--as-a-clone-and-as-a-mirror\error-context.md
+
+  2) e2e\tests\share-folder.e2e.ts:115:1 › the copied q2 preview command serves the project, and git switch re-points it 
+
+    Error: timed out waiting for the q2 preview command on the clipboard
+
+       at ..\..\src\core\test-support.ts:167
+
+      165 |     const v = await check();
+      166 |     if (v) return v as NonNullable<T>;
+    > 167 |     if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+          |                                      ^
+      168 |     await sleep(50);
+      169 |   }
+      170 | }
+        at waitFor (C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\src\core\test-support.ts:167:38)
+        at C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\e2e\tests\share-folder.e2e.ts:132:19
+
+    Error Context: test-results\share-folder.e2e.ts-the-co-9ea75-and-git-switch-re-points-it\error-context.md
+
+    Error Context: test-results\share-folder.e2e.ts-the-co-9ea75-and-git-switch-re-points-it\error-context.md
+
+  3) e2e\tests\smoke.e2e.ts:45:1 › A: a folder bound to the test hub auto-starts sync, in both directions 
+
+    Error: timed out waiting for the typed edit on the hub
+
+       at ..\..\src\core\test-support.ts:167
+
+      165 |     const v = await check();
+      166 |     if (v) return v as NonNullable<T>;
+    > 167 |     if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+          |                                      ^
+      168 |     await sleep(50);
+      169 |   }
+      170 | }
+        at waitFor (C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\src\core\test-support.ts:167:38)
+        at C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment\e2e\tests\smoke.e2e.ts:79:3
+
+    Error Context: test-results\smoke.e2e.ts-A-a-folder-bo-e6883-rts-sync-in-both-directions\error-context.md
+
+    Error Context: test-results\smoke.e2e.ts-A-a-folder-bo-e6883-rts-sync-in-both-directions\error-context.md
+
+  3 failed
+    e2e\tests\share-folder.e2e.ts:56:1 › share a git folder, read the confirm, copy the id, and join it as a clone and as a mirror 
+    e2e\tests\share-folder.e2e.ts:115:1 › the copied q2 preview command serves the project, and git switch re-points it 
+    e2e\tests\smoke.e2e.ts:45:1 › A: a folder bound to the test hub auto-starts sync, in both directions 
+  16 passed (3.9m)
+npm error Lifecycle script `test:e2e` failed with error:
+npm error code 1
+npm error path C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment
+npm error workspace quarto-hub-vscode@0.0.1
+npm error location C:\Users\GordonWoodhull\src\fuck\q2\vscode-sync-experiment
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c node e2e/run.mjs
