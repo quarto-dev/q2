@@ -127,7 +127,7 @@ export class ProjectSync {
 
     // Phase 2: go online. From here on, changes flow both ways live.
     if (this.mode !== 'clone') this.repo.networkSubsystem.addNetworkAdapter(webSocketAdapter(this.meta.syncServer));
-    const onIndex = () => void this.syncIndex();
+    const onIndex = () => this.background('index sync', () => this.syncIndex());
     this.index.on('change', onIndex);
     this.cleanups.push(() => this.index.off('change', onIndex));
 
@@ -151,9 +151,9 @@ export class ProjectSync {
     buffers.onClose((p) => this.unbind(p));
     if (this.mode === 'clone') await this.startClone();
     if (this.writesDisk) {
-      watcher.onChange((p) => void this.onDiskChange(p));
-      watcher.onCreate((p) => void this.onDiskCreate(p));
-      watcher.onDelete((p) => void this.onDiskDelete(p));
+      watcher.onChange((p) => this.background('disk change', () => this.onDiskChange(p)));
+      watcher.onCreate((p) => this.background('disk create', () => this.onDiskCreate(p)));
+      watcher.onDelete((p) => this.background('disk delete', () => this.onDiskDelete(p)));
     }
     this.cleanups.push(() => watcher.dispose(), () => buffers.dispose());
     buffers.openPaths().forEach((p) => this.bind(p));
@@ -162,10 +162,26 @@ export class ProjectSync {
     this.host.notifier.status(`$(sync) Quarto Hub: syncing ${path.basename(this.root)}`, 5000);
   }
 
+  /** Work started by an event handler and not yet finished: `dispose` waits for it. */
+  private readonly inFlight = new Set<Promise<void>>();
+
+  /**
+   * Run event-driven work without letting a failure escape as an unhandled rejection. A failure is logged (a
+   * `realpath` of a folder that is being deleted fails with EPERM on Windows, which says nothing about existence), and
+   * `dispose` waits for the work so nothing touches the folder after the engine has stopped.
+   */
+  private background(what: string, task: () => Promise<void>): void {
+    const p = task()
+      .catch((err: unknown) => this.log.appendLine(`${what} failed: ${err instanceof Error ? err.message : String(err)}`))
+      .finally(() => this.inFlight.delete(p));
+    this.inFlight.add(p);
+  }
+
   async dispose(): Promise<void> {
     await this.clone?.dispose().catch(() => {});
     this.cleanups.forEach((c) => c());
     this.cleanups.length = 0;
+    await Promise.all([...this.inFlight]);
     this.host.notifier.status(null); // clears the mode item
     for (const rel of [...this.handles.keys()]) this.untrack(rel);
     for (const abs of [...this.bound.keys()]) this.unbind(abs);
@@ -323,7 +339,7 @@ export class ProjectSync {
 
   private track(rel: string, handle: DocHandle<FileDoc>): void {
     this.handles.set(rel, handle);
-    const listener = () => void this.onDocChange(rel);
+    const listener = () => this.background('doc change', () => this.onDocChange(rel));
     handle.on('change', listener);
     this.fileListeners.set(rel, listener);
     // The file may already be open in an editor. For a file created in the
