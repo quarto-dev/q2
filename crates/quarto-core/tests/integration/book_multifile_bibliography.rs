@@ -294,7 +294,7 @@ fn numeric_style_in_text_differs_per_chapter_but_merged_bibliography_is_book_num
 
     assert!(
         ch1.contains(
-            r#"First <span class="citation" data-cites="doe2020">[1]</span>, then <span class="citation" data-cites="knuth1984">[2]</span>."#
+            r##"First <span class="citation" data-cites="doe2020"><a href="references.html#ref-doe2020" role="doc-biblioref">[1]</a></span>, then <span class="citation" data-cites="knuth1984"><a href="references.html#ref-knuth1984" role="doc-biblioref">[2]</a></span>."##
         ),
         "chapter one's own citation order must number 1 then 2: {ch1}"
     );
@@ -303,7 +303,9 @@ fn numeric_style_in_text_differs_per_chapter_but_merged_bibliography_is_book_num
     // inherited, Q1-identical limitation this phase deliberately does not
     // fix (see plan Decisions).
     assert!(
-        ch2.contains(r#"Again <span class="citation" data-cites="knuth1984">[1]</span>."#),
+        ch2.contains(
+            r##"Again <span class="citation" data-cites="knuth1984"><a href="references.html#ref-knuth1984" role="doc-biblioref">[1]</a></span>."##
+        ),
         "chapter two's per-chapter renumbering must reproduce Q1's own \
          behavior (not book-wide [2]): {ch2}"
     );
@@ -427,5 +429,218 @@ fn citeproc_in_post_produces_named_diagnostic_not_silent_drop() {
             .any(|d| d.code.as_deref() == Some("Q-23-1")),
         "a citeproc-in-.post chapter must produce a Q-23-1 diagnostic naming it: {:?}",
         ch1.render_output.diagnostics
+    );
+}
+
+// ── Quarto 1 style books: no `filters:` and no `book.references` ────
+
+/// Write a book the way Quarto 1's scaffold does: `bibliography:` only,
+/// and `references.qmd` as an ordinary last chapter holding the `#refs`
+/// div. `extra_yaml` is appended to `_quarto.yml`.
+fn write_q1_style_book(project_dir: &Path, extra_yaml: &str) {
+    write(
+        &project_dir.join("_quarto.yml"),
+        &format!(
+            "project:\n  type: book\n\nbibliography: refs.json\n{extra_yaml}\nbook:\n  title: \"Q1 Style Book\"\n  chapters:\n    - index.qmd\n    - ch1.qmd\n    - part/deep.qmd\n    - references.qmd\n"
+        ),
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "# Welcome {.unnumbered}\n\nWelcome to the book.\n",
+    );
+    write(
+        &project_dir.join("ch1.qmd"),
+        "# Chapter One {#sec-one}\n\nSee @knuth1984 and @doe2020.\n",
+    );
+    write(
+        &project_dir.join("part").join("deep.qmd"),
+        "# Deep\n\nAlso see @knuth1984, and @sec-one.\n",
+    );
+    write(
+        &project_dir.join("references.qmd"),
+        "# References {.unnumbered}\n\n::: {#refs}\n:::\n",
+    );
+    write(&project_dir.join("refs.json"), REFS_JSON);
+}
+
+fn all_diagnostic_codes(summary: &ProjectRenderSummary<RenderToFileResult>) -> Vec<String> {
+    summary
+        .outputs
+        .iter()
+        .flat_map(|r| r.render_output.diagnostics.iter())
+        .chain(summary.project_diagnostics.iter())
+        .filter_map(|d| d.code.clone())
+        .collect()
+}
+
+/// GH #1157: a `bibliography` alone must resolve citations in an HTML
+/// book, as it does in Quarto 1 and in a single document. The citeproc
+/// entry lands in `.pre`, so no `Q-23-1`, and a crossref key in the same
+/// chapter raises no `Q-23-2`.
+#[test]
+fn bibliography_alone_resolves_citations_and_fills_the_refs_chapter() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_q1_style_book(&project_dir, "");
+
+    let summary = render_book(&project_dir);
+    assert!(
+        summary.pass2_failures.is_empty(),
+        "{:?}",
+        summary.pass2_failures
+    );
+    let ch1 = read_output(&summary.outputs, "ch1");
+    let deep = read_output(&summary.outputs, "deep");
+    let references = read_output(&summary.outputs, "references");
+
+    assert!(!ch1.contains("@knuth1984"), "raw key left in ch1: {ch1}");
+    assert!(ch1.contains("Knuth") && ch1.contains("Doe"), "{ch1}");
+    assert!(!deep.contains("@knuth1984"), "raw key left in deep: {deep}");
+    assert!(
+        !ch1.contains("id=\"refs\"") && !deep.contains("id=\"refs\""),
+        "ordinary chapters must have no local bibliography"
+    );
+
+    // GH #1227: the `#refs` div of an ordinary chapter receives the list.
+    assert_eq!(
+        references.matches("id=\"ref-knuth1984\"").count(),
+        1,
+        "{references}"
+    );
+    assert_eq!(
+        references.matches("id=\"ref-doe2020\"").count(),
+        1,
+        "{references}"
+    );
+    assert_eq!(references.matches("id=\"refs\"").count(), 1, "{references}");
+
+    let codes = all_diagnostic_codes(&summary);
+    for code in ["Q-23-1", "Q-23-2", "Q-23-3", "Q-23-4"] {
+        assert!(
+            !codes.iter().any(|c| c == code),
+            "unexpected {code} in {codes:?}"
+        );
+    }
+}
+
+/// Each citation links to its entry in the references chapter, with the
+/// right depth from a chapter in a subfolder, as Quarto 1's
+/// `bookBibliographyPostRender` rewrites them.
+#[test]
+fn citations_link_to_the_references_chapter() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_q1_style_book(&project_dir, "");
+
+    let summary = render_book(&project_dir);
+    let ch1 = read_output(&summary.outputs, "ch1");
+    let deep = read_output(&summary.outputs, "deep");
+
+    assert!(
+        ch1.contains("href=\"references.html#ref-knuth1984\""),
+        "{ch1}"
+    );
+    assert!(
+        ch1.contains("href=\"references.html#ref-doe2020\""),
+        "{ch1}"
+    );
+    assert!(
+        deep.contains("href=\"../references.html#ref-knuth1984\""),
+        "{deep}"
+    );
+    assert!(
+        !ch1.contains("href=\"#ref-") && !deep.contains("href=\"#ref-"),
+        "no citation link may point at a missing local entry"
+    );
+}
+
+/// `link-citations: false` is the user's choice and stays in force.
+#[test]
+fn link_citations_false_leaves_book_citations_unlinked() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_q1_style_book(&project_dir, "link-citations: false\n");
+
+    let summary = render_book(&project_dir);
+    let ch1 = read_output(&summary.outputs, "ch1");
+    assert!(ch1.contains("Knuth"), "{ch1}");
+    assert!(!ch1.contains("#ref-knuth1984"), "{ch1}");
+}
+
+/// `citeproc: false` wins over the bibliography default.
+#[test]
+fn citeproc_false_keeps_book_citations_unprocessed() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_q1_style_book(&project_dir, "citeproc: false\n");
+
+    let summary = render_book(&project_dir);
+    let ch1 = read_output(&summary.outputs, "ch1");
+    assert!(ch1.contains("@knuth1984"), "{ch1}");
+}
+
+/// A book that cites but has nowhere to put the list: Quarto 1 writes no
+/// list and says nothing. q2 warns (`Q-23-3`) and leaves the citations
+/// unlinked rather than pointing at entries that do not exist.
+#[test]
+fn citations_without_a_references_chapter_warn_and_stay_unlinked() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_q1_style_book(&project_dir, "");
+    write(
+        &project_dir.join("references.qmd"),
+        "# References {.unnumbered}\n\nNo div here.\n",
+    );
+
+    let summary = render_book(&project_dir);
+    let ch1 = read_output(&summary.outputs, "ch1");
+    assert!(ch1.contains("Knuth"), "{ch1}");
+    assert!(!ch1.contains("#ref-knuth1984"), "{ch1}");
+    let codes = all_diagnostic_codes(&summary);
+    assert!(codes.iter().any(|c| c == "Q-23-3"), "{codes:?}");
+}
+
+/// GH #1227: a `#refs` div in a chapter that is not the references
+/// chapter cannot receive the list. It stays empty, with a `Q-23-4`
+/// warning on that chapter.
+#[test]
+fn refs_div_outside_the_references_chapter_warns() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_q1_style_book(&project_dir, "");
+    write(
+        &project_dir.join("ch1.qmd"),
+        "# Chapter One {#sec-one}\n\nSee @knuth1984 and @doe2020.\n\n::: {#refs}\n:::\n",
+    );
+    // `book.references` names the references chapter, so ch1's div is the
+    // stray one even though ch1 comes first.
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: book\n\nbibliography: refs.json\n\nbook:\n  title: \"Stray Refs\"\n  chapters:\n    - index.qmd\n    - ch1.qmd\n    - part/deep.qmd\n  references: references.qmd\n",
+    );
+
+    let summary = render_book(&project_dir);
+    let references = read_output(&summary.outputs, "references");
+    assert_eq!(
+        references.matches("id=\"ref-knuth1984\"").count(),
+        1,
+        "{references}"
+    );
+    let ch1 = summary
+        .outputs
+        .iter()
+        .find(|r| r.output_path.file_stem().is_some_and(|s| s == "ch1"))
+        .unwrap();
+    assert!(
+        ch1.render_output
+            .diagnostics
+            .iter()
+            .any(|d| d.code.as_deref() == Some("Q-23-4")),
+        "{:?}",
+        ch1.render_output.diagnostics
+    );
+    assert!(
+        !ch1.render_output.html.contains("id=\"ref-knuth1984\""),
+        "the stray div must stay empty"
     );
 }

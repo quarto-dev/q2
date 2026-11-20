@@ -517,6 +517,8 @@ website:
           contents:
             - errors/citeproc/Q-23-1.qmd
             - errors/citeproc/Q-23-2.qmd
+            - errors/citeproc/Q-23-3.qmd
+            - errors/citeproc/Q-23-4.qmd
         - section: "import"
           contents:
             - errors/import/Q-24-1.qmd

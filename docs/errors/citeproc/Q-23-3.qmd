@@ -1,0 +1,60 @@
+---
+title: "Book Has No References Chapter"
+description: "A book's chapters cite references, but no chapter can hold the bibliography, so the book has no reference list."
+code: Q-23-3
+subsystem: citeproc
+status: stub
+since: "99.9.9"
+categories:
+  - citeproc
+  - book
+---
+
+# `Q-23-3` — Book Has No References Chapter
+
+> This book's chapters cite references, but no chapter can hold the
+> bibliography, so the book has no reference list and its citations
+> are not linked.
+
+## What this means
+
+An HTML book has one bibliography for the whole book. Quarto collects
+the references every chapter cites and writes one merged list into the
+book's references chapter. This book has citations, but no references
+chapter, so the list has nowhere to go. The citations still render
+("Knuth (1984)"), but they are not links, and no page lists the
+references.
+
+## Why this happens
+
+The references chapter is the chapter `book.references` names. If that
+key is not set, it is the first chapter that contains a div with the id
+`refs`. This warning appears when neither exists: no `book.references`
+key, and no chapter with a `#refs` div.
+
+## How to fix
+
+Add an empty `#refs` div to the chapter that should list the
+references:
+
+```markdown
+# References {.unnumbered}
+
+::: {#refs}
+:::
+```
+
+Or name the chapter in `_quarto.yml`:
+
+```yaml
+book:
+  chapters:
+    - index.qmd
+    - intro.qmd
+  references: references.qmd
+```
+
+## Related
+
+- `Q-23-4`: a `#refs` div in a chapter that is not the references
+  chapter.

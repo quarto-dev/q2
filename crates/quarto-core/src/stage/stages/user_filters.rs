@@ -67,15 +67,15 @@ impl UserFiltersStage {
 /// (`format-html-bootstrap.ts`, `format-reveal.ts`). Citeproc reads the key with a `false` default,
 /// Pandoc's, which every other format keeps.
 ///
-/// Minimal HTML is not Bootstrap HTML, so it keeps `false`; so do book
-/// projects, where a chapter's citations point at a references chapter
-/// on another page and a `#ref-` link would dangle.
+/// Minimal HTML is not Bootstrap HTML, so it keeps `false`.
+///
+/// Book chapters follow the same rule. In a multi-file HTML book the
+/// entry a citation links to is on the references chapter's page, so
+/// `render_book_multi_file_html` rewrites each `#ref-` target to point
+/// there (or removes the link when the book has no references chapter).
 fn links_citations_by_default(ctx: &StageContext, meta: &quarto_pandoc_types::ConfigValue) -> bool {
     use crate::format::PipelineProfile;
 
-    if ctx.project.project_kind() == crate::project::ProjectKind::Book {
-        return false;
-    }
     match PipelineProfile::from_format(&ctx.format.target_format) {
         PipelineProfile::RevealjsRender | PipelineProfile::RevealjsPreview => true,
         // Q1 dashboards build on its Bootstrap HTML format, so they share
@@ -114,12 +114,14 @@ fn default_link_citations(meta: &mut quarto_pandoc_types::ConfigValue) {
 /// - On the Pandoc-hybrid leg, margin-citation mode belongs to the Lua
 ///   margin handler. HTML has no such handler, so its margin citations
 ///   still need citeproc.
-/// - Book projects keep their pre-#1026 behavior. A multi-file HTML book
-///   aggregates references only from a citeproc placed in `.pre`
-///   (`Q-23-1`), and this default places citeproc in `.post`, so it would
-///   turn every HTML book with a bibliography into a Q-23-1 error. HTML
-///   book chapters get no entry; Pandoc-hybrid ones only for
-///   `citeproc: true`.
+/// - An HTML book chapter gets the same default as any HTML page, but
+///   placed in `.pre` (`before_quarto`). A multi-file HTML book merges
+///   its bibliography from the citations each chapter's citeproc has
+///   resolved by the time the chapter pauses, and `.post` runs after
+///   that point (`Q-23-1`). Before GH #1157 these chapters got no entry
+///   at all, and every citation stayed a literal `@key`.
+/// - A Pandoc-hybrid book (Typst, EPUB) runs citeproc once on the merged
+///   document, so its chapters get an entry only for `citeproc: true`.
 fn citeproc_defaults(ctx: &StageContext) -> Option<crate::filter_resolve::CiteprocDefaults> {
     use crate::filter_resolve::CiteprocDefaults;
 
@@ -129,13 +131,13 @@ fn citeproc_defaults(ctx: &StageContext) -> Option<crate::filter_resolve::Citepr
         Some(CiteprocDefaults {
             from_bibliography: !is_typst && !in_book,
             margin_handled_elsewhere: true,
+            before_quarto: false,
         })
-    } else if in_book {
-        None
     } else {
         Some(CiteprocDefaults {
             from_bibliography: true,
             margin_handled_elsewhere: false,
+            before_quarto: in_book,
         })
     }
 }
@@ -1318,12 +1320,11 @@ mod tests {
         assert!(result.is_ok(), "{result:?}");
     }
 
-    /// Book projects keep their own citation handling: a multi-file HTML
-    /// book needs citeproc in `.pre` to aggregate its references (Q-23-1),
-    /// so neither the bibliography default nor `citeproc: true` adds a
-    /// post-position citeproc to an HTML book chapter.
+    /// GH #1157: an HTML book chapter gets citeproc from a bibliography
+    /// alone, and from `citeproc: true`, like any HTML page. (The missing
+    /// bibliography file makes the filter fail, which shows it ran.)
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn book_projects_get_no_citeproc_default_on_html() {
+    async fn book_projects_get_the_citeproc_default_on_html() {
         for extra in [vec![], vec![("citeproc", cv_bool(true))]] {
             let result = run_pre_post_in(
                 crate::project::ProjectKind::Book,
@@ -1332,8 +1333,30 @@ mod tests {
                 extra,
             )
             .await;
-            assert!(result.is_ok(), "{result:?}");
+            assert!(result.is_err(), "citeproc must run on an HTML book chapter");
         }
+    }
+
+    /// The default citeproc of an HTML book chapter runs in `.pre`: a
+    /// multi-file HTML book merges its bibliography from the citations
+    /// resolved before the chapter pauses (`Q-23-1`).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn book_html_default_citeproc_runs_in_pre() {
+        let mut ctx = make_ctx();
+        ctx.project.config.project_kind = crate::project::ProjectKind::Book;
+        ctx.format = crate::format::Format::html();
+        let doc = make_doc_ast(cv_map(vec![(
+            "bibliography",
+            cv_str("/nonexistent/path/refs.json"),
+        )]));
+        let result = UserFiltersStage::pre()
+            .run(PipelineData::DocumentAst(doc), &mut ctx)
+            .await;
+        assert!(
+            result.is_err(),
+            "citeproc must already run in the pre stage"
+        );
+        assert!(!ctx.citeproc_filter_in_post);
     }
 
     /// A Pandoc-hybrid book chapter keeps the pre-#1026 rule: only an
@@ -1404,7 +1427,7 @@ mod tests {
                 Some(true),
             ),
             (Default, Format::docx(), None),
-            (Book, Format::html(), None),
+            (Book, Format::html(), Some(true)),
         ];
         for (kind, format, expected) in cases {
             let label = format!("{kind:?} {}", format.target_format);
