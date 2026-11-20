@@ -75,6 +75,7 @@ website:
             - guides/projects/drafts.qmd
             - guides/projects/llms-txt.qmd
             - guides/projects/website-search.qmd
+            - guides/projects/social-metadata.qmd
             - guides/embedded-docs.qmd
             - guides/projects/scripts.qmd
             - guides/projects/environment.qmd
@@ -406,6 +407,10 @@ website:
             - errors/project/Q-5-55.qmd
             - errors/project/Q-5-56.qmd
             - errors/project/Q-5-57.qmd
+            - errors/project/Q-5-58.qmd
+            - errors/project/Q-5-59.qmd
+            - errors/project/Q-5-60.qmd
+            - errors/project/Q-5-61.qmd
         - section: "include"
           contents:
             - errors/include/Q-17-1.qmd

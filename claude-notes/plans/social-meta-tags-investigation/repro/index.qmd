@@ -1,0 +1,8 @@
+---
+title: Home
+description: A page with a description.
+---
+
+First paragraph of the page.
+
+![A preview](preview.png)

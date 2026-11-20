@@ -264,5 +264,6 @@ pub mod website_drafts;
 pub mod website_post_render;
 pub mod website_post_render_format_gate;
 pub mod website_search;
+pub mod website_social_meta;
 
 fn main() {}

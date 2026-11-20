@@ -157,6 +157,7 @@ pub(crate) use toc_render::{html_escape, render_toc_label, strip_links_and_notes
 mod website_bootstrap_icons;
 mod website_canonical_url;
 mod website_favicon;
+mod website_social_meta;
 mod website_title_prefix;
 
 pub use about_page_diagnostics::AboutPageDiagnosticsTransform;
@@ -256,6 +257,7 @@ pub use toc_render::TocRenderTransform;
 pub use website_bootstrap_icons::WebsiteBootstrapIconsTransform;
 pub use website_canonical_url::WebsiteCanonicalUrlTransform;
 pub use website_favicon::WebsiteFaviconTransform;
+pub use website_social_meta::WebsiteSocialMetaTransform;
 pub use website_title_prefix::WebsiteTitlePrefixTransform;
 
 /// Whether `raw` is the `<pre>` that `mermaid-render` or `graphviz-render`

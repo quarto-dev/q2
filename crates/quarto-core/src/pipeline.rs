@@ -102,7 +102,7 @@ use crate::transforms::{
     TableFloatClassForwardTransform, TheoremSugarTransform, TitleBannerTransform,
     TitleBlockTransform, TocGenerateTransform, TocLocationTransform, TocRenderTransform,
     WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform, WebsiteFaviconTransform,
-    WebsiteTitlePrefixTransform,
+    WebsiteSocialMetaTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -2313,6 +2313,8 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 ///     and append a `<link rel="stylesheet">` so `bi-*` icons render (bd-bsut)
 /// 4c. `WebsiteCanonicalUrlTransform` - Set `canonical-url` from
 ///     `website.site-url + output_href` (Phase 7)
+/// 4c'. `WebsiteSocialMetaTransform` - Append `og:*` / `twitter:*` meta tags
+///     for `open-graph` / `twitter-card` (bd-tyvt)
 /// 4d. `DraftAlertTransform` - For `draft: true` pages, set the localized
 ///     `rendered.draft-alert-text` the template's `#quarto-draft-alert`
 ///     banner gates on, and append a `quarto:status` meta tag
@@ -2571,6 +2573,10 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(WebsiteFaviconTransform::new()));
     pipeline.push(Box::new(WebsiteBootstrapIconsTransform::new()));
     pipeline.push(Box::new(WebsiteCanonicalUrlTransform::new()));
+    // `og:*` / `twitter:*` meta tags (bd-tyvt). After title-prefix, whose
+    // composed `pagetitle` is the tags' default title, and before
+    // title-block / sectionize, so the first paragraph is still top level.
+    pipeline.push(Box::new(WebsiteSocialMetaTransform::new(runtime.clone())));
     // User-declared stylesheets (bd-format-css-not-copied-crn3bjdz):
     // copy `css:` files into the output tree and rewrite the entries
     // to per-page hrefs. Not website-scoped — default projects (and
@@ -3249,6 +3255,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "website-favicon",
     "website-bootstrap-icons",
     "website-canonical-url",
+    "website-social-meta",
     // Navigation phase: chrome generate + render (TOC, navbar, sidebar,
     // page-nav, footer, announcement, listings) has no Pandoc-writer output
     // slot.
@@ -3412,6 +3419,7 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     ("website-favicon", Bucket::B2),
     ("website-bootstrap-icons", Bucket::B2),
     ("website-canonical-url", Bucket::B2),
+    ("website-social-meta", Bucket::B2),
     // Copies `css:` files into the output tree and rewrites the entries to
     // per-page hrefs — a stylesheet plumbing step with no Pandoc analog.
     ("format-css", Bucket::B2),
@@ -7272,6 +7280,7 @@ mod tests {
                 "website-favicon",
                 "website-bootstrap-icons",
                 "website-canonical-url",
+                "website-social-meta",
                 "format-css",
                 "draft-alert",
                 "about-page-diagnostics",
@@ -7377,6 +7386,7 @@ mod tests {
                 "website-favicon",
                 "website-bootstrap-icons",
                 "website-canonical-url",
+                "website-social-meta",
                 "format-css",
                 "draft-alert",
                 "about-page-diagnostics",
@@ -7766,6 +7776,7 @@ mod tests {
                 "website-favicon",
                 "website-bootstrap-icons",
                 "website-canonical-url",
+                "website-social-meta",
                 "format-css",
                 "draft-alert",
                 "about-page-diagnostics",
