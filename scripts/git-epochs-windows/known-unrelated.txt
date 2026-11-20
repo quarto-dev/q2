@@ -2,3 +2,22 @@
 # a6 marks itself known unrelated only when every failure is listed here, which lets c3 pass. Add lines from a d2 result.
 quarto-hub storage::tests::test_storage_manager_prevents_double_lock
 quarto-hub storage::tests::test_storage_manager_standalone_prevents_double_lock
+# Added from run 171347 (d2, merge base f9936b08d): fail on the base too; pandoc 3.13 and typst from the CI pins.
+quarto::bin/q2 commands::render_dry_run::tests::would_render_lines_are_project_relative
+quarto::integration convert_positron_cli::the_source_uri_default_is_the_documents_path_with_forward_slashes
+quarto::integration lmd_snapshots::lmd_blog_project_renders_as_snapshotted
+quarto::integration lmd_snapshots::lmd_fixtures_render_as_snapshotted
+quarto::integration lmd_snapshots::lmd_html_fixtures_render_as_snapshotted
+quarto::integration lmd_snapshots::lmd_project_renders_as_snapshotted
+quarto::integration preview_static_e2e::cli_flags_override_project_preview_keys
+quarto::integration preview_static_e2e::project_preview_keys_set_the_defaults_and_unsupported_keys_warn
+quarto::integration render_record_sources_cli::the_key_in_front_matter_works_like_dash_m
+quarto::integration render_scripts_cli::explicit_interpreter_command_line_with_args
+quarto::integration render_scripts_cli::list_form_runs_scripts_in_order
+quarto::integration smoke_all::smoke_all
+quarto-preview import_route::tests::every_fixture_reads_to_the_recorded_json_and_status
+quarto-preview route_tests::a_book_request_reaches_the_book_seam_with_every_capture
+quarto-preview route_tests::pdf_is_inline_with_stats_and_the_typst_pdf_target
+quarto-preview::integration book_downloads::a_chapters_recorded_plot_reaches_the_book
+quarto-preview::integration live_reexecute::the_cache_does_not_answer_a_re_execute_under_engine_only_sources
+quarto-preview::integration render_scripts_boot::pre_render_scripts_run_once_at_boot
