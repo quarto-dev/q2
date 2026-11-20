@@ -1,0 +1,95 @@
+﻿{
+    "run_id":  "20261119-230111-GWWIN",
+    "branch":  "windows/git-epochs",
+    "commit":  "9f35d549c4b64869349fabcceba606cedab27dcf",
+    "base":  "current tip of origin/windows/git-epochs",
+    "host_triple":  "x86_64-pc-windows-msvc",
+    "os":  "Microsoft Windows 11 Pro",
+    "git":  "git version 2.47.1.windows.1",
+    "node":  "v24.21.0",
+    "autocrlf":  "true",
+    "longpaths":  "(unset)",
+    "tools":  [
+                  {
+                      "tool":  "git",
+                      "required":  "yes",
+                      "found":  true,
+                      "install":  "winget install Git.Git   (Git for Windows; the probe is tested against it)"
+                  },
+                  {
+                      "tool":  "rustc",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "winget install Rustlang.Rustup   (then: rustup default stable-x86_64-pc-windows-msvc)"
+                  },
+                  {
+                      "tool":  "cargo",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "comes with rustup"
+                  },
+                  {
+                      "tool":  "cargo-nextest",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "cargo install cargo-nextest --locked"
+                  },
+                  {
+                      "tool":  "uv",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "winget install astral-sh.uv   (runs make_large_tree.py and extract_failures.py)"
+                  },
+                  {
+                      "tool":  "nasm",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "winget install NASM.NASM   (the aws-lc-sys crates in quarto-hub need it)"
+                  },
+                  {
+                      "tool":  "cmake",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "winget install Kitware.CMake   (the aws-lc-sys crates in quarto-hub need it)"
+                  },
+                  {
+                      "tool":  "link",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "Visual Studio Build Tools, \"Desktop development with C++\" (cargo finds link.exe itself, so absent from PATH is normal; install only if the build says \"linker not found\")"
+                  },
+                  {
+                      "tool":  "node",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "fnm/nvm; Node major per .nvmrc (items b1 to b7)"
+                  },
+                  {
+                      "tool":  "npm",
+                      "required":  "no",
+                      "found":  true,
+                      "install":  "comes with Node"
+                  },
+                  {
+                      "tool":  "jj",
+                      "required":  "no",
+                      "found":  false,
+                      "install":  "optional: winget install jj-vcs.jj (the jj scenarios of b1 skip without it)"
+                  }
+              ],
+    "items":  [
+                  {
+                      "id":  "c2",
+                      "catalog":  "W8",
+                      "title":  "Playwright subset with the pinned VS Code build and the timing test",
+                      "status":  "FAIL",
+                      "reason":  "failed: embed build (c2-build-embed.log, c2-rebuild-q2.log); 20 passed",
+                      "caveat":  "Measured lock-release to last-reload gap: 33 ms.",
+                      "known_unrelated":  false,
+                      "proves":  "The extension\u0027s VS Code surfaces (commands, notifications, status bar, buffers) work with the pinned Code.exe the harness downloads; the permanent cross-client scenarios (H1 to H7, L1 to L4, the registry check) pass on Windows; editor-only\u0027s quiet window is measured against a real Windows buffer reload (a gap above 1 s is a finding for the experimental fallback in G20, not a failure).",
+                      "does_not_prove":  "VS Code Insiders or other versions; the unmarked exploratory scenarios.",
+                      "output_tail":  "   Compiling logos-codegen v0.14.4\n   Compiling mlua-sys v0.10.0\n   Compiling strum_macros v0.27.2\n   Compiling cssparser-macros v0.7.1\n   Compiling async-trait v0.1.89\nwarning: mlua-sys@0.10.0: Compiler family detection failed due to error: ToolNotFound: failed to find tool \"clang\": program not found (see https://docs.rs/cc/latest/cc/#compile-time-requirements for help)\nwarning: mlua-sys@0.10.0: Compiler family detection failed due to error: ToolNotFound: failed to find tool \"clang\": program not found (see https://docs.rs/cc/latest/cc/#compile-time-requirements for help)\nerror: failed to run custom build command for `mlua-sys v0.10.0`\n\nCaused by:\n  process didn\u0027t exit successfully: `C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\wasm-quarto-hub-client\\target\\release\\build\\mlua-sys-77fd313da449c6e2\\build-script-main` (exit code: 101)\n  --- stdout\n  cargo:rerun-if-changed=build\n  cargo:warning=Compiler family detection failed due to error: ToolNotFound: failed to find tool \"clang\": program not found (see https://docs.rs/cc/latest/cc/#compile-time-requirements for help)\n  cargo:warning=Compiler family detection failed due to error: ToolNotFound: failed to find tool \"clang\": program not found (see https://docs.rs/cc/latest/cc/#compile-time-requirements for help)\n\n  --- stderr\n\n  thread \u0027main\u0027 (17120) panicked at C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\crates\\lua-src-wasm\\src\\lib.rs:99:25:\n  ToolNotFound: failed to find tool \"clang\": program not found (see https://docs.rs/cc/latest/cc/#compile-time-requirements for help)\n  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nwarning: build failed, waiting for other jobs to finish...\n\nBuild failed: cargo exited with code 101\nnpm error Lifecycle script `build:wasm` failed with error:\nnpm error code 1\nnpm error path C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\hub-client\nnpm error workspace hub-client@0.0.0\nnpm error location C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\hub-client\nnpm error command failed\nnpm error command C:\\WINDOWS\\system32\\cmd.exe /d /s /c node scripts/build-wasm.js\nnpm error Lifecycle script `build:preview-embed` failed with error:\nnpm error code 1\nnpm error path C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\hub-client\nnpm error workspace hub-client@0.0.0\nnpm error location C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\hub-client\nnpm error command failed\nnpm error command C:\\WINDOWS\\system32\\cmd.exe /d /s /c npm run build:wasm \u0026\u0026 npm run build:sandboxed \u0026\u0026 tsc -b \u0026\u0026 VITE_GOOGLE_CLIENT_ID= VITE_DISABLE_PWA=1 VITE_EPHEMERAL_STORAGE=1 VITE_PREVIEW_EMBED=1 VITE_PANDOC_WASM=0 VITE_DEFAULT_SYNC_SERVER=/ws NODE_OPTIONS=--max-old-space-size=4096 vite build --outDir dist-preview-embed \u0026\u0026 node ../scripts/prune-embed-dist.mjs dist-preview-embed \u0026\u0026 node ../scripts/precompress-dist.mjs dist-preview-embed\nError: hub-client preview-embed build failed\nerror: process didn\u0027t exit successfully: `target\\debug\\xtask.exe build-hub-client-embed` (exit code: 1)",
+                      "log":  "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\scripts\\git-epochs-windows\\results\\logs\\20261119-230111-GWWIN\\c2-timing.log"
+                  }
+              ]
+}
