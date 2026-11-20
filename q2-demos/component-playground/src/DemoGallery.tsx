@@ -54,6 +54,11 @@ const DEMOS: Record<string, Demo> = {
     description: 'The same embedded editor, restyled by the host: one extra stylesheet overrides hub-client\'s theme tokens, in light and dark, without targeting a hub-client class.',
     icon: <span className="dg-glyph">▲</span>,
   },
+  embed3: {
+    title: 'Embedded editor, Connect layout',
+    description: 'The same parts laid out as a Posit Connect page: the host\'s top bar and sidebar sections around a card holding the document and preview.',
+    icon: <span className="dg-glyph">◧</span>,
+  },
 };
 
 export default function DemoGallery() {

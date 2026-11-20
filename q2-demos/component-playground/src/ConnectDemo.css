@@ -1,0 +1,163 @@
+/* The host's layout for embed3.html. hub-client is reached only through
+   its theme tokens: a white sidebar, as on Connect. */
+:root {
+  --sidebar-bg: #ffffff;
+  --sidebar-section-bg: #ffffff;
+  --sidebar-border: #e5e7eb;
+  --cn-card-bg: #e3e8ee;
+}
+
+.cn-page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  color: #1f2937;
+  font: 14px 'Open Sans', system-ui, sans-serif;
+}
+
+/* Small caps labels: top bar, section headers, card captions. */
+.cn-top a,
+.cn-top button,
+.cn-side summary,
+.cn-page small {
+  font: 11px 'Source Code Pro', monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #1f2937;
+  text-decoration: none;
+}
+
+.cn-page button,
+.cn-page select {
+  border: none;
+  background: none;
+  font-size: 11px;
+  color: #1f2937;
+  cursor: pointer;
+}
+
+/* As wide as the selected option, not the widest one. */
+.cn-page select {
+  field-sizing: content;
+}
+
+.cn-page :is(button, label) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Top bar: icon above label. */
+.cn-top button {
+  flex-direction: column;
+}
+
+.cn-page button[aria-pressed='true'] {
+  font-weight: 700;
+}
+
+.cn-top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 24px 16px 32px;
+}
+
+.cn-title {
+  flex: 1;
+  padding-left: 24px;
+  border-left: 1px solid #1f2937;
+}
+
+.cn-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.cn-side {
+  flex: none;
+  width: 213px;
+  overflow-y: auto;
+}
+
+/* Flex, not a float for the badge: a float would hang below the summary
+   and narrow the toolbar under it. Flex drops the marker, so draw one. */
+.cn-side summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--sidebar-border);
+  cursor: pointer;
+}
+
+.cn-side summary::-webkit-details-marker {
+  display: none;
+}
+
+.cn-side summary::before {
+  content: '›';
+}
+
+.cn-side details[open] > summary::before {
+  content: '⌄';
+}
+
+.cn-side summary > * {
+  margin-left: auto;
+}
+
+.cn-card {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0 8px 8px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--cn-card-bg);
+}
+
+.cn-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+}
+
+.cn-bar small {
+  display: block;
+  font-size: 9px;
+}
+
+/* The two sides share the slack equally, which centers the layout
+   buttons between them. */
+.cn-bar > :is(.cn-file, .cn-actions, small) {
+  flex: 1;
+}
+
+.cn-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* The split, with a strip of the card showing to the right of the preview. */
+.cn-split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  padding-right: 4px;
+}
+
+/* Monaco's line-number gutter takes the card's color. Monaco paints it
+   from its own theme, not a hub-client token, so this one rule has to
+   name a Monaco class. */
+.cn-card .monaco-editor .margin {
+  background: var(--cn-card-bg);
+}

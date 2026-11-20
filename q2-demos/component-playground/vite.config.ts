@@ -41,7 +41,7 @@ function attributionViewerCssPlugin(): Plugin {
  * pages hub-client's preview components load in iframes by relative URL
  * (which is why all pages sit side by side at the root).
  */
-const PAGES = ['index', 'simple-auth', 'monaco', 'preview', 'project', 'canvas', 'embed', 'embed2', 'q2-preview', 'q2-debug']
+const PAGES = ['index', 'simple-auth', 'monaco', 'preview', 'project', 'canvas', 'embed', 'embed2', 'embed3','q2-preview', 'q2-debug']
 
 /** The hub the demos sign in to and sync with. Override with VITE_HUB_SERVER. */
 const hubTarget = process.env.VITE_HUB_SERVER || 'http://localhost:3000'
