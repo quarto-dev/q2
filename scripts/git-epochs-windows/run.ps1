@@ -702,7 +702,8 @@ if ($wantC -and ((Test-Selected 'c1') -or (Test-Selected 'c2'))) {
 if (Test-Selected 'c3') {
     # c3: the a and b items of this same invocation, all green together on the final code.
     $ab = @($results | Where-Object { $_.id -like 'a*' -or $_.id -like 'b*' })
-    $expected = @('a0','a1','a2','a3','a4','a5','a6','b1','b2','b3','b4','b5','b6','b7')
+    # a6 is recorded as a6-clippy and a6-nextest; a plain 'a6' row exists only when the up-front build failed (run 193640: c3 said a6 did not run while both rows were green)
+    $expected = @('a0','a1','a2','a3','a4','a5','a6-clippy','a6-nextest','b1','b2','b3','b4','b5','b6','b7')
     $missingIds = @($expected | Where-Object { $id = $_; -not ($ab | Where-Object { $_.id -eq $id }) })
     $bad = @($ab | Where-Object { $_.status -ne 'PASS' -and -not $_.known_unrelated })
     $c3Proves = 'Nothing regressed on Windows after the fix plans: every a and b item ran in one invocation on the final code and is green together.'
