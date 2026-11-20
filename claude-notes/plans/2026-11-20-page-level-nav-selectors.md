@@ -2,7 +2,7 @@
 title: 'Website: page-level `sidebar: id` and `navbar: true` keep site navigation (GH #1217)'
 date: 2026-11-20
 description: 'A page scalar sidebar or navbar replaced the whole site definition; match Quarto 1, where only false disables and a string sidebar selects one by id.'
-status: in-review
+status: done  # Merged in PR #1282 (02031646c), 2026-11-20
 braid: bd-rr8gbukc
 ---
 
