@@ -1,0 +1,139 @@
+---
+title: "Social metadata: Open Graph and Twitter Cards"
+---
+
+## Overview
+
+When someone shares a link to your site on LinkedIn, Bluesky,
+Mastodon, Slack or X, the site shows a preview card with a title, a
+description and an image. It reads them from `<meta>` tags in the
+page's head: Open Graph tags (`og:*`) for most sites, Twitter Card
+tags (`twitter:*`) for X. Quarto writes both for website and book
+pages when you turn them on:
+
+```yaml
+# _quarto.yml
+website:
+  title: My Site
+  site-url: https://example.com
+  open-graph: true
+  twitter-card: true
+```
+
+Set `site-url` too. Preview images need an absolute URL, and without
+`site-url` Quarto leaves the image tags out and warns
+([`Q-5-58`](../../errors/project/Q-5-58.qmd)).
+
+Each provider can also be turned on or off for a single page, in its
+front matter:
+
+```yaml
+---
+title: Draft notes
+open-graph: false
+twitter-card: false
+---
+```
+
+## What goes in the tags
+
+Without further configuration, Quarto fills the tags from the page.
+
+**Title.** The page title as it appears in the browser tab, which for
+a website page includes the site title (`Getting Started – My Site`).
+
+**Description.** The first of: the page's `description`, `abstract`,
+or `subtitle`; the site's `website.description`; the page's first
+paragraph, shortened to about 200 characters at the end of a
+sentence.
+
+**Image.** The page's `image:` if it has one. Otherwise Quarto looks
+for one in the page body, in this order:
+
+1. an image with the class `preview-image`:
+   `![](chart.png){.preview-image}`;
+2. the output of a code cell with the class `preview-image`
+   (`#| classes: preview-image`);
+3. an image whose file name contains `preview`, `feature`, `cover`
+   or `thumbnail`;
+4. the first image in the page that isn't a remote URL.
+
+If the body has no image either, Quarto uses the site-wide
+`website.image` (and its `website.image-alt`). Set `image: false` on
+a page to skip the body search.
+
+Image paths in a page's front matter are relative to the page; paths
+in `_quarto.yml` are relative to the project. Quarto writes the image
+as an absolute URL under `site-url`, adds `og:image:width` and
+`og:image:height` from the image file, and copies the file into the
+output directory. A data URI can't be fetched by a social media site,
+so it is ignored with a warning
+([`Q-5-60`](../../errors/project/Q-5-60.qmd)).
+
+## Options
+
+Instead of `true`, each provider takes a map of options. Options set
+under `website:` apply to every page; a page's own `open-graph:` or
+`twitter-card:` map overrides them key by key, and a page that sets
+`true` keeps the site's options.
+
+```yaml
+# _quarto.yml
+website:
+  title: My Site
+  site-url: https://example.com
+  open-graph:
+    locale: en_US
+    site-name: My Site Docs
+  twitter-card:
+    creator: "@me"
+    site: "@mysite"
+```
+
+`open-graph`:
+
+| Option | Tag | Default |
+|--------|-----|---------|
+| `title` | `og:title` | the page title |
+| `description` | `og:description` | see above |
+| `image` | `og:image` | see above |
+| `image-alt` | `og:image:alt` | the page's `image-alt` |
+| `image-width`, `image-height` | `og:image:width`, `og:image:height` | read from the image file |
+| `locale` | `og:locale` | none |
+| `site-name` | `og:site_name` | `website.title` |
+
+`twitter-card`:
+
+| Option | Tag | Default |
+|--------|-----|---------|
+| `title` | `twitter:title` | the page title |
+| `description` | `twitter:description` | see above |
+| `image` | `twitter:image` | see above |
+| `image-alt` | `twitter:image:alt` | the page's `image-alt` |
+| `creator` | `twitter:creator` | none |
+| `site` | `twitter:site` | none |
+| `card-style` | `twitter:card` | `summary_large_image` with an image, `summary` without |
+
+Twitter Cards have no image size tags, so `image-width` and
+`image-height` under `twitter-card` are ignored with a warning
+([`Q-5-61`](../../errors/project/Q-5-61.qmd)). An option with a
+value of the wrong type, such as a list where text belongs, is
+ignored with a warning
+([`Q-5-59`](../../errors/project/Q-5-59.qmd)); keys Quarto doesn't
+use are ignored silently.
+
+## Differences from Quarto 1
+
+The tags match Quarto 1's, with two exceptions:
+
+- **First-paragraph descriptions.** When neither the page nor the
+  site has a description, Quarto 1 writes an empty
+  `og:description`. Quarto 2 uses the page's first paragraph, which
+  is what Quarto 1 intends.
+- **`open-graph: true` on a page.** In Quarto 1 a page that sets
+  `open-graph: true` (or `twitter-card: true`) loses the options set
+  under `website:`. In Quarto 2 it keeps them.
+
+Quarto 2 also finds preview images in the document rather than in
+the rendered HTML, so an image that only appears in raw HTML, or
+inside a table, is not found.

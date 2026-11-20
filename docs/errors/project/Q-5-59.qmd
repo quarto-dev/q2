@@ -1,0 +1,56 @@
+---
+title: "Invalid Social Metadata Option"
+description: "An `open-graph` or `twitter-card` setting, or one of their options, has the wrong type and is ignored."
+code: Q-5-59
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-59` — Invalid Social Metadata Option
+
+> An `open-graph` or `twitter-card` setting, or one of their options, has the wrong type and is ignored.
+
+## What this means
+
+`open-graph` and `twitter-card` take `true`, `false`, or a map of
+options, and each option Quarto reads has a type: text for `title`,
+`description`, `image`, `image-alt`, `locale`, `site-name`, `creator`,
+`site` and `card-style`, and a whole number for `image-width` and
+`image-height`.
+
+A value of another type is ignored: an `open-graph` setting that is
+neither a boolean nor a map leaves the provider configured as if the
+key were absent, and an ill-typed option falls back to its default.
+The rest of the page renders normally.
+
+Keys Quarto doesn't read are ignored without a warning.
+
+## Why this happens
+
+A list where text belongs, or a word where a number belongs:
+
+```yaml
+website:
+  open-graph:
+    title: [My, Site]      # a list, not text
+    image-width: wide      # not a number
+  twitter-card: 3          # neither true/false nor a map
+```
+
+## How to fix
+
+Write the value as the type the option expects:
+
+```yaml
+website:
+  open-graph:
+    title: My Site
+    image-width: 1200
+  twitter-card: true
+```
+
+See [Social metadata](../../guides/projects/social-metadata.qmd) for
+every option.
