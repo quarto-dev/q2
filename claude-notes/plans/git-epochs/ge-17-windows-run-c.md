@@ -318,5 +318,41 @@ only coverage in the exit criteria?
   `RUST_LOG=quarto_hub=info,warn`, and records the hub log tail. macOS dry run: passed (exit code 0 after 15 s). The next
   step 9 run decides between slow and hung; do not classify before it.
 
+**Session 2, later runs (about 17:00 to 18:00 EST).**
+
+| Run | Item | Result |
+|---|---|---|
+| `165053` (tooling `81dfb1363`) | `c1` | steps 1 to 8 PASS (10.2 min); step 9 FAIL: no exit in 60 s (the same as `163017`) |
+| `170520` | `b5`, `b6` | PASS: 57 passed, 1 skipped; 63 passed, 1 skipped |
+| `170623` | `b4` | PASS: 131 passed, 0 skipped (the `events.jsonl` test passes) |
+| `171347` (`b5b9a4cb0`, pandoc 3.13, `d2`) | `a0`, clippy | PASS |
+| | `a6` nextest | 21 failing; `d2`: **20 also fail on the merge base** `f9936b08d`, 1 does not |
+| `174516` (`7cceacd22`) | `c1` step 9 | **PASS**: Ctrl+C delivered, the flush skipped, the hub exited with code 0 after **154 s**, the restarted hub served the switched tree with no markers |
+
+**Step 9, settled.** The hub does not hang; it is slow to exit on Windows. From the log tail: Ctrl+C at 22:50:07, the final
+sync (which skips the flush) done at 22:50:18, and the process exits about 143 s later, while `ctx.shutdown()` waits for
+samod\'s background storage writes of about 4,000 docs. The same step on macOS exits in 15 s in total. The 60 s limit in the
+test was the wrong assumption; it is now 5 min. Recorded outcomes: Ctrl+C was delivered (`GenerateConsoleCtrlEvent` through
+the hidden console), `shutdown flush was skipped` was logged with `unwritten=0`, and the restart served the switched tree
+with no conflict markers. A 2.5 min exit after Ctrl+C on a 4,000-file project is a usability finding about storage drain
+speed on Windows, not an epic defect (nothing here shows the epic added those writes; not measured against the base).
+
+**`a6` classification (21 failures, run `171347`).** The 20 that also fail on the merge base are not caused by this epic and
+are now on `known-unrelated.txt` (2 earlier, 18 added; tooling commit `6556b8c5e`): the `quarto` tests `render_dry_run`,
+`convert_positron_cli`, four `lmd_snapshots`, two `preview_static_e2e`, `render_record_sources_cli`, two `render_scripts_cli`,
+and `smoke_all`; the two `quarto-hub` storage double-lock tests; and the `quarto-preview` tests `import_route`, two
+`route_tests`, `book_downloads::a_chapters_recorded_plot_reaches_the_book`, `live_reexecute`, and `render_scripts_boot`. The one
+failure that is ours is `git_epochs::unreachable_canonical_docs_wait_one_cap_not_one_per_doc`, the wall-clock assertion
+(three unreachable docs under 1.5 s with a 600 ms cap); it has now failed in 2 of 3 loaded full runs and passed alone. It
+is not on the unrelated list, so `c3` fails on it until decision (a) is made. Its `fail_attach` hook cannot count attempts,
+so an attempt-count version needs a new test hook in `quarto-hub`.
+
+**`b4`, `b5`, `b6`.** `b4` passes with 131 of 131, so the `events.jsonl` test needed no `debug: disk` evidence. Whether
+`QUARTO_HUB_DEBUG=1` was set for that run is not recorded in the results. `b5` and `b6` each skipped one test; the results do
+not record whether Developer Mode was on, so the two symlink tests (GE-16a `B2`) may still be unproven.
+
+**`c1` step 7 (intermittent).** Across five runs on identical code, one failed (`143919`); `150923` and `165053` passed. The
+diagnostics have not fired. One more `c1` pair was requested.
+
 **The final statement, end-to-end record, and landing are not written**: they wait for the `a6` classification with
 pandoc 3.13, `c3`, and the step 7 and step 9 outcomes.
