@@ -77,7 +77,12 @@ export interface PreviewServerHandle {
 const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 
 /** Pre-built debug binary the global-setup compiled (or expects). */
-export const Q2_BINARY = path.join(REPO_ROOT, 'target', 'debug', 'q2');
+export const Q2_BINARY = path.join(
+  REPO_ROOT,
+  'target',
+  'debug',
+  process.platform === 'win32' ? 'q2.exe' : 'q2',
+);
 
 function waitForUrl(
   proc: ChildProcess,
