@@ -10,6 +10,12 @@ set -euo pipefail
 # first if the WASM module or sandboxed preview is missing or stale.
 # Extra arguments are passed through to Vite.
 #
+# With --component-playground the Vite dev server is the component playground's
+# (q2-demos/component-playground) instead of hub-client's, on the same port,
+# so the demos get the hub, the sandboxed preview and sign-in without the
+# hub-client app running:
+#   npm run local-dev -- --component-playground
+#
 # Optional auth, as in local-prod: with OIDC_CLIENT_ID set the hub picks it
 # up from the environment and the client gets it as VITE_GOOGLE_CLIENT_ID,
 # so the sign-in button appears:
@@ -22,6 +28,19 @@ DATA_DIR="$PROJECT_ROOT/.local-prod-data"
 HUB_PORT=3000
 Q2_SANDBOXED_PREVIEW_PORT=8081
 VITE_DEV_PORT="${VITE_DEV_PORT:-8080}"
+
+# Which app Vite serves; --component-playground swaps in the component playground.
+APP_DIR="$HUB_CLIENT_DIR"
+APP_NAME="hub-client"
+VITE_ARGS=()
+for arg in "$@"; do
+    if [ "$arg" = "--component-playground" ]; then
+        APP_DIR="$PROJECT_ROOT/q2-demos/component-playground"
+        APP_NAME="component playground"
+    else
+        VITE_ARGS+=("$arg")
+    fi
+done
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -101,17 +120,18 @@ if ! kill -0 "$Q2_SANDBOXED_PREVIEW_PID" 2>/dev/null; then
 fi
 
 log_info "Logs: $DATA_DIR/hub.log, $DATA_DIR/q2-sandboxed-preview.log"
-log_info "Starting Vite dev server on http://127.0.0.1:$VITE_DEV_PORT (Ctrl-C to stop everything)"
+log_info "Starting Vite dev server for $APP_NAME on http://127.0.0.1:$VITE_DEV_PORT (Ctrl-C to stop everything)"
 
-cd "$HUB_CLIENT_DIR"
+cd "$APP_DIR"
 # .env defaults the sync server to the public wss://sync.automerge.org; point new
 # projects at the local hub instead (a relative /ws resolves against the page
 # origin, so it goes through Vite's /ws proxy). The client ID is baked in the
-# same way build-local-prod.sh does it. --strictPort: the demos and anything
-# else that spells out ws://127.0.0.1:8080/ws must find this server there,
-# not one Vite silently moved to the next free port.
+# same way build-local-prod.sh does it. --strictPort: anything that spells
+# out ws://127.0.0.1:8080/ws must find this server there, not one Vite
+# silently moved to the next free port. The playground reads the same
+# variables (it ignores the sync-server default: its demos always use /ws).
 VITE_DEFAULT_SYNC_SERVER=/ws \
 VITE_HUB_SERVER="http://127.0.0.1:$HUB_PORT" \
 VITE_Q2_SANDBOXED_PREVIEW_URL="http://127.0.0.1:$Q2_SANDBOXED_PREVIEW_PORT/" \
 VITE_GOOGLE_CLIENT_ID="${OIDC_CLIENT_ID:-}" \
-    npx vite --host 127.0.0.1 --port "$VITE_DEV_PORT" --strictPort "$@"
+    npx vite --host 127.0.0.1 --port "$VITE_DEV_PORT" --strictPort ${VITE_ARGS[@]+"${VITE_ARGS[@]}"}

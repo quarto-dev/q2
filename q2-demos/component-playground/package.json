@@ -1,0 +1,38 @@
+{
+  "name": "component-playground",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "local-dev": "../../scripts/local-dev.sh --component-playground",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@automerge/automerge": "^3.5.0",
+    "@automerge/automerge-repo": "2.6.0-alpha.5",
+    "@automerge/automerge-repo-network-websocket": "2.6.0-alpha.5",
+    "@automerge/automerge-repo-storage-indexeddb": "2.6.0-alpha.5",
+    "@quarto/preview-renderer": "*",
+    "@quarto/preview-runtime": "*",
+    "@quarto/quarto-automerge-schema": "*",
+    "@quarto/quarto-sync-client": "*",
+    "@react-oauth/google": "^0.13.4",
+    "@xyflow/react": "^12.12.1",
+    "hub-client": "*",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "monaco-editor": "^0.55.1",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4",
+    "vite-plugin-wasm": "^3.5.0"
+  }
+}

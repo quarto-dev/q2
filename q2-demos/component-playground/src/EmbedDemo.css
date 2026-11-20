@@ -1,0 +1,95 @@
+/* The host's own layout. Nothing here targets a hub-client class. */
+.ed-page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  color: #1f2937;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+}
+
+.ed-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--editor-bg);
+}
+
+.ed-header select {
+  /* The native caret cannot be moved, so draw one: two gradient halves
+     form a triangle in the text color, inset 10px from the right edge. */
+  appearance: none;
+  padding: 4px 28px 4px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background-color: var(--bg-input);
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ed-header select:hover {
+  border-color: var(--border-focus);
+}
+
+.ed-header select:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.ed-path {
+  font-family: monospace;
+  color: #4b5563;
+}
+
+.ed-people {
+  color: #4b5563;
+}
+
+.ed-spacer {
+  flex: 1;
+}
+
+.ed-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.ed-side {
+  flex: none;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+}
+
+.ed-side-files,
+.ed-side-outline {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.ed-side-outline {
+  border-top: 1px solid #d1d5db;
+}
+.ed-footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: #f3f4f6;
+}
