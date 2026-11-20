@@ -7,7 +7,7 @@
 //! equal the input after the reader's normal desugaring, compared without
 //! source info.
 
-use pampa::pandoc::{ASTContext, Pandoc};
+use pampa::pandoc::{ASTContext, Block, Inline, Pandoc};
 use pampa::{readers, writers};
 use serde_json::{Value, json};
 
@@ -1043,4 +1043,64 @@ fn definition_list_term_without_definitions_falls_back_to_the_div() {
             });
         },
     );
+}
+
+// ---------------------------------------------------------------------------
+// Percent-encoded link and image targets
+// ---------------------------------------------------------------------------
+
+/// Targets with characters a target can't contain, and how they're written.
+/// A `%` is left alone, as the reader leaves it.
+const TARGETS: &[(&str, &str)] = &[
+    ("x y", "x%20y"),
+    ("https://example.com/a b c", "https://example.com/a%20b%20c"),
+    ("a\tb", "a%09b"),
+    ("a<b>|\"{}[]^`", "a%3Cb%3E%7C%22%7B%7D%5B%5D%5E%60"),
+    ("x%20y z", "x%20y%20z"),
+];
+
+fn link_to(target: &str) -> Value {
+    json!({"t": "Link", "c": [attr("", &[], &[]), [str_("a")], [target, ""]]})
+}
+
+#[test]
+fn link_target_is_percent_encoded() {
+    for (target, encoded) in TARGETS {
+        let qmd = write_qmd(&doc(vec![json!({"t": "Para", "c": [link_to(target)]})]));
+        assert_eq!(qmd.trim_end(), format!("[a]({encoded})"));
+    }
+}
+
+#[test]
+fn image_target_is_percent_encoded() {
+    for (target, encoded) in TARGETS {
+        let qmd = write_qmd(&doc(vec![
+            json!({"t": "Para", "c": [str_("x"), space(), image(attr("", &[], &[]), inl("a"), target)]}),
+        ]));
+        assert_eq!(qmd.trim_end(), format!("x ![a]({encoded})"));
+    }
+}
+
+/// The encoded target reads back as the reader would have encoded it.
+#[test]
+fn encoded_target_reads_back_encoded() {
+    for (target, encoded) in TARGETS {
+        let qmd = write_qmd(&doc(vec![json!({"t": "Para", "c": [link_to(target)]})]));
+        let (reread, _, _) = readers::qmd::read(
+            qmd.as_bytes(),
+            false,
+            "<generated>",
+            &mut std::io::sink(),
+            true,
+            None,
+        )
+        .unwrap_or_else(|e| panic!("{qmd:?} doesn't parse: {e:?}"));
+        let [Block::Paragraph(para)] = reread.blocks.as_slice() else {
+            panic!("{qmd:?} isn't one paragraph");
+        };
+        let [Inline::Link(link)] = para.content.as_slice() else {
+            panic!("{qmd:?} isn't one link");
+        };
+        assert_eq!(link.target.0, *encoded);
+    }
 }
