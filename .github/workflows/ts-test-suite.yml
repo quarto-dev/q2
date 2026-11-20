@@ -233,6 +233,20 @@ jobs:
         shell: bash
         run: cargo build --release -p quarto-output-extract
 
+      # hub-client's vitest suites import quarto-sync-client (and through it
+      # @quarto/quarto-git-epochs and @quarto/share-url), which resolve workspace
+      # siblings through the `"import": "./dist/index.js"` export condition. Build
+      # the dists first, as the workspace-ts-suites job does. Without this the
+      # suites fail with "Failed to resolve entry for package" (GE-17).
+      - name: Build ts-packages workspaces
+        shell: bash
+        run: |
+          for pkg in ts-packages/*/; do
+            if [ -f "$pkg/package.json" ]; then
+              npm run build --workspace "$pkg" --if-present
+            fi
+          done
+
       - name: Run hub-client tests
         shell: bash
         run: |
