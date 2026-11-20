@@ -153,7 +153,7 @@ mod toc_generate;
 mod toc_js;
 mod toc_location;
 mod toc_render;
-pub(crate) use toc_render::strip_links_and_notes;
+pub(crate) use toc_render::{html_escape, render_toc_label, strip_links_and_notes};
 mod website_bootstrap_icons;
 mod website_canonical_url;
 mod website_favicon;
