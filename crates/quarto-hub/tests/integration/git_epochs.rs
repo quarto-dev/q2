@@ -8,7 +8,7 @@ use std::process::Command;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use automerge::{Automerge, ROOT, ReadDoc, transaction::Transactable};
 use quarto_git_epochs::registry::doc as regdoc;
@@ -1062,13 +1062,16 @@ async fn unreachable_canonical_docs_wait_one_cap_not_one_per_doc() {
     rig.git(&["switch", "-q", "other"]);
     let t = now_ms();
     rig.ctx.git_tick_at(t).await;
-    let started = Instant::now();
     rig.ctx.git_tick_at(t + 1_100).await;
-    assert!(
-        started.elapsed() < Duration::from_millis(1_500),
-        "three unreachable docs took {:?}",
-        started.elapsed()
+    // A count, not a clock (the wall-clock version failed on a loaded Windows host, GE-17): the fetches overlap, so all
+    // three were in flight together. One after another would peak at 1, and the wait would be three caps, not one.
+    let hooks = &rig.ctx.git_epochs().unwrap().hooks;
+    assert_eq!(
+        hooks.attach_max_in_flight.load(Ordering::SeqCst),
+        3,
+        "the three unreachable docs are fetched concurrently"
     );
+    assert_eq!(hooks.attach_in_flight.load(Ordering::SeqCst), 0);
     assert_eq!(rig.text("c.qmd").await, "# C2\n");
 }
 

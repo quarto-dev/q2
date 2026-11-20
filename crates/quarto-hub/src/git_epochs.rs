@@ -16,7 +16,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -100,6 +100,28 @@ pub struct GitTestHooks {
     pub attach_timeout_ms: AtomicU64,
     /// While set, `git_tick_at` does nothing: a decision stays pending for a test to inspect.
     pub hold_decisions: AtomicBool,
+    /// Canonical-doc fetches in flight right now (arrival waits on all of them at once).
+    pub attach_in_flight: AtomicUsize,
+    /// The most canonical-doc fetches that were in flight together. A count, not a clock: it is 3 for three docs fetched
+    /// concurrently and 1 if they were fetched one after another, whatever the load on the machine.
+    pub attach_max_in_flight: AtomicUsize,
+}
+
+/// Counts one canonical-doc fetch as in flight until it is dropped.
+struct InFlight<'a>(&'a GitTestHooks);
+
+impl<'a> InFlight<'a> {
+    fn new(hooks: &'a GitTestHooks) -> Self {
+        let now = hooks.attach_in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+        hooks.attach_max_in_flight.fetch_max(now, Ordering::SeqCst);
+        InFlight(hooks)
+    }
+}
+
+impl Drop for InFlight<'_> {
+    fn drop(&mut self) {
+        self.0.attach_in_flight.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 /// The hub's git state. Lives in an `Arc` inside [`HubContext`].
@@ -723,11 +745,12 @@ impl GitEpochs {
                 .iter()
                 .filter_map(|c| registry::canonical(&view, &c.path, &c.blob).map(|e| e.doc.clone()))
                 .collect();
-            let fetched: Vec<(String, Option<DocHandle>)> = futures::future::join_all(
-                want.iter()
-                    .map(|id| async move { (id.clone(), find_doc(repo, id, wait).await) }),
-            )
-            .await;
+            let fetched: Vec<(String, Option<DocHandle>)> =
+                futures::future::join_all(want.iter().map(|id| async move {
+                    let _in_flight = InFlight::new(&self.hooks);
+                    (id.clone(), find_doc(repo, id, wait).await)
+                }))
+                .await;
             let handles: HashMap<String, Option<DocHandle>> = fetched.into_iter().collect();
 
             let mut ss = ss_mutex.lock().await;
