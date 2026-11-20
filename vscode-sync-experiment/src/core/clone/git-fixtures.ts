@@ -57,10 +57,14 @@ export function rootCommits(dir: string): string[] {
   return git(dir, 'rev-list', '--max-parents=0', 'HEAD').split('\n').filter(Boolean);
 }
 
-/** `git clone` of `src` into a fresh temp directory, with a per-repo identity. */
+/**
+ * `git clone` of `src` into a fresh temp directory, with a per-repo identity. `core.autocrlf` is passed to `clone`
+ * itself (and kept in the clone's config): the files are written during the clone, so a global `core.autocrlf=true`
+ * (the Windows CI runner's default) would otherwise give the clone CRLF files before any per-repo config exists.
+ */
 export function cloneRepo(src: string, args: string[] = []): string {
   const dest = gitTempDir('ge10-clone-');
-  git(dest, 'clone', '-q', ...args, `file://${src}`, '.');
+  git(dest, 'clone', '-q', '-c', 'core.autocrlf=false', ...args, `file://${src}`, '.');
   git(dest, 'config', 'user.email', 't@example.invalid');
   git(dest, 'config', 'user.name', 'T');
   git(dest, 'config', 'commit.gpgsign', 'false');
