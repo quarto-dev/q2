@@ -653,6 +653,9 @@ fn config_map_entry_content_eq(a: &ConfigMapEntry, b: &ConfigMapEntry) -> bool {
 fn block_attrs_eq(a: &Block, b: &Block) -> bool {
     match (a, b) {
         (Block::Header(ha), Block::Header(hb)) => {
+            if ha.level != hb.level {
+                return false;
+            }
             let id_eq = if ha.attr_source.id.is_some() {
                 ha.attr.0 == hb.attr.0
             } else {
