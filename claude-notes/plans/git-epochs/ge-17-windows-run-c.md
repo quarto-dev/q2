@@ -370,5 +370,23 @@ diagnostics have not fired. One more `c1` pair was requested.
 - Both are on the tooling branch (tip `189745689`), pushed. That branch was integrated with `git pull --rebase` after the
   merge, which flattened my unpushed merge into linear copies of the plan commits; the remote history was not rewritten.
 
+**`c3`, run `193640` (tooling tip `189745689`, Developer Mode on, pandoc 3.13): every item ran and is green.**
+
+| Item | Result |
+|---|---|
+| `a0`, `a6-clippy` | PASS (built; clean) |
+| `a1`, `a2`, `a3`, `a4`, `a5` | PASS: 21, 3, 17, 16, 26 tests |
+| `a6-nextest` | 20 failing, **all on the known-unrelated list** (the 20 that also fail on the merge base); `unreachable_canonical_docs_wait_one_cap_not_one_per_doc` now passes under the full load |
+| `b1`, `b2`, `b3`, `b4` | PASS: 204 (1 skipped), 117, 91, 131 |
+| `b5`, `b6` | PASS: 58 and 64 tests, **0 skipped** (was 1 and 1): the two symlink tests ran with Developer Mode on |
+| `b7` | PASS (a build item: `npm ci`, typecheck, bundle, ts-packages builds) |
+
+The run\'s own `c3` row said FAIL ("items did not run: a6"). That was a **tooling defect**, not a result: `run.ps1` records `a6-clippy`
+and `a6-nextest`, and a plain `a6` row only when the build fails, so the completeness check could never pass. Fixed (tooling
+`85e617616`; `pwsh` parse: 0 errors). The evidence behind the row is complete, so `c3` is not rerun just for its verdict row.
+Two honest caveats on the green: `b1` skipped one test because `jj` is not installed (its scenarios skip without it), and
+`a4` carries the machine caveat that `core.longpaths` is unset, so its over-260-character path round-trips may not be
+proven on this machine.
+
 **The final statement, end-to-end record, and landing are not written**: they wait for the `a6` classification with
 pandoc 3.13, `c3`, and the step 7 and step 9 outcomes.
