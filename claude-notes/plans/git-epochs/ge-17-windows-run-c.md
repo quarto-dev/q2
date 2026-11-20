@@ -119,6 +119,12 @@ Items marked (agent) run on macOS; items marked (Gordon) need the Windows machin
 - [ ] (agent) For each failure decide whether it is a product defect, a test defect, or the machine, and propose a fix
   plan. A fix plan inserted here means this plan stays open until its follow-up run passes; do not change product
   code in this plan.
+- [x] (agent) General Windows fixes found by the `c2` `-BuildEmbed` run, kept on this branch with Gordon\'s agreement
+  (they are not epoch code, but a Windows run needs them): `7ff153571` (`build-wasm.js` finds `wasm-opt` through a
+  shell), `dev-setup` installs wasm-bindgen-cli without `--locked` (walrus 0.24.4 emits wasm that `wasm-opt -Oz`
+  rejects; test-first), and `cross-env` for the inline environment variables in the hub-client `build` and
+  `build:preview-embed` scripts. The same fixes overlap #1275 (`build-wasm.js`, `build:sw`); a rebase onto a main
+  that has #1275 should drop the duplicates.
 - [ ] (agent) Write the final statement in the notes (below) and copy the summary into `ge/17-windows-run-c`; rebase,
   fast-forward, and leave the tooling branch unmerged. Do not delete the tooling branch: GE-18 does that, with
   Gordon\'s agreement, after the notes are recorded.
