@@ -365,16 +365,14 @@ fn emit_metadata_prefix(
     // entry's offset — when blocks are removed from the beginning, the
     // first coarsened block may reference a later original block whose
     // start > 0, falsely triggering the metadata prefix logic.
-    let first_block_start = if !original_ast.blocks.is_empty() {
-        Some(block_source_span(&original_ast.blocks[0]).start)
-    } else {
-        None
+    // A document with no blocks is all metadata region.
+    let start = match original_ast.blocks.first() {
+        Some(block) => block_source_span(block).start,
+        None => original_qmd.len(),
     };
 
     // Check if there's a metadata region before the first block
-    if let Some(start) = first_block_start
-        && start > 0
-    {
+    if start > 0 {
         // There is a metadata prefix region
         if metadata_content_eq(&original_ast.meta, &new_ast.meta) {
             // Metadata unchanged — copy verbatim

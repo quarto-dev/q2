@@ -612,6 +612,26 @@ fn verbatim_preservation_unchanged_blocks() {
     );
 }
 
+// --- Front matter changes ---
+
+#[test]
+fn front_matter_without_a_body_is_kept() {
+    let original_qmd = "---\ntitle: Old\nauthor: Ana\n---\n";
+    let new_ast = parse_qmd("---\ntitle: New\nauthor: Ana\n---\n");
+
+    let original_ast = parse_qmd(original_qmd);
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+    let result =
+        writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
+            .expect("incremental_write failed");
+
+    assert_eq!(
+        write_qmd(&parse_qmd(&result)),
+        write_qmd(&new_ast),
+        "written as:\n{result}"
+    );
+}
+
 // =============================================================================
 // QMD String Generators (for property-based tests)
 // =============================================================================
