@@ -184,6 +184,22 @@ fn splice_str_change_in_header() {
     assert_eq!(result, "## Goodbye World\n");
 }
 
+#[test]
+fn header_level_change_is_written() {
+    let original_qmd = "## Hello\n";
+    let original_ast = parse_qmd(original_qmd);
+    let mut new_ast = original_ast.clone();
+    if let Block::Header(ref mut h) = new_ast.blocks[0] {
+        h.level = 3;
+    }
+
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+    let result =
+        writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
+            .unwrap();
+    assert_eq!(result, "### Hello\n");
+}
+
 // =============================================================================
 // Tests: Str change preserves multi-line paragraph (Scenario B)
 // =============================================================================
