@@ -84,6 +84,11 @@ pub fn incremental_write(
     new_ast: &Pandoc,
     plan: &ReconciliationPlan,
 ) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    // An empty original has nothing to keep.
+    if original_qmd.trim().is_empty() {
+        return write_document_to_string(new_ast);
+    }
+
     // The QMD reader internally pads input with '\n' when it doesn't end with
     // one, producing source spans relative to the padded input. We must use the
     // same padded string so that block source spans are valid byte indices.
@@ -548,6 +553,22 @@ fn ensure_trailing_newline<'a>(
 fn block_source_span(block: &Block) -> Range<usize> {
     let si = block.source_info();
     si.start_offset()..si.end_offset()
+}
+
+/// Write a whole document to a string using the standard QMD writer.
+fn write_document_to_string(
+    doc: &Pandoc,
+) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let mut buf = Vec::new();
+    qmd::write(doc, &mut buf)?;
+    String::from_utf8(buf).map_err(|e| {
+        vec![
+            quarto_error_reporting::DiagnosticMessageBuilder::error("UTF-8 error during write")
+                .with_code("Q-3-2")
+                .problem(format!("Writer produced invalid UTF-8: {}", e))
+                .build(),
+        ]
+    })
 }
 
 /// Write a single block to a string using the standard QMD writer.

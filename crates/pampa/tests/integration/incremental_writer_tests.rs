@@ -444,6 +444,16 @@ fn roundtrip_remove_first_paragraph() {
     assert_roundtrip("First.\n\nSecond.\n\nThird.\n", "Second.\n\nThird.\n");
 }
 
+#[test]
+fn add_paragraph_to_empty_document() {
+    let original_ast = parse_qmd("");
+    let new_ast = parse_qmd("Hi\n");
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+    let result = writers::incremental::incremental_write("", &original_ast, &new_ast, &plan)
+        .expect("incremental_write failed");
+    assert_eq!(result, "Hi\n");
+}
+
 // --- Change header ---
 
 #[test]
