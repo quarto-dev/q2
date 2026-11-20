@@ -1,15 +1,17 @@
 ---
 title: 'Open Graph / Twitter card social meta tags (bd-tyvt)'
 date: 2026-11-20
-description: 'Emit og:* and twitter:* meta tags for website pages, matching Quarto 1''s website-meta.ts; investigation skeleton pending design alignment.'
-status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+description: 'Emit og:* and twitter:* meta tags for website pages from an AST transform, matching Quarto 1''s website-meta.ts.'
+status: in-progress
 braid:
   strand: bd-tyvt
 ---
 
-**Checkout:** main checkout, branch `main` @ `4ca24c110` (no worktree created).
+**Checkout:** main checkout, branch `braid/bd-tyvt-social-meta-tags`, based on
+`main` @ `4ca24c110`.
 **GitHub:** [quarto-dev/q2#1259](https://github.com/quarto-dev/q2/issues/1259)
-**Do not start implementation until the user gives the go-ahead.**
+**Status:** design settled with the user on 2026-11-20 (see Decisions);
+implementing.
 
 ## Triage verdict
 
@@ -115,53 +117,133 @@ Building blocks already present:
   `twitter-card` / `image` / `image-alt` from `book:` to `website:`, so books
   get this for free once websites do.
 
-## Proposed phases (draft)
+## Decisions (user, 2026-11-20)
 
-- Phase 0: Tests first. Unit tests on a pure "compute social tags from
-  merged meta + derived values" helper (enable gate, merge, defaults, key
-  mapping, card-style default, truncation); one integration test rendering
-  the repro site and asserting the head tags.
-- Phase 1: Core tags. New `website-social-meta` transform next to
-  `website-canonical-url`: gate, merge, base values, provider keys, absolute
-  image URL via `site-url`, template slot(s) in the full HTML head.
-- Phase 2: Discovery. Preview image (the Q1 chain, data URIs skipped,
-  `website.image` fallback) and first-paragraph description.
-- Phase 3: Image dimensions via `imagesize` (native only; OG only), and
-  registering the image as a page resource so it is copied to `_site`.
-- Phase 4: Docs (website guide section on social metadata) and a
-  changelog entry; update GH #1259.
+1. **AST transform**, not a post-render HTML pass ("we want to avoid
+   reading HTML in general").
+2. **Discovery over the AST** (`Image` classes, `.preview-image` cell
+   divs); images only raw HTML or late filters produce are out of reach,
+   which is accepted.
+3. **Ship everything in one PR** (core tags, discovery, image sizes,
+   diagnostics, docs). One commit per phase.
+4. **No `site-url` → diagnostic**, and the image tags are left out (a
+   relative image URL is useless to crawlers).
+5. **Validate the types of the fields we read; open schema.** Unknown keys
+   are ignored silently; a wrong type (an array where a string belongs)
+   warns.
 
-## Open design questions for the user
+## Quarto 1 reference output
 
-1. **Where does it live?** (a) An AST transform + template slot, like
-   `website-canonical-url` (works in the hub-client preview too, discovery
-   reimplemented over the AST), or (b) a native post-render pass over the
-   written HTML reusing `reader.rs` (closest to Q1, discovery reuses the
-   existing selector chain, but adds another read/rewrite of every page and
-   never runs in preview). Leaning (a).
-2. **Image discovery over the AST.** If (a): is it acceptable for
-   `.preview-image` detection to work on `Image` classes and on cell-output
-   divs with `.preview-image` in the AST rather than on rendered HTML? Edge
-   cases (images produced by raw HTML or by filters after the transform)
-   would be missed where Q1 finds them.
-3. **First cut scope.** Ship Phases 1-3 together for full parity, or ship
-   Phase 1 (explicit title/description/image) first to unblock #1259 and
-   follow with discovery and dimensions?
-4. **Without `site-url`.** Q1 emits the image href unresolved (relative),
-   which crawlers can't use. Match Q1, or skip the image tag and warn (a new
-   diagnostic code)?
-5. **Schema.** Should q2 validate the `open-graph` / `twitter-card`
-   object keys (unknown key → warning), or keep accepting them as free-form
-   maps like today?
+Rendered with the local Quarto 1 dev build (`quarto` 99.9.9) on two
+throwaway sites. Observations that pin behaviour beyond what the source
+says:
 
-## Risks / tradeoffs (draft)
+- **Title** is the composed page title, `Home – Site`. `open-graph.title`
+  is markdown, emitted as plain text (`OG *title*` → `OG title`).
+- **Description precedence, in effect:** provider `description` > page
+  `description` / `abstract` / `subtitle` > `website.description` >
+  (nothing). Q1's markdown pipeline overwrites the tag after the
+  first-paragraph discovery, so a page with no page or site description
+  gets `content=""`. **q2 diverges deliberately:** it falls back to the
+  discovered first paragraph (truncated to 200 characters at sentence
+  punctuation), which is what Q1's code intends.
+- **Image precedence:** provider `image` (site map image, replaced by page
+  `image:`) > discovery (`.preview-image` > named file > first local image)
+  > `website.image` (with `website.image-alt`). Site-map and
+  `website.image` paths are project-relative; page paths are
+  document-relative. `image: false` turns off discovery and the
+  `website.image` fallback only; a site-map image is still emitted.
+- **Sizes** (OG only): read from the file, overriding a declared
+  `image-width` / `image-height`; a declared size is used only when the
+  file can't be read (or for remote images).
+- **Alt text:** `image-alt` from the provider, then page `image-alt`; a
+  discovered image contributes its alt only when it is an inline image
+  (a figure's caption is not alt text).
+- **`twitter:card`** defaults to `summary_large_image` with an image,
+  `summary` without. Twitter `image-width` / `image-height` warn once and
+  are ignored.
+- **`open-graph: true` on a page drops the site-level options** in Q1
+  (`mergedSiteAndDocumentData` returns the bare `true`). **q2 diverges:** a
+  page `true` enables the provider with the site options.
+- Tag order: OG `title, description, image, site_name, image:height,
+  image:width, locale, image:alt`; Twitter `title, description, image,
+  creator, site, image:alt, card`. `property=` for `og:*`, `name=` for
+  `twitter:*`.
 
-- Template slot design: a `$for(social-meta)$` list of `name`/`content`
-  pairs keeps the template small; per-tag `$if$`s match the existing head
-  style. Either way the values must be attribute-escaped.
-- Attribute name: Q1's `writeMetaTag` (`format-html-shared.ts:536`) writes
-  `property=` for `og:*` and `name=` for everything else; match it. Q1
-  appends at the end of `<head>`, after any include-in-header tags.
-- Description truncation needs a port of Q1's `truncateText` "punctuation"
-  mode; `listing/helpers.rs::truncate_text_at_space` only does the space
-  mode.
+## Design
+
+New Normalization-phase, Bucket B2 transform
+`crates/quarto-core/src/transforms/website_social_meta.rs`
+(`website-social-meta`), pushed right after `website-canonical-url`.
+
+- **Gate:** website or book project, HTML-family format (decks included, as
+  in Q1's website `formatExtras`), and the provider enabled: page
+  `open-graph` / `twitter-card` truthy (or a map), or absent on the page and
+  truthy under `website.`. Page `false` disables.
+- **Values** are computed by a pure function from the merged meta plus
+  discovered values, so the precedence rules are unit-testable without a
+  render.
+- **Discovery** walks the AST: `Image` with class `preview-image`; a `Div`
+  with `preview-image` containing a `cell-output-display` `Div`'s image; an
+  image whose src matches Q1's named-file regex; the first local image.
+  Data URIs are skipped. Description: first non-empty top-level `Para`.
+- **Image URLs:** metadata paths resolve through
+  `config_paths::resolve_config_path` (provenance-aware: `_quarto.yml`
+  values are project-relative, page values document-relative, leading `/` is
+  the project root). Body images resolve against the document dir. The
+  project-relative path is joined onto `site-url` (Q1's `joinUrl`). Sizes
+  come from `imagesize::blob_size` over bytes read through
+  `ctx.runtime` (works over the VFS); the crate dependency moves out of
+  the native-only block.
+- **Output:** `<meta>` tags appended to `rendered.includes.header` (the
+  same slot `draft-alert` and `website-favicon` use), values
+  attribute-escaped.
+- **Resources:** explicit and site images are registered as
+  `ResourceCopyIntent`s so the file reaches `_site` even when no body
+  image references it.
+
+New diagnostics (`project` subsystem):
+
+| Code | When |
+| --- | --- |
+| `Q-5-58` | A social image was found but `website.site-url` is not set; image tags omitted. |
+| `Q-5-59` | An `open-graph` / `twitter-card` value or option has the wrong type; ignored. |
+| `Q-5-60` | A social image is a data URI, which crawlers can't fetch; ignored. |
+| `Q-5-61` | `twitter-card` `image-width` / `image-height` set; ignored (Twitter has no size tags). |
+
+## Work items
+
+The transform landed in one piece rather than one commit per phase: the
+value rules (explicit values, discovery, sizes) share one precedence
+chain, and splitting them would have meant committing knowingly wrong
+intermediate tag sets.
+
+- [x] Phase 0: failing tests first. Integration tests in
+  `crates/quarto-core/tests/integration/website_social_meta.rs` modelled
+  on the two Quarto 1 reference sites (all failed with no tags before
+  the transform); unit tests in the module for enabling, option types,
+  discovery order, alt text, truncation, URL joining and escaping.
+- [x] Phase 1: transform, gate, explicit values, URL resolution, head
+  emission, pipeline registration (builder, B2 bucket table, the HTML /
+  preview / Pandoc-exclusion name lists).
+- [x] Phase 2: image and description discovery.
+- [x] Phase 3: image sizes (native only; the WASM build returns no size)
+  and resource copies for metadata images.
+- [x] Phase 4: type validation and the four diagnostics (catalog,
+  `docs/errors/project/Q-5-58..61`, docs sidebar).
+- [x] Phase 5: user guide `docs/guides/projects/social-metadata.qmd`
+  (with a "Differences from Quarto 1" section). The repo keeps no
+  changelog file.
+- [ ] PR for GH #1259; CI green.
+
+## Verification log
+
+- The q2 CLI on a copy of reference site 1 writes exactly Quarto 1's
+  tags on all six pages; on site 2 the only differences are the two
+  recorded divergences.
+- A Jupyter cell with `#| classes: preview-image` beats a named
+  `thumbnail.png` and gets its size tags, end to end.
+- Windows cross-clippy can't build `quarto-core` from macOS (C build
+  scripts for wasmtime, tree-sitter, aws-lc need MSVC headers); the new
+  code uses no platform-specific API. The WASM hub-client crate
+  type-checks with the change.
