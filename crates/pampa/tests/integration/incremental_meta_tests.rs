@@ -98,3 +98,19 @@ fn text_starting_like_a_block_reads_back_as_text() {
         assert_eq!(title_text(&result), text, "written as:\n{result}");
     }
 }
+
+// =============================================================================
+// Shapes of document
+// =============================================================================
+
+#[test]
+fn front_matter_without_a_body_is_kept() {
+    let doc = "---\ntitle: Old\nauthor: Ana\n---\n";
+    let mut ast = parse_qmd(doc);
+    entries(&mut ast)[0].value.value = ConfigValueKind::PandocInlines(words("New"));
+    let result = write(doc, &ast);
+    assert_eq!(title_text(&result), "New", "written as:\n{result}");
+    let mut reread = parse_qmd(&result);
+    let keys: Vec<_> = entries(&mut reread).iter().map(|e| e.key.clone()).collect();
+    assert_eq!(keys, ["title", "author"], "written as:\n{result}");
+}
