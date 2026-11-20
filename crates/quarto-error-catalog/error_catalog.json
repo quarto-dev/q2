@@ -1563,7 +1563,7 @@
   "Q-2-47": {
     "subsystem": "markdown",
     "title": "Cell option ignored on a diagram cell",
-    "message_template": "A diagram cell has no execution engine to pass unrecognized options to, so this option has no effect. Diagram cells accept `label`, `fig-cap`, `fig-scap`, `fig-alt`, and `fig-align`.",
+    "message_template": "A diagram cell has no execution engine to pass unrecognized options to, so this option has no effect. Diagram cells accept `label`, `fig-cap`, `fig-scap`, `fig-alt`, and `fig-align`; Graphviz cells also accept `graph-layout`.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-47",
     "since_version": "99.9.9"
   },
@@ -1668,7 +1668,7 @@
   "Q-2-58": {
     "subsystem": "markdown",
     "title": "Quarto 1 diagram cell is not run",
-    "message_template": "Quarto 2 does not run `{mermaid}` or `{dot}` cells, so the block renders as a code block, not a diagram. For Mermaid, drop the braces and write a plain `mermaid` fence.",
+    "message_template": "Quarto 2 does not run `{mermaid}` or `{dot}` cells, so the block renders as a code block, not a diagram. Drop the braces and write a plain `mermaid` or `dot` fence.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-58",
     "since_version": "99.9.9"
   },
@@ -1868,6 +1868,41 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-52",
     "since_version": "99.9.9"
   },
+  "Q-5-53": {
+    "subsystem": "project",
+    "title": "Project Does Not Declare a Quarto Version",
+    "message_template": "`_quarto.yml` has no `quarto-required` key, so the project is presumed to be a Quarto 1 project. A Quarto 2 project declares `quarto-required: \"^2\"`, which Quarto 1 (1.4 and later) refuses to render.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-53",
+    "since_version": "99.9.9"
+  },
+  "Q-5-54": {
+    "subsystem": "project",
+    "title": "`quarto-required` Admits Both Quarto 1 and Quarto 2",
+    "message_template": "The `quarto-required` range in `_quarto.yml` admits versions of both Quarto 1 and Quarto 2, so it does not say which one the project is written for.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-54",
+    "since_version": "99.9.9"
+  },
+  "Q-5-55": {
+    "subsystem": "project",
+    "title": "`quarto-required` Does Not Admit Quarto 2",
+    "message_template": "The `quarto-required` range in `_quarto.yml` admits no Quarto 2 version: it declares a Quarto 1 project, or a version that does not exist.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-55",
+    "since_version": "99.9.9"
+  },
+  "Q-5-56": {
+    "subsystem": "project",
+    "title": "Invalid `quarto-required` Value",
+    "message_template": "`quarto-required` in `_quarto.yml` must be a version range string, such as `\"^2\"`.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-56",
+    "since_version": "99.9.9"
+  },
+  "Q-5-57": {
+    "subsystem": "project",
+    "title": "About Pages Not Yet Supported",
+    "message_template": "A website or book page sets `about:`. Quarto 2 does not implement about page templates yet; the page renders as a plain document.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-57",
+    "since_version": "99.9.9"
+  },
   "Q-13-8": {
     "subsystem": "navigation",
     "title": "Unsupported toc-location value",
@@ -2018,7 +2053,7 @@
   "Q-18-12": {
     "subsystem": "engine",
     "title": "knitr Cache Is Off While Recording",
-    "message_template": "A knitr chunk asked for knitr's cache (`cache: true`), and Quarto turned the cache off for the run that records the document, because a cache hit skips the run and leaves nothing to record. The chunks run every time the document is executed, so a document that relies on the cache is slower. The output is the same.",
+    "message_template": "No longer emitted (OPR-7b): a chunk that asks for knitr's cache keeps it and is not recorded. Formerly: a knitr chunk asked for knitr's cache (`cache: true`), and Quarto turned the cache off for the run that records the document, because a cache hit skips the run and leaves nothing to record. The chunks run every time the document is executed, so a document that relies on the cache is slower. The output is the same.",
     "docs_url": "https://quarto.org/docs/errors/engine/Q-18-12",
     "since_version": "99.9.9"
   },
@@ -2034,6 +2069,27 @@
     "title": "knitr Child Document Kept As knitr Wrote It",
     "message_template": "A knitr chunk includes another document with `child=`. knitr runs the child document and returns its finished markdown as one block, so Quarto keeps that markdown as knitr wrote it instead of presenting the child's chunks from recorded pieces. The output is the same as knitr's.",
     "docs_url": "https://quarto.org/docs/errors/engine/Q-18-14",
+    "since_version": "99.9.9"
+  },
+  "Q-18-15": {
+    "subsystem": "engine",
+    "title": "Execution Record Skipped",
+    "message_template": "The document uses an engine that builds no execution record, so it is stored in the older capture format. Every cell still ran and every output is shown, but features that read execution records, like reusing saved results or sharing them with other editors, may not work with it.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-15",
+    "since_version": "99.9.9"
+  },
+  "Q-18-16": {
+    "subsystem": "engine",
+    "title": "Interactive Widget Not Supported",
+    "message_template": "A code cell shows an interactive widget (an ipywidgets view, the `application/vnd.jupyter.widget-view+json` output type). Quarto does not capture a widget's state yet, so it cannot draw the widget, and the page shows the widget's text representation instead. Other output in the document is unaffected. The render continues.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-16",
+    "since_version": "99.9.9"
+  },
+  "Q-18-17": {
+    "subsystem": "engine",
+    "title": "Reserved Chunk Option",
+    "message_template": "A chunk sets an option that Quarto reserves for its own use (`quarto-unit-id`). Quarto adds this option to every chunk it records, so a second one makes the engine fail. Remove the option line from the chunk.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-17",
     "since_version": "99.9.9"
   },
   "Q-19-1": {

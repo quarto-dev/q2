@@ -1,0 +1,11 @@
+---
+title: Asis
+---
+
+```{python}
+#| echo: false
+#| output: asis
+print("## Generated heading\n")
+print("Some **bold** text.\n")
+print("::: {.callout-note}\nA note.\n:::")
+```

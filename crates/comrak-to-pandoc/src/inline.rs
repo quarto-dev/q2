@@ -105,11 +105,11 @@ fn convert_inline<'a>(
 
         // Raw HTML, as pandoc's commonmark reader (raw_html on) produces it.
         NodeValue::HtmlInline(html) => {
-            vec![Inline::RawInline(RawInline {
+            vec![Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: html.clone(),
                 source_info,
-            })]
+            }))]
         }
 
         // Unsupported inline types - panic as they're outside CommonMark;
@@ -159,12 +159,12 @@ fn convert_inline<'a>(
 }
 
 fn convert_code(code: &NodeCode, source_info: SourceInfo) -> Inline {
-    Inline::Code(Code {
+    Inline::Code(Box::new(Code {
         attr: empty_attr(),
         text: code.literal.clone(),
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 fn convert_link(link: &NodeLink, children: Inlines, source_info: SourceInfo) -> Inline {
@@ -176,31 +176,31 @@ fn convert_link(link: &NodeLink, children: Inlines, source_info: SourceInfo) -> 
 
     let attr = if is_autolink {
         // pampa adds "uri" class to autolinks
-        (String::new(), vec!["uri".to_string()], LinkedHashMap::new())
+        (String::new(), vec!["uri".to_string()], LinkedHashMap::new()).into()
     } else {
         empty_attr()
     };
 
-    Inline::Link(Link {
+    Inline::Link(Box::new(Link {
         attr,
         content: children,
         target: (link.url.clone(), link.title.clone()),
         source_info,
         attr_source: AttrSourceInfo::empty(),
         target_source: TargetSourceInfo::empty(),
-    })
+    }))
 }
 
 fn convert_image(link: &NodeLink, children: Inlines, source_info: SourceInfo) -> Inline {
     // For images, children become alt text
-    Inline::Image(Image {
+    Inline::Image(Box::new(Image {
         attr: empty_attr(),
         content: children,
         target: (link.url.clone(), link.title.clone()),
         source_info,
         attr_source: AttrSourceInfo::empty(),
         target_source: TargetSourceInfo::empty(),
-    })
+    }))
 }
 
 #[cfg(test)]

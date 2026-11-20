@@ -375,6 +375,7 @@ mod tests {
             text: None,
             file: Some(PathBuf::from(file)),
             number: Some(number),
+            heading_title: None,
         }
     }
 

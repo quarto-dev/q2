@@ -383,6 +383,30 @@ mod render_tests {
         serde_yaml::from_str(src).expect("scaffolded _quarto.yml must be valid YAML")
     }
 
+    /// Every scaffold declares that it targets Quarto 2 (bd-gw8fmaz3), so
+    /// a freshly created project never draws Q-5-53 and Quarto 1 refuses
+    /// to render it.
+    #[test]
+    fn every_scaffold_declares_quarto_2() {
+        let mut checked = 0;
+        for choice in crate::choices::implemented_choices() {
+            let files =
+                create_project_from_choice(CreateFromChoiceOptions::new(&choice.id, "T")).unwrap();
+            let yml = parse_yaml(file_content(&files, "_quarto.yml"));
+            assert_eq!(
+                yml["quarto-required"].as_str(),
+                Some("^2"),
+                "scaffold `{}` must declare quarto-required: \"^2\"",
+                choice.id
+            );
+            checked += 1;
+        }
+        assert!(
+            checked >= 5,
+            "expected several scaffolds, checked {checked}"
+        );
+    }
+
     #[test]
     fn default_scaffold_produces_config_and_starter_doc() {
         let files =

@@ -3,3 +3,4 @@ project:
 format:
   html:
     theme: darkly
+quarto-required: "^2"

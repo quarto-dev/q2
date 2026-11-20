@@ -578,14 +578,14 @@ mod tests {
 
     /// Build an `Image` inline with the given target URL.
     fn image(url: &str) -> Inline {
-        Inline::Image(Image {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+        Inline::Image(Box::new(Image {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![],
             target: (url.to_string(), String::new()),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(inlines: Vec<Inline>) -> Block {
@@ -666,8 +666,8 @@ mod tests {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Image(Image {
-                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![Inline::Image(Box::new(Image {
+                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![Inline::Str(Str {
                         text: "alt text".to_string(),
                         source_info: dummy_source_info(),
@@ -676,7 +676,7 @@ mod tests {
                     source_info: dummy_source_info(),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: TargetSourceInfo::empty(),
-                })],
+                }))],
                 source_info: dummy_source_info(),
             })],
         };
@@ -713,14 +713,14 @@ mod tests {
     #[tokio::test]
     async fn test_dedupes_repeated_urls() {
         let image = |url: &str| {
-            Inline::Image(Image {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            Inline::Image(Box::new(Image {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![],
                 target: (url.to_string(), String::new()),
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),
-            })
+            }))
         };
 
         let mut ast = Pandoc {
@@ -797,14 +797,14 @@ mod tests {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Image(Image {
-                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![Inline::Image(Box::new(Image {
+                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![],
                     target: ("https://example.com/image.png".to_string(), String::new()),
                     source_info: dummy_source_info(),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: TargetSourceInfo::empty(),
-                })],
+                }))],
                 source_info: dummy_source_info(),
             })],
         };
@@ -828,14 +828,14 @@ mod tests {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Image(Image {
-                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![Inline::Image(Box::new(Image {
+                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![],
                     target: ("data:image/png;base64,abc123".to_string(), String::new()),
                     source_info: dummy_source_info(),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: TargetSourceInfo::empty(),
-                })],
+                }))],
                 source_info: dummy_source_info(),
             })],
         };

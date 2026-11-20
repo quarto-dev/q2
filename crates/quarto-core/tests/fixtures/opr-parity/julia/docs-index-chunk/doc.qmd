@@ -1,0 +1,20 @@
+---
+title: The Julia chunk of docs/index.qmd
+engine: julia
+---
+
+See @fig-parametric for an example.
+
+```{julia}
+#| label: fig-parametric
+#| fig-cap: "Parametric Plots"
+
+using Plots
+
+plot(sin,
+     x->sin(2x),
+     0,
+     2π,
+     leg=false,
+     fill=(0,:lavender))
+```

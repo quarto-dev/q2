@@ -298,7 +298,14 @@ async function runMarimoCompiler(quarto2, options) {
   if (options.bareSql) args.push("yes");
   let output;
   try {
-    output = await executeProcess(quarto2, command, args, options.source);
+    output = await executeProcess(
+      quarto2,
+      command,
+      args,
+      options.source,
+      compilerTimeoutMs(),
+      options.env
+    );
   } finally {
     if (temporaryDirectory) {
       removeTemporaryDirectory(temporaryDirectory);
@@ -562,7 +569,7 @@ var marimoEngineDiscovery = {
     ),
     execute: async (options) => {
       const interactive = quarto.format.isHtmlCompatible(options.format);
-      const { ownedLanguages, units } = options;
+      const { ownedLanguages, units, executeEnv } = options;
       const bareSql = bareSqlOwned(options.handledLanguages, ownedLanguages);
       const execution = await quarto.console.withSpinner(
         { message: "Executing marimo cells..." },
@@ -574,7 +581,8 @@ var marimoEngineDiscovery = {
           globalEval: options.target.metadata.eval !== false,
           externalEnv: options.target.metadata["external-env"] === true,
           pyproject: String(options.target.metadata.pyproject ?? ""),
-          bareSql
+          bareSql,
+          env: executeEnv
         })
       );
       const chunks = await quarto.markdownRegex.breakQuartoMd(

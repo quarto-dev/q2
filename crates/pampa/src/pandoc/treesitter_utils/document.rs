@@ -27,7 +27,7 @@ pub fn process_document(
             }
             PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
                 // for now we assume it's metadata and emit it as a rawblock
-                blocks.push(Block::RawBlock(RawBlock {
+                blocks.push(Block::RawBlock(Box::new(RawBlock {
                     format: "quarto_minus_metadata".to_string(),
                     text,
                     // Reroot through `parent_source_info` when this parse is
@@ -37,7 +37,7 @@ pub fn process_document(
                     // the converted buffer instead of the true original
                     // file.
                     source_info: range_to_source_info_with_context(&range, context),
-                }));
+                })));
             }
             PandocNativeIntermediate::IntermediateUnknown(_) => {
                 // Skip unknown nodes - these occur when tree-sitter encounters parse errors

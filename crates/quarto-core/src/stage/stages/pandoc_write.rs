@@ -1859,22 +1859,22 @@ mod tests {
     use yaml_rust2::Yaml;
 
     fn header(level: usize) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr: quarto_pandoc_types::empty_attr(),
             content: vec![],
             source_info: SourceInfo::for_test(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn div(content: Vec<Block>) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: quarto_pandoc_types::empty_attr(),
             content,
             source_info: SourceInfo::for_test(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// pandoc-hybrid-typst Phase 1: a top-level level-1 heading means no

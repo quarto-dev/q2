@@ -1,0 +1,78 @@
+---
+title: "About Pages Not Yet Supported"
+description: "A website or book page sets `about:`. Quarto 2 does not implement about page templates yet; the page renders as a plain document."
+code: Q-5-57
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-57` — About Pages Not Yet Supported
+
+> A website or book page sets `about:`. Quarto 2 does not implement about page
+> templates yet; the page renders as a plain document.
+
+## What this means
+
+In Quarto 1, a page of a website or book that sets `about:` in its
+front matter is laid out as an about page: one of the built-in
+templates (`jolla`, `trestles`, `solana`, `marquee`, `broadside`)
+places the page's image, title, and links around its content.
+
+```yaml
+---
+title: "Finley Malloc"
+image: profile.jpg
+about:
+  template: jolla
+  links:
+    - icon: github
+      text: GitHub
+      href: https://github.com
+---
+```
+
+Quarto 2 does not implement these templates. The `about:` key is
+ignored and the page renders like any other page of the site: the
+title block and body appear, but not the profile image or the link
+buttons.
+
+The render succeeds; the warning reports a gap in this Quarto version.
+
+## Why this happens
+
+The website was migrated from Quarto 1, or started from a Quarto 1
+template (the blog template ships an `about.qmd` that uses `jolla`).
+
+## How to fix
+
+There is no configuration that produces an about page layout in this
+version. Your options are:
+
+**Write the layout into the page.** Put the image and links in the
+body with ordinary Markdown, and remove `about:`:
+
+```markdown
+![](profile.jpg){width=200}
+
+[GitHub](https://github.com)
+```
+
+**Leave it as is.** The page still renders, without the about
+layout. To keep `about:` for Quarto 1 and silence the warning in
+Quarto 2, turn the diagnostic off in the page's front matter or in
+`_quarto.yml`:
+
+```yaml
+diagnostics:
+  Q-5-57:
+    level: off
+    reason: "about: is kept for Quarto 1"
+```
+
+## Related errors
+
+- [`Q-5-18`](Q-5-18.qmd) — the same "accepted but not implemented"
+  outcome, for a whole project type.

@@ -476,7 +476,7 @@ fn parity_jupyter_record_present_equals_live() {
         None,
         quarto_core::presenter::inline::InlineTarget::from_format("q2-preview"),
         "q2-preview",
-        None,
+        &[],
         &mut fig,
     )
     .expect("present")

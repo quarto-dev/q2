@@ -63,12 +63,12 @@ fn has_class(attr: &Attr, class: &str) -> bool {
 }
 
 fn div(attr: Attr, content: Blocks) -> Block {
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr,
         content,
         source_info: generated(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 fn class_attr(classes: &[&str]) -> Attr {
@@ -77,6 +77,7 @@ fn class_attr(classes: &[&str]) -> Attr {
         classes.iter().map(|c| c.to_string()).collect(),
         LinkedHashMap::new(),
     )
+        .into()
 }
 
 fn as_div(block: &Block) -> Option<&Div> {
@@ -214,7 +215,7 @@ fn is_preserve_placeholder(inlines: &[Inline]) -> bool {
 /// heading becomes a `Div.h<N>` with its level offset.
 fn process_body_content(block: Block, heading_offset: usize) -> Block {
     match block {
-        Block::Header(h) => header_div(h, heading_offset),
+        Block::Header(h) => header_div(*h, heading_offset),
         other => unwrap_single_inline_paras(other),
     }
 }
@@ -505,17 +506,17 @@ pub fn build_cards(
             d.content = build_cards(d.content, doc, diagnostics);
             out.push(Block::Div(d));
         } else if is_input_kind(&d.attr, "card-sidebar") {
-            out.push(card_sidebar_marker(d));
+            out.push(card_sidebar_marker(*d));
         } else if is_input_kind(&d.attr, "card-toolbar") {
-            out.push(card_toolbar_marker(d));
+            out.push(card_toolbar_marker(*d));
         } else if is_content_value(&d.attr, "sidebar") || is_content_value(&d.attr, "toolbar") {
             // D5-Q9: `content: sidebar` / `content: toolbar` (in Q1's schema
             // but never implemented) make a sidebar or toolbar like a
             // `.sidebar` / `.toolbar` heading does.
-            out.push(content_panel_div(d));
+            out.push(content_panel_div(*d));
         } else if has_class(&d.attr, "card") {
             if is_literal_card(&d) {
-                out.push(literal_card(d, doc));
+                out.push(literal_card(*d, doc));
                 continue;
             }
             let (options, classes) = read_card_options(&d.attr, &d.source_info);
@@ -525,7 +526,7 @@ pub fn build_cards(
                 None => out.push(Block::Div(d)),
             }
         } else if is_value_box(&d.attr) {
-            out.push(make_value_box(d, doc, diagnostics));
+            out.push(make_value_box(*d, doc, diagnostics));
         } else if has_class(&d.attr, "quarto-float")
             && let Some(cell) = cell_around_float(&mut d)
         {
@@ -538,7 +539,7 @@ pub fn build_cards(
         } else if has_class(&d.attr, "cell") {
             let id = d.attr.0.clone();
             out.extend(
-                cell_to_card(d, doc)
+                cell_to_card(*d, doc)
                     .into_iter()
                     .map(|b| with_source_id(b, &id)),
             );
@@ -575,7 +576,7 @@ fn cell_around_float(float: &mut Div) -> Option<Div> {
                     });
                     blocks.splice(i..i, unwrapped);
                     cell.content = rest;
-                    return Some(cell);
+                    return Some(*cell);
                 }
                 Block::Div(d) => {
                     if let Some(c) = take_cell(&mut d.content) {
@@ -596,22 +597,23 @@ fn cell_around_float(float: &mut Div) -> Option<Div> {
     let float = std::mem::replace(
         float,
         Div {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             content: Vec::new(),
             source_info: float.source_info.clone(),
             attr_source: AttrSourceInfo::empty(),
         },
     );
-    cell.content.push(Block::Div(Div {
+    cell.content.push(Block::Div(Box::new(Div {
         attr: (
             String::new(),
             vec!["cell-output-display".to_string()],
             LinkedHashMap::new(),
-        ),
-        content: vec![Block::Div(float)],
+        )
+            .into(),
+        content: vec![Block::Div(Box::new(float))],
         source_info: generated(),
         attr_source: AttrSourceInfo::empty(),
-    }));
+    })));
     Some(cell)
 }
 
@@ -686,7 +688,7 @@ fn card_toolbar_marker(d: Div) -> Block {
     } else {
         marker_contents(d)
     };
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr: (
             String::new(),
             vec![
@@ -694,11 +696,12 @@ fn card_toolbar_marker(d: Div) -> Block {
                 "card-toolbar-unprocessed".to_string(),
             ],
             attrs,
-        ),
+        )
+            .into(),
         content,
         source_info: source,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Q1 `card_sidebar.readOptions` + `makeCardSidebar`.
@@ -728,7 +731,7 @@ fn card_sidebar_marker(d: Div) -> Block {
     } else {
         marker_contents(d)
     };
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr: (
             String::new(),
             vec![
@@ -736,11 +739,12 @@ fn card_sidebar_marker(d: Div) -> Block {
                 "card-sidebar-unprocessed".to_string(),
             ],
             attrs,
-        ),
+        )
+            .into(),
         content,
         source_info: source,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// D5-Q9: a `content: sidebar` / `content: toolbar` cell as a sidebar or
@@ -758,7 +762,7 @@ fn content_panel_div(d: Div) -> Block {
         }
     }
     div(
-        (String::new(), vec![kind.to_string()], attrs),
+        (String::new(), vec![kind.to_string()], attrs).into(),
         escape_leaf_contents(d.content),
     )
 }
@@ -776,7 +780,7 @@ fn escape_with(blocks: Blocks, offset: usize) -> Blocks {
     let mut out = Vec::new();
     for b in blocks {
         match b {
-            Block::Header(h) => out.push(header_div(h, offset)),
+            Block::Header(h) => out.push(header_div(*h, offset)),
             Block::Custom(n) if n.type_name == CARD_TYPE => {
                 if let Some(card) = Card::from_custom(&n) {
                     out.extend(escape_with(
@@ -886,7 +890,7 @@ fn make_value_box(
         extra = pending;
     }
 
-    let mut vb_attr: Attr = (String::new(), Vec::new(), LinkedHashMap::new());
+    let mut vb_attr: Attr = (String::new(), Vec::new(), LinkedHashMap::new()).into();
     for key in ["color", "bg-color", "fg-color"] {
         if let Some(v) = el.attr.2.get(key) {
             vb_attr.2.insert(format!("data-{key}"), v.clone());
@@ -916,7 +920,8 @@ fn make_value_box(
                 String::new(),
                 vec!["value-box-showcase".to_string()],
                 showcase,
-            ),
+            )
+                .into(),
             Vec::new(),
         ));
     }
@@ -939,12 +944,12 @@ fn make_value_box(
         el.source_info,
     )
     .unwrap_or_else(|| {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: class_attr(&["valuebox"]),
             content: Vec::new(),
             source_info: generated(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
@@ -1068,7 +1073,7 @@ fn cell_to_card(mut cell: Div, doc: &DashboardOptions) -> Vec<Block> {
         if !has_class(&cell.attr, "hidden") {
             cell.attr.1.push("hidden".to_string());
         }
-        return vec![Block::Div(cell)];
+        return vec![Block::Div(Box::new(cell))];
     }
 
     let (mut options, classes) = read_card_options(&cell.attr, &cell.source_info);
@@ -1262,7 +1267,7 @@ fn convert_section(
         return vec![block];
     };
     if let Some(orientation) = explicit_orientation(&section.attr) {
-        return vec![explicit_container(section, orientation, doc, info)];
+        return vec![explicit_container(*section, orientation, doc, info)];
     }
     if !has_class(&section.attr, "section") {
         return vec![Block::Div(section)];
@@ -1324,7 +1329,7 @@ fn convert_section(
     }
 
     if has_class(&header.attr, "tabset") {
-        return make_tabset(header, content, parent, doc, info);
+        return make_tabset(*header, content, parent, doc, info);
     }
 
     let orientation = suggested_orientation(&content).unwrap_or(parent.flip());

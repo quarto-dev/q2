@@ -311,12 +311,12 @@ fn slot_children_mut(slot: &mut Slot, v: &mut dyn ListVisitor) {
             **b = if list.len() == 1 {
                 list.pop().expect("one block")
             } else {
-                Block::Div(quarto_pandoc_types::block::Div {
+                Block::Div(Box::new(quarto_pandoc_types::block::Div {
                     attr: Default::default(),
                     content: list,
                     source_info: b.source_info().clone(),
                     attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-                })
+                }))
             };
         }
         Slot::Inline(i) => {
@@ -328,12 +328,12 @@ fn slot_children_mut(slot: &mut Slot, v: &mut dyn ListVisitor) {
             **i = if list.len() == 1 {
                 list.pop().expect("one inline")
             } else {
-                Inline::Span(quarto_pandoc_types::inline::Span {
+                Inline::Span(Box::new(quarto_pandoc_types::inline::Span {
                     attr: Default::default(),
                     content: list,
                     source_info: i.source_info().clone(),
                     attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-                })
+                }))
             };
         }
     }

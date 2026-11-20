@@ -316,3 +316,318 @@ a ' b.
         (single_quote))
       (pandoc_space)
       (pandoc_str))))
+================================================================================
+apostrophe after emphasis: possessive (bd-apostrophe-after-span-6l9c8c26)
+================================================================================
+The _book_'s premise
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+apostrophe after a link and after a span with attributes (bd-apostrophe-after-span-6l9c8c26)
+================================================================================
+The [book](https://book.com)'s and [span]{.x}'s
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_span
+        (content
+          (pandoc_str))
+        (target
+          (url)))
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_span
+        (content
+          (pandoc_str))
+        (attribute_specifier
+          (commonmark_specifier
+            (attribute_class))))
+      (pandoc_str)
+      (pandoc_str))))
+================================================================================
+apostrophe after a code span and after inline math (bd-apostrophe-after-span-6l9c8c26)
+================================================================================
+`a.rs`'s file and $x$'s value
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_math)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+apostrophe after emphasis: plural possessive and end of block (bd-apostrophe-after-span-6l9c8c26)
+================================================================================
+The _books_' premises and _cats_'
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_str))))
+================================================================================
+apostrophe after strong, twice: no longer pairs into a quote (bd-apostrophe-after-span-6l9c8c26)
+================================================================================
+**book**'s and **cat**'s
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_strong
+        (strong_emphasis_delimiter)
+        (pandoc_str)
+        (strong_emphasis_delimiter))
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_strong
+        (strong_emphasis_delimiter)
+        (pandoc_str)
+        (strong_emphasis_delimiter))
+      (pandoc_str)
+      (pandoc_str))))
+================================================================================
+apostrophe after emphasis inside double quotes (bd-apostrophe-after-span-6l9c8c26)
+================================================================================
+"the _book_'s premise"
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_double_quote
+        (double_quote)
+        (content
+          (pandoc_str)
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter))
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (double_quote)))))
+================================================================================
+a quote after a closer and whitespace is still a quote (bd-apostrophe-after-span-6l9c8c26)
+================================================================================
+_a_ 'quoted'
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_single_quote
+        (single_quote)
+        (content
+          (pandoc_str))
+        (single_quote)))))
+================================================================================
+a quote after a closer and a soft break is still a quote (bd-apostrophe-after-span-6l9c8c26)
+================================================================================
+_a_
+'quoted'
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_soft_break)
+      (pandoc_single_quote
+        (single_quote)
+        (content
+          (pandoc_str))
+        (single_quote)))))
+================================================================================
+inside an open single quote the mark after a closer is its closer (bd-apostrophe-after-span-6l9c8c26)
+================================================================================
+'_book_' and '_book_'s
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_single_quote
+        (single_quote)
+        (content
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter)))
+        (single_quote))
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_single_quote
+        (single_quote)
+        (content
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter)))
+        (single_quote))
+      (pandoc_str))))
+================================================================================
+a word in quote marks abutting a closer is two apostrophes (bd-apostrophe-after-span-6l9c8c26)
+================================================================================
+_a_'b'
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_str)
+      (pandoc_str))))
+================================================================================
+an HTML comment between a closer and a quote keeps the quote (bd-apostrophe-after-span-6l9c8c26)
+================================================================================
+_a_<!---->'b'
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (comment)
+      (pandoc_single_quote
+        (single_quote)
+        (content
+          (pandoc_str))
+        (single_quote)))))
+================================================================================
+apostrophe after emphasis in a heading and a list item (bd-apostrophe-after-span-6l9c8c26)
+================================================================================
+## _a_'s toys
+
+- _a_'s toys
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (atx_heading
+      (atx_h2_marker)
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter))
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))))
+================================================================================
+apostrophe after emphasis in a pipe table cell (bd-apostrophe-after-span-6l9c8c26)
+================================================================================
+| a | _b_'s |
+|---|---|
+| 1 | 2 |
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pipe_table
+      (pipe_table_header
+        (pipe_table_cell
+          (pandoc_str))
+        (pipe_table_cell
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter))
+          (pandoc_str)
+          (pandoc_str)))
+      (pipe_table_delimiter_row
+        (pipe_table_delimiter_cell)
+        (pipe_table_delimiter_cell))
+      (pipe_table_row
+        (pipe_table_cell
+          (pandoc_str))
+        (pipe_table_cell
+          (pandoc_str))))))

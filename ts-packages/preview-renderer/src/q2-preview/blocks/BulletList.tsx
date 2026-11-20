@@ -36,7 +36,7 @@ export const BulletList = (args: NodeArgs<BulletListBlock>) => {
                 {args.node.c.map((item, i) => {
                     const checked = taskItemChecked(item);
                     return (
-                        <PlainHost as="li" key={i} {...liItemAttrProps(args.node.itemAttr?.[i], incremental)}>
+                        <PlainHost as="li" key={i} {...liItemAttrProps(args.node.itemAttr?.[i], incremental, checked !== null)}>
                             {checked !== null ? (
                                 // Incremental (reveal) surfaces are never edit-enabled:
                                 // render the checkbox, but inert.
@@ -68,8 +68,10 @@ export const BulletList = (args: NodeArgs<BulletListBlock>) => {
     return (
         <ul {...taskListClass} {...(isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {})} {...dataLocProps(args.node)}>
             {args.node.c.map((item, i) => {
-                // Per-item block attr (bd-aeyss6p5) applies to every <li>.
-                const itemAttrProps = liItemAttrProps(args.node.itemAttr?.[i], false);
+                const checked = taskItemChecked(item);
+                // Per-item block attr (bd-aeyss6p5) applies to every <li>;
+                // task items also get `task-list-item` (bd-2ydvebkc).
+                const itemAttrProps = liItemAttrProps(args.node.itemAttr?.[i], false, checked !== null);
                 // Empty-item guard: render a bare <li> to avoid accessing item[0].s on an empty array.
                 if (item.length === 0) {
                     return <li key={i} {...itemAttrProps} />;
@@ -83,7 +85,6 @@ export const BulletList = (args: NodeArgs<BulletListBlock>) => {
                 const liProps = borrowPoolId !== undefined
                     ? { 'data-block-pool-id': borrowPoolId, tabIndex: -1 as const }
                     : {};
-                const checked = taskItemChecked(item);
                 return (
                     <PlainHost as="li" key={i} {...itemAttrProps} {...liProps}>
                         {checked !== null ? (

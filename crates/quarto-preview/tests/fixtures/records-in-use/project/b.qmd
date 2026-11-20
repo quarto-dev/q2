@@ -1,0 +1,10 @@
+---
+title: B
+jupyter: python3
+---
+
+Prose B.
+
+```{python}
+print("b cell")
+```

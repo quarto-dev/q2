@@ -105,6 +105,9 @@ pub fn execute(args: AddArgs) -> Result<()> {
     if !args.json {
         print_table(&plan);
     }
+    for note in &plan.notes {
+        emit_diagnostic(note, args.json);
+    }
     let prompter: Option<&mut dyn Prompter> = if can_prompt {
         Some(&mut inquire_prompter)
     } else {
@@ -140,15 +143,27 @@ fn allow_prompt(no_prompt: bool, json: bool) -> bool {
 /// Report a fatal diagnostic on the right channel and exit non-zero.
 /// Stdout carries no result on failure.
 fn fail(diag: &DiagnosticMessage, json: bool) -> ! {
+    emit_diagnostic(diag, json);
+    std::process::exit(1);
+}
+
+/// Write a diagnostic to stderr: as text, or as one JSON line under
+/// `--json`.
+fn emit_diagnostic(diag: &DiagnosticMessage, json: bool) {
     if json {
         match serde_json::to_string(&diagnostic_to_json(diag, &SourceContext::new())) {
             Ok(line) => eprintln!("{line}"),
             Err(e) => eprintln!("(internal: failed to serialize diagnostic for --json: {e})"),
         }
     } else {
-        eprintln!("{}", diag.to_text(None));
+        eprintln!(
+            "{}",
+            diag.to_text_with_options(
+                None,
+                &crate::commands::terminal_style::stderr_text_options()
+            )
+        );
     }
-    std::process::exit(1);
 }
 
 // ====================================================================
@@ -221,7 +236,15 @@ fn print_table(plan: &AddPlan) {
 }
 
 fn print_human_footer(plan: &AddPlan) {
+    let gitattributes =
+        std::path::Path::new(stage::EXTENSIONS_DIR).join(install::GITATTRIBUTES_FILENAME);
     if plan.dry_run {
+        if plan.writes_gitattributes {
+            println!(
+                "(dry run) would also create {}, so git keeps extension files byte-for-byte.",
+                gitattributes.display()
+            );
+        }
         println!("(dry run) nothing was written.");
         return;
     }
@@ -231,6 +254,13 @@ fn print_human_footer(plan: &AddPlan) {
     println!("Extension installation complete.");
     for ext in plan.extensions.iter().filter(|e| e.writes) {
         println!("  {}", ext.dest.display());
+    }
+    if plan.writes_gitattributes {
+        println!(
+            "Created {}, so git keeps extension files byte-for-byte \
+             (line-ending conversion would look like a local edit).",
+            gitattributes.display()
+        );
     }
     if let Some(url) = &plan.learn_more {
         println!();
@@ -248,6 +278,9 @@ struct AddResultJson<'a> {
     dry_run: bool,
     source: &'a str,
     extensions: Vec<ExtensionResultJson<'a>>,
+    /// Whether this run created `_extensions/.gitattributes`. False
+    /// under `--dry-run`, like `written`.
+    gitattributes_written: bool,
 }
 
 #[derive(Serialize)]
@@ -287,6 +320,7 @@ fn print_json_result(plan: &AddPlan) {
                 untracked: e.installed == InstalledState::Untracked,
             })
             .collect(),
+        gitattributes_written: plan.writes_gitattributes && !plan.dry_run,
     };
     match serde_json::to_string(&result) {
         Ok(line) => println!("{line}"),

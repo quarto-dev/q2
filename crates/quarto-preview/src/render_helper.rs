@@ -241,6 +241,27 @@ impl RenderSeam for RealRender {
     }
 }
 
+/// The host's record source list when guests can reach the render routes (`--share`): a
+/// document's `execute: record-sources` may only reorder or narrow it (OPR-6). Session state
+/// like the render flags, set once by [`crate::run`]; `None` (the default) means the request's
+/// `metadata` is an ordinary override.
+static RECORD_SOURCES_CEILING: RwLock<Option<quarto_core::record::RecordSources>> =
+    RwLock::new(None);
+
+/// Set (or clear) the `--share` ceiling for the render routes.
+pub fn set_record_sources_ceiling(ceiling: Option<quarto_core::record::RecordSources>) {
+    *RECORD_SOURCES_CEILING
+        .write()
+        .unwrap_or_else(|e| e.into_inner()) = ceiling;
+}
+
+fn record_sources_ceiling() -> Option<quarto_core::record::RecordSources> {
+    RECORD_SOURCES_CEILING
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+}
+
 static RENDER_SEAM: RwLock<Option<Arc<dyn RenderSeam>>> = RwLock::new(None);
 
 fn render_seam() -> Arc<dyn RenderSeam> {
@@ -497,6 +518,10 @@ pub fn render_blocking(job: RenderJob) -> RenderOutcome {
         capture_materialize_dir: Some(guard.path().to_path_buf()),
         typst_target,
         captures: job.captures.clone(),
+        record_sources: quarto_core::record::RenderRecordSources {
+            command: quarto_core::record::CommandSources::RENDER,
+            ceiling: record_sources_ceiling(),
+        },
         attribution_json: job.attribution_json.clone(),
         // The preview's PDF and download routes are authoring views:
         // drafts render whatever their `draft-mode` (bd-2hy80x1j).

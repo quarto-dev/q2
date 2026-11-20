@@ -7,3 +7,4 @@ lmd:
   modules:
     - components/cards
     - badges
+quarto-required: "^2"

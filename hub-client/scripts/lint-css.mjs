@@ -28,6 +28,8 @@
  *     is not blocked. New/refactored CSS must use logical properties
  *     (margin-inline-start, inset-inline-end, ...).
  *
+ * Not linted: src/components/demo/ (prototype demos; see EXCLUDED_DIRS).
+ *
  * Grandfathering: violations listed in scripts/lint-css-exceptions.json are
  * tolerated; anything else fails. Exceptions are matched by normalized
  * declaration text (whitespace-collapsed, lowercased), so they survive line
@@ -53,13 +55,22 @@ const EXCEPTIONS_PATH = fileURLToPath(
 );
 /** Only this file may define color tokens (hex/rgb/rgba literals). */
 const TOKEN_FILE = 'theme.css';
+/**
+ * Directories (relative to src/, forward slashes) that are not linted.
+ * components/demo holds throwaway prototype demos that deliberately sit
+ * outside the design system.
+ */
+const EXCLUDED_DIRS = new Set(['components/demo']);
 
 /* ---------- utilities ---------- */
 
 function* walkCss(dir) {
   for (const entry of readdirSync(dir)) {
     const path = join(dir, entry);
-    if (statSync(path).isDirectory()) yield* walkCss(path);
+    if (statSync(path).isDirectory()) {
+      const rel = relative(SRC_DIR, path).split('\\').join('/');
+      if (EXCLUDED_DIRS.has(rel) === false) yield* walkCss(path);
+    }
     else if (entry.endsWith('.css')) yield path;
   }
 }

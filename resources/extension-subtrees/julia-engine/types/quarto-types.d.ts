@@ -288,6 +288,13 @@ export interface ExecuteOptions {
 	previewServer?: boolean;
 	/** List of languages handled by cell language handlers (Quarto 2: the leave-alone set) */
 	handledLanguages?: string[];
+	/**
+	 * Quarto 2 only; Quarto 1 does not send it. Per-document variables (QUARTO_DOCUMENT_*,
+	 * QUARTO_EXECUTE_INFO, QUARTO_FIG_*, QUARTO_PROJECT_ROOT) and the project environment
+	 * (_environment files, QUARTO_PROFILE). Merge into the environment of the processes that
+	 * run user code; never cache across executes.
+	 */
+	executeEnv?: Readonly<Record<string, string>>;
 	/** Project context */
 	project: EngineProjectContext;
 }

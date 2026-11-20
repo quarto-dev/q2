@@ -148,6 +148,14 @@ fn should_sectionize(meta: &quarto_pandoc_types::ConfigValue) -> bool {
 fn main() {
     let args = Args::parse();
 
+    // Decide color and hyperlinks once, on the main thread, before any
+    // output (bd-be8ve52f): the same policy as `q2`
+    // (`quarto_util::output_style`). Diagnostics below render with it.
+    let style = quarto_util::output_style::init(quarto_util::output_style::ColorFlag::Auto).stderr;
+    let text_opts = quarto_error_reporting::TextRenderOptions::default()
+        .color(style.color)
+        .hyperlinks(style.hyperlinks);
+
     // Handle --export-template early (like --help)
     if let Some(template_name) = &args.export_template {
         match get_builtin_template(template_name) {
@@ -218,7 +226,7 @@ fn main() {
         if args.json_errors {
             eprintln!("{}", warning.to_json());
         } else {
-            eprintln!("{}", warning.to_text(None));
+            eprintln!("{}", warning.to_text_with_options(None, &text_opts));
         }
         input.push('\n'); // ensure the input ends with a newline
     }
@@ -255,7 +263,13 @@ fn main() {
                     } else {
                         // Text format (default) - pass source_context for Ariadne rendering
                         for warning in warnings {
-                            eprintln!("{}", warning.to_text(Some(&context.source_context)));
+                            eprintln!(
+                                "{}",
+                                warning.to_text_with_options(
+                                    Some(&context.source_context),
+                                    &text_opts
+                                )
+                            );
                         }
                     }
                     (pandoc, context)
@@ -276,7 +290,10 @@ fn main() {
                         );
 
                         for diagnostic in diagnostics {
-                            eprintln!("{}", diagnostic.to_text(Some(&source_context)));
+                            eprintln!(
+                                "{}",
+                                diagnostic.to_text_with_options(Some(&source_context), &text_opts)
+                            );
                         }
                     }
                     std::process::exit(1);
@@ -378,7 +395,10 @@ fn main() {
                         for diagnostic in &output.diagnostics {
                             eprintln!(
                                 "{}",
-                                diagnostic.to_text(Some(&output.context.source_context))
+                                diagnostic.to_text_with_options(
+                                    Some(&output.context.source_context),
+                                    &text_opts
+                                )
                             );
                         }
                     }
@@ -485,7 +505,13 @@ fn main() {
                         }
                     } else {
                         for diagnostic in &diagnostics {
-                            eprintln!("{}", diagnostic.to_text(Some(&context.source_context)));
+                            eprintln!(
+                                "{}",
+                                diagnostic.to_text_with_options(
+                                    Some(&context.source_context),
+                                    &text_opts
+                                )
+                            );
                         }
                     }
                 }
@@ -557,7 +583,13 @@ fn main() {
                         }
                     } else {
                         for diagnostic in &diagnostics {
-                            eprintln!("{}", diagnostic.to_text(Some(&context.source_context)));
+                            eprintln!(
+                                "{}",
+                                diagnostic.to_text_with_options(
+                                    Some(&context.source_context),
+                                    &text_opts
+                                )
+                            );
                         }
                     }
                 }
@@ -580,7 +612,10 @@ fn main() {
             }
         } else {
             for diagnostic in diagnostics {
-                eprintln!("{}", diagnostic.to_text(Some(&context.source_context)));
+                eprintln!(
+                    "{}",
+                    diagnostic.to_text_with_options(Some(&context.source_context), &text_opts)
+                );
             }
         }
         std::process::exit(1);

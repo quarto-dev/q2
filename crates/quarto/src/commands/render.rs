@@ -38,6 +38,9 @@ use quarto_core::project::orchestrator::{
 };
 use quarto_core::project::render_scripts;
 use quarto_core::{Format, ProjectContext, QuartoError, RenderToFileOptions};
+use quarto_util::output_style::StreamStyle;
+
+use crate::commands::terminal_style::{stderr_text_options, text_render_options};
 use quarto_error_reporting::{
     CoalescedDiagnostic, DiagnosticMessage, DiagnosticMessageBuilder, JsonDiagnostic,
     JsonPass1Failure, TextRenderOptions, diagnostic_to_json_with_options, with_source_file,
@@ -119,6 +122,14 @@ pub struct RenderArgs {
     /// `-M/--metadata KEY:VALUE` arguments, unparsed. Parsed by
     /// [`quarto_core::metadata_flag`] into the render's runtime overlay.
     pub metadata: Vec<String>,
+    /// `--dry-run` (bd-render-dry-run-dyiq7d08): stop after Pass 1 and
+    /// the project's `pre_render` hook, report every diagnostic, write
+    /// nothing. Skips `pre-render` / `post-render` scripts. See
+    /// [`ProjectPipeline::with_dry_run`].
+    pub dry_run: bool,
+    /// The global `-v` count. Read only by `--dry-run`, which lists the
+    /// files a render would produce when it is at least 1.
+    pub verbose: u8,
 }
 
 impl RenderArgs {
@@ -469,30 +480,18 @@ fn classify_no_inputs(
 /// contains the first match, or `None` if the filesystem root is
 /// reached without one.
 ///
-/// This is the cheap half of `ProjectContext::find_project_config`
-/// (parsing-free, `path_exists`-only). `classify_no_inputs` uses it
-/// to gate the expensive directory walk that `ProjectContext::discover`
-/// would otherwise perform on a project-less cwd.
+/// A thin wrapper over the shared walk,
+/// `quarto_core::project::discovery::find_project_root` (parsing-free,
+/// `path_exists`-only). `classify_no_inputs` uses it to gate the
+/// expensive directory walk that `ProjectContext::discover` would
+/// otherwise perform on a project-less cwd.
 pub(crate) fn find_project_root_upward(
     start: &Path,
     runtime: &dyn SystemRuntime,
 ) -> std::result::Result<Option<PathBuf>, DispatchError> {
-    let mut current = start.to_path_buf();
-    loop {
-        for name in ["_quarto.yml", "_quarto.yaml"] {
-            let candidate = current.join(name);
-            let exists = runtime
-                .path_exists(&candidate, None)
-                .map_err(|e| DispatchError::Discover(e.to_string()))?;
-            if exists {
-                return Ok(Some(current));
-            }
-        }
-        match current.parent() {
-            Some(parent) => current = parent.to_path_buf(),
-            None => return Ok(None),
-        }
-    }
+    quarto_core::project::discovery::find_project_root(start, runtime)
+        .map(|found| found.map(|(dir, _config)| dir))
+        .map_err(|e| DispatchError::Discover(e.to_string()))
 }
 
 /// True when a real `_quarto.yml` (or `_quarto.yaml`) sits at the
@@ -630,11 +629,10 @@ fn colorize(text: &str, sgr_code: &str, color: bool) -> String {
 }
 
 /// Whether the error/warning summary should use ANSI color on stderr:
-/// stderr is a terminal and `NO_COLOR` is unset. (`--json-errors`
-/// suppression is handled separately at the call site.)
+/// the process-wide output style decided in `main` (bd-be8ve52f).
+/// (`--json-errors` suppression is handled separately at the call site.)
 fn stderr_use_color() -> bool {
-    use std::io::IsTerminal;
-    std::env::var_os("NO_COLOR").is_none() && std::io::stderr().is_terminal()
+    quarto_util::output_style::get().stderr.color
 }
 
 /// bd-45yw: resolve the replay activation source and load the trace.
@@ -770,11 +768,12 @@ impl RenderReport {
     }
 
     /// The diagnostics exactly as `q2 render` prints them (per-page
-    /// diagnostics included, i.e. the non-`--quiet` form). With
-    /// `color: false` the text carries no ANSI escapes and no OSC 8
-    /// hyperlinks, for consumers that are not a terminal.
-    pub fn diagnostics_text(&self, color: bool) -> String {
-        format_render_diagnostics_text(&self.summary, false, &self.config_sources, color)
+    /// diagnostics included, i.e. the non-`--quiet` form), decorated as
+    /// `style` allows. [`StreamStyle::PLAIN`] gives text with no ANSI
+    /// escapes and no OSC 8 hyperlinks, for consumers that are not a
+    /// terminal.
+    pub fn diagnostics_text(&self, style: StreamStyle) -> String {
+        format_render_diagnostics_text(&self.summary, false, &self.config_sources, style)
     }
 }
 
@@ -803,15 +802,16 @@ pub enum RenderAbort {
 }
 
 impl RenderAbort {
-    /// What `q2 render` prints for this abort in text mode. Parse
-    /// diagnostics carry their own `Error: [Q-N-M]` header; the rest
-    /// get the `Error:` prefix `main` would have added.
-    pub fn user_message(&self) -> String {
+    /// What `q2 render` prints for this abort in text mode, decorated
+    /// per `opts` (the stderr style for a terminal, plain for the
+    /// browser). Parse diagnostics carry their own `Error: [Q-N-M]`
+    /// header; the rest get the `Error:` prefix `main` would have added.
+    pub fn user_message(&self, opts: &TextRenderOptions) -> String {
         match self {
-            RenderAbort::Dispatch(DispatchError::DiscoverParse(pe)) => pe.to_string(),
+            RenderAbort::Dispatch(DispatchError::DiscoverParse(pe)) => pe.render_with(opts),
             RenderAbort::Dispatch(e) => format!("Error: {e}"),
-            RenderAbort::Parse { error, .. } => error.to_string(),
-            RenderAbort::Scripts(pe) => pe.to_string(),
+            RenderAbort::Parse { error, .. } => error.render_with(opts),
+            RenderAbort::Scripts(pe) => pe.render_with(opts),
             RenderAbort::Other(e) => format!("Error: {e:#}"),
         }
     }
@@ -838,7 +838,7 @@ pub(crate) fn exit_with_abort(abort: RenderAbort, args: &RenderArgs) -> anyhow::
             // `Error:` prefix on top (bd-y56u1gl7). Mirrors the
             // `RenderAbort::Parse` arm below.
             if let DispatchError::DiscoverParse(pe) = &e {
-                eprintln!("{pe}");
+                eprintln!("{}", pe.render_with(&stderr_text_options()));
                 std::process::exit(1);
             }
             anyhow::anyhow!("{}", e)
@@ -847,7 +847,7 @@ pub(crate) fn exit_with_abort(abort: RenderAbort, args: &RenderArgs) -> anyhow::
             if args.json_errors {
                 emit_parse_error_json(&error, input.as_deref());
             } else {
-                eprintln!("{}", error);
+                eprintln!("{}", error.render_with(&stderr_text_options()));
             }
             std::process::exit(1);
         }
@@ -876,6 +876,10 @@ pub fn execute(args: RenderArgs) -> Result<()> {
 /// from before the split.
 pub(crate) fn present_report(report: &RenderReport, args: &RenderArgs) {
     print_render_diagnostics(&report.summary, args, &report.config_sources);
+    if let Some(dry_run) = &report.summary.dry_run {
+        present_dry_run(report, dry_run, args);
+        return;
+    }
     match report.total_files {
         Some(total_files) => {
             let rendered = report.summary.outputs.len();
@@ -908,6 +912,48 @@ pub(crate) fn present_report(report: &RenderReport, args: &RenderArgs) {
             }
         }
     }
+}
+
+/// The end of a `--dry-run` (bd-render-dry-run-dyiq7d08), after the
+/// diagnostics: under `--json-errors`, the one JSON summary object on
+/// stdout; otherwise the `-v` would-render list and the `Checked N
+/// files` line on stderr. Unlike a render, a single file gets the line
+/// too, so a clean dry run says so instead of printing nothing.
+fn present_dry_run(
+    report: &RenderReport,
+    dry_run: &quarto_core::project::orchestrator::DryRunReport,
+    args: &RenderArgs,
+) {
+    use super::render_dry_run;
+    let counts = report.diagnostic_counts();
+    if args.json_errors {
+        let summary = render_dry_run::json_summary(&render_dry_run::SummaryInputs {
+            report: dry_run,
+            counts,
+            project_dir: &report.project_dir,
+            format: &report.project_format_key,
+            strict: args.strict,
+            stopped_early: report.summary.stopped_early,
+            list_files: args.verbose > 0,
+            wire_path,
+        });
+        match serde_json::to_string(&summary) {
+            Ok(line) => println!("{line}"),
+            Err(e) => eprintln!("(internal: failed to serialize the dry-run summary: {e})"),
+        }
+        return;
+    }
+    if args.verbose > 0 && !report.summary.stopped_early {
+        for line in render_dry_run::would_render_lines(&dry_run.would_render, &report.project_dir) {
+            quarto_util::user_status!(args.console_quiet(), "{}", line);
+        }
+    }
+    let mut line = render_dry_run::summary_line(dry_run);
+    match format_counts_clause(&counts, stderr_use_color()) {
+        Some(clause) => line = format!("{line} — {clause}"),
+        None => line.push_str(" — no problems found"),
+    }
+    quarto_util::user_status!(args.console_quiet(), "{}", line);
 }
 
 /// Render once, in process, and return what happened.
@@ -981,6 +1027,8 @@ pub fn render_once(
         typst_target: None,
         captures: Default::default(),
         overlay,
+        // `execute: record-sources` is read per document inside the render; no option sets it.
+        record_sources: Default::default(),
     };
 
     match target {
@@ -1054,7 +1102,12 @@ fn render_single_doc(
 
     quarto_util::user_status!(
         args.console_quiet(),
-        "Rendering single file: {}",
+        "{} single file: {}",
+        if args.dry_run {
+            "Checking"
+        } else {
+            "Rendering"
+        },
         input.display()
     );
 
@@ -1076,15 +1129,18 @@ fn render_single_doc(
         runtime_arc.clone(),
     )
     .with_format_override(args.to.clone())
-    .with_fail_fast(args.fail_fast);
+    .with_fail_fast(args.fail_fast)
+    .with_dry_run(args.dry_run);
     if resolved.is_book {
         pipeline = pipeline.with_project_format(resolved.project_format.clone());
     }
 
-    // bd-hxhnnlzs: keep Jupyter kernels warm across the whole pipeline
-    // run. Scoped to the `block_on` (not the surrounding function)
-    // because callers may `std::process::exit` afterwards, which skips
-    // destructors — the scope must close before any exit.
+    // bd-hxhnnlzs: one kernel scope for the whole pipeline run, so any
+    // kernel still alive when it ends is shut down. Each document's kernel
+    // is its own and is shut down when the document finishes
+    // (bd-i7yz08uh). Scoped to the `block_on` (not the surrounding
+    // function) because callers may `std::process::exit` afterwards,
+    // which skips destructors — the scope must close before any exit.
     let run_result = {
         let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
         pollster::block_on(pipeline.run_with_book_support())
@@ -1199,7 +1255,9 @@ fn render_project(
     // the project so script-created inputs and config edits are
     // picked up. `project.type` / `project.output-dir` changes are
     // forbidden (Q1-compatible mutation guard).
-    let run_scripts = !args.no_render_scripts;
+    // A dry run never runs scripts: they are arbitrary user code that may
+    // write files (bd-render-dry-run-dyiq7d08).
+    let run_scripts = !args.no_render_scripts && !args.dry_run;
     let render_all = targets.is_none();
     let target = match &targets {
         None => RenderTarget::FullProject {
@@ -1255,7 +1313,12 @@ fn render_project(
 
     quarto_util::user_status!(
         args.console_quiet(),
-        "Rendering project: {} (type: {})",
+        "{} project: {} (type: {})",
+        if args.dry_run {
+            "Checking"
+        } else {
+            "Rendering"
+        },
         project.dir.display(),
         project.project_type_label()
     );
@@ -1282,7 +1345,8 @@ fn render_project(
         runtime_arc.clone(),
     )
     .with_format_override(args.to.clone())
-    .with_fail_fast(args.fail_fast);
+    .with_fail_fast(args.fail_fast)
+    .with_dry_run(args.dry_run);
     if resolved.is_book {
         pipeline = pipeline.with_project_format(resolved.project_format.clone());
     }
@@ -1291,10 +1355,11 @@ fn render_project(
         pipeline = pipeline.with_mode(mode);
     }
 
-    // bd-hxhnnlzs: one kernel scope for the whole project render, so
-    // documents sharing a (kernel, dir) session key reuse one warm
-    // kernel. Scoped to the `block_on` because callers may
-    // `std::process::exit` afterwards, which skips destructors.
+    // bd-hxhnnlzs: one kernel scope for the whole project render, so any
+    // kernel still alive when it ends is shut down. Each document runs on
+    // its own kernel, shut down when the document finishes (bd-i7yz08uh).
+    // Scoped to the `block_on` because callers may `std::process::exit`
+    // afterwards, which skips destructors.
     let run_result = {
         let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
         pollster::block_on(pipeline.run_with_book_support())
@@ -1393,7 +1458,7 @@ fn exit_with_parse_error(parse_error: quarto_core::ParseError, args: &RenderArgs
     if args.json_errors {
         emit_parse_error_json(&parse_error, None);
     } else {
-        eprintln!("{}", parse_error);
+        eprintln!("{}", parse_error.render_with(&stderr_text_options()));
     }
     std::process::exit(1);
 }
@@ -1441,7 +1506,12 @@ fn print_render_diagnostics(
     } else {
         eprint!(
             "{}",
-            format_render_diagnostics_text(summary, args.quiet, config_sources, true)
+            format_render_diagnostics_text(
+                summary,
+                args.quiet,
+                config_sources,
+                quarto_util::output_style::get().stderr,
+            )
         );
         // Per-file output line stays on `tracing::info!` (opt-in via
         // `-v`); enumerating every file is too noisy for a large
@@ -1712,9 +1782,10 @@ fn failure_attribution_line(group: &quarto_error_reporting::CoalescedDiagnostic)
     }
 }
 
-/// The text form of a render's diagnostics: what `q2 render` prints
-/// on stderr (`color: true`), or the same content rendered with no ANSI
-/// color and no OSC 8 hyperlinks (`color: false`). One function,
+/// The text form of a render's diagnostics, decorated as `style`
+/// allows: what `q2 render` prints on stderr (the process's resolved
+/// stderr style, bd-be8ve52f), or the same content with no ANSI color
+/// and no OSC 8 hyperlinks ([`StreamStyle::PLAIN`]). One function,
 /// so the terminal and `q2 preview --static`'s browser overlay cannot
 /// drift apart (bd-sl79jjiq Phase 1).
 ///
@@ -1735,11 +1806,9 @@ fn format_render_diagnostics_text(
     summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
     quiet: bool,
     config_sources: &[PathBuf],
-    color: bool,
+    style: StreamStyle,
 ) -> String {
-    // The no-color form also drops hyperlinks: it is for the browser
-    // overlay, where OSC 8 sequences are just noise.
-    let opts = TextRenderOptions::default().color(color).hyperlinks(color);
+    let opts = text_render_options(style);
     let mut out = String::new();
     let mut line = |text: &str| {
         out.push_str(text);
@@ -1747,8 +1816,16 @@ fn format_render_diagnostics_text(
     };
 
     for failure in &summary.pass1_failures {
+        // A full render reports the file as skipped by the profile pass;
+        // a dry run checks exactly that pass, so the failure is the
+        // finding itself (bd-render-dry-run-dyiq7d08).
+        let prefix = if summary.dry_run.is_some() {
+            "error:"
+        } else {
+            "warning: profile-pass skipped"
+        };
         line(&format!(
-            "warning: profile-pass skipped {}: {}",
+            "{prefix} {}: {}",
             failure.input.display(),
             failure_error_text(failure, &opts)
         ));
@@ -1820,7 +1897,7 @@ fn format_render_diagnostics_text(
     if !quiet {
         use quarto_error_reporting::coalesce_by_source;
 
-        let entries = summary.outputs.iter().flat_map(|result| {
+        let output_entries = summary.outputs.iter().flat_map(|result| {
             result.render_output.diagnostics.iter().map(|d| {
                 (
                     result.input_path.clone(),
@@ -1829,6 +1906,18 @@ fn format_render_diagnostics_text(
                 )
             })
         });
+        // A dry run's Pass-1 warnings (no outputs exist) take the same
+        // path: one report per shared location, an "Affected files:" tail.
+        let pass1_entries = summary.pass1_diagnostics.iter().flat_map(|file| {
+            file.diagnostics.iter().map(|d| {
+                (
+                    file.input.clone(),
+                    d.clone(),
+                    Some(file.source_context.clone()),
+                )
+            })
+        });
+        let entries = output_entries.chain(pass1_entries);
         // Q-5-37 (unreferenced brand file) is emitted once per page but
         // is one project-wide problem with no source span, so the
         // location coalescer would print it once per page.
@@ -2096,7 +2185,7 @@ fn json_source_file(
 /// A path as `--json-errors` spells it: absolute, without resolving
 /// symlinks (`std::path::absolute` keeps the plain form on Windows,
 /// unlike `canonicalize`'s `\\?\` prefix).
-fn wire_path(path: &Path) -> String {
+pub(crate) fn wire_path(path: &Path) -> String {
     std::path::absolute(path)
         .unwrap_or_else(|_| path.to_path_buf())
         .display()
@@ -2150,7 +2239,9 @@ fn emit_cli_diagnostic(
         {
             emit_json_line(&json);
         }
-    } else if let Some(text) = render_diagnostic_guarded(code, || diagnostic.to_text(None)) {
+    } else if let Some(text) = render_diagnostic_guarded(code, || {
+        diagnostic.to_text_with_options(None, &stderr_text_options())
+    }) {
         eprintln!("{}", text);
     }
 }
@@ -2236,6 +2327,19 @@ fn print_render_diagnostics_json(
             render_diagnostic_guarded(code, || diagnostic_json(diagnostic, &project_ctx, None))
         {
             emit_json_line(&json);
+        }
+    }
+
+    // A dry run's Pass-1 warnings on files that parsed: the same
+    // JsonDiagnostic records a real render emits for them from Pass 2.
+    for file in &summary.pass1_diagnostics {
+        for d in &file.diagnostics {
+            let code = d.code.as_deref();
+            if let Some(json) = render_diagnostic_guarded(code, || {
+                diagnostic_json(d, &file.source_context, Some(&file.input))
+            }) {
+                emit_json_line(&json);
+            }
         }
     }
 
@@ -3482,6 +3586,8 @@ mod tests {
             pass2_failures: Vec::new(),
             project_diagnostics,
             stopped_early: false,
+            pass1_diagnostics: Vec::new(),
+            dry_run: None,
         }
     }
 
@@ -3547,6 +3653,8 @@ mod tests {
             pass2_failures: Vec::new(),
             project_diagnostics: Vec::new(),
             stopped_early: false,
+            pass1_diagnostics: Vec::new(),
+            dry_run: None,
         }
     }
 
@@ -3598,7 +3706,7 @@ mod render_once_tests {
         let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         write(
             &dir.join("_quarto.yml"),
-            "project:\n  type: website\nwebsite:\n  title: Base\n",
+            "quarto-required: \"^2\"\nproject:\n  type: website\nwebsite:\n  title: Base\n",
         );
         write(&dir.join("index.qmd"), "---\ntitle: Home\n---\n\nHello.\n");
         write(&dir.join("about.qmd"), "---\ntitle: About\n---\n\nAbout.\n");
@@ -3678,7 +3786,7 @@ mod render_once_tests {
             "good pages still render"
         );
 
-        let text = report.diagnostics_text(false);
+        let text = report.diagnostics_text(StreamStyle::PLAIN);
         // Q-1-1 "YAML Syntax Error" (was the generic Q-0-99 until bd-x30aq7ae).
         assert!(
             text.contains("Q-1-1"),
@@ -3693,7 +3801,12 @@ mod render_once_tests {
             "color=false must yield no ANSI escapes: {text:?}"
         );
         assert!(
-            report.diagnostics_text(true).contains("\x1b["),
+            report
+                .diagnostics_text(StreamStyle {
+                    color: true,
+                    hyperlinks: true
+                })
+                .contains("\x1b["),
             "color=true keeps the terminal colors"
         );
     }

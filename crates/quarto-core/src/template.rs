@@ -142,7 +142,7 @@ pub(crate) fn escape_html_text(s: &str) -> String {
 }
 
 const MINIMAL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
-<html$if(lang)$ lang="$lang$"$endif$>
+<html$if(lang)$ lang="$lang$"$endif$$if(dir)$ dir="$dir$"$endif$>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -198,13 +198,14 @@ $endfor$
 ///   exists (same transform); gates the `<header>` emission
 /// - `$date$` - publication date
 /// - `$abstract$` - document abstract (rendered as HTML blocks)
-/// - `$body-classes$` - CSS classes for body element. A top-level
-///   `body-classes` supplied by the author or a filter is kept
-///   wholesale and suppresses the compose below. Otherwise
+/// - `$body-classes$` - CSS classes for body element.
 ///   `render_with_compiled_template` accumulates: the structural base
 ///   from `rendered.navigation.body-classes` (written by
-///   `SidebarRenderTransform`, e.g. `nav-sidebar docked`), then
-///   `fullcontent` when nothing occupies the right margin, then
+///   `SidebarRenderTransform`, e.g. `nav-sidebar docked`), then a
+///   top-level `body-classes` supplied by the author or a filter
+///   (added to the computed classes, not replacing them, as in Q1 —
+///   GH #1218), then `fullcontent` when nothing occupies the right
+///   margin, then
 ///   `nav-fixed` when a navbar is rendered, then the color-mode class.
 ///   `fullcontent` shrinks the right margin to near-nothing (to
 ///   `0.14*margin-width` per segment without a sidebar; to zero in the
@@ -256,7 +257,7 @@ $endfor$
 macro_rules! html_head {
     () => {
         r#"<!DOCTYPE html>
-<html$if(lang)$ lang="$lang$"$endif$>
+<html$if(lang)$ lang="$lang$"$endif$$if(dir)$ dir="$dir$"$endif$>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1064,10 +1065,11 @@ pub fn render_with_template(
 /// * `meta` - Document metadata from the Pandoc AST (as ConfigValue).
 ///   Include slots are read from `meta.rendered.includes.{header,
 ///   before-body, after-body}` — populated upstream by
-///   [`IncludeResolveStage`](crate::stage::IncludeResolveStage). Authored
+///   [`IncludeResolveStage`](crate::stage::IncludeResolveStage). The
 ///   `header-includes` / `include-before` / `include-after` literals at the
 ///   top level are NOT read here; they are folded into `rendered.includes.*`
-///   by the resolve stage.
+///   by [`IncludeInlineFoldStage`](crate::stage::IncludeInlineFoldStage)
+///   after user filters run.
 /// * `css_paths` - Paths to CSS files (relative to output HTML)
 /// * `script_paths` - Paths to JS files (relative to output HTML)
 ///
@@ -1087,7 +1089,7 @@ pub fn render_with_compiled_template(
     // leak into the template context as variables. The authored
     // `header-includes` / `include-before` / `include-after` keys (Pandoc
     // inline-content form) are also excluded here so they don't shadow the
-    // resolved values. The resolve stage already folded them into
+    // resolved values. `IncludeInlineFoldStage` already folded them into
     // `rendered.includes.*`; reading them again here would double-count.
     add_metadata_to_context_except(
         meta,
@@ -1227,20 +1229,23 @@ pub fn render_with_compiled_template(
 
     // Compute the body class as an accumulating list (bd-ersobfbt
     // refactored the old single-`String` replace into this compose).
-    // Order of precedence for the structural base:
+    // The structural base:
     //
-    //   1. user-supplied `body-classes` (e.g. set in metadata) — kept
-    //      as-is, wholesale: the compose below (including the
-    //      `nav-fixed` append) is skipped entirely.
-    //   2. `rendered.navigation.body-classes` (written by
-    //      `SidebarRenderTransform`, e.g. `"nav-sidebar floating"`) —
-    //      promoted to the top-level template variable. See bd-mgoh.
-    //   3. no sidebar → empty base. The body falls through to the
-    //      default (no-class) wide grid, whose right margin column is
-    //      `minmax(0.3*mw, 0.58*mw)` and has room for a TOC.
+    //   - `rendered.navigation.body-classes` (written by
+    //     `SidebarRenderTransform`, e.g. `"nav-sidebar floating"`) —
+    //     promoted to the top-level template variable. See bd-mgoh.
+    //   - no sidebar → empty base. The body falls through to the
+    //     default (no-class) wide grid, whose right margin column is
+    //     `minmax(0.3*mw, 0.58*mw)` and has room for a TOC.
     //
     // Onto the structural base, in order:
     //
+    //   - the user-supplied top-level `body-classes` (metadata or a
+    //     filter). It adds to the computed classes and never replaces
+    //     them (GH #1218): Q1's template writes it on `<body>` and its
+    //     postprocessors `classList.add` the layout classes on top, so
+    //     the theme's `nav-fixed` / `fullcontent` / `quarto-light`
+    //     selectors keep working on pages that add a class of their own.
     //   - `fullcontent` when nothing occupies the right margin
     //     (bd-no-toc-reserves-margin-column-s8nonx0w). How much it
     //     reclaims depends on the variant: without a sidebar,
@@ -1370,7 +1375,7 @@ pub fn render_with_compiled_template(
         ctx.insert("main-column", TemplateValue::String(column.to_string()));
     }
 
-    if ctx.get("body-classes").is_none() {
+    {
         let mut classes: Vec<String> = Vec::new();
         if let Some(base) = meta
             .get_path(&["rendered", "navigation", "body-classes"])
@@ -1378,6 +1383,13 @@ pub fn render_with_compiled_template(
             .filter(|s| !s.is_empty())
         {
             classes.push(base);
+        }
+        if let Some(user) = meta
+            .get("body-classes")
+            .and_then(|v| v.as_plain_text())
+            .filter(|s| !s.is_empty())
+        {
+            classes.push(user);
         }
         // Q1: `!hasRightContent && !hasMarginContent && !hasToc`. Under
         // `page-layout: full` the main-column suggestion above is the
@@ -1392,8 +1404,16 @@ pub fn render_with_compiled_template(
         if navbar_rendered {
             classes.push("nav-fixed".to_string());
         }
-        let body_classes =
-            append_color_mode_class(&classes.join(" "), dark_theme_default.unwrap_or(false));
+        // A class the author repeats (e.g. `body-classes: nav-fixed`)
+        // appears once, at its first position.
+        let mut seen = std::collections::HashSet::new();
+        let joined = classes
+            .iter()
+            .flat_map(|c| c.split_whitespace())
+            .filter(|tok| seen.insert(*tok))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let body_classes = append_color_mode_class(&joined, dark_theme_default.unwrap_or(false));
         ctx.insert("body-classes", TemplateValue::String(body_classes));
     }
 
@@ -2368,45 +2388,45 @@ mod tests {
 
     #[test]
     fn test_inlines_to_text_quoted() {
-        let inlines = vec![Inline::Quoted(Quoted {
+        let inlines = vec![Inline::Quoted(Box::new(Quoted {
             quote_type: QuoteType::DoubleQuote,
             content: vec![Inline::Str(Str {
                 text: "quoted".to_string(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "\"quoted\"");
     }
 
     #[test]
     fn test_inlines_to_text_code() {
-        let inlines = vec![Inline::Code(Code {
+        let inlines = vec![Inline::Code(Box::new(Code {
             attr: quarto_pandoc_types::attr::Attr::default(),
             text: "code()".to_string(),
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "code()");
     }
 
     #[test]
     fn test_inlines_to_text_math() {
-        let inlines = vec![Inline::Math(Math {
+        let inlines = vec![Inline::Math(Box::new(Math {
             math_type: MathType::InlineMath,
             text: "x^2".to_string(),
             source_info: dummy_source_info(),
             text_source: None,
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "x^2");
     }
 
     #[test]
     fn test_inlines_to_text_link() {
-        let inlines = vec![Inline::Link(Link {
+        let inlines = vec![Inline::Link(Box::new(Link {
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Inline::Str(Str {
                 text: "link text".to_string(),
@@ -2416,14 +2436,14 @@ mod tests {
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
             target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "link text");
     }
 
     #[test]
     fn test_inlines_to_text_span() {
-        let inlines = vec![Inline::Span(Span {
+        let inlines = vec![Inline::Span(Box::new(Span {
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Inline::Str(Str {
                 text: "span content".to_string(),
@@ -2431,7 +2451,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "span content");
     }
@@ -2466,7 +2486,7 @@ mod tests {
 
     #[test]
     fn test_blocks_to_text_header() {
-        let blocks = vec![Block::Header(Header {
+        let blocks = vec![Block::Header(Box::new(Header {
             level: 1,
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Inline::Str(Str {
@@ -2475,19 +2495,19 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = blocks_to_text(&blocks);
         assert_eq!(text, "Heading");
     }
 
     #[test]
     fn test_blocks_to_text_code_block() {
-        let blocks = vec![Block::CodeBlock(CodeBlock {
+        let blocks = vec![Block::CodeBlock(Box::new(CodeBlock {
             attr: quarto_pandoc_types::attr::Attr::default(),
             text: "fn main() {}".to_string(),
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = blocks_to_text(&blocks);
         assert_eq!(text, "fn main() {}");
     }
@@ -2510,7 +2530,7 @@ mod tests {
 
     #[test]
     fn test_blocks_to_text_div() {
-        let blocks = vec![Block::Div(Div {
+        let blocks = vec![Block::Div(Box::new(Div {
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
@@ -2521,7 +2541,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = blocks_to_text(&blocks);
         assert_eq!(text, "div content");
     }
@@ -2548,7 +2568,7 @@ mod tests {
 
     #[test]
     fn test_blocks_to_text_ordered_list() {
-        let blocks = vec![Block::OrderedList(OrderedList {
+        let blocks = vec![Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Default, ListNumberDelim::Default),
             content: vec![vec![Block::Plain(Plain {
                 content: vec![Inline::Str(Str {
@@ -2558,7 +2578,7 @@ mod tests {
                 source_info: dummy_source_info(),
             })]],
             source_info: dummy_source_info(),
-        })];
+        }))];
         let text = blocks_to_text(&blocks);
         assert!(text.contains("Item 1"));
     }
@@ -3406,16 +3426,17 @@ mod tests {
         assert!(pos("BELOW") < pos("</header>"));
     }
 
-    /// bd-ersobfbt: an explicit user-supplied top-level `body-classes`
-    /// still wins wholesale (bd-mtzry contract) — the compose step,
-    /// including the `nav-fixed` append, is skipped entirely.
+    /// GH #1218: a user-supplied top-level `body-classes` is added to
+    /// the computed layout classes, as in Q1, instead of replacing them:
+    /// the theme's CSS and JS select on `nav-fixed`, `fullcontent` and
+    /// `quarto-light`.
     #[test]
-    fn test_full_template_user_body_classes_suppress_nav_fixed() {
+    fn test_full_template_user_body_classes_add_to_computed_classes() {
         let template = full_html_template().unwrap();
         let mut meta = ConfigValue::null(dummy_source_info());
         meta.insert_path(
             &["body-classes"],
-            ConfigValue::new_string("custom-layout", dummy_source_info()),
+            ConfigValue::new_string("my-page", dummy_source_info()),
         );
         meta.insert_path(
             &["rendered", "navigation", "navbar"],
@@ -3426,13 +3447,36 @@ mod tests {
             render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
 
         assert!(
-            html.contains("<body class=\"custom-layout\">"),
-            "explicit body-classes must be kept as-is; got: {}",
+            html.contains("<body class=\"my-page fullcontent nav-fixed quarto-light\">"),
+            "user body-classes must join the computed classes; got: {}",
             &html[..html.len().min(800)]
         );
+    }
+
+    /// GH #1218: the user classes sit after the sidebar's structural
+    /// base, and a class the user repeats from the computed list is
+    /// emitted once.
+    #[test]
+    fn test_full_template_user_body_classes_with_sidebar_dedup() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["body-classes"],
+            ConfigValue::new_string("doc-reference fullcontent", dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "body-classes"],
+            ConfigValue::new_string("nav-sidebar docked", dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
         assert!(
-            !html.contains("nav-fixed"),
-            "explicit body-classes suppresses the nav-fixed append; got: {}",
+            html.contains(
+                "<body class=\"nav-sidebar docked doc-reference fullcontent quarto-light\">"
+            ),
+            "expected sidebar base, then user classes, deduplicated; got: {}",
             &html[..html.len().min(800)]
         );
     }
@@ -4284,12 +4328,12 @@ mod tests {
 
     /// A `Code` inline `\`text\``.
     fn code_inline(text: &str) -> Inline {
-        Inline::Code(Code {
+        Inline::Code(Box::new(Code {
             attr: empty_attr(),
             text: text.to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn str_inline(text: &str) -> Inline {
@@ -4525,6 +4569,50 @@ mod tests {
             "metadata must not reach $skip-to-content-text$"
         );
         assert!(html.contains(">Skip to main content</a>"));
+    }
+
+    // ─────────── GH #1219: `dir` on the root element ───────────
+
+    /// Render `meta` through each built-in HTML template and return the
+    /// `<html ...>` opening tag of each.
+    fn html_open_tags(meta: &ConfigValue) -> Vec<String> {
+        [
+            minimal_html_template().expect("minimal template compiles"),
+            full_html_template().expect("full template compiles"),
+            dashboard_html_template().expect("dashboard template compiles"),
+        ]
+        .iter()
+        .map(|template| {
+            let (html, _diags) =
+                render_with_compiled_template(template, "<p>body</p>", meta, &[], &[])
+                    .expect("template renders");
+            let start = html.find("<html").expect("has <html");
+            let end = html[start..].find('>').expect("<html closes") + start + 1;
+            html[start..end].to_string()
+        })
+        .collect()
+    }
+
+    #[test]
+    fn html_templates_write_dir_on_root_element() {
+        let meta = ConfigValue::new_map(
+            vec![
+                entry("lang", ConfigValue::new_string("ar", dummy_source_info())),
+                entry("dir", ConfigValue::new_string("rtl", dummy_source_info())),
+            ],
+            dummy_source_info(),
+        );
+        for tag in html_open_tags(&meta) {
+            assert_eq!(tag, r#"<html lang="ar" dir="rtl">"#);
+        }
+    }
+
+    #[test]
+    fn html_templates_omit_dir_when_unset() {
+        let meta = ConfigValue::new_map(vec![], dummy_source_info());
+        for tag in html_open_tags(&meta) {
+            assert_eq!(tag, "<html>");
+        }
     }
 
     #[test]

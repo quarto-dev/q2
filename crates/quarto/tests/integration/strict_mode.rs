@@ -271,7 +271,7 @@ fn strict_project_render_fails_on_warning() {
     let dir = canonical(temp.path());
     write_file(
         &dir.join("_quarto.yml"),
-        "project:\n  type: website\n  output-dir: _site\n",
+        "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n",
     );
     write_file(&dir.join("index.qmd"), CLEAN_DOC);
     write_file(&dir.join("warn.qmd"), WARNING_DOC);

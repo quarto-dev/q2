@@ -14,3 +14,4 @@ website:
         href: "mailto:someone@example.com"
       - text: Custom scheme
         href: "positron://settings/positron.notebook.enabled"
+quarto-required: "^2"

@@ -6,6 +6,7 @@ import {
     MERMAID_VERSION,
     setMermaidLoaderForTests,
 } from './MermaidCodeBlock';
+import { DiagramCodeBlock } from './DiagramCodeBlock';
 import { previewRegistry } from '../registry';
 import type { NodeArgs, CodeBlock as CodeBlockType } from '../../framework';
 
@@ -128,8 +129,13 @@ describe('MermaidCodeBlock', () => {
         expect(box.textContent).toContain('not a diagram');
     });
 
-    it('is registered as the previewRegistry CodeBlock entry', () => {
-        expect(previewRegistry.CodeBlock).toBe(MermaidCodeBlock);
+    it('is reached through the previewRegistry CodeBlock entry', async () => {
+        // bd-ijlapt70: the entry is the diagram dispatcher, which
+        // forwards everything but ```dot to this component.
+        expect(previewRegistry.CodeBlock).toBe(DiagramCodeBlock);
+        installFakeMermaid();
+        const { container } = renderNode(codeBlock(['mermaid'], 'flowchart LR'), DiagramCodeBlock);
+        expect(container.querySelector('[data-mermaid-diagram]')).not.toBeNull();
     });
 
     it('pins the same mermaid version as the Rust transform', () => {
@@ -146,6 +152,6 @@ describe('MermaidCodeBlock', () => {
         const UserCodeBlock = () => null;
         const merged = { ...previewRegistry, ...{ CodeBlock: UserCodeBlock } };
         expect(merged.CodeBlock).toBe(UserCodeBlock);
-        expect(previewRegistry.CodeBlock).toBe(MermaidCodeBlock);
+        expect(previewRegistry.CodeBlock).toBe(DiagramCodeBlock);
     });
 });

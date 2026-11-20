@@ -87,8 +87,7 @@ async fn second_eager_run_with_same_cache_dir_hits_cache_skips_engine() {
         ctx.clone(),
         runtime.clone(),
         Some(registry_with_counter(calls.clone())),
-        EnginePolicy::Manual,
-        &cache_dir,
+        &quarto_preview::config::ReExecuteConfig::new(EnginePolicy::Manual, cache_dir.clone()),
     )
     .await
     .expect("first run succeeds");
@@ -119,8 +118,7 @@ async fn second_eager_run_with_same_cache_dir_hits_cache_skips_engine() {
         ctx.clone(),
         runtime,
         Some(registry_with_counter(calls2.clone())),
-        EnginePolicy::Manual,
-        &cache_dir,
+        &quarto_preview::config::ReExecuteConfig::new(EnginePolicy::Manual, cache_dir.clone()),
     )
     .await
     .expect("second run succeeds");

@@ -8,10 +8,11 @@
 //! Brace-form diagram cell diagnostics (GH #1067).
 //!
 //! Quarto 1 draws diagrams from executable cells — ```` ```{mermaid} ````
-//! and ```` ```{dot} ````. Quarto 2 only draws the plain fence
-//! ```` ```mermaid ````; a brace-form cell used to fall through as a code
-//! block whose class was the literal `{mermaid}`, with no warning. In a
-//! migrated site every diagram silently became its source.
+//! and ```` ```{dot} ````. Quarto 2 only draws the plain fences
+//! ```` ```mermaid ```` and ```` ```dot ````; a brace-form cell used to
+//! fall through as a code block whose class was the literal `{mermaid}`,
+//! with no warning. In a migrated site every diagram silently became its
+//! source.
 //!
 //! This transform warns (`Q-2-58`); it does not rewrite. It runs after
 //! engine execution, so a cell an engine *did* claim has already been
@@ -93,8 +94,8 @@ fn diagnostic(cb: &CodeBlock, index: usize, lang: &str) -> DiagnosticMessage {
             .build()
     } else {
         builder
-            .problem("Quarto 2 does not run `{dot}` cells and has no Graphviz support yet, so this block renders as a code block, not a diagram.")
-            .add_hint("To silence this warning when an engine handles `{dot}` cells, set `diagnostics: {Q-2-58: off}`.")
+            .problem("Quarto 2 does not run `{dot}` cells, so this block renders as a code block, not a diagram.")
+            .add_hint("Drop the braces: write ```` ```dot ````. The diagram body and `//|` options need no other change.")
             .build()
     }
 }
@@ -129,12 +130,12 @@ mod tests {
     use quarto_source_map::SourceInfo;
 
     fn cell(class: &str) -> Block {
-        Block::CodeBlock(CodeBlock {
-            attr: (String::new(), vec![class.to_string()], Default::default()),
+        Block::CodeBlock(Box::new(CodeBlock {
+            attr: (String::new(), vec![class.to_string()], Default::default()).into(),
             text: "A --> B".to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn codes(blocks: &Blocks) -> Vec<Option<String>> {
@@ -150,6 +151,28 @@ mod tests {
         }
     }
 
+    /// bd-ijlapt70: Graphviz is drawn from the plain `dot` fence, so a
+    /// `{dot}` cell gets the same "drop the braces" advice as
+    /// `{mermaid}`, each naming its own fence and option marker.
+    #[test]
+    fn each_language_is_told_to_drop_the_braces() {
+        for (class, fence, marker) in [
+            ("{mermaid}", "```mermaid", "%%|"),
+            ("{dot}", "```dot", "//|"),
+        ] {
+            let mut out = Vec::new();
+            collect(&vec![cell(class)], &mut out);
+            let rendered = format!("{:?}", out[0]);
+            assert!(rendered.contains("Drop the braces"), "{class}: {rendered}");
+            assert!(rendered.contains(fence), "{class}: {rendered}");
+            assert!(rendered.contains(marker), "{class}: {rendered}");
+            assert!(
+                !rendered.contains("no Graphviz support"),
+                "{class}: {rendered}"
+            );
+        }
+    }
+
     #[test]
     fn plain_fences_and_other_cells_do_not_warn() {
         for class in ["mermaid", "dot", "{python}", "{{mermaid}}", "{ojs}"] {
@@ -159,12 +182,12 @@ mod tests {
 
     #[test]
     fn nested_cells_warn() {
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: Default::default(),
             content: vec![cell("{mermaid}")],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         assert_eq!(codes(&vec![div]).len(), 1);
     }
 }

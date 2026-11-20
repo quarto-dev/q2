@@ -16,6 +16,7 @@
 use std::path::{Path, PathBuf};
 
 use quarto_core::extension::read_extension;
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_source_fetch::{ExtractLimits, RemoteTarget, SourceFetch, Target, fetch_into};
 use quarto_system_runtime::NativeRuntime;
 
@@ -23,7 +24,7 @@ use crate::commands::common::plan::CommandFailure;
 use crate::commands::common::prompter::Prompter;
 use crate::commands::use_cmd::find_project_config;
 
-use super::record::{InstalledState, SourceKind};
+use super::record::{EditKind, InstalledState, SourceKind, SourceRecord};
 use super::stage::{
     EXTENSIONS_DIR, locate_extensions_dir, read_staged, type_summary, validate_segment,
 };
@@ -75,6 +76,14 @@ pub struct AddPlan {
     pub provenance: Provenance,
     pub learn_more: Option<String>,
     pub dry_run: bool,
+    /// Whether this run creates `_extensions/.gitattributes` (see
+    /// [`super::install::GITATTRIBUTES_FILENAME`]): true when the plan
+    /// writes an extension and the file does not exist yet. Under
+    /// `--dry-run`, whether it *would*.
+    pub writes_gitattributes: bool,
+    /// Informational notes to show alongside the plan, such as an
+    /// owner folder in the source that the install drops.
+    pub notes: Vec<DiagnosticMessage>,
 }
 
 impl AddPlan {
@@ -97,6 +106,9 @@ pub struct PlannedExtension {
     pub change: Change,
     pub types: String,
     pub installed: InstalledState,
+    /// The installed copy's record, when it could be read. Its keys that
+    /// q2 does not define are written into the new record (GH #1175).
+    pub prior_record: Option<SourceRecord>,
     /// Whether this extension is (re)installed. False for No Change
     /// unless `--force` was given.
     pub writes: bool,
@@ -166,6 +178,7 @@ pub fn resolve(req: &AddRequest, ctx: &mut ResolveContext) -> Result<AddPlan, Co
     refuse_skipped_links(&staged, &fetched.skipped_links, target_input)?;
 
     let mut extensions: Vec<PlannedExtension> = Vec::with_capacity(staged.len());
+    let mut notes: Vec<DiagnosticMessage> = Vec::new();
     for ext in &staged {
         validate_segment(&ext.id.name, "name")?;
         // Q1 installs under the *source's* owner and drops any
@@ -180,6 +193,9 @@ pub fn resolve(req: &AddRequest, ctx: &mut ResolveContext) -> Result<AddPlan, Co
             Some(owner) => format!("{owner}/{}", ext.id.name),
             None => ext.id.name.clone(),
         };
+        if let Some(note) = dropped_owner_note(ext, owner.as_deref()) {
+            notes.push(note);
+        }
         if extensions.iter().any(|e| e.dest == dest) {
             return Err(CommandFailure::new(
                 format!(
@@ -199,7 +215,7 @@ pub fn resolve(req: &AddRequest, ctx: &mut ResolveContext) -> Result<AddPlan, Co
             ext.version.as_deref(),
             installed_version.as_ref().map(Option::as_deref),
         );
-        let installed = super::record::installed_state(&installed_dir)?;
+        let inspection = super::record::inspect(&installed_dir)?;
         let writes = change.action != Action::NoChange || req.force;
 
         extensions.push(PlannedExtension {
@@ -209,12 +225,20 @@ pub fn resolve(req: &AddRequest, ctx: &mut ResolveContext) -> Result<AddPlan, Co
             dest,
             change,
             types: type_summary(ext),
-            installed,
+            installed: inspection.state,
+            prior_record: inspection.record,
             writes,
         });
     }
 
     refuse_local_edits(&extensions, req)?;
+
+    let writes_gitattributes = extensions.iter().any(|e| e.writes)
+        && std::fs::symlink_metadata(
+            root.join(EXTENSIONS_DIR)
+                .join(super::install::GITATTRIBUTES_FILENAME),
+        )
+        .is_err();
 
     Ok(AddPlan {
         root,
@@ -223,7 +247,35 @@ pub fn resolve(req: &AddRequest, ctx: &mut ResolveContext) -> Result<AddPlan, Co
         provenance,
         learn_more,
         dry_run: req.dry_run,
+        writes_gitattributes,
+        notes,
     })
+}
+
+/// Say when the source's own owner folder is not the one the extension
+/// is installed under, so a reference to the old id is not a surprise.
+/// Same text as Q1 1.11 (`readAndCopyExtensions`, quarto-cli#15117).
+fn dropped_owner_note(
+    ext: &quarto_core::extension::Extension,
+    owner: Option<&str>,
+) -> Option<DiagnosticMessage> {
+    let source_owner = ext.id.organization.as_deref()?;
+    if Some(source_owner) == owner {
+        return None;
+    }
+    let name = &ext.id.name;
+    let source_id = format!("{source_owner}/{name}");
+    let text = match owner {
+        Some(owner) => format!(
+            "'{source_id}' installed as '{owner}/{name}', under the owner it is installed \
+             from. Refer to it as '{name}' or '{owner}/{name}'."
+        ),
+        None => format!(
+            "'{source_id}' installed as '{name}', as extensions from a local path or an \
+             archive have no owner. Refer to it as '{name}'."
+        ),
+    };
+    Some(DiagnosticMessageBuilder::info(text).build())
 }
 
 /// The project root when cwd is inside a project, else cwd; `--dir`
@@ -312,22 +364,44 @@ fn refuse_local_edits(
         return Ok(());
     }
     let mut lines = Vec::new();
+    let mut line_endings = false;
+    let mut newer_record = false;
     for ext in extensions.iter().filter(|e| e.writes) {
         if let InstalledState::Modified(edits) = &ext.installed {
             lines.push(format!("{}:", ext.dest.display()));
             for edit in edits {
-                lines.push(format!("  {} ({})", edit.path, edit.kind.as_str()));
+                lines.push(format!("  {} ({})", edit.path, edit.kind.describe()));
+                match edit.kind {
+                    EditKind::LineEndings => line_endings = true,
+                    EditKind::NewerRecord(_) => newer_record = true,
+                    _ => {}
+                }
             }
         }
     }
     if lines.is_empty() {
         return Ok(());
     }
+    let mut hints = String::new();
+    if line_endings {
+        hints.push_str(
+            "\n\nFiles marked \"line endings changed\" differ from the record only in CRLF \
+             vs LF line endings. This is usually git's core.autocrlf setting converting them \
+             on checkout. To stop it, add the line `* -text` to `_extensions/.gitattributes` \
+             (`q2 add` creates that file when it is missing) and check the files out again.",
+        );
+    }
+    if newer_record {
+        hints.push_str(
+            "\n\nAn install record from a newer version of q2 can't be checked by this one. \
+             Upgrade q2, or use --force to replace the extension and its record.",
+        );
+    }
     Err(CommandFailure::new(
         "Installed extensions have local changes",
         format!(
             "Installing would replace files that changed since `q2 add` installed them:\n\n{}\n\n\
-             Nothing was written. Re-run with --force to replace them.",
+             Nothing was written. Re-run with --force to replace them.{hints}",
             lines.join("\n")
         ),
     ))
@@ -617,6 +691,39 @@ mod tests {
         assert!(p.prompts.is_empty());
     }
 
+    fn note_texts(plan: &AddPlan) -> Vec<String> {
+        plan.notes.iter().map(|n| n.to_text(None)).collect()
+    }
+
+    #[test]
+    fn a_local_source_with_an_owner_folder_notes_that_the_owner_is_dropped() {
+        let src = tree(&[("_extensions/cderv/demo/_extension.yml", MANIFEST_V1)]);
+        let cwd = TempDir::new().unwrap();
+        let plan = resolve_with(&request(&src.path().to_string_lossy()), cwd.path(), None).unwrap();
+        assert_eq!(
+            plan.extensions[0].dest,
+            Path::new("_extensions").join("demo")
+        );
+        let notes = note_texts(&plan);
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(
+            notes[0].contains(
+                "'cderv/demo' installed as 'demo', as extensions from a local path or an \
+                 archive have no owner. Refer to it as 'demo'."
+            ),
+            "{}",
+            notes[0]
+        );
+    }
+
+    #[test]
+    fn a_local_source_without_an_owner_folder_has_no_note() {
+        let src = tree(&[("_extensions/demo/_extension.yml", MANIFEST_V1)]);
+        let cwd = TempDir::new().unwrap();
+        let plan = resolve_with(&request(&src.path().to_string_lossy()), cwd.path(), None).unwrap();
+        assert!(plan.notes.is_empty(), "{:?}", note_texts(&plan));
+    }
+
     /// Serves one canned `.tar.gz` at one URL, 404 elsewhere.
     struct OneArchive {
         url: String,
@@ -687,6 +794,16 @@ mod tests {
         // GitHub owner, as in Q1's `copyExtensions`.
         assert_eq!(ext.dest, Path::new("_extensions").join("acme").join("demo"));
         assert_eq!(ext.id, "acme/demo");
+        let notes = note_texts(&plan);
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(
+            notes[0].contains(
+                "'quarto-ext/demo' installed as 'acme/demo', under the owner it is installed \
+                 from. Refer to it as 'demo' or 'acme/demo'."
+            ),
+            "{}",
+            notes[0]
+        );
         assert_eq!(plan.provenance.kind, SourceKind::Github);
         assert_eq!(plan.provenance.git_ref.as_deref(), Some("v1.0.0"));
         assert_eq!(

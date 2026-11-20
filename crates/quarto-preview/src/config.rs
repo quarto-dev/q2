@@ -17,6 +17,209 @@
 use quarto_pandoc_types::ConfigValue;
 use quarto_system_runtime::SystemRuntime;
 
+/// Everything the re-execute paths and the capture driver need to know about *whether and how*
+/// the engine may run, built once at start-up in `lib.rs` and carried to the HTTP handler as an
+/// axum `Extension` (it replaces the process-wide `CACHE_DIR` static, whose first writer won).
+///
+/// The writer gate is read from the environment where this is built and nowhere else, so a test
+/// builds a config with the gate it wants and never touches the process environment.
+#[derive(Debug, Clone)]
+pub struct ReExecuteConfig {
+    /// `preview.engine`: `off` forbids every engine run.
+    pub policy: EnginePolicy,
+    /// The host's record sources: the preview default, or the value of `-M
+    /// 'execute: {record-sources: ...}'`. A document's `execute: record-sources` overrides it
+    /// (see [`Self::document_sources`]); when `share` is set it is the **ceiling** a document
+    /// may only reorder or narrow. Re-execute needs `engine` in the resolved list (epic
+    /// decision 5).
+    pub sources: quarto_core::record::RecordSources,
+    /// A `--share` session: guests reach the render routes and re-execute, so a document is not
+    /// trusted to widen the host's list.
+    pub share: bool,
+    /// The writer gate (`QUARTO_ENGINE_RECORD_WRITE`), read once at start-up.
+    pub record_gate: bool,
+    /// The capture cache root (`<data_dir>/captures/` unless overridden).
+    pub cache_dir: std::path::PathBuf,
+}
+
+impl ReExecuteConfig {
+    /// The preview defaults for `policy` and `cache_dir`, writer gate off. Tests and the
+    /// production path (which sets the gate and the list explicitly) start here.
+    pub fn new(policy: EnginePolicy, cache_dir: std::path::PathBuf) -> Self {
+        Self {
+            policy,
+            sources: quarto_core::record::RecordSources::preview_default(),
+            share: false,
+            record_gate: false,
+            cache_dir,
+        }
+    }
+
+    /// The same config with the writer gate set (tests choose it; production reads the
+    /// environment once in `lib.rs`).
+    pub fn with_gate(mut self, record_gate: bool) -> Self {
+        self.record_gate = record_gate;
+        self
+    }
+
+    /// Whether any engine run may start: the policy is not `off` **and** `engine` is in the
+    /// source list. The one question `claim_and_spawn` asks before it claims a slot.
+    pub fn allows_engine(&self) -> bool {
+        engine_can_run(self.policy, &self.sources)
+    }
+
+    /// The record sources for one document: its `execute: record-sources` read before any
+    /// pipeline (project, directory, front matter, then `-M`), else the host list. With `share`
+    /// the host list is a ceiling the document may only reorder or narrow. The notes (what was
+    /// ignored and why) come back for the caller to put on the page.
+    pub fn document_sources(
+        &self,
+        abs_path: &std::path::Path,
+        content: Option<&str>,
+    ) -> Result<quarto_core::record::ResolvedSources, String> {
+        use quarto_core::record::{CommandSources, Trust, resolve_record_sources};
+        let runtime = crate::render_flags::runtime_with_overlay();
+        let project = quarto_core::project::ProjectContext::discover(abs_path, runtime.as_ref())
+            .map_err(|e| format!("project discovery failed: {e}"))?;
+        let trust = if self.share {
+            Trust::Ceiling {
+                allowed: &self.sources,
+            }
+        } else {
+            Trust::Override
+        };
+        let mut resolved = resolve_record_sources(
+            &project,
+            abs_path,
+            content,
+            runtime.as_ref(),
+            &CommandSources::PREVIEW,
+            trust,
+        )
+        .map_err(|e| e.to_string())?;
+        if resolved.origin.is_none() {
+            resolved.sources = self.sources.clone();
+        }
+        Ok(resolved)
+    }
+
+    /// Whether an engine run may start for `abs_path`: the policy is not `off` and `engine` is
+    /// in the document's list. A document whose key cannot be read refuses (fail closed).
+    pub fn allows_engine_for(&self, abs_path: &std::path::Path) -> bool {
+        self.policy != EnginePolicy::Off
+            && self
+                .document_sources(abs_path, None)
+                .is_ok_and(|r| r.sources.contains_engine())
+    }
+}
+
+/// The one rule for "may an engine run": the policy is not `off` and `engine` is in the
+/// source list. The re-execute guard and the `--share` banner's "guests can re-run" claim both
+/// ask it, so a guest is told what the guard will actually allow.
+pub fn engine_can_run(policy: EnginePolicy, sources: &quarto_core::record::RecordSources) -> bool {
+    policy != EnginePolicy::Off && sources.contains_engine()
+}
+
+#[cfg(test)]
+mod engine_can_run_tests {
+    use super::*;
+    use quarto_core::record::{RecordSource, RecordSources};
+
+    #[test]
+    fn needs_both_a_policy_that_is_not_off_and_engine_in_the_list() {
+        let with = RecordSources::new(vec![RecordSource::Cache, RecordSource::Engine]);
+        let without = RecordSources::new(vec![RecordSource::Cache, RecordSource::Positron]);
+        assert!(engine_can_run(EnginePolicy::Manual, &with));
+        assert!(engine_can_run(EnginePolicy::Auto, &with));
+        assert!(!engine_can_run(EnginePolicy::Off, &with));
+        assert!(!engine_can_run(EnginePolicy::Manual, &without));
+        assert!(!engine_can_run(EnginePolicy::Auto, &without));
+    }
+}
+
+#[cfg(test)]
+mod document_sources_tests {
+    use super::*;
+    use quarto_core::record::{RecordSource as S, RecordSources};
+
+    fn doc_with(key: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        let doc = root.join("doc.qmd");
+        std::fs::write(
+            &doc,
+            format!(
+                "---\nexecute:\n  record-sources: \"{key}\"\n---\n\n```{{python}}\nx = 1\n```\n"
+            ),
+        )
+        .unwrap();
+        (tmp, doc)
+    }
+
+    fn cfg(share: bool, host: Vec<S>) -> ReExecuteConfig {
+        let mut c = ReExecuteConfig::new(EnginePolicy::Manual, std::path::PathBuf::from("/unused"));
+        c.share = share;
+        c.sources = RecordSources::new(host);
+        c
+    }
+
+    /// Without `--share` the document key is an ordinary setting: it replaces the host list.
+    #[test]
+    fn without_share_the_document_key_overrides_the_host_list() {
+        let (_t, doc) = doc_with("q2");
+        let c = cfg(false, vec![S::Cache, S::Engine]);
+        let r = c.document_sources(&doc, None).unwrap();
+        assert_eq!(r.sources.as_slice(), [S::Q2]);
+        assert!(r.notes.is_empty());
+        assert!(!c.allows_engine_for(&doc), "the document dropped `engine`");
+        let (_t, doc) = doc_with("positron,engine");
+        assert!(c.allows_engine_for(&doc));
+    }
+
+    /// With `--share` the host list is a ceiling: the document may not add `positron`, and
+    /// `allows_engine_for` follows the ceiling.
+    #[test]
+    fn with_share_a_document_key_outside_the_ceiling_is_ignored_with_a_warning() {
+        let (_t, doc) = doc_with("positron,engine");
+        let c = cfg(true, vec![S::Cache, S::Engine]);
+        let r = c.document_sources(&doc, None).unwrap();
+        assert_eq!(r.sources.as_slice(), [S::Engine]);
+        assert_eq!(r.notes.len(), 1);
+        assert!(r.notes[0].warning && r.notes[0].text.contains("positron"));
+        assert!(c.allows_engine_for(&doc));
+        // The ceiling has no `engine`: the document cannot bring it back.
+        let c = cfg(true, vec![S::Cache]);
+        assert!(!c.allows_engine_for(&doc));
+    }
+
+    /// A document with no key gets the host list, shared or not (this is also what the tests
+    /// that set `sources` directly rely on).
+    #[test]
+    fn a_document_without_the_key_gets_the_host_list() {
+        let tmp = tempfile::tempdir().unwrap();
+        let doc = tmp.path().canonicalize().unwrap().join("d.qmd");
+        std::fs::write(&doc, "---\ntitle: T\n---\n\nbody\n").unwrap();
+        for share in [false, true] {
+            let c = cfg(share, vec![S::Positron, S::Engine]);
+            let r = c.document_sources(&doc, None).unwrap();
+            assert_eq!(
+                r.sources.as_slice(),
+                [S::Positron, S::Engine],
+                "share {share}"
+            );
+        }
+    }
+
+    /// A key that cannot be read fails closed: no engine run starts.
+    #[test]
+    fn an_unknown_entry_refuses_the_engine() {
+        let (_t, doc) = doc_with("engine,bogus");
+        let c = cfg(false, vec![S::Engine]);
+        assert!(c.document_sources(&doc, None).is_err());
+        assert!(!c.allows_engine_for(&doc));
+    }
+}
+
 /// What the preview server should do with engine execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EnginePolicy {
@@ -61,6 +264,40 @@ pub fn read_engine_policy_from_metadata(meta: &ConfigValue) -> EnginePolicy {
         };
     }
     EnginePolicy::Manual
+}
+
+/// The session's `preview.engine`: the `-M` overlay's value when it carries one, else
+/// `from_project` (what `_quarto.yml` said, or `Manual` for a standalone document). `-M` wins
+/// over `_quarto.yml`, the same precedence it has for `record-sources`.
+///
+/// A string maps as [`read_engine_policy_from_metadata`] maps it; a boolean likewise (`false`
+/// is `off`, `true` is `manual`). Unlike the lenient project read, a value `-M` names that
+/// is not one of those is an error, as an unknown `record-sources` entry is: a typo on the
+/// command line must not silently fall back to a policy the user did not ask for.
+pub fn engine_policy_with_overlay(
+    from_project: EnginePolicy,
+    overlay: Option<&serde_json::Value>,
+) -> Result<EnginePolicy, String> {
+    let Some(value) = overlay
+        .and_then(|o| o.get("preview"))
+        .and_then(|p| p.get("engine"))
+    else {
+        return Ok(from_project);
+    };
+    let refused = || {
+        format!("`-M preview.engine` must be `auto`, `manual` or `off` (or a boolean); got {value}")
+    };
+    match value {
+        serde_json::Value::Bool(false) => Ok(EnginePolicy::Off),
+        serde_json::Value::Bool(true) => Ok(EnginePolicy::Manual),
+        serde_json::Value::String(s) => match s.trim().to_ascii_lowercase().as_str() {
+            "auto" => Ok(EnginePolicy::Auto),
+            "manual" => Ok(EnginePolicy::Manual),
+            "off" | "false" | "none" | "no" => Ok(EnginePolicy::Off),
+            _ => Err(refused()),
+        },
+        _ => Err(refused()),
+    }
 }
 
 fn parse_policy_str(s: &str) -> EnginePolicy {
@@ -1209,5 +1446,76 @@ mod static_preview_defaults_tests {
         let d = read_static_preview_defaults(&meta(&[("port", "lots"), ("browser", "maybe")]));
         assert_eq!(d.port, None);
         assert_eq!(d.browser, None);
+    }
+}
+
+#[cfg(test)]
+mod engine_policy_overlay_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn resolve(project: EnginePolicy, overlay: serde_json::Value) -> Result<EnginePolicy, String> {
+        engine_policy_with_overlay(project, Some(&overlay))
+    }
+
+    /// No `-M`, or a `-M` without `preview.engine`, leaves the project's policy alone.
+    #[test]
+    fn without_a_preview_engine_key_the_project_policy_stands() {
+        for p in [EnginePolicy::Manual, EnginePolicy::Auto, EnginePolicy::Off] {
+            assert_eq!(engine_policy_with_overlay(p, None), Ok(p));
+            assert_eq!(resolve(p, json!({"execute": {"record": true}})), Ok(p));
+            assert_eq!(resolve(p, json!({"preview": {"port": 4000}})), Ok(p));
+        }
+    }
+
+    /// A standalone document has no `_quarto.yml`, so the project policy is `Manual` and `-M`
+    /// is the only way to ask for `auto`.
+    #[test]
+    fn a_standalone_document_can_ask_for_auto() {
+        assert_eq!(
+            resolve(EnginePolicy::Manual, json!({"preview": {"engine": "auto"}})),
+            Ok(EnginePolicy::Auto)
+        );
+    }
+
+    #[test]
+    fn minus_m_wins_over_the_project() {
+        let auto = json!({"preview": {"engine": "auto"}});
+        let off = json!({"preview": {"engine": "off"}});
+        let manual = json!({"preview": {"engine": "manual"}});
+        assert_eq!(resolve(EnginePolicy::Off, auto), Ok(EnginePolicy::Auto));
+        assert_eq!(resolve(EnginePolicy::Auto, off), Ok(EnginePolicy::Off));
+        assert_eq!(
+            resolve(EnginePolicy::Auto, manual),
+            Ok(EnginePolicy::Manual)
+        );
+    }
+
+    /// The boolean forms (YAML reads a bare `off` or `no` as `false`), and the string aliases
+    /// the project read accepts.
+    #[test]
+    fn the_boolean_and_alias_forms_map_as_the_project_read_maps_them() {
+        let engine =
+            |v: serde_json::Value| resolve(EnginePolicy::Auto, json!({"preview": {"engine": v}}));
+        assert_eq!(engine(json!(false)), Ok(EnginePolicy::Off));
+        assert_eq!(engine(json!(true)), Ok(EnginePolicy::Manual));
+        for alias in ["off", "none", "no", "false", "OFF"] {
+            assert_eq!(engine(json!(alias)), Ok(EnginePolicy::Off), "{alias}");
+        }
+        assert_eq!(engine(json!(" Auto ")), Ok(EnginePolicy::Auto));
+    }
+
+    /// An unknown value is an error naming the key and the accepted values.
+    #[test]
+    fn an_unknown_value_is_an_error() {
+        for bad in [json!("autoo"), json!(3), json!(null), json!(["auto"])] {
+            let err = resolve(
+                EnginePolicy::Manual,
+                json!({"preview": {"engine": bad.clone()}}),
+            )
+            .expect_err(&format!("{bad} must be refused"));
+            assert!(err.contains("preview.engine"), "{err}");
+            assert!(err.contains("auto"), "{err}");
+        }
     }
 }

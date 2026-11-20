@@ -1,0 +1,36 @@
+---
+title: Backtick runs inside Jupyter cells
+format: html
+_quarto:
+  tests:
+    run:
+      # bd-f63cqoke: needs a live python3 kernel.
+      requires: jupyter
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        # Each marker is assembled at run time, so it appears in the HTML
+        # only if the cell actually executed (the source never contains it).
+        - ["MID-LINE-RAN", "ASIS-RAN", "CONTROL-RAN", 'class="[^"]*panel-tabset']
+        # The bug left the cell as an inert block with class `{python}`.
+        - ['class="\{python\}']
+---
+
+A backtick run of three or more anywhere in a cell's source makes the qmd
+writer lengthen the cell's fence. Such a cell must still run (bd-f63cqoke).
+
+```{python}
+print("a ``` b " + "MID-LINE-" + "RAN")
+```
+
+The `output: asis` use case from GH #1156: a cell that prints a tabset
+holding a fenced code block.
+
+```{python}
+#| output: asis
+print("::: {.panel-tabset}\n\n## pip\n\n```bash\npip install " + "ASIS-" + "RAN\n```\n\n:::")
+```
+
+```{python}
+print("CONTROL-" + "RAN")
+```

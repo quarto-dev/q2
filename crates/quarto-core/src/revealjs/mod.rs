@@ -17,6 +17,7 @@
 //!
 //! See `claude-notes/plans/2026-06-08-revealjs-presentations.md` (Phase 1).
 
+mod absolute;
 mod assemble;
 mod auto_stretch;
 mod columns;
@@ -26,6 +27,7 @@ mod slides;
 mod theme;
 mod transform;
 
+pub use absolute::RevealAbsoluteTransform;
 pub use assemble::{
     DEFAULT_THEME, register_reveal_assets, render_revealjs_document, stock_reveal_theme_css,
 };

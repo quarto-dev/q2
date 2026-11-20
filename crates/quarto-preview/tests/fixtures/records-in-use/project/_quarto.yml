@@ -1,0 +1,5 @@
+project:
+  title: records project
+preview:
+  engine: manual
+quarto-required: "^2"

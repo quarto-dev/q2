@@ -201,8 +201,8 @@ impl AstTransform for LightboxTransform {
         if !descriptions.is_empty() {
             let mut kvs = LinkedHashMap::new();
             kvs.insert("aria-hidden".to_string(), "true".to_string());
-            ast.blocks.push(Block::Div(Div {
-                attr: (String::new(), vec!["hidden".to_string()], kvs),
+            ast.blocks.push(Block::Div(Box::new(Div {
+                attr: (String::new(), vec!["hidden".to_string()], kvs).into(),
                 content: descriptions,
                 // The container is lightbox chrome; the descriptions inside
                 // keep their images' source info.
@@ -211,7 +211,7 @@ impl AstTransform for LightboxTransform {
                     data: serde_json::Value::Null,
                 }),
                 attr_source: AttrSourceInfo::empty(),
-            }));
+            })));
         }
 
         // The runtime is render-only: the preview has no
@@ -681,7 +681,7 @@ impl Walker<'_> {
                     let Inline::Image(img) = std::mem::replace(inline, placeholder) else {
                         unreachable!("matched an Image above");
                     };
-                    *inline = Inline::Link(self.wrap(img));
+                    *inline = Inline::Link(Box::new(self.wrap(*img)));
                 }
             }
             // A footnote's body is not part of the figure (but an image
@@ -724,16 +724,17 @@ impl Walker<'_> {
         if let Some(description) = img.attr.2.remove(DESCRIPTION) {
             let desc_class = format!("lightbox-desc-{n}");
             let content = self.parse_description(&description, &img.source_info);
-            self.descriptions.push(Block::Div(Div {
+            self.descriptions.push(Block::Div(Box::new(Div {
                 attr: (
                     String::new(),
                     vec!["glightbox-desc".to_string(), desc_class.clone()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content,
                 source_info: img.source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
-            }));
+            })));
             let mut config = format!("description: .{desc_class};");
             if let Some(title) = &title {
                 config.push_str(&format!("title:{title};"));
@@ -749,9 +750,9 @@ impl Walker<'_> {
 
         let source_info = img.source_info.clone();
         Link {
-            attr: (String::new(), vec![LIGHTBOX.to_string()], kvs),
+            attr: (String::new(), vec![LIGHTBOX.to_string()], kvs).into(),
             target: (img.target.0.clone(), title.unwrap_or_default()),
-            content: vec![Inline::Image(img)],
+            content: vec![Inline::Image(Box::new(img))],
             source_info,
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
@@ -1176,8 +1177,8 @@ mod tests {
 
     fn image_para(src: &str, alt: &str) -> Block {
         Block::Plain(Plain {
-            content: vec![Inline::Image(Image {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![Inline::Image(Box::new(Image {
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
                     text: alt.to_string(),
                     source_info: SourceInfo::for_test(),
@@ -1186,7 +1187,7 @@ mod tests {
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),
-            })],
+            }))],
             source_info: SourceInfo::for_test(),
         })
     }
@@ -1194,7 +1195,7 @@ mod tests {
     fn float(id: &str, order: u64, caption: Option<&str>, content: Vec<Block>) -> Block {
         let mut node = CustomNode::new(
             FLOAT_REF_TARGET,
-            (id.to_string(), vec![], LinkedHashMap::new()),
+            (id.to_string(), vec![], LinkedHashMap::new()).into(),
             SourceInfo::for_test(),
         )
         .with_slot("content", Slot::Blocks(content))
@@ -1214,7 +1215,7 @@ mod tests {
                 })]),
             );
         }
-        Block::Custom(node)
+        Block::Custom(Box::new(node))
     }
 
     fn auto_meta() -> ConfigValue {
@@ -1281,8 +1282,8 @@ mod tests {
         let caption_img = image_para("cap.png", "in caption");
         let mut ast = Pandoc {
             meta: auto_meta(),
-            blocks: vec![Block::Figure(Figure {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+            blocks: vec![Block::Figure(Box::new(Figure {
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 caption: Caption {
                     short: None,
                     long: Some(vec![caption_img]),
@@ -1291,7 +1292,7 @@ mod tests {
                 content: vec![image_para("a.png", "a")],
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
         run(&mut ast).await;
         let found = links(&mut ast.blocks);

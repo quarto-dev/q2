@@ -42,9 +42,11 @@ pub fn process_note_definition_para(
         }
     }
 
-    PandocNativeIntermediate::IntermediateBlock(Block::NoteDefinitionPara(NoteDefinitionPara {
-        id,
-        content,
-        source_info: node_source_info_with_context(node, context),
-    }))
+    PandocNativeIntermediate::IntermediateBlock(Block::NoteDefinitionPara(Box::new(
+        NoteDefinitionPara {
+            id,
+            content,
+            source_info: node_source_info_with_context(node, context),
+        },
+    )))
 }

@@ -133,7 +133,7 @@ pub fn process_shortcode(
                 }
             }
             ("shortcode", PandocNativeIntermediate::IntermediateInline(Inline::Shortcode(arg))) => {
-                positional_args.push(ShortcodeArg::Shortcode(arg));
+                positional_args.push(ShortcodeArg::Shortcode(*arg));
             }
             ("shortcode_number", PandocNativeIntermediate::IntermediateShortcodeArg(arg, _)) => {
                 positional_args.push(arg);
@@ -153,13 +153,13 @@ pub fn process_shortcode(
         }
     }
 
-    let shortcode = Inline::Shortcode(Shortcode {
+    let shortcode = Inline::Shortcode(Box::new(Shortcode {
         is_escaped,
         name,
         positional_args,
         keyword_args,
         source_info,
-    });
+    }));
 
     // Return with leading Space if the scanner included whitespace in the node
     if has_leading_space {

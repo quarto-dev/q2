@@ -456,6 +456,92 @@ fn editorial_mark_without_attributes_is_unchanged() {
 }
 
 // ---------------------------------------------------------------------------
+// Line breaks inside a comment (bd-ov4jydyf)
+//
+// The q2-preview comment input stores Shift+Enter as a `LineBreak` inside
+// the `[>> …]` span (plan: 2026-11-16-comment-shift-enter-linebreak.md).
+// These lock in the writer behavior that feature depends on, in every
+// place a comment can be added. The client never puts a `LineBreak` at
+// the end of a comment or inside a heading; the writer emits qmd it can't
+// read back for those (bd-ajeb4y6f).
+// ---------------------------------------------------------------------------
+
+fn comment(text: &str) -> Value {
+    span(attr("", &["quarto-edit-comment"], &[]), inl(text))
+}
+
+#[test]
+fn line_break_inside_editorial_comment() {
+    let with = |c: Value| vec![str_("Text."), c];
+    let cases: Vec<(&str, Value, &str)> = vec![
+        (
+            "paragraph",
+            doc(vec![para(with(comment("one\\\ntwo")))]),
+            "Text.[>> one\\\ntwo]\n",
+        ),
+        (
+            "two line breaks (an empty line in the comment)",
+            doc(vec![para(with(comment("one\\\n\\\ntwo")))]),
+            "Text.[>> one\\\n\\\ntwo]\n",
+        ),
+        (
+            "tight list item",
+            doc(vec![bullet_list(vec![vec![plain(with(comment(
+                "one\\\ntwo",
+            )))]])]),
+            "* Text.[>> one\\\n  two]\n",
+        ),
+        (
+            "block quote",
+            doc(vec![block_quote(vec![para(with(comment("one\\\ntwo")))])]),
+            "> Text.[>> one\\\n> two]\n",
+        ),
+        (
+            "block quote inside a list item",
+            doc(vec![bullet_list(vec![vec![block_quote(vec![para(
+                with(comment("one\\\ntwo")),
+            )])]])]),
+            "* > Text.[>> one\\\n  > two]\n",
+        ),
+    ];
+    for (what, input, expected) in cases {
+        let qmd = assert_roundtrip(input);
+        assert_eq!(qmd, expected, "{what}");
+    }
+}
+
+#[test]
+fn line_break_in_a_comment_on_a_span() {
+    // `[range[>> one\ two]]`: a comment attached to a span.
+    let mut content = inl("range");
+    content.push(comment("one\\\ntwo"));
+    let qmd = assert_roundtrip(doc(vec![para(vec![span(attr("", &[], &[]), content)])]));
+    assert_eq!(qmd, "[range[>> one\\\ntwo]]\n");
+}
+
+#[test]
+fn line_break_in_a_comment_container() {
+    // A comment on a code block lives in a comment-container div.
+    let container = json!({"t": "Div", "c": [
+        attr("", &["quarto-edit-comment-container"], &[]),
+        [code_block("x = 1"), para(vec![comment("one\\\ntwo")])],
+    ]});
+    let qmd = assert_roundtrip(doc(vec![container]));
+    assert!(qmd.contains("\n[>> one\\\ntwo]\n"), "{qmd:?}");
+}
+
+#[test]
+fn after_line_break_in_editorial_comment() {
+    check_all("after line break in a comment", LINE_START_TEXTS, |t| {
+        doc(vec![para(vec![
+            str_("x"),
+            space(),
+            comment(&format!("a\\\n{t}")),
+        ])])
+    });
+}
+
+// ---------------------------------------------------------------------------
 // T3: adjacent lists
 // ---------------------------------------------------------------------------
 

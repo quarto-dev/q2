@@ -1277,31 +1277,33 @@ mod tests {
 
     /// Create a CodeBlock with a braced language class `{lang}`.
     fn engine_cell(lang: &str) -> Block {
-        Block::CodeBlock(CodeBlock {
+        Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 String::new(),
                 vec![format!("{{{}}}", lang)],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: format!("# {lang} code"),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Create a CodeBlock with a braced language class `{lang}` and an
     /// additional plain class (first_class).
     fn engine_cell_with_class(lang: &str, class: &str) -> Block {
-        Block::CodeBlock(CodeBlock {
+        Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 String::new(),
                 vec![format!("{{{}}}", lang), class.to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: format!("# {lang} {class} code"),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Build an AST with the given top-level blocks.
@@ -1640,12 +1642,12 @@ mod tests {
                 source_info: si(),
             }),
             // A plain (non-braced) highlight fence: not an engine cell.
-            Block::CodeBlock(CodeBlock {
-                attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()),
+            Block::CodeBlock(Box::new(CodeBlock {
+                attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()).into(),
                 text: "x <- 1".to_string(),
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
         ]);
         let meta = empty_meta();
 
@@ -1809,12 +1811,12 @@ mod tests {
     #[test]
     fn test_container_recursion() {
         let registry = mock_registry(vec![mock_knitr(), mock_jupyter()]);
-        let nested_div = Block::Div(Div {
+        let nested_div = Block::Div(Box::new(Div {
             attr: empty_attr(),
             content: vec![engine_cell("python")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let nested_list = Block::BulletList(BulletList {
             content: vec![vec![engine_cell("sql")]],
             source_info: si(),
@@ -3932,16 +3934,17 @@ mod tests {
     #[test]
     fn test_doubled_brace_display_fence_is_not_computational() {
         let registry = mock_registry(vec![mock_knitr(), mock_jupyter()]);
-        let display_cell = Block::CodeBlock(CodeBlock {
+        let display_cell = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 String::new(),
                 vec!["{{python}}".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "#| label: fig-line-plot\nimport matplotlib.pyplot as plt".to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let ast = ast_with_blocks(vec![display_cell]);
         let meta = empty_meta();
 

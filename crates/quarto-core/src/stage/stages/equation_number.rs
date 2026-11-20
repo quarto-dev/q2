@@ -181,19 +181,20 @@ pub fn encode_number(span: &mut Span, number: &str, encoding: NumberEncoding) ->
             span.attr.1.push(EQ_SIBLING_NUMBER_CLASS.to_string());
             span.content.insert(
                 1,
-                Inline::Span(Span {
+                Inline::Span(Box::new(Span {
                     attr: (
                         String::new(),
                         vec![EQ_NUMBER_LABEL_CLASS.to_string()],
                         Default::default(),
-                    ),
+                    )
+                        .into(),
                     content: vec![Inline::Str(Str {
                         text: format!("({number})"),
                         source_info: source_info.clone(),
                     })],
                     source_info,
                     attr_source: AttrSourceInfo::empty(),
-                }),
+                })),
             );
         }
         NumberEncoding::Writer => {}
@@ -246,12 +247,12 @@ mod tests {
     }
 
     fn math(math_type: MathType, text: &str) -> Inline {
-        Inline::Math(Math {
+        Inline::Math(Box::new(Math {
             math_type,
             text: text.to_string(),
             source_info: si(),
             text_source: None,
-        })
+        }))
     }
 
     /// The span `CrossrefRenderTransform` emits for a numbered equation.
@@ -263,7 +264,8 @@ mod tests {
                 "eq-x".to_string(),
                 vec!["quarto-math-with-attribute".to_string()],
                 kvs,
-            ),
+            )
+                .into(),
             content,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -354,12 +356,12 @@ mod tests {
         let text = SourceInfo::original(FileId(0), 2, 10);
         let mut span = numbered_span(
             "1",
-            vec![Inline::Math(Math {
+            vec![Inline::Math(Box::new(Math {
                 math_type: MathType::DisplayMath,
                 text: "e = mc^2".to_string(),
                 source_info: node,
                 text_source: Some(text),
-            })],
+            }))],
         );
         assert!(encode_number(&mut span, "1", NumberEncoding::TexTag));
         let Inline::Math(math) = &span.content[0] else {
@@ -389,12 +391,12 @@ mod tests {
         let text = SourceInfo::original(FileId(0), 2, 3);
         let mut span = numbered_span(
             "2",
-            vec![Inline::Math(Math {
+            vec![Inline::Math(Box::new(Math {
                 math_type: MathType::DisplayMath,
                 text: "x".to_string(),
                 source_info: node,
                 text_source: Some(text),
-            })],
+            }))],
         );
         assert!(encode_number(&mut span, "2", NumberEncoding::Qquad));
         let Inline::Math(math) = &span.content[0] else {
@@ -525,14 +527,19 @@ mod tests {
         use quarto_pandoc_types::custom::{CustomNode, Slot};
         use quarto_pandoc_types::inline::Emph;
 
-        let eq = || Inline::Span(numbered_span("1", vec![math(MathType::DisplayMath, "x")]));
+        let eq = || {
+            Inline::Span(Box::new(numbered_span(
+                "1",
+                vec![math(MathType::DisplayMath, "x")],
+            )))
+        };
         let mut custom = CustomNode::new("Anything", quarto_pandoc_types::attr::empty_attr(), si());
         custom
             .slots
             .insert("content".to_string(), Slot::Inlines(vec![eq()]));
         let mut blocks = vec![
             para(vec![eq()]),
-            Block::Div(Div {
+            Block::Div(Box::new(Div {
                 attr: quarto_pandoc_types::attr::empty_attr(),
                 content: vec![para(vec![Inline::Emph(Emph {
                     content: vec![eq()],
@@ -540,12 +547,12 @@ mod tests {
                 })])],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
             Block::BulletList(BulletList {
                 content: vec![vec![para(vec![eq()])]],
                 source_info: si(),
             }),
-            Block::Custom(custom),
+            Block::Custom(Box::new(custom)),
         ];
         let out = walk(&mut blocks, NumberEncoding::TexTag);
         assert_eq!(out.encoded, 4);
@@ -592,10 +599,10 @@ mod tests {
 
     #[test]
     fn walker_removes_the_attribute_even_when_it_cannot_encode() {
-        let mut blocks = vec![para(vec![Inline::Span(numbered_span(
+        let mut blocks = vec![para(vec![Inline::Span(Box::new(numbered_span(
             "1",
             vec![math(MathType::InlineMath, "x")],
-        ))])];
+        )))])];
         let out = walk(&mut blocks, NumberEncoding::TexTag);
         assert_eq!((out.encoded, out.non_canonical), (0, 1));
         let Block::Paragraph(p) = &blocks[0] else {
@@ -612,12 +619,12 @@ mod tests {
     fn walker_ignores_spans_without_the_attribute() {
         let mut span = numbered_span("1", vec![math(MathType::DisplayMath, "x")]);
         span.attr.2.clear();
-        let mut blocks = vec![para(vec![Inline::Span(span.clone())])];
+        let mut blocks = vec![para(vec![Inline::Span(Box::new(span.clone()))])];
         let out = walk(&mut blocks, NumberEncoding::TexTag);
         assert_eq!((out.encoded, out.non_canonical), (0, 0));
         let Block::Paragraph(p) = &blocks[0] else {
             panic!()
         };
-        assert_eq!(p.content[0], Inline::Span(span));
+        assert_eq!(p.content[0], Inline::Span(Box::new(span)));
     }
 }

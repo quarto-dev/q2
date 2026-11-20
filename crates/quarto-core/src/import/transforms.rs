@@ -113,7 +113,7 @@ fn rename_tracked_change(span: &mut Span, from: &str, to: &str) {
     let kept = kept_attrs(span);
     let mut classes: Vec<String> = span.attr.1.iter().filter(|c| *c != from).cloned().collect();
     classes.insert(0, to.to_string());
-    span.attr = (String::new(), classes, kept);
+    *span.attr = (String::new(), classes, kept);
     span.attr_source = AttrSourceInfo::empty();
 }
 

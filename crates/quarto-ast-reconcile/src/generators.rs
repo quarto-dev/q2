@@ -395,6 +395,7 @@ fn gen_attr() -> impl Strategy<Value = Attr> {
         proptest::collection::vec(gen_class(), 0..=2),
         Just(LinkedHashMap::new()), // Keep attributes simple for now
     )
+        .prop_map(Attr::from)
 }
 
 /// Generate an empty Attr.
@@ -543,35 +544,35 @@ fn gen_line_break() -> impl Strategy<Value = Inline> {
 /// Generate a Code inline.
 fn gen_code_inline() -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_code_text()).prop_map(|(attr, text)| {
-        Inline::Code(Code {
+        Inline::Code(Box::new(Code {
             attr,
             text,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
 /// Generate a Math inline.
 fn gen_math() -> impl Strategy<Value = Inline> {
     (gen_math_type(), gen_code_text()).prop_map(|(math_type, text)| {
-        Inline::Math(Math {
+        Inline::Math(Box::new(Math {
             math_type,
             text,
             source_info: dummy_source(),
             text_source: None,
-        })
+        }))
     })
 }
 
 /// Generate a RawInline.
 fn gen_raw_inline() -> impl Strategy<Value = Inline> {
     (gen_format(), gen_code_text()).prop_map(|(format, text)| {
-        Inline::RawInline(RawInline {
+        Inline::RawInline(Box::new(RawInline {
             format,
             text,
             source_info: dummy_source(),
-        })
+        }))
     })
 }
 
@@ -640,7 +641,7 @@ fn gen_shortcode_inner(depth: usize) -> impl Strategy<Value = Shortcode> {
 /// recursive args (ShortcodeArg can contain nested Shortcodes).
 fn gen_shortcode() -> impl Strategy<Value = Inline> {
     // Use depth 2 to allow some nesting in args
-    gen_shortcode_inner(2).prop_map(Inline::Shortcode)
+    gen_shortcode_inner(2).prop_map(|s| Inline::Shortcode(Box::new(s)))
 }
 
 // =============================================================================
@@ -720,51 +721,51 @@ fn gen_smallcaps(config: GenConfig) -> impl Strategy<Value = Inline> {
 /// Generate a Quoted inline containing other inlines.
 fn gen_quoted(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_quote_type(), gen_inlines_inner(config)).prop_map(|(quote_type, content)| {
-        Inline::Quoted(Quoted {
+        Inline::Quoted(Box::new(Quoted {
             quote_type,
             content,
             source_info: dummy_source(),
-        })
+        }))
     })
 }
 
 /// Generate a Span inline containing other inlines.
 fn gen_span(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_inlines_inner(config)).prop_map(|(attr, content)| {
-        Inline::Span(Span {
+        Inline::Span(Box::new(Span {
             attr,
             content,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
 /// Generate a Link inline containing other inlines.
 fn gen_link(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_inlines_inner(config), gen_target()).prop_map(|(attr, content, target)| {
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr,
             content,
             target,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     })
 }
 
 /// Generate an Image inline containing other inlines (for alt text).
 fn gen_image(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_inlines_inner(config), gen_target()).prop_map(|(attr, content, target)| {
-        Inline::Image(Image {
+        Inline::Image(Box::new(Image {
             attr,
             content,
             target,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     })
 }
 
@@ -776,11 +777,11 @@ fn gen_cite(config: GenConfig) -> impl Strategy<Value = Inline> {
         gen_inlines_inner(config),
     )
         .prop_map(|(citations, content)| {
-            Inline::Cite(Cite {
+            Inline::Cite(Box::new(Cite {
                 citations,
                 content,
                 source_info: dummy_source(),
-            })
+            }))
         })
 }
 
@@ -802,48 +803,48 @@ fn gen_note(config: GenConfig) -> impl Strategy<Value = Inline> {
 /// Generate an Insert inline (CriticMarkup addition).
 fn gen_insert(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_inlines_inner(config)).prop_map(|(attr, content)| {
-        Inline::Insert(Insert {
+        Inline::Insert(Box::new(Insert {
             attr,
             content,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
 /// Generate a Delete inline (CriticMarkup deletion).
 fn gen_delete(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_inlines_inner(config)).prop_map(|(attr, content)| {
-        Inline::Delete(Delete {
+        Inline::Delete(Box::new(Delete {
             attr,
             content,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
 /// Generate a Highlight inline (CriticMarkup highlight).
 fn gen_highlight(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_inlines_inner(config)).prop_map(|(attr, content)| {
-        Inline::Highlight(Highlight {
+        Inline::Highlight(Box::new(Highlight {
             attr,
             content,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
 /// Generate an EditComment inline (CriticMarkup comment).
 fn gen_edit_comment(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_inlines_inner(config)).prop_map(|(attr, content)| {
-        Inline::EditComment(EditComment {
+        Inline::EditComment(Box::new(EditComment {
             attr,
             content,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
@@ -998,23 +999,23 @@ fn gen_plain(config: GenConfig) -> impl Strategy<Value = Block> {
 /// Generate a CodeBlock.
 fn gen_code_block() -> impl Strategy<Value = Block> {
     (gen_attr(), gen_code_text()).prop_map(|(attr, text)| {
-        Block::CodeBlock(CodeBlock {
+        Block::CodeBlock(Box::new(CodeBlock {
             attr,
             text,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
 /// Generate a RawBlock.
 fn gen_raw_block() -> impl Strategy<Value = Block> {
     (gen_format(), gen_code_text()).prop_map(|(format, text)| {
-        Block::RawBlock(RawBlock {
+        Block::RawBlock(Box::new(RawBlock {
             format,
             text,
             source_info: dummy_source(),
-        })
+        }))
     })
 }
 
@@ -1028,13 +1029,13 @@ fn gen_horizontal_rule() -> impl Strategy<Value = Block> {
 /// Generate a Header block.
 fn gen_header(config: GenConfig) -> impl Strategy<Value = Block> {
     (1..=6usize, gen_attr(), gen_inlines_inner(config)).prop_map(|(level, attr, content)| {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr,
             content,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
@@ -1096,23 +1097,23 @@ fn gen_ordered_list(config: GenConfig) -> impl Strategy<Value = Block> {
         proptest::collection::vec(gen_blocks_inner(config), 1..=max_children),
     )
         .prop_map(|(attr, content)| {
-            Block::OrderedList(OrderedList {
+            Block::OrderedList(Box::new(OrderedList {
                 attr,
                 content,
                 source_info: dummy_source(),
-            })
+            }))
         })
 }
 
 /// Generate a Div block.
 fn gen_div(config: GenConfig) -> impl Strategy<Value = Block> {
     (gen_attr(), gen_blocks_inner(config)).prop_map(|(attr, content)| {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr,
             content,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
@@ -1141,13 +1142,13 @@ fn gen_figure(config: GenConfig) -> impl Strategy<Value = Block> {
         gen_blocks_inner(config),
     )
         .prop_map(|(attr, caption, content)| {
-            Block::Figure(Figure {
+            Block::Figure(Box::new(Figure {
                 attr,
                 caption,
                 content,
                 source_info: dummy_source(),
                 attr_source: AttrSourceInfo::empty(),
-            })
+            }))
         })
 }
 
@@ -1168,22 +1169,22 @@ fn gen_caption_block(config: GenConfig) -> impl Strategy<Value = Block> {
 /// Generate a NoteDefinitionPara (leaf block with ID and inline content).
 fn gen_note_definition_para(config: GenConfig) -> impl Strategy<Value = Block> {
     (gen_note_id(), gen_inlines_inner(config)).prop_map(|(id, content)| {
-        Block::NoteDefinitionPara(NoteDefinitionPara {
+        Block::NoteDefinitionPara(Box::new(NoteDefinitionPara {
             id,
             content,
             source_info: dummy_source(),
-        })
+        }))
     })
 }
 
 /// Generate a NoteDefinitionFencedBlock (container block with ID and block content).
 fn gen_note_definition_fenced(config: GenConfig) -> impl Strategy<Value = Block> {
     (gen_note_id(), gen_blocks_inner(config)).prop_map(|(id, content)| {
-        Block::NoteDefinitionFencedBlock(NoteDefinitionFencedBlock {
+        Block::NoteDefinitionFencedBlock(Box::new(NoteDefinitionFencedBlock {
             id,
             content,
             source_info: dummy_source(),
-        })
+        }))
     })
 }
 
@@ -1270,12 +1271,12 @@ fn gen_custom_node(config: GenConfig) -> impl Strategy<Value = CustomNode> {
 
 /// Generate a Block::Custom.
 fn gen_custom_block(config: GenConfig) -> impl Strategy<Value = Block> {
-    gen_custom_node(config).prop_map(Block::Custom)
+    gen_custom_node(config).prop_map(|c| Block::Custom(Box::new(c)))
 }
 
 /// Generate an Inline::Custom.
 fn gen_custom_inline(config: GenConfig) -> impl Strategy<Value = Inline> {
-    gen_custom_node(config).prop_map(Inline::Custom)
+    gen_custom_node(config).prop_map(|c| Inline::Custom(Box::new(c)))
 }
 
 // =============================================================================
@@ -1408,7 +1409,7 @@ fn gen_table(config: GenConfig) -> impl Strategy<Value = Block> {
             gen_table_foot(child_config, num_cols),
         )
             .prop_map(|(attr, caption, colspec, head, bodies, foot)| {
-                Block::Table(Table {
+                Block::Table(Box::new(Table {
                     attr,
                     caption,
                     colspec,
@@ -1417,7 +1418,7 @@ fn gen_table(config: GenConfig) -> impl Strategy<Value = Block> {
                     foot,
                     source_info: dummy_source(),
                     attr_source: AttrSourceInfo::empty(),
-                })
+                }))
             })
     })
 }

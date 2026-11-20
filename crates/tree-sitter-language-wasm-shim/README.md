@@ -43,5 +43,13 @@ Three surfaces can drift:
    Trivially small.
 
 When upgrading the pin, diff each surface against upstream and copy new
-additions. Do **not** copy new `.c` files into `wasm/src/` — those
+additions.
+
+Additions cherry-picked from a newer upstream without moving the pin
+(each is commented at its declaration):
+
+- `memchr` in `string.h` and `iswxdigit` in `wctype.h`, from 0.1.9, for
+  `tree-sitter-containerfile` (bd-z6xw3psd). Upstream 0.1.9 restructured
+  these headers around link-level exports and dropped `wasm/src/`, so a
+  full re-sync is a separate job. Do **not** copy new `.c` files into `wasm/src/` — those
 remain empty by design.

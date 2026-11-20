@@ -174,6 +174,13 @@ pub struct TocEntry {
     /// Child entries (nested headings)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<TocEntry>,
+
+    /// Where the heading is in the source (the `Header` block's span), so
+    /// an outline consumer can jump to it — the language server's
+    /// `quarto/documentProfile` outline ranges (bd-kkmn4413). `None` for
+    /// entries not built from a heading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_info: Option<SourceInfo>,
 }
 
 impl TocEntry {
@@ -256,6 +263,7 @@ impl TocEntry {
             level,
             number,
             children,
+            source_info: None,
         })
     }
 }
@@ -359,6 +367,7 @@ struct FlatTocEntry {
     title: Inlines,
     level: i32,
     number: Option<String>,
+    source_info: SourceInfo,
 }
 
 /// Collect TOC entries from blocks (flat list, not hierarchical).
@@ -399,13 +408,13 @@ fn collect_toc_entries(blocks: &[Block], max_depth: i32) -> Vec<FlatTocEntry> {
 
 /// Check if a Div is a section created by sectionize_blocks.
 fn is_section_div(div: &Div) -> bool {
-    let (_, classes, _) = &div.attr;
+    let (_, classes, _) = &*div.attr;
     classes.iter().any(|c| c == "section")
 }
 
 /// Extract the heading level from a section Div's classes.
 fn get_section_level(div: &Div) -> Option<i32> {
-    let (_, classes, _) = &div.attr;
+    let (_, classes, _) = &*div.attr;
     for class in classes {
         if class.starts_with("level")
             && let Ok(level) = class[5..].parse::<i32>()
@@ -418,7 +427,7 @@ fn get_section_level(div: &Div) -> Option<i32> {
 
 /// Extract a TOC entry from a section Div.
 fn extract_entry_from_section(div: &Div, max_depth: i32) -> Option<FlatTocEntry> {
-    let (id, classes, _) = &div.attr;
+    let (id, classes, _) = &*div.attr;
 
     // Skip if unlisted
     if classes.iter().any(|c| c == "unlisted") {
@@ -461,12 +470,13 @@ fn extract_entry_from_section(div: &Div, max_depth: i32) -> Option<FlatTocEntry>
         level,
         // TODO: Implement actual section numbering
         number: if is_numbered { None } else { None },
+        source_info: header.source_info.clone(),
     })
 }
 
 /// Extract a TOC entry from a direct Header (non-sectionized document).
 fn extract_entry_from_header(header: &Header, max_depth: i32) -> Option<FlatTocEntry> {
-    let (id, classes, _) = &header.attr;
+    let (id, classes, _) = &*header.attr;
     let level = header.level as i32;
 
     // Skip if unlisted
@@ -496,6 +506,7 @@ fn extract_entry_from_header(header: &Header, max_depth: i32) -> Option<FlatTocE
         level,
         // TODO: Implement actual section numbering
         number: if is_numbered { None } else { None },
+        source_info: header.source_info.clone(),
     })
 }
 
@@ -515,6 +526,7 @@ fn build_hierarchy(flat_entries: Vec<FlatTocEntry>) -> Vec<TocEntry> {
             level: flat.level,
             number: flat.number,
             children: vec![],
+            source_info: Some(flat.source_info),
         };
 
         // Pop entries from stack that are at same or higher level
@@ -568,20 +580,21 @@ mod tests {
     }
 
     fn make_header(level: usize, id: &str, classes: Vec<&str>, text: &str) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr: (
                 id.to_string(),
                 classes.iter().map(|s| s.to_string()).collect(),
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn make_section(
@@ -594,30 +607,31 @@ mod tests {
         let mut section_classes = vec!["section".to_string(), format!("level{}", level)];
         section_classes.extend(classes.iter().map(|s| s.to_string()));
 
-        let header = Block::Header(Header {
+        let header = Block::Header(Box::new(Header {
             level,
             attr: (
                 String::new(),
                 classes.iter().map(|s| s.to_string()).collect(),
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Str(Str {
                 text: header_text.to_string(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         let mut section_content = vec![header];
         section_content.extend(content);
 
-        Block::Div(Div {
-            attr: (id.to_string(), section_classes, LinkedHashMap::new()),
+        Block::Div(Box::new(Div {
+            attr: (id.to_string(), section_classes, LinkedHashMap::new()).into(),
             content: section_content,
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn make_para(text: &str) -> Block {
@@ -755,16 +769,17 @@ mod tests {
     }
 
     fn make_plain_div(id: &str, classes: Vec<&str>, content: Vec<Block>) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (
                 id.to_string(),
                 classes.iter().map(|s| s.to_string()).collect(),
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content,
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     #[test]
@@ -892,7 +907,9 @@ mod tests {
                 level: 3,
                 number: None,
                 children: vec![],
+                source_info: None,
             }],
+            source_info: None,
         };
 
         let cv = entry.to_config_value();
@@ -926,7 +943,9 @@ mod tests {
                 level: 3,
                 number: None,
                 children: vec![],
+                source_info: None,
             }],
+            source_info: None,
         };
 
         let cv = original.to_config_value();
@@ -945,6 +964,7 @@ mod tests {
                 level: 1,
                 number: None,
                 children: vec![],
+                source_info: None,
             }],
         };
 
@@ -970,6 +990,7 @@ mod tests {
                     level: 1,
                     number: None,
                     children: vec![],
+                    source_info: None,
                 },
                 TocEntry {
                     id: "b".to_string(),
@@ -977,6 +998,7 @@ mod tests {
                     level: 1,
                     number: None,
                     children: vec![],
+                    source_info: None,
                 },
             ],
         };
@@ -1005,20 +1027,20 @@ mod tests {
                 text: "Using a ".to_string(),
                 source_info: dummy_source_info(),
             }),
-            Inline::Quoted(Quoted {
+            Inline::Quoted(Box::new(Quoted {
                 quote_type: QuoteType::DoubleQuote,
                 content: vec![Inline::Str(Str {
                     text: "raw".to_string(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
-            }),
-            Inline::Code(Code {
+            })),
+            Inline::Code(Box::new(Code {
                 text: "volume".to_string(),
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
         ];
 
         let original = TocEntry {
@@ -1027,6 +1049,7 @@ mod tests {
             level: 2,
             number: None,
             children: vec![],
+            source_info: None,
         };
 
         let restored = TocEntry::from_config_value(&original.to_config_value()).unwrap();
@@ -1129,27 +1152,28 @@ mod tests {
                 text: "Using a ".to_string(),
                 source_info: dummy_source_info(),
             }),
-            Inline::Quoted(Quoted {
+            Inline::Quoted(Box::new(Quoted {
                 quote_type: QuoteType::DoubleQuote,
                 content: vec![Inline::Str(Str {
                     text: "raw".to_string(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
-            }),
+            })),
         ];
 
-        let blocks = vec![Block::Header(Header {
+        let blocks = vec![Block::Header(Box::new(Header {
             level: 2,
             attr: (
                 "using-a-raw-volume".to_string(),
                 vec![],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: header_content.clone(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })];
+        }))];
 
         let toc = generate_toc(&blocks, &TocConfig::default());
 

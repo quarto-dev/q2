@@ -290,10 +290,10 @@ fn read_impl<T: Write>(
                 // Lexical metadata - return as BlockMetadata
                 // ConfigValue is already fully processed (strings parsed as markdown)
                 FilterReturn::FilterResult(
-                    vec![Block::BlockMetadata(MetaBlock {
+                    vec![Block::BlockMetadata(Box::new(MetaBlock {
                         meta: config_value,
                         source_info: rb.source_info.clone(),
-                    })],
+                    }))],
                     false,
                 )
             } else {

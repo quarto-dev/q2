@@ -30,7 +30,7 @@ pub fn process_section(
             }
             PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
                 // for now we assume it's metadata and emit it as a rawblock
-                blocks.push(Block::RawBlock(RawBlock {
+                blocks.push(Block::RawBlock(Box::new(RawBlock {
                     format: "quarto_minus_metadata".to_string(),
                     text,
                     // Reroot through `parent_source_info` when this parse is
@@ -38,7 +38,7 @@ pub fn process_section(
                     // converted buffer, Plan 7b) — see `document.rs`'s
                     // identical fix for the top-level metadata block.
                     source_info: range_to_source_info_with_context(&range, context),
-                }));
+                })));
             }
             _ => panic!("Expected Block or Section, got {:?}", child),
         }
@@ -100,6 +100,7 @@ pub fn process_section(
 
                         // Merge attr_source if present
                         if let Some(attr_source) = caption_attr_source {
+                            let attr_source = attr_source.into_parts();
                             for (key_source, value_source) in attr_source.attributes {
                                 table
                                     .attr_source

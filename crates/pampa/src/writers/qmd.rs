@@ -567,7 +567,7 @@ fn id_expressible_as_shorthand(id: &str) -> bool {
 }
 
 fn write_attr<W: std::io::Write + ?Sized>(
-    attr: &crate::pandoc::Attr,
+    attr: &quarto_pandoc_types::AttrTuple,
     writer: &mut W,
     _ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
@@ -622,7 +622,7 @@ fn write_code_attr<W: std::io::Write + ?Sized>(
     writer: &mut W,
     _ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    let (id, classes, keyvals) = attr;
+    let (id, classes, keyvals) = &**attr;
     let mut wrote_something = false;
     write!(writer, "{{")?;
     if id_expressible_as_shorthand(id) {
@@ -787,7 +787,7 @@ fn write_div(
     // A div whose first class is an editorial mark's is written with the
     // block marker (`::: --`), the rest of its attributes following it.
     // The reader puts the mark's class first, so this round-trips.
-    let (id, classes, keyvals) = &div.attr;
+    let (id, classes, keyvals) = &*div.attr;
     match classes.first().and_then(|c| editorial_marker_for_class(c)) {
         Some(marker) => {
             write!(writer, "::: {marker}")?;
@@ -815,8 +815,9 @@ fn write_div(
 }
 
 /// Pandoc's `taskListItemToAscii`: when a list item's first block is a
-/// `Plain`/`Paragraph` starting with `Str "☐"`/`Str "☒"` + `Space` (the
-/// task-list convention the reader produces), rewrite the ballot-box `Str`
+/// `Plain`/`Paragraph` starting with `Str "☐"`/`Str "☒"` + `Space`, or
+/// holding that `Str` alone (the task-list convention the reader produces),
+/// rewrite the ballot-box `Str`
 /// into `RawInline("markdown", "[ ]"/"[x]")` so the qmd writer round-trips
 /// the source syntax instead of emitting the Unicode character. The raw
 /// inline inherits the marker's source-info (the original bracket bytes).
@@ -834,14 +835,19 @@ fn task_item_to_ascii(item: &[Block]) -> Option<Vec<Block>> {
         "☒" => "[x]",
         _ => return None,
     };
-    if !matches!(content.get(1), Some(crate::pandoc::Inline::Space(_))) {
-        return None;
-    }
-    let marker = crate::pandoc::Inline::RawInline(crate::pandoc::RawInline {
+    // An empty item is the lone marker `Str` (bd-2ydvebkc). The grammar's
+    // marker token requires the whitespace after `]`, so write it here —
+    // without it `- [ ]` reads back as an empty span, not a task item.
+    let text = match content.get(1) {
+        Some(crate::pandoc::Inline::Space(_)) => ascii.to_string(),
+        None => format!("{ascii} "),
+        Some(_) => return None,
+    };
+    let marker = crate::pandoc::Inline::RawInline(Box::new(crate::pandoc::RawInline {
         format: "markdown".to_string(),
-        text: ascii.to_string(),
+        text,
         source_info: s.source_info.clone(),
-    });
+    }));
     let mut rewritten: Vec<Block> = item.to_vec();
     match &mut rewritten[0] {
         Block::Plain(p) => p.content[0] = marker,
@@ -1048,7 +1054,7 @@ fn write_header(
         && header.attr_source.id.is_none()
         && header.attr.0 == crate::utils::autoid::auto_generated_id(&header.content)
     {
-        (String::new(), header.attr.1.clone(), header.attr.2.clone())
+        (String::new(), header.attr.1.clone(), header.attr.2.clone()).into()
     } else {
         header.attr.clone()
     };
@@ -1103,7 +1109,7 @@ fn write_codeblock(
     }
 
     // Write language/attributes if they exist
-    let (id, classes, keyvals) = &codeblock.attr;
+    let (id, classes, keyvals) = &*codeblock.attr;
 
     // Only write language as bare word if it's a single class with no other attributes
     if classes.len() == 1 && id.is_empty() && keyvals.is_empty() {
@@ -1292,11 +1298,11 @@ fn match_implicit_figure_shape(
     if caption_plain.content.is_empty() && !image.content.is_empty() {
         return None;
     }
-    let (_fig_id, fig_classes, fig_kvs) = &figure.attr;
+    let (_fig_id, fig_classes, fig_kvs) = &*figure.attr;
     if !fig_classes.is_empty() || !fig_kvs.is_empty() {
         return None;
     }
-    let (img_id, _, _) = &image.attr;
+    let (img_id, _, _) = &*image.attr;
     if !img_id.is_empty() {
         return None;
     }
@@ -2371,7 +2377,7 @@ fn write_linebreak(
 /// Returns the anchor id if it matches, None otherwise.
 fn anchor_shorthand_id(link: &crate::pandoc::Link) -> Option<&str> {
     // Must have exactly one class "anchor", no id, no key-value pairs
-    let (ref id, ref classes, ref kvs) = link.attr;
+    let (ref id, ref classes, ref kvs) = *link.attr;
     if !id.is_empty() || classes.len() != 1 || classes[0] != "anchor" || !kvs.is_empty() {
         return None;
     }
@@ -2527,7 +2533,7 @@ fn write_span(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    let (id, classes, keyvals) = &span.attr;
+    let (id, classes, keyvals) = &*span.attr;
 
     // A span whose first class is an editorial mark's is written with the
     // decorated syntax (`[++ …]`), the rest of its attributes following in
@@ -3437,7 +3443,7 @@ pub fn write_paragraph(
     if let [Inline::Image(image)] = para.content.as_slice()
         && !image.content.is_empty()
     {
-        let respelled = Inline::Image(respell_alt_as_fig_alt(image, &Vec::new()));
+        let respelled = Inline::Image(Box::new(respell_alt_as_fig_alt(image, &Vec::new())));
         write_prose_inlines(std::slice::from_ref(&respelled), buf, ctx)?;
         writeln!(buf)?;
         return Ok(());

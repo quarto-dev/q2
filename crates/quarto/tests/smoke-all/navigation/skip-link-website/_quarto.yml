@@ -12,3 +12,4 @@ website:
     contents:
       - index.qmd
       - other.qmd
+quarto-required: "^2"

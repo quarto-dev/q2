@@ -6,3 +6,4 @@ website:
     content: "Below-navbar banner on a site with no navbar."
     position: below-navbar
     dismissable: false
+quarto-required: "^2"

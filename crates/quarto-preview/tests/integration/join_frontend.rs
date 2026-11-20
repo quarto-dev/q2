@@ -286,6 +286,7 @@ async fn boot_rig_with(
     let port = pick_free_port();
     let config = PreviewConfig {
         render,
+        upstream: None,
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(project.path().to_path_buf()),
@@ -294,6 +295,7 @@ async fn boot_rig_with(
         spa_dir_override: None,
         engine_registry: None,
         engine_policy: Default::default(),
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,
@@ -825,12 +827,17 @@ async fn head_peek_timeout_closes() {
     // An incomplete head (no `\r\n\r\n`) within the 5 s peek timeout:
     // the connection closes without any response and without the host
     // seeing a request.
+    // Start the clock before connecting: the frontend's peek timer starts
+    // when it accepts, which can be before `connect` returns here, so a
+    // clock started after the write could see the close at 4.99999 s under
+    // load (bd-n735u7ml). The frontend runs in-process, on the same
+    // monotonic clock, and cannot accept before we begin to connect.
+    let started = Instant::now();
     let mut stream = TcpStream::connect(guest).await.expect("connect guest");
     stream
         .write_all(b"GET / HTTP/1.1\r\nHost: join-frontend-test\r\n")
         .await
         .expect("write partial head");
-    let started = Instant::now();
     let mut raw = Vec::new();
     let read = tokio::time::timeout(Duration::from_secs(30), stream.read_to_end(&mut raw)).await;
     assert!(

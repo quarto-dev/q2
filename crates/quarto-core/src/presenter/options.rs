@@ -16,6 +16,8 @@
 //! byte-identically to a cell without the layer.
 
 use quarto_pandoc_types::config_value::{ConfigValue, ConfigValueKind};
+
+use super::engine_attrs::{ClassPlacement, EngineAttrs, build_head};
 use serde_json::Value;
 use yaml_rust2::Yaml;
 
@@ -37,6 +39,10 @@ const OPTION_ALIASES: &[(&str, &str)] = &[
     ("out.height", "out-height"),
     ("out.extra", "out-extra"),
 ];
+
+/// Quarto options the presenter reads for every engine that no engine's option list names, so
+/// knitr's forwarding of unknown options (hooks.R `unknown_opts`) must skip them.
+const ENGINE_NEUTRAL_KEYS: &[&str] = &["output-interleave"];
 
 /// The cell options a Jupyter cell does not forward as attributes: Quarto 1\'s
 /// `kJupyterCellInternalOptionKeys` and its standard and third-party metadata keys, plus the keys
@@ -197,6 +203,9 @@ pub enum OutputKind {
 /// Resolved options that shape cell markup.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CellOptions {
+    /// The output target; `None` means html (the historical behavior, so every caller that does
+    /// not set it renders as before).
+    target: Option<super::inline::InlineTarget>,
     class_source: Vec<String>,
     attr_source: Vec<String>,
     class_output: Vec<String>,
@@ -212,6 +221,14 @@ pub struct CellOptions {
     /// Parallel to the cell\'s outputs: which of them is a message or a warning. Empty when
     /// unknown (a Jupyter cell).
     output_kinds: Vec<Option<OutputKind>>,
+    /// OPR-7g: the text of this cell\'s outputs is the engine\'s own (knitr wrote it from
+    /// resolved options), so the presenter leaves its ANSI escapes as written. Set only by
+    /// `present_with_inputs` for a cell that carries `quarto_resolved_options`; every other
+    /// cell, and every expansion, is stripped. See `ansi::output_text`.
+    keeps_engine_text: bool,
+    /// OPR-7f: what the engine said about the `.cell` wrapper (`quarto_attrs` on the record
+    /// cell). Display-only; dropped when the wrapper is not written.
+    engine_attrs: Option<EngineAttrs>,
     /// `classes`: extra classes of the cell div (a leading dot is kept, nothing is split).
     classes: Vec<String>,
     panel: Option<String>,
@@ -234,8 +251,9 @@ pub struct CellOptions {
     code_line_numbers: Option<String>,
     lst_cap: Option<String>,
     lst_label: Option<String>,
-    /// knitr `fig.cap` (one caption, or one per figure) and `fig.subcap`. Read under knitr\'s
-    /// dotted names only: Jupyter\'s `fig-cap` is handled by the Quarto crossref layer.
+    /// knitr `fig.cap` (one caption, or one per figure) and `fig.subcap`. Both front
+    /// ends read the canonical dashed `fig-cap` and `fig-subcap`; `from_knitr` also accepts knitr\'s
+    /// dotted spellings (`fig.cap`).
     fig_cap: Vec<String>,
     fig_subcap: Vec<String>,
     fig_alt: Option<String>,
@@ -260,6 +278,10 @@ pub struct CellOptions {
     /// knitr `results`: `hide` drops printed text, `asis` writes it bare (`hold` is applied
     /// by [`crate::presenter::cell::apply_holds`]).
     results: Option<String>,
+    /// Jupyter `output: asis` (Quarto 1 `jupyter.ts`): no output gets a `.cell-output` div,
+    /// stdout is written as is, and the `.cell` div goes unless something needs it. Set only
+    /// from a Jupyter cell's resolved options; knitr reaches its own asis through `results`.
+    output_asis: bool,
     /// Options Quarto forwards to the cell div as `key='value'` (knitr: outside `known_options`).
     unknown: Vec<(String, String)>,
     /// A `fig-` label: the id of a figure\'s output div.
@@ -268,12 +290,23 @@ pub struct CellOptions {
     /// (a figure label becomes `label` or `label-<i>` on the image, hooks.R). `None` for engines
     /// whose label is the crossref layer\'s.
     figure_count: Option<usize>,
+    /// How many plots (not included graphics) the cell holds, set by the cell renderer for every
+    /// engine. Consulted only when `figure_count` is `None`: a group (label, `fig-cap`,
+    /// `fig-subcap`) needs two or more plots (OPR-7j).
+    plot_count: Option<usize>,
     /// A `tbl-` label: the cell\'s id (hooks.R lets only table labels through).
     table_label: Option<String>,
     /// A knitr cell: printed text keeps its trailing spaces (only the final newlines go).
     keep_trailing_space: bool,
     /// knitr `fig.show = "hide"`: plots are not shown.
     fig_show_hide: bool,
+    /// knitr `fig.show = "hold"`: plots move to the end of an interleaved cell.
+    fig_show_hold: bool,
+    /// knitr `fig.beforecode`: a plot moves before the source run it followed.
+    fig_beforecode: bool,
+    /// `output-interleave`: whether outputs interleave with the source; `None` leaves it to the
+    /// engine's default (`EngineEntry::interleaves_output`).
+    output_interleave: Option<bool>,
     /// knitr numeric `echo`: the expression numbers to show (negative: all but those).
     echo_selection: Option<Vec<i64>>,
     /// knitr numeric `warning` / `message`: which of the cell\'s warnings or messages to show.
@@ -289,7 +322,7 @@ pub struct CellOptions {
 impl CellOptions {
     /// Build from a Jupyter cell's resolved options (`None`: nothing was set).
     pub fn from_config(resolved: Option<&ConfigValue>) -> Self {
-        Self::from_lookup(
+        let mut me = Self::from_lookup(
             &|key| {
                 resolved
                     .and_then(|c| c.get(key))
@@ -308,7 +341,25 @@ impl CellOptions {
                         _ => None,
                     })
             },
-        )
+        );
+        // The cell's `output` wins over the document's `execute.output` (resolution merged
+        // them), so `output: true` on a cell turns a document-level asis off.
+        me.output_asis = resolved
+            .and_then(|c| c.get("output"))
+            .is_some_and(|v| config_to_json(v) == Value::String("asis".to_string()));
+        me
+    }
+
+    /// Set the output target (OPR-9b): it decides which rich output the presenter picks.
+    pub fn with_target(mut self, target: super::inline::InlineTarget) -> Self {
+        self.target = Some(target);
+        self
+    }
+
+    /// The output target; html when none was set.
+    pub fn target(&self) -> super::inline::InlineTarget {
+        self.target
+            .unwrap_or_else(|| super::inline::InlineTarget::from_format("html"))
     }
 
     /// Forward the cell options nothing handles as cell attributes (Phase 7g): Quarto 1\'s
@@ -367,6 +418,7 @@ impl CellOptions {
             // list holds knitr\'s names only.
             let is_known = |name: &str| known.iter().any(|k| k == name);
             if is_known(key)
+                || ENGINE_NEUTRAL_KEYS.contains(&key.as_str())
                 || dotted_alias(key).is_some_and(is_known)
                 || key.starts_with('.')
                 || value.is_null()
@@ -406,6 +458,7 @@ impl CellOptions {
         };
         let collapse = get("collapse").first().map(String::as_str) == Some("true");
         Self {
+            target: None,
             class_source: words("class.source"),
             attr_source: get("attr.source"),
             class_output: words("class.output"),
@@ -423,6 +476,8 @@ impl CellOptions {
             class_warning: words("class.warning"),
             attr_warning: get("attr.warning"),
             output_kinds: Vec::new(),
+            keeps_engine_text: false,
+            engine_attrs: None,
             classes: get("classes"),
             fig_column: string("fig-column"),
             tbl_column: string("tbl-column"),
@@ -487,9 +542,11 @@ impl CellOptions {
             },
             collapse,
             results: first("results"),
+            output_asis: false,
             keep_trailing_space: false,
             unknown: Vec::new(),
             figure_count: None,
+            plot_count: None,
             figure_label: first("label")
                 .filter(|l| l.trim_start_matches('#').starts_with("fig-"))
                 .map(|l| l.trim_start_matches('#').to_string()),
@@ -497,6 +554,13 @@ impl CellOptions {
                 .filter(|l| l.trim_start_matches('#').starts_with("tbl-"))
                 .map(|l| l.trim_start_matches('#').to_string()),
             fig_show_hide: first("fig.show").as_deref() == Some("hide"),
+            fig_show_hold: first("fig.show").as_deref() == Some("hold"),
+            fig_beforecode: first("fig.beforecode").as_deref() == Some("true"),
+            output_interleave: match first("output-interleave").as_deref() {
+                Some("true") => Some(true),
+                Some("false") => Some(false),
+                _ => None,
+            },
             echo_selection: echo_selection(&get("echo")),
             warning_selection: echo_selection(&get("warning")),
             message_selection: echo_selection(&get("message")),
@@ -507,17 +571,32 @@ impl CellOptions {
 
     /// Text appended inside the `.cell` div's braces (` .column-margin keep-hidden='true'`).
     pub fn cell_div_attrs(&self) -> String {
+        let (classes, pairs) = self.cell_div_parts();
         let mut out = String::new();
+        for c in &classes {
+            out.push_str(&format!(" .{c}"));
+        }
+        for p in &pairs {
+            out.push_str(&format!(" {p}"));
+        }
+        out
+    }
+
+    /// The presenter\'s own wrapper classes (after `.cell`, without the dot) and key/value
+    /// pairs (`key=text`), in the order [`Self::cell_div_attrs`] writes them.
+    fn cell_div_parts(&self) -> (Vec<String>, Vec<String>) {
+        let mut classes = Vec::new();
+        let mut pairs = Vec::new();
         // hooks.R order: `classes`, panel, column, `fig-column`, `tbl-column`, the three
         // caption locations. A leading dot on a user class is kept, not doubled.
         for c in &self.classes {
-            out.push_str(&format!(" .{}", c.strip_prefix('.').unwrap_or(c)));
+            classes.push(c.strip_prefix('.').unwrap_or(c).to_string());
         }
         if let Some(p) = &self.panel {
-            out.push_str(&format!(" .panel-{p}"));
+            classes.push(format!("panel-{p}"));
         }
         for c in &self.column {
-            out.push_str(&format!(" .column-{c}"));
+            classes.push(format!("column-{c}"));
         }
         for (prefix, value) in [
             ("fig-column", &self.fig_column),
@@ -527,19 +606,46 @@ impl CellOptions {
             ("tbl-cap-location", &self.tbl_cap_location),
         ] {
             if let Some(v) = value {
-                out.push_str(&format!(" .{prefix}-{v}"));
+                classes.push(format!("{prefix}-{v}"));
             }
         }
         for (key, value) in &self.layout {
-            out.push_str(&format!(" {key}=\"{value}\""));
+            pairs.push(format!("{key}=\"{value}\""));
         }
         if let Some(v) = &self.keep_hidden {
-            out.push_str(&format!(" keep-hidden='{v}'"));
+            pairs.push(format!("keep-hidden='{v}'"));
         }
         for (key, value) in &self.unknown {
-            out.push_str(&format!(" {key}='{value}'"));
+            pairs.push(format!("{key}='{value}'"));
         }
-        out
+        (classes, pairs)
+    }
+
+    /// Attach what the engine said about the `.cell` wrapper (OPR-7f).
+    pub fn with_engine_attrs(mut self, attrs: EngineAttrs) -> Self {
+        self.engine_attrs = Some(attrs).filter(|a| !a.is_empty());
+        self
+    }
+
+    /// The text inside the braces of the `.cell` wrapper: the presenter\'s id (a `tbl-` or
+    /// `fig-` label), `.cell` and its classes and pairs, then the engine\'s entries merged by
+    /// [`build_head`].
+    pub fn cell_div_head(&self) -> String {
+        let label = if self.label_on_cell() {
+            self.figure_label.as_ref()
+        } else {
+            self.table_label.as_ref()
+        };
+        let (rest, pairs) = self.cell_div_parts();
+        let mut classes = vec!["cell".to_string()];
+        classes.extend(rest);
+        build_head(
+            label.map(String::as_str),
+            &classes,
+            &pairs,
+            self.engine_attrs.as_ref(),
+            ClassPlacement::After,
+        )
     }
 
     /// `#fig-label ` for an output div, or nothing (hooks.R `output_label`).
@@ -555,10 +661,18 @@ impl CellOptions {
         self
     }
 
+    /// Say how many plots the cell holds, for engines with no knitr figure count (Julia,
+    /// Jupyter): a labeled `fig-cap` plus `fig-subcap` cell with two or more is a group.
+    pub fn with_plot_count(mut self, count: usize) -> Self {
+        self.plot_count = Some(count);
+        self
+    }
+
     /// Whether the label moves to the cell div: hooks.R keeps a cell label only when both
-    /// `fig.cap` and `fig.subcap` are set (the figures then carry `label-<i>`).
+    /// `fig.cap` and `fig.subcap` are set (the figures then carry `label-<i>`). Without a knitr
+    /// figure count the cell needs two or more plots to be a group (OPR-7j).
     fn label_on_cell(&self) -> bool {
-        self.figure_count.is_some()
+        (self.figure_count.is_some() || self.plot_count.is_some_and(|n| n >= 2))
             && self.figure_label.is_some()
             && !self.fig_cap.is_empty()
             && !self.fig_subcap.is_empty()
@@ -586,10 +700,15 @@ impl CellOptions {
     }
 
     /// `#label` for the `index`th plot\'s image (from 0): the label itself for one plot,
-    /// `label-<i>` for several (hooks.R). Only when the figure count is known.
+    /// `label-<i>` for several (hooks.R). With no knitr figure count, only the group case
+    /// (see [`Self::label_on_cell`]) gets an id, `label-<i>`.
     fn plot_image_id(&self, index: usize) -> Option<String> {
-        let n = self.figure_count?;
         let label = self.figure_label.as_ref()?;
+        let Some(n) = self.figure_count else {
+            return self
+                .label_on_cell()
+                .then(|| format!("#{label}-{}", index + 1));
+        };
         Some(if n > 1 {
             format!("#{label}-{}", index + 1)
         } else {
@@ -744,6 +863,17 @@ impl CellOptions {
         self
     }
 
+    /// Mark this cell\'s output text as the engine\'s own (see the field).
+    pub fn with_engine_text(mut self, keeps: bool) -> Self {
+        self.keeps_engine_text = keeps;
+        self
+    }
+
+    /// Whether `ansi::output_text` leaves this cell\'s text as written.
+    pub fn keeps_engine_text(&self) -> bool {
+        self.keeps_engine_text
+    }
+
     /// The numeric `warning` selection, when set.
     pub fn warning_selection(&self) -> Option<&[i64]> {
         self.warning_selection.as_deref()
@@ -798,6 +928,26 @@ impl CellOptions {
         self.fig_show_hide
     }
 
+    /// `fig.show = "hold"`: plots are held to the end of an interleaved cell.
+    pub fn fig_show_hold(&self) -> bool {
+        self.fig_show_hold
+    }
+
+    /// `fig.beforecode = TRUE`: a plot moves before the source run it followed.
+    pub fn fig_beforecode(&self) -> bool {
+        self.fig_beforecode
+    }
+
+    /// `output-interleave`, when the cell or the document scope sets it.
+    pub fn output_interleave(&self) -> Option<bool> {
+        self.output_interleave
+    }
+
+    /// `results = "hold"`: printed text is held to the end of an interleaved cell.
+    pub fn results_hold(&self) -> bool {
+        self.results.as_deref() == Some("hold")
+    }
+
     /// `results = "hide"`: printed text is dropped (messages and plots stay).
     pub fn results_hide(&self) -> bool {
         self.results.as_deref() == Some("hide")
@@ -808,9 +958,22 @@ impl CellOptions {
         self.results.as_deref() == Some("asis")
     }
 
-    /// Whether the `.cell` wrapper is written: not for `results = "asis"` unless the cell
-    /// has attributes or a caption that need it (hooks.R `needCell`).
+    /// Jupyter `output: asis`: every output is written without its output div, and printed
+    /// stdout as is (Quarto 1 `jupyter.ts`, `asis`).
+    pub fn output_asis(&self) -> bool {
+        self.output_asis
+    }
+
+    /// Whether the `.cell` wrapper is written: not under asis (knitr `results = "asis"`,
+    /// Jupyter `output: asis`) unless the cell has attributes or a caption that need it
+    /// (hooks.R and `jupyter.ts` `needCell`). Under Jupyter asis a cell id (a `tbl-` label)
+    /// needs it too: `jupyter.ts` keeps the div for a label it puts on the cell.
     pub fn needs_cell_div(&self) -> bool {
+        if self.output_asis {
+            return !self.cell_div_id().is_empty()
+                || !self.cell_div_attrs().is_empty()
+                || !self.fig_cap.is_empty();
+        }
         !self.results_asis() || !self.cell_div_attrs().is_empty() || !self.fig_cap.is_empty()
     }
 
@@ -1019,6 +1182,7 @@ mod tests {
             "attr.warning",
             "fig.alt",
             "fig.show",
+            "fig.beforecode",
             "fenced.echo",
             "prompt",
             "comment",
@@ -1278,5 +1442,137 @@ mod tests {
         assert_eq!(sel(json!(true)).echo_selection(), None);
         assert_eq!(sel(json!(false)).echo_selection(), None);
         assert_eq!(CellOptions::from_knitr(&json!({})).echo_selection(), None);
+    }
+}
+
+/// OPR-0a: the two option front ends over the union of option keys, pinned.
+///
+/// `from_config` reads a Jupyter cell's resolved options; `from_knitr` reads a knitr record's
+/// `quarto_resolved_options` JSON. OPR-1a makes `quarto_resolved_options` one field of one cell
+/// step instead of the switch between the two, so the two must keep agreeing wherever they
+/// agree today: all rows but knitr's dotted aliases.
+#[cfg(test)]
+mod opr_pinning {
+    use super::*;
+    use crate::cell_options::options_to_config;
+    use serde_json::{Value, json};
+
+    const ROWS: &[(&str, &str)] = &[
+        ("echo", "false"),
+        ("output", "false"),
+        ("warning", "false"),
+        ("include", "false"),
+        ("code-fold", "true"),
+        ("code-summary", "\"'Show'\""),
+        ("code-overflow", "wrap"),
+        ("code-line-numbers", "true"),
+        ("code-copy", "false"),
+        ("fig-cap", "\"'A caption'\""),
+        ("fig-subcap", "\"'sub'\""),
+        ("fig-scap", "\"'short'\""),
+        ("fig-alt", "\"'alt text'\""),
+        ("fig-align", "center"),
+        ("fig-link", "\"'http://x'\""),
+        ("fig-cap-location", "top"),
+        ("tbl-cap", "\"'A table'\""),
+        ("tbl-subcap", "\"'sub'\""),
+        ("tbl-scap", "\"'short'\""),
+        ("tbl-colwidths", "\"[30, 70]\""),
+        ("tbl-cap-location", "top"),
+        ("lst-cap", "\"'Listing'\""),
+        ("lst-label", "lst-a"),
+        ("cap-location", "top"),
+        ("layout", "\"[[1]]\""),
+        ("layout-ncol", "2"),
+        ("layout-nrow", "2"),
+        ("layout-align", "center"),
+        ("layout-valign", "top"),
+        ("panel", "tabset"),
+        ("column", "margin"),
+        ("keep-hidden", "true"),
+        ("fig-env", "\"'figure*'\""),
+        ("fig-pos", "\"'h'\""),
+        ("out-width", "\"'50%'\""),
+        ("out-height", "\"'50%'\""),
+        ("classes", "plain"),
+        ("fig-column", "margin"),
+        ("tbl-column", "margin"),
+        ("out-extra", "\"'style=\\\"x\\\"'\""),
+        ("results", "hide"),
+        ("collapse", "true"),
+        ("prompt", "true"),
+        ("comment", "\"'#>'\""),
+        ("fig.show", "hide"),
+        ("fig.align", "center"),
+        ("fig.env", "\"'figure*'\""),
+        ("fig.cap", "\"'A caption'\""),
+        ("fig.scap", "\"'short'\""),
+        ("fig.subcap", "\"'sub'\""),
+        ("fig.pos", "\"'h'\""),
+        ("out.width", "\"'50%'\""),
+        ("out.height", "\"'50%'\""),
+        ("out.extra", "\"'style=\\\"x\\\"'\""),
+        ("fenced.echo", "true"),
+        ("fig.alt", "\"'alt text'\""),
+        ("class.source", "foo"),
+        ("class.output", "foo"),
+        ("class.message", "foo"),
+        ("class.warning", "foo"),
+        ("attr.source", "\"'.n'\""),
+        ("attr.output", "\"'.n'\""),
+        ("attr.message", "\"'.n'\""),
+        ("attr.warning", "\"'.n'\""),
+        ("fig.link", "\"'http://x'\""),
+    ];
+
+    fn config(yaml: &str) -> ConfigValue {
+        let parsed = quarto_yaml::parse(yaml).expect("test YAML parses");
+        options_to_config(parsed).0
+    }
+
+    /// The knitr reader sets `keep_trailing_space` for its own reasons; the Jupyter one never does.
+    fn inert(mut o: CellOptions) -> CellOptions {
+        o.keep_trailing_space = false;
+        o
+    }
+
+    /// A sweep value as the JSON a knitr record would hold.
+    fn json_of(v: &str) -> Value {
+        serde_json::from_str(v).unwrap_or_else(|_| Value::String(v.to_string()))
+    }
+
+    #[test]
+    fn the_two_front_ends_agree_except_on_knitrs_dotted_aliases() {
+        let (mut same, mut differ) = (Vec::new(), Vec::new());
+        for (k, v) in ROWS {
+            let cfg = config(&format!("{k}: {v}\n"));
+            let jupyter = CellOptions::from_config(Some(&cfg));
+            let jv = cfg.get(k).map_or_else(|| json_of(v), config_to_json);
+            let knitr = inert(CellOptions::from_knitr(&json!({ *k: jv })));
+            if jupyter == knitr {
+                same.push(*k);
+            } else {
+                differ.push(*k);
+            }
+        }
+        assert_eq!(ROWS.len(), 65);
+        assert_eq!(same.len(), 55, "same: {same:?}\ndiffer: {differ:?}");
+        // The ten differences are knitr's dotted spellings, which the Jupyter front end reads
+        // only under their dashed names (`fig-align`, ...). OPR-1a keeps both readers.
+        assert_eq!(
+            differ,
+            [
+                "fig.align",
+                "fig.env",
+                "fig.cap",
+                "fig.scap",
+                "fig.subcap",
+                "fig.pos",
+                "out.width",
+                "out.height",
+                "out.extra",
+                "fig.link"
+            ]
+        );
     }
 }

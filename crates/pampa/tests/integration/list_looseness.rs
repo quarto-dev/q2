@@ -1418,11 +1418,11 @@ fn imported_same_delimiter_lists_stay_apart() {
         let mut expected = imported.clone();
         container(&mut expected).insert(
             second,
-            Block::RawBlock(RawBlock {
+            Block::RawBlock(Box::new(RawBlock {
                 format: "html".to_string(),
                 text: "<!-- -->".to_string(),
                 source_info,
-            }),
+            })),
         );
 
         let (written, reread) = roundtrip_pandoc(&imported).expect("writes");

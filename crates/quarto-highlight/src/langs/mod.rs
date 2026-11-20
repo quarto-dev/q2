@@ -9,18 +9,23 @@
 
 pub(crate) mod bash;
 pub(crate) mod css;
+pub(crate) mod dockerfile;
 pub(crate) mod html;
+pub(crate) mod ini;
 pub(crate) mod javascript;
 pub(crate) mod json;
 pub(crate) mod julia;
 pub(crate) mod lmd;
 pub(crate) mod lua;
+pub(crate) mod powershell;
 pub(crate) mod python;
 pub(crate) mod r;
 pub(crate) mod rust;
 pub(crate) mod sql;
+pub(crate) mod toml;
 pub(crate) mod tsx;
 pub(crate) mod typescript;
+pub(crate) mod xml;
 pub(crate) mod yaml;
 
 use tree_sitter::Language;

@@ -96,12 +96,12 @@ fn classed_para(class: &str, text: String) -> Block {
         content: vec![str_inline(text)],
         source_info: SourceInfo::generated(By::revealjs()),
     });
-    Block::Div(Div {
-        attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()),
+    Block::Div(Box::new(Div {
+        attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()).into(),
         content: vec![para],
         source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Read a metadata field as plain text (joining array items with ", ").
@@ -133,17 +133,18 @@ fn build_title_slide(meta: &quarto_pandoc_types::ConfigValue) -> Option<Block> {
 
     let mut content: Vec<Block> = Vec::new();
     if let Some(title) = title {
-        content.push(Block::Header(Header {
+        content.push(Block::Header(Box::new(Header {
             level: 1,
             attr: (
                 String::new(),
                 vec!["title".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![str_inline(title)],
             source_info: SourceInfo::generated(By::revealjs()),
             attr_source: AttrSourceInfo::empty(),
-        }));
+        })));
     }
     if let Some(subtitle) = subtitle {
         content.push(classed_para("subtitle", subtitle));
@@ -155,7 +156,7 @@ fn build_title_slide(meta: &quarto_pandoc_types::ConfigValue) -> Option<Block> {
         content.push(classed_para("date", date));
     }
 
-    Some(Block::Div(Div {
+    Some(Block::Div(Box::new(Div {
         attr: (
             "title-slide".to_string(),
             // `center` keeps the title slide vertically centered even though
@@ -169,11 +170,12 @@ fn build_title_slide(meta: &quarto_pandoc_types::ConfigValue) -> Option<Block> {
                 "center".to_string(),
             ],
             LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         content,
         source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
-    }))
+    })))
 }
 
 #[cfg(test)]

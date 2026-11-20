@@ -18,6 +18,9 @@
 //! 4. rename the staged copy into place.
 //!
 //! The staging directory is removed on every exit path.
+//!
+//! Once every extension is in place, `_extensions/.gitattributes` is
+//! created if it is missing ([`ensure_gitattributes`]).
 
 use std::path::{Path, PathBuf};
 
@@ -54,10 +57,60 @@ pub fn install(plan: &AddPlan) -> Result<(), CommandFailure> {
     for (i, ext) in plan.extensions.iter().filter(|e| e.writes).enumerate() {
         let staged = staging.path().join(i.to_string());
         copy_tree(&ext.source_dir, &staged)?;
-        write_record(plan, &staged)?;
+        write_record(plan, ext, &staged)?;
         replace(&extensions_dir, ext, &plan.root, &staged)?;
     }
+    if plan.writes_gitattributes {
+        ensure_gitattributes(&extensions_dir)?;
+    }
     Ok(())
+}
+
+pub const GITATTRIBUTES_FILENAME: &str = ".gitattributes";
+
+/// `-text` tells git never to convert line endings in these files, in
+/// either direction. Without it, a Windows checkout under
+/// `core.autocrlf=true` (Git for Windows' default) rewrites LF to CRLF,
+/// every text file stops matching its recorded hash, and the next
+/// `q2 add` refuses to replace "locally edited" files that nobody
+/// edited. `text eol=lf` would be wrong: it normalizes on commit, which
+/// breaks an extension that ships CRLF files.
+const GITATTRIBUTES_CONTENT: &str = "\
+# Created by `q2 add`. Tells git to keep installed extension files
+# byte-for-byte as installed, without converting line endings. Each
+# extension's .quarto-source.yml records a hash of every file, and a
+# converted file would look like a local edit.
+#
+# You can edit this file. `q2 add` only creates it when it is missing.
+* -text
+";
+
+/// Create `_extensions/.gitattributes` unless something is already
+/// there.
+///
+/// It lives beside the extensions, not inside one, so it is never
+/// hashed, never collides with a `.gitattributes` an extension ships,
+/// and survives replacing an extension. A pattern without a `/` applies
+/// at every depth below this directory, and a deeper `.gitattributes`
+/// takes precedence over the project's root one. An existing file is
+/// the user's and is never changed. It is written even outside a git
+/// repository: it does nothing there, and has to be in place before the
+/// extension's first commit to protect it.
+fn ensure_gitattributes(extensions_dir: &Path) -> Result<(), CommandFailure> {
+    let path = extensions_dir.join(GITATTRIBUTES_FILENAME);
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path);
+    match file {
+        Ok(mut f) => {
+            use std::io::Write;
+            f.write_all(GITATTRIBUTES_CONTENT.as_bytes())
+                .map_err(|e| io_failure("write", &path, e))
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(e) => Err(io_failure("create", &path, e)),
+    }
 }
 
 /// Copy a staged extension, leaving out any `.quarto-source.yml` the
@@ -80,13 +133,26 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), CommandFailure> {
     Ok(())
 }
 
-fn write_record(plan: &AddPlan, staged: &Path) -> Result<(), CommandFailure> {
+/// Write the new record. q2 owns `version`, `source`, `kind`, `ref` and
+/// `files`, and sets them from this install. Every other key of the
+/// record being replaced is kept as it was (GH #1175), so a key that
+/// another tool or a newer q2 wrote survives this q2's rewrite.
+fn write_record(
+    plan: &AddPlan,
+    ext: &PlannedExtension,
+    staged: &Path,
+) -> Result<(), CommandFailure> {
     let record = SourceRecord {
         version: RECORD_VERSION,
         source: plan.provenance.source.clone(),
         kind: plan.provenance.kind,
         git_ref: plan.provenance.git_ref.clone(),
         files: hash_tree(staged)?,
+        extra: ext
+            .prior_record
+            .as_ref()
+            .map(|r| r.extra.clone())
+            .unwrap_or_default(),
     };
     let path = staged.join(RECORD_FILENAME);
     std::fs::write(&path, record.to_yaml()?).map_err(|e| io_failure("write", &path, e))

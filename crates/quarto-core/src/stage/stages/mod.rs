@@ -40,6 +40,7 @@ mod capture_splice;
 // enabled. Same WASM-exclusion reasoning as `bootstrap_js`: the
 // hub-client preview reinitializes its iframe on every render and
 // gains nothing from the runtime injection.
+mod authored_metadata;
 #[cfg(not(target_arch = "wasm32"))]
 mod clipboard_js;
 mod code_highlight;
@@ -126,6 +127,7 @@ pub use record_splice::SpliceReport;
 // native revealjs scaffold to register as `js:revealjs:*` assets (bd-lg6t6qfy).
 // Native-only: like `ClipboardJsStage`, reveal copy is functional in `q2 render`
 // but inert in the WASM preview / hub-client iframe (parity with plain HTML).
+pub use authored_metadata::AuthoredMetadataStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use clipboard_js::{CLIPBOARD_JS, CODE_COPY_INIT_JS};
 pub use code_highlight::CodeHighlightStage;
@@ -144,7 +146,7 @@ pub use equation_number::{
 pub use include_expansion::{
     IncludeExpansionStage, collect_include_paths, expand_document_includes, extract_include_path,
 };
-pub use include_resolve::IncludeResolveStage;
+pub use include_resolve::{IncludeInlineFoldStage, IncludeResolveStage};
 pub use inline_table_css::{InlineTableCssStage, inline_table_css};
 pub use language_resolve::LanguageResolveStage;
 pub use link_resolution::LinkResolutionStage;

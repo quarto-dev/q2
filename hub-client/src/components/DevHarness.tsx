@@ -9,7 +9,6 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import ProjectSetError from './ProjectSetError';
 import ProjectsHome from './ProjectsHome';
 import NewFileDialog from './NewFileDialog';
 import ShareDialog from './ShareDialog';
@@ -508,6 +507,7 @@ function ReplayHarness() {
     isPlaying: false,
     playbackSpeed: 1,
     currentContent: '',
+    currentHeads: null,
     // Seconds, not ms — ReplayDrawer formats with `new Date(ts * 1000)`.
     // Module-level so render stays pure (react-hooks/purity); visual
     // specs pin the clock (FIXED_NOW) before page load, so the module
@@ -978,12 +978,6 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
     <AuthProviderRoot provider={harnessAuthProvider}>
       <LoginScreen errorReason="denied" />
     </AuthProviderRoot>
-  ),
-  'project-set-error': () => (
-    <ProjectSetError
-      error="Connection failed: could not reach sync server"
-      onRetry={noop}
-    />
   ),
 
   /* ---- Phase 0 baseline routes (characterization testing) ---- */

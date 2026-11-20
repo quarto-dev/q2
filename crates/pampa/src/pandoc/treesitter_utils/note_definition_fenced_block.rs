@@ -45,11 +45,11 @@ pub fn process_note_definition_fenced_block(
         }
     }
 
-    PandocNativeIntermediate::IntermediateBlock(Block::NoteDefinitionFencedBlock(
+    PandocNativeIntermediate::IntermediateBlock(Block::NoteDefinitionFencedBlock(Box::new(
         NoteDefinitionFencedBlock {
             id,
             content,
             source_info: node_source_info_with_context(node, context),
         },
-    ))
+    )))
 }

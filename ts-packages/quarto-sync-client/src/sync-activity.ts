@@ -74,12 +74,18 @@ const MAX_REMOTE_PATCHES = 20;
 const MAX_CONNECTION_EVENTS = 50;
 
 // ---------------------------------------------------------------------------
-// Cross-session persistence: the three per-doc timestamps shown in the
+// Cross-session persistence: the per-doc timestamps shown in the
 // connection-status dialog survive a page reload via localStorage. Only
 // getDocSyncActivityWithPersisted() reads them back — getDocSyncActivity()
 // stays session-only on purpose, because SyncStatusBadge's green "just now"
-// state and client.ts's delivery detection both mean "observed *this*
-// session".
+// state means "observed *this* session".
+//
+// lastLocalChangeAt is persisted too so that an edit made offline survives
+// a reload (e.g. the sign-in redirect): client.ts's delivery detection
+// compares it against lastLocalDeliveredAt, and without the persisted value
+// the hub's first acknowledgement after reload — the one that actually
+// delivers the offline edit — went unrecorded, leaving the badge on the
+// pre-offline timestamp until the next edit.
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY = 'q2hub.syncActivity';
@@ -88,7 +94,7 @@ const SAVE_THROTTLE_MS = 1000;
 
 type PersistedDocActivity = Pick<
   DocSyncActivity,
-  'lastEphemeralMessageAt' | 'lastRemoteChangeAt' | 'lastLocalDeliveredAt'
+  'lastEphemeralMessageAt' | 'lastRemoteChangeAt' | 'lastLocalChangeAt' | 'lastLocalDeliveredAt'
 >;
 
 /** localStorage when present and accessible (browser); null in Node. */
@@ -118,6 +124,7 @@ function loadPersisted(): void {
       persisted.set(docId, {
         lastEphemeralMessageAt: asTimestamp(v?.lastEphemeralMessageAt),
         lastRemoteChangeAt: asTimestamp(v?.lastRemoteChangeAt),
+        lastLocalChangeAt: asTimestamp(v?.lastLocalChangeAt),
         lastLocalDeliveredAt: asTimestamp(v?.lastLocalDeliveredAt),
       });
     }
@@ -130,6 +137,7 @@ function newestTimestamp(v: PersistedDocActivity): number {
   return Math.max(
     v.lastEphemeralMessageAt ?? 0,
     v.lastRemoteChangeAt ?? 0,
+    v.lastLocalChangeAt ?? 0,
     v.lastLocalDeliveredAt ?? 0,
   );
 }
@@ -187,6 +195,7 @@ function persistDoc(documentId: string, entry: DocSyncActivity): void {
   persisted.set(documentId, {
     lastEphemeralMessageAt: maxTimestamp(entry.lastEphemeralMessageAt, prev?.lastEphemeralMessageAt ?? null),
     lastRemoteChangeAt: maxTimestamp(entry.lastRemoteChangeAt, prev?.lastRemoteChangeAt ?? null),
+    lastLocalChangeAt: maxTimestamp(entry.lastLocalChangeAt, prev?.lastLocalChangeAt ?? null),
     lastLocalDeliveredAt: maxTimestamp(entry.lastLocalDeliveredAt, prev?.lastLocalDeliveredAt ?? null),
   });
   scheduleSave();
@@ -270,7 +279,9 @@ export function recordRemoteChange(
 }
 
 export function recordLocalChange(documentId: string): void {
-  docEntry(documentId).lastLocalChangeAt = Date.now();
+  const entry = docEntry(documentId);
+  entry.lastLocalChangeAt = Date.now();
+  persistDoc(documentId, entry);
 }
 
 export function recordLocalDelivery(documentId: string): void {
@@ -294,10 +305,10 @@ export function getDocSyncActivity(documentId: string): DocSyncActivity {
 }
 
 /**
- * Like getDocSyncActivity, but the three persisted timestamps (ephemeral,
- * remote change, read receipt) also survive page reloads — per field, the
- * newer of this session's value and the localStorage-persisted one.
- * `lastSyncMessageAt` / `lastLocalChangeAt` remain session-only.
+ * Like getDocSyncActivity, but the persisted timestamps (ephemeral, remote
+ * change, local change, read receipt) also survive page reloads — per
+ * field, the newer of this session's value and the localStorage-persisted
+ * one. `lastSyncMessageAt` remains session-only.
  */
 export function getDocSyncActivityWithPersisted(documentId: string): DocSyncActivity {
   const live = getDocSyncActivity(documentId);
@@ -308,6 +319,7 @@ export function getDocSyncActivityWithPersisted(documentId: string): DocSyncActi
     ...live,
     lastEphemeralMessageAt: maxTimestamp(live.lastEphemeralMessageAt, p.lastEphemeralMessageAt),
     lastRemoteChangeAt: maxTimestamp(live.lastRemoteChangeAt, p.lastRemoteChangeAt),
+    lastLocalChangeAt: maxTimestamp(live.lastLocalChangeAt, p.lastLocalChangeAt),
     lastLocalDeliveredAt: maxTimestamp(live.lastLocalDeliveredAt, p.lastLocalDeliveredAt),
   };
 }

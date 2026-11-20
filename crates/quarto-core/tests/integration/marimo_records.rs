@@ -402,12 +402,16 @@ fn marimo_record_replays_without_engine() {
             let format = Format::html();
             let bins = BinaryDependencies::new();
             let mut ctx = RenderContext::new(&project, &doc_info, &format, &bins);
-            ctx.engine_registry_override = Some(Arc::new(EngineRegistry::new()));
             render_qmd_to_html(
                 source.as_bytes(),
                 &input.display().to_string(),
                 &mut ctx,
-                &HtmlRenderConfig::default().with_record(Arc::new(record)),
+                // The registry goes through the config: `render_qmd_to_html`
+                // sets `ctx.engine_registry_override` from it, so one set on
+                // `ctx` would be overwritten and the real engine would run.
+                &HtmlRenderConfig::default()
+                    .with_record(Arc::new(record))
+                    .with_engine_registry(Arc::new(EngineRegistry::new())),
                 runtime,
             )
             .await

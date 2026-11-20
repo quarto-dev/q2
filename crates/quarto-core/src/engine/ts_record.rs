@@ -25,14 +25,16 @@
 //! is the unit's wire `id`. The kernel is the cell's `metadata.quarto_kernel`,
 //! else the notebook's `metadata.kernelspec.name`.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::engine::context::{ExecuteResult, ExecutionContext};
 use crate::engine::diagnostics::{EngineRecordProblem, engine_record_diagnostic};
+use crate::engine::ts_presentation::presentation_for;
 use crate::engine::ts_protocol::{TsAlignment, TsCoverage, TsRecordInfo, TsUnit, TsUnitKind};
 use crate::engine::units::{Unit, line_at, locate_units, view_for_engine};
+use crate::presenter::knitr_inputs::{EXPRESSION_STARTS_KEY, OUTPUT_ANCHORS_KEY, OUTPUT_KINDS_KEY};
 use crate::record::{BuildError, EngineEntryInput, RecordBuilder, UnitResult};
 
 /// Whether `owned_languages` contains `lang`, case-insensitively (the same rule
@@ -85,6 +87,11 @@ pub(super) fn wire_units(input: &str, ctx: &ExecutionContext) -> Option<Vec<TsUn
 
 /// One cell of the engine's notebook, reduced to what core takes from it.
 struct NotebookCell {
+    /// The raw 0-based position among **all** the notebook\'s cells (OPR-7f: the wrapper id).
+    index: usize,
+    /// For a code cell, its 1-based position among the notebook\'s code cells (OPR-7f: the
+    /// figure file name); 0 for any other cell.
+    code_ordinal: usize,
     unit_id: Option<String>,
     is_code: bool,
     result: UnitResult,
@@ -104,6 +111,74 @@ struct QuartoAnnotation {
     expansion: Option<u64>,
     /// `inline`: one entry per span evaluated in a markdown cell, in order.
     inline: Vec<InlineEntry>,
+    /// The runner's capture facts, present only for a runner built with them (OPR-4b).
+    /// Written onto the record cell under the knitr keys ([`facts_as_cell_metadata`], OPR-4d).
+    facts: CaptureFacts,
+}
+
+/// The three optional keys QuartoNotebookRunner adds to `metadata.quarto` for the presenter
+/// (OPR-4a spike, wire table): where each expression starts, where each output anchors, and what
+/// kind each output is. All `None` when the runner does not write them.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct CaptureFacts {
+    /// `expression_starts`: the 0-based line of the cell code at which each expression starts.
+    expression_starts: Option<Vec<u64>>,
+    /// `output_anchors`: the expression each output follows.
+    output_anchors: Option<Vec<u64>>,
+    /// `output_kinds`: per output, `message`, `warning`, or `null` for anything else.
+    output_kinds: Option<Vec<Option<String>>>,
+}
+
+/// An optional array of non-negative integers, or an error naming the key.
+fn read_u64_array(quarto: &Value, key: &str) -> Result<Option<Vec<u64>>, String> {
+    match quarto.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|v| v.as_u64())
+            .collect::<Option<Vec<_>>>()
+            .map(Some)
+            .ok_or_else(|| format!("`metadata.quarto.{key}` holds a non-integer")),
+        Some(_) => Err(format!("`metadata.quarto.{key}` is not an array")),
+    }
+}
+
+fn read_capture_facts(quarto: &Value) -> Result<CaptureFacts, String> {
+    let output_kinds = match quarto.get("output_kinds") {
+        None | Some(Value::Null) => None,
+        Some(Value::Array(a)) => Some(
+            a.iter()
+                .map(|v| match v {
+                    Value::Null => Ok(None),
+                    Value::String(s) => Ok(Some(s.clone())),
+                    _ => Err("`metadata.quarto.output_kinds` holds a non-string".to_string()),
+                })
+                .collect::<Result<Vec<_>, String>>()?,
+        ),
+        Some(_) => return Err("`metadata.quarto.output_kinds` is not an array".to_string()),
+    };
+    Ok(CaptureFacts {
+        expression_starts: read_u64_array(quarto, "expression_starts")?,
+        output_anchors: read_u64_array(quarto, "output_anchors")?,
+        output_kinds,
+    })
+}
+
+/// The facts the runner supplied, as record cell metadata under the names knitr uses, so the one
+/// per-cell step reads them with no engine test (OPR-4d, decision D4). Only the keys present
+/// are written; a cell with none gets none, and its output is as before.
+fn facts_as_cell_metadata(facts: &CaptureFacts) -> BTreeMap<String, Value> {
+    let mut extra = BTreeMap::new();
+    if let Some(starts) = &facts.expression_starts {
+        extra.insert(EXPRESSION_STARTS_KEY.to_string(), json!(starts));
+    }
+    if let Some(anchors) = &facts.output_anchors {
+        extra.insert(OUTPUT_ANCHORS_KEY.to_string(), json!(anchors));
+    }
+    if let Some(kinds) = &facts.output_kinds {
+        extra.insert(OUTPUT_KINDS_KEY.to_string(), json!(kinds));
+    }
+    extra
 }
 
 struct InlineEntry {
@@ -154,6 +229,7 @@ fn read_annotation(quarto: &Value, kernel: &Option<String>) -> Result<QuartoAnno
         line: quarto.get("line").and_then(Value::as_u64),
         expansion: quarto.get("expansion").and_then(Value::as_u64),
         inline,
+        facts: read_capture_facts(quarto)?,
     })
 }
 
@@ -174,6 +250,7 @@ fn read_engine_notebook(nb: &Value) -> Result<Vec<NotebookCell>, String> {
         .and_then(|m| m.get("kernelspec"))
         .and_then(|k| k.get("name"))
         .and_then(Value::as_str);
+    let mut code_cells = 0usize;
     cells
         .iter()
         .enumerate()
@@ -206,10 +283,16 @@ fn read_engine_notebook(nb: &Value) -> Result<Vec<NotebookCell>, String> {
                 }
                 _ => None,
             };
+            let is_code = cell.get("cell_type").and_then(Value::as_str) == Some("code");
+            if is_code {
+                code_cells += 1;
+            }
             Ok(NotebookCell {
+                index: i,
+                code_ordinal: if is_code { code_cells } else { 0 },
                 quarto,
                 unit_id: meta_str("quarto_cell_id"),
-                is_code: cell.get("cell_type").and_then(Value::as_str) == Some("code"),
+                is_code,
                 source: match cell.get("source") {
                     Some(Value::String(s)) => s.clone(),
                     Some(Value::Array(lines)) => {
@@ -248,6 +331,11 @@ struct Slot {
 struct QnrResult {
     key: UnitKey,
     result: UnitResult,
+    /// The cell's capture facts; `None` for a span and for an expanded cell, whose outputs are
+    /// the expansions' and so do not line up with one cell's anchors.
+    facts: Option<CaptureFacts>,
+    /// The cell\'s `quarto_attrs` for the wrapper (OPR-7f); `None` for a span and an expanded cell.
+    attrs: Option<Value>,
 }
 
 /// Attach the `m`-th expansion of a unit to its result, as extra outputs. A marker
@@ -306,6 +394,16 @@ fn build_record(
 
     // (stage unit index, engine result) for every cell that lines up with a unit.
     let mut pairs: Vec<(usize, UnitResult)> = Vec::new();
+    // The capture facts of the cells that carried them, by stage unit index.
+    let mut facts: BTreeMap<usize, CaptureFacts> = BTreeMap::new();
+    // The wrapper `quarto_attrs` of the annotated cells, by stage unit index (OPR-7f).
+    let mut attrs: BTreeMap<usize, Value> = BTreeMap::new();
+    let stem = ctx
+        .source_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("document")
+        .to_string();
     match info.alignment {
         TsAlignment::Ids => {
             let expected = owned.iter().flatten().count();
@@ -330,6 +428,9 @@ fn build_record(
                     return Err(EngineRecordProblem::DuplicateUnitId { id: id.to_string() });
                 }
                 pairs.push((index, cell.result.clone()));
+                if let Some(q) = &cell.quarto {
+                    facts.insert(index, q.facts.clone());
+                }
             }
         }
         TsAlignment::Positional if info.coverage == TsCoverage::Subset => {
@@ -380,12 +481,16 @@ fn build_record(
                         // One of the expansions of the unit just seen.
                         Some(m) if expanding => {
                             let unit = results.last_mut().expect("`expanding` follows a push");
-                            attach_expansion(
-                                &mut unit.result,
-                                m,
+                            let shown = presentation_for(
+                                cell.index,
+                                cell.code_ordinal,
                                 &cell.source,
+                                cell.result.execution_count,
                                 &cell.result.outputs,
+                                &stem,
+                                &ctx.format,
                             );
+                            attach_expansion(&mut unit.result, m, &cell.source, &shown.outputs);
                         }
                         Some(m) => {
                             return Err(EngineRecordProblem::Malformed {
@@ -397,12 +502,25 @@ fn build_record(
                         }
                         None => {
                             expanding = q.role.as_deref() == Some("expansion_source");
+                            let shown = presentation_for(
+                                cell.index,
+                                cell.code_ordinal,
+                                &cell.source,
+                                cell.result.execution_count,
+                                &cell.result.outputs,
+                                &stem,
+                                &ctx.format,
+                            );
+                            let mut result = cell.result.clone();
+                            result.outputs = shown.outputs;
                             results.push(QnrResult {
                                 key: UnitKey {
                                     is_cell: true,
                                     code: cell.source.trim().to_string(),
                                 },
-                                result: cell.result.clone(),
+                                result,
+                                facts: (!expanding).then(|| q.facts.clone()),
+                                attrs: (!expanding).then_some(shown.cell_attrs),
                             });
                         }
                     }
@@ -417,6 +535,8 @@ fn build_record(
                                 code: e.code.trim().to_string(),
                             },
                             result: e.result.clone(),
+                            facts: None,
+                            attrs: None,
                         }),
                 );
             }
@@ -429,6 +549,12 @@ fn build_record(
                 if let Some(offset) = slots[next..].iter().position(|s| s.key == r.key) {
                     if let Some(index) = slots[next + offset].index {
                         pairs.push((index, r.result));
+                        if let Some(f) = r.facts {
+                            facts.insert(index, f);
+                        }
+                        if let Some(a) = r.attrs {
+                            attrs.insert(index, a);
+                        }
                     }
                     next += offset + 1;
                 }
@@ -445,6 +571,9 @@ fn build_record(
             for (slot, cell) in owned.iter().zip(code) {
                 if let Some(index) = slot {
                     pairs.push((*index, cell.result.clone()));
+                    if let Some(q) = &cell.quarto {
+                        facts.insert(*index, q.facts.clone());
+                    }
                 }
             }
         }
@@ -459,14 +588,47 @@ fn build_record(
     for (index, result) in pairs {
         builder.push(index, result).map_err(build)?;
     }
-    builder
+    let mut record = builder
         .finish(EngineEntryInput {
             can_freeze,
             owned_languages: ctx.owned_languages.clone(),
             document_metadata: ctx.document_metadata_json(),
             ..Default::default()
         })
-        .map_err(build)
+        .map_err(build)?;
+    // The label is set only with the presentation acknowledgement (OPR-7i, decision 8): an
+    // engine that presented itself stored its own `toMarkdown` includes in the entry, so "label
+    // present" must mean "core presents, so core derives". Outside the hash definition.
+    if acknowledged_presentation(Some(info)) {
+        record.engine.dependency_data = info.dependency_data.clone();
+    }
+    // The `quarto_` keys are outside the unit hash, so this changes nothing the record hashes.
+    for (index, f) in &facts {
+        let Some(id) = unit_id(&ctx.units[*index]) else {
+            continue;
+        };
+        if let Some(cell) = record
+            .cells
+            .iter_mut()
+            .find(|c| c.metadata.quarto_cell_id == id)
+        {
+            cell.metadata.extra.extend(facts_as_cell_metadata(f));
+        }
+    }
+    // Display data too: `quarto_attrs` is outside the hash, like the facts.
+    for (index, a) in attrs {
+        let Some(id) = unit_id(&ctx.units[index]) else {
+            continue;
+        };
+        if let Some(cell) = record
+            .cells
+            .iter_mut()
+            .find(|c| c.metadata.quarto_cell_id == id)
+        {
+            cell.metadata.extra.insert("quarto_attrs".into(), a);
+        }
+    }
+    Ok(record)
 }
 
 /// Turn the engine's returned notebook into `result.record`, or push a warning
@@ -482,7 +644,7 @@ pub(super) fn attach_record(
     result: &mut ExecuteResult,
 ) {
     let Some(notebook) = notebook else { return };
-    if !ctx.want_record || ctx.units.is_empty() {
+    if !ctx.builds_record() || ctx.units.is_empty() {
         return;
     }
     let info = info.unwrap_or_else(default_record_info);
@@ -494,11 +656,45 @@ pub(super) fn attach_record(
     }
 }
 
-/// Whether core presents this engine's output (EXR-8 B4): Julia, when core built a unit
-/// list and wants a record. The flip is per engine; an engine this returns `false` for
-/// keeps presenting for itself.
-pub(super) fn core_presents(engine: &str, ctx: &ExecutionContext) -> bool {
-    engine == "julia" && ctx.want_record && !ctx.units.is_empty()
+/// Whether core offers to present this run's output (OPR-7a, decision D8): whenever it
+/// builds a record and the document has units. No engine name is tested; an engine that
+/// ignores the offer keeps presenting for itself.
+pub(super) fn offers_presentation(ctx: &ExecutionContext) -> bool {
+    ctx.builds_record()
+        && !ctx.units.is_empty()
+        && JULIA_PRESENTED_TARGETS.contains(&ctx.format.as_str())
+}
+
+/// The output formats core presents from the record for a TypeScript engine (OPR-9e; today
+/// that is Julia). An allowlist, not a deny list: `FormatIdentifier::as_str()` yields about
+/// sixty identifiers, and an identifier with no parity case must stay on the engine's own
+/// route. A target joins this list with a parity case in `opr-parity/manifest.toml` that
+/// differs from the plain route by the accepted interleaving alone. The gate applies under
+/// `want_record` and `present_from_record` alike, so asking for a record never changes
+/// which route writes the output. It is quiet: a gated target prints nothing.
+///
+/// Graduated by parity evidence (`opr-parity/manifest.toml`): html, revealjs, dashboard, gfm,
+/// typst, epub, docx and pptx. commonmark, markdown, djot, rst, org, native, textile, mediawiki,
+/// plain, icml, fb2, docbook, rtf and odt have hand-matrix evidence only (9a S2), so they stay
+/// gated until a parity case exists for them.
+///
+/// `pdf` stays out until the LaTeX work exists (`latex` and `beamer` never reach an engine).
+/// Knitr keeps its own list (`knitr::target_route`, which is smaller: no commonmark, odt and the other text formats); do not merge them.
+pub(super) const JULIA_PRESENTED_TARGETS: &[&str] = &[
+    "html",
+    "revealjs",
+    "dashboard",
+    "gfm",
+    "typst",
+    "epub",
+    "docx",
+    "pptx",
+];
+
+/// Whether the engine acknowledged the offer on its returned record info. Core presents
+/// from the record exactly when this is true.
+pub(super) fn acknowledged_presentation(info: Option<&TsRecordInfo>) -> bool {
+    info.is_some_and(|i| i.presented_by == Some(crate::engine::ts_protocol::TsPresentedBy::Core))
 }
 
 /// After [`attach_record`] on a run core asked to present (`presentedBy: "core"`): replace
@@ -524,7 +720,12 @@ pub(super) fn present_from_record(
             let why = result
                 .warnings
                 .iter()
-                .map(|w| w.to_text(None))
+                .map(|w| {
+                    w.to_text_with_options(
+                        None,
+                        &quarto_error_reporting::TextRenderOptions::plain(),
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join("\n");
             return Err(ExecutionError::execution_failed(
@@ -538,7 +739,7 @@ pub(super) fn present_from_record(
         return Ok(());
     };
     let units = locate_units(&ctx.units, input);
-    let mut fig = FsFigureSink::new(&ctx.source_path);
+    let mut fig = FsFigureSink::new(&ctx.source_path).with_format(&ctx.format);
     let presented = present_document(
         &record.cells,
         input,
@@ -546,13 +747,14 @@ pub(super) fn present_from_record(
         ctx.execute_scope.as_ref(),
         InlineTarget::from_format(&ctx.format),
         &ctx.format,
-        Some(&record.engine),
+        std::slice::from_ref(&record.engine),
         &mut fig,
     )
     .map_err(|e| {
         ExecutionError::execution_failed(engine, format!("presenting the record failed: {e}"))
     })?;
     result.markdown = presented.markdown;
+    result.derived_header_includes = presented.header_includes;
     result.supporting_files.extend(presented.files_written);
     result.warnings.extend(
         presented
@@ -794,6 +996,42 @@ z = 3
         );
     }
 
+    /// A record built from `info` over the document's owned cells.
+    fn entry_label(info: TsRecordInfo) -> Option<String> {
+        let ctx = ctx_for(DOC, &["python"], true);
+        let cells: Vec<Value> = owned_python_ids(&ctx)
+            .iter()
+            .map(|id| cell(Some(id), "o\n", None))
+            .collect();
+        let result = run(&ctx, Some(notebook(cells)), Some(info));
+        result.record.expect("a record").engine.dependency_data
+    }
+
+    fn labeled_info(
+        presented_by: Option<crate::engine::ts_protocol::TsPresentedBy>,
+    ) -> TsRecordInfo {
+        let mut info = default_record_info();
+        info.alignment = TsAlignment::Ids;
+        info.presented_by = presented_by;
+        info.dependency_data = Some("jupyter-outputs".into());
+        info
+    }
+
+    #[test]
+    fn the_label_reaches_the_entry_only_with_the_presentation_acknowledgement() {
+        use crate::engine::ts_protocol::TsPresentedBy;
+        // OPR-7i decision 8: an engine that presented itself stored its own includes in the
+        // entry, so a label there would make core derive a second copy.
+        assert_eq!(
+            entry_label(labeled_info(Some(TsPresentedBy::Core))).as_deref(),
+            Some("jupyter-outputs")
+        );
+        assert_eq!(entry_label(labeled_info(None)), None);
+        let mut unlabeled = labeled_info(Some(TsPresentedBy::Core));
+        unlabeled.dependency_data = None;
+        assert_eq!(entry_label(unlabeled), None);
+    }
+
     #[test]
     fn declared_hash_definition_is_carried_into_the_entry() {
         let ctx = ctx_for(DOC, &["python"], true);
@@ -811,6 +1049,8 @@ z = 3
             alignment: TsAlignment::Ids,
             coverage: Default::default(),
             hash_definition: Some(def.clone()),
+            presented_by: None,
+            dependency_data: None,
         };
         let record = run(&ctx, Some(notebook(cells)), Some(info)).record.unwrap();
         assert_eq!(record.engine.hash_definition, def);
@@ -830,6 +1070,8 @@ z = 3
             alignment: TsAlignment::Positional,
             coverage: Default::default(),
             hash_definition: None,
+            presented_by: None,
+            dependency_data: None,
         };
         let record = run(&ctx, Some(notebook(cells)), Some(info)).record.unwrap();
         let ids: Vec<_> = record
@@ -879,6 +1121,8 @@ z = 3
             alignment: TsAlignment::Ids,
             coverage: Default::default(),
             hash_definition: Some(def),
+            presented_by: None,
+            dependency_data: None,
         }
     }
 
@@ -1102,6 +1346,8 @@ fenced = 1
             alignment: TsAlignment::Positional,
             coverage: Default::default(),
             hash_definition: None,
+            presented_by: None,
+            dependency_data: None,
         }
     }
 
@@ -1279,6 +1525,41 @@ fenced = 1
         let result = run_julia(&ctx, julia_nb());
         assert!(result.warnings.is_empty(), "{:?}", result.warnings);
         assert_eq!(result.record.unwrap().cells.len(), 3);
+    }
+
+    /// OPR-7f: the mapping stamps what the plain route would (wrapper id from the raw notebook
+    /// index, figure name from the code-cell ordinal, counts, the figure class), on the record
+    /// cell and its outputs, with the unit hash untouched.
+    #[test]
+    fn julia_record_carries_the_plain_routes_ids_names_and_counts() {
+        let doc = "Prose.\n\n```{julia}\nplot()\n```\n";
+        let plot = json!({"output_type": "display_data",
+            "data": {"image/png": "AAAA", "text/plain": "<Plot>"}, "metadata": {}});
+        let cells = vec![
+            qnr_md(vec![]),
+            qnr_code(1, "julia", 3, "plot()", vec![out("hi\n"), plot], 4),
+        ];
+        let (_ctx, result) = run_doc(doc, cells);
+        assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+        let record = result.record.expect("a record");
+        let cell = &record.cells[0];
+        assert_eq!(cell.metadata.extra["quarto_attrs"]["id"], "cell-1");
+        assert_eq!(
+            cell.metadata.extra["quarto_attrs"]["attributes"]["execution_count"],
+            "4"
+        );
+        // One markdown cell, then the code cell: raw index 1, but its figure is cell-2 and,
+        // after the printed line, output 2.
+        assert_eq!(
+            cell.outputs[1]["metadata"]["quarto_file_path"],
+            "doc_files/figure-html/cell-2-output-2.png"
+        );
+        assert_eq!(
+            cell.outputs[1]["metadata"]["quarto_attrs"]["classes"],
+            json!(["cell-output"])
+        );
+        // The stream output is untouched.
+        assert_eq!(cell.outputs[0], out("hi\n"));
     }
 
     #[test]
@@ -1619,10 +1900,92 @@ fenced = 1
     }
 
     #[test]
-    fn only_julia_with_units_and_a_wanted_record_is_presented_by_core() {
-        assert!(core_presents("julia", &ctx_for(JDOC, &["julia"], true)));
-        assert!(!core_presents("julia", &ctx_for(JDOC, &["julia"], false)));
-        assert!(!core_presents("marimo", &ctx_for(JDOC, &["julia"], true)));
+    fn core_offers_whenever_it_builds_a_record_for_a_document_with_units() {
+        assert!(offers_presentation(&ctx_for(JDOC, &["julia"], true)));
+        assert!(!offers_presentation(&ctx_for(JDOC, &["julia"], false)));
+        assert!(offers_presentation(
+            &ctx_for(JDOC, &["julia"], false).with_present_from_record(true)
+        ));
+        let no_units = ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/proj"),
+            PathBuf::from("/proj/doc.qmd"),
+            "html",
+        )
+        .with_want_record(true);
+        assert!(!offers_presentation(&no_units));
+    }
+
+    fn with_target(mut ctx: ExecutionContext, target: &str) -> ExecutionContext {
+        ctx.format = target.to_string();
+        ctx
+    }
+
+    #[test]
+    fn the_target_allowlist_admits_each_graduated_target() {
+        for target in JULIA_PRESENTED_TARGETS {
+            let ctx = with_target(ctx_for(JDOC, &["julia"], true), target);
+            assert!(offers_presentation(&ctx), "{target} is graduated");
+        }
+    }
+
+    #[test]
+    fn a_gated_or_unknown_target_is_never_offered_whatever_asks_for_a_record() {
+        for target in [
+            "pdf",
+            "odt",
+            "commonmark",
+            "rst",
+            "latex",
+            "beamer",
+            "no-such-format",
+            "",
+        ] {
+            assert!(!JULIA_PRESENTED_TARGETS.contains(&target));
+            // `want_record` (record: true, --trace, preview, hub) does not bypass the gate ...
+            let asked = with_target(ctx_for(JDOC, &["julia"], true), target);
+            assert!(!offers_presentation(&asked), "{target} with want_record");
+            // ... nor does the stage's own present-from-record flag.
+            let flagged = with_target(
+                ctx_for(JDOC, &["julia"], false).with_present_from_record(true),
+                target,
+            );
+            assert!(
+                !offers_presentation(&flagged),
+                "{target} with present_from_record"
+            );
+        }
+    }
+
+    #[test]
+    fn the_target_allowlist_holds_canonical_identifiers_and_the_html_family() {
+        for t in JULIA_PRESENTED_TARGETS {
+            assert_eq!(*t, t.to_lowercase(), "identifiers are canonical lowercase");
+            assert!(!t.contains('+'), "no +extension: {t}");
+        }
+        // These would stop presenting from the record on the flip if they were missing.
+        for t in ["html", "revealjs", "dashboard"] {
+            assert!(JULIA_PRESENTED_TARGETS.contains(&t), "{t}");
+        }
+        assert!(!JULIA_PRESENTED_TARGETS.contains(&"pdf"));
+    }
+
+    #[test]
+    fn a_gated_target_is_quiet() {
+        // The gate offers nothing and adds no diagnostic: the run is the engine's own.
+        let ctx = with_target(ctx_for(JDOC, &["julia"], true), "odt");
+        assert!(!offers_presentation(&ctx));
+        let result = run_julia(&ctx, julia_nb());
+        assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+    }
+
+    #[test]
+    fn only_an_acknowledgement_on_the_record_info_means_present() {
+        let mut info = positional();
+        assert!(!acknowledged_presentation(None));
+        assert!(!acknowledged_presentation(Some(&info)));
+        info.presented_by = Some(crate::engine::ts_protocol::TsPresentedBy::Core);
+        assert!(acknowledged_presentation(Some(&info)));
     }
 
     #[test]
@@ -1636,7 +1999,11 @@ fenced = 1
         let result = presented(&ctx, cells).unwrap();
         let md = &result.markdown;
         // The julia cell is a cell div with its output; the inline span is its value.
-        assert!(md.contains("::: {.cell}"), "{md}");
+        // OPR-7f: with the plain route\'s wrapper id (raw notebook index 1) and count.
+        assert!(
+            md.contains("::: {#cell-1 .cell execution_count='1'}"),
+            "{md}"
+        );
         assert!(md.contains("cell-output-stdout"), "{md}");
         assert!(md.contains("Inline VALUE and"), "{md}");
         // The python cell and span belong to nobody here and stay as they were written.
@@ -1714,5 +2081,161 @@ fenced = 1
         let mut result = ExecuteResult::new("engine markdown");
         present_from_record("julia", JDOC, &ctx, &mut result).unwrap();
         assert_eq!(result.markdown, "engine markdown");
+    }
+
+    /// A notebook with one code cell whose `metadata.quarto` is `quarto`.
+    fn notebook_with_annotation(quarto: serde_json::Value) -> Value {
+        json!({
+            "nbformat": 4,
+            "nbformat_minor": 5,
+            "metadata": {"kernelspec": {"name": "julia-1.12"}},
+            "cells": [{
+                "cell_type": "code",
+                "execution_count": null,
+                "metadata": {"quarto": quarto},
+                "source": ["x = 1 + 1\n", "x\n", "y = x * 3"],
+                "outputs": []
+            }]
+        })
+    }
+
+    /// The runner's capture facts (OPR-4a, 4b) reach q2 in `metadata.quarto`, in the shapes the
+    /// runner wrote for a three-expression cell (a real run, 2026-11-09): the start line of each
+    /// expression, the output anchors, and the kind of each output (`null` for a plain value).
+    #[test]
+    fn capture_facts_in_the_cell_annotation_are_read_without_loss() {
+        let nb = notebook_with_annotation(json!({
+            "unit": 2,
+            "language": "julia",
+            "line": 15,
+            "expression_starts": [0, 1, 2],
+            "output_expressions": [1, 2, 3],
+            "output_anchors": [1, 2, 3],
+            "output_kinds": ["message", null, null],
+        }));
+        let cells = read_engine_notebook(&nb).unwrap();
+        let facts = &cells[0].quarto.as_ref().unwrap().facts;
+        assert_eq!(facts.expression_starts, Some(vec![0, 1, 2]));
+        assert_eq!(facts.output_anchors, Some(vec![1, 2, 3]));
+        assert_eq!(
+            facts.output_kinds,
+            Some(vec![Some("message".to_string()), None, None])
+        );
+    }
+
+    /// With none of the keys (an older runner, or units absent) a cell reads as before.
+    #[test]
+    fn an_annotation_without_capture_facts_reads_as_before() {
+        let nb = notebook_with_annotation(json!({"unit": 1, "language": "julia", "line": 9}));
+        let cells = read_engine_notebook(&nb).unwrap();
+        let q = cells[0].quarto.as_ref().unwrap();
+        assert_eq!(q.language.as_deref(), Some("julia"));
+        assert_eq!(q.line, Some(9));
+        assert_eq!(q.facts, CaptureFacts::default());
+    }
+
+    /// A key of the wrong shape is a runner bug, reported as the other malformed fields are.
+    #[test]
+    fn a_malformed_capture_fact_is_an_error() {
+        for (key, value) in [
+            ("expression_starts", json!("0,1")),
+            ("output_anchors", json!([1, "two"])),
+            ("output_kinds", json!([1])),
+        ] {
+            let nb = notebook_with_annotation(json!({"language": "julia", key: value}));
+            let err = read_engine_notebook(&nb).err().expect(key);
+            assert!(err.contains(key), "{err}");
+        }
+    }
+    // ---- OPR-4d: the capture facts become cell metadata under the knitr names ----
+
+    /// `qnr_code` with capture facts added to `metadata.quarto`.
+    fn qnr_code_with_facts(
+        unit: u64,
+        line: u64,
+        code: &str,
+        outputs: Vec<Value>,
+        facts: Value,
+    ) -> Value {
+        let mut cell = qnr_code(unit, "julia", line, code, outputs, 1);
+        for (k, v) in facts.as_object().unwrap() {
+            cell["metadata"]["quarto"][k] = v.clone();
+        }
+        cell
+    }
+
+    fn julia_nb_with(cell1: Value) -> Vec<Value> {
+        let mut nb = julia_nb();
+        nb[1] = cell1;
+        nb
+    }
+
+    #[test]
+    fn julia_capture_facts_become_cell_metadata_under_the_knitr_keys() {
+        let ctx = ctx_for(JDOC, &["julia"], true);
+        let facts = json!({
+            "expression_starts": [0, 1],
+            "output_anchors": [1, 2],
+            "output_kinds": ["message", null],
+        });
+        let nb = julia_nb_with(qnr_code_with_facts(
+            1,
+            7,
+            "x = 1",
+            vec![out("a\n"), out("b\n")],
+            facts,
+        ));
+        let result = run_julia(&ctx, nb);
+        assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+        let record = result.record.expect("a record");
+        let extra = &record.cells[1].metadata.extra;
+        assert_eq!(extra[EXPRESSION_STARTS_KEY], json!([0, 1]));
+        assert_eq!(extra[OUTPUT_ANCHORS_KEY], json!([1, 2]));
+        assert_eq!(extra[OUTPUT_KINDS_KEY], json!(["message", null]));
+        // Only the cell that carried facts has the keys; the span and the `eval: false` cell do not.
+        for i in [0, 2] {
+            assert!(
+                !record.cells[i]
+                    .metadata
+                    .extra
+                    .contains_key(OUTPUT_ANCHORS_KEY)
+            );
+        }
+    }
+
+    #[test]
+    fn julia_keys_present_are_mapped_and_absent_ones_are_left_out() {
+        let ctx = ctx_for(JDOC, &["julia"], true);
+        let nb = julia_nb_with(qnr_code_with_facts(
+            1,
+            7,
+            "x = 1",
+            vec![out("x\n")],
+            json!({"expression_starts": [0]}),
+        ));
+        let record = run_julia(&ctx, nb).record.expect("a record");
+        let extra = &record.cells[1].metadata.extra;
+        assert_eq!(extra[EXPRESSION_STARTS_KEY], json!([0]));
+        assert!(!extra.contains_key(OUTPUT_ANCHORS_KEY));
+        assert!(!extra.contains_key(OUTPUT_KINDS_KEY));
+    }
+
+    /// Facts do not change what is hashed: the `quarto_` keys are outside the unit hash.
+    #[test]
+    fn julia_capture_facts_leave_the_exec_hash_alone() {
+        let ctx = ctx_for(JDOC, &["julia"], true);
+        let plain = run_julia(&ctx, julia_nb()).record.expect("a record");
+        let nb = julia_nb_with(qnr_code_with_facts(
+            1,
+            7,
+            "x = 1",
+            vec![out("x\n")],
+            json!({"expression_starts": [0], "output_anchors": [1], "output_kinds": [null]}),
+        ));
+        let with = run_julia(&ctx, nb).record.expect("a record");
+        assert_eq!(
+            plain.cells[1].metadata.quarto_exec_hash,
+            with.cells[1].metadata.quarto_exec_hash
+        );
     }
 }

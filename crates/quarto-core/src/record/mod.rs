@@ -18,11 +18,18 @@ mod exec_hash;
 mod freeze_readiness;
 mod hash_definition;
 mod ids;
+mod location;
 mod matching;
 mod overlay;
 mod place;
+mod positron_export;
 mod positron_import;
+mod positron_record;
 mod reader;
+#[cfg(not(target_arch = "wasm32"))]
+mod render_sources;
+mod source_key;
+mod sources;
 mod staleness;
 mod types;
 mod writer;
@@ -39,19 +46,41 @@ pub use ids::{
     FillIdsError, author_label, cell_id, content_hash, fill_ids, scanned_author_text,
     span_content_hash, span_id,
 };
+pub use location::{execution_record_path, project_relative_source};
 pub use matching::{
     HEADER_KEYS_KEY, Matching, OUTPUT_FORMAT_OPTION, UnitKey, UnitStaleness, lost_header_keys,
     match_units,
 };
-pub use overlay::{overlay_difference, rehash_record};
+pub use overlay::{overlay_difference, overlay_free_run, rehash_record};
 pub use place::{PlaceNote, Placed, QUARTO_MARKDOWN_MIME, VERBATIM_KEY, place};
 pub(crate) use place::{placed_replacement, replacement, stored_markdown};
+pub use positron_export::{
+    DropReason, DroppedRepresentation, ExportError, ExportOptions, ExportedCache, SkipReason,
+    SkippedUnit, export_for_positron,
+};
 pub use positron_import::{
-    DisplayOnlyOutputs, ImportError, JUPYTER_ENGINE, KNITR_ENGINE, POSITRON_CACHE_VERSION,
-    PositronImport, Provenance, import_positron_cache,
+    DisplayOnlyOutputs, ImportError, POSITRON_CACHE_VERSION, PositronImport, Provenance,
+    import_positron_cache,
+};
+pub use positron_record::{
+    PROVENANCE_KEY, PROVENANCE_POSITRON, UNCLAIMED_KEY, import_record_source,
+    imported_record_is_stale, is_imported_record, record_from_positron,
 };
 pub use reader::{ReadError, read_record, read_record_value};
-pub use staleness::record_is_stale;
+#[cfg(not(target_arch = "wasm32"))]
+pub use render_sources::{
+    RenderRecordSources, RenderSelection, SelectInputs, select_render_record,
+};
+pub use source_key::{
+    CommandSources, RECORD_SOURCES_KEY, ResolvedSources, SourceKeyError, SourceNote, Trust,
+    describe as describe_sources, host_record_sources, resolve_record_sources,
+};
+pub use sources::{
+    Chosen, EngineError, EngineResult, ImportContext, ImportedOnly, LookupError, OutcomeKind,
+    ParseSourceError, RecordLookup, RecordSource, RecordSources, Resolution, SourceOutcome,
+    WalkContext, resolve_records,
+};
+pub use staleness::{record_format_mismatch, record_is_stale, record_staleness, source_staleness};
 pub use types::{
     AuthorText, AuthorTexts, CellMetadata, CellType, EngineEntry, EngineRecord, Record, RecordCell,
     RecordFile, RecordMetadata, UnitKind, UnitLocation, UnitResult,

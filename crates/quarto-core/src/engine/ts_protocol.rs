@@ -21,7 +21,7 @@
 //! - `TsFormatIdentifier`: explicit kebab-case per-field renames; `extension-name` omitted when `None`.
 //! - `TsMetadataValue`: untagged (each variant serializes bare).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use serde::{Deserialize, Serialize};
 
@@ -423,6 +423,15 @@ pub struct TsExecuteOptions {
     /// before. Defined here, not by EXR-7; nothing sets it until the Julia flip.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub presented_by: Option<TsPresentedBy>,
+    /// q2-only (bd-x3h4zjhl): the environment the engine merges into the processes
+    /// that run user code. It holds the filtered project environment (`_environment`
+    /// files, `QUARTO_PROFILE`), then the per-document execute environment
+    /// (`QUARTO_DOCUMENT_*`, `QUARTO_EXECUTE_INFO`, `QUARTO_FIG_*`,
+    /// `QUARTO_PROJECT_ROOT`) on top, the same precedence knitr uses. Left out when
+    /// empty; an absent key deserializes as empty. May carry secrets from
+    /// `_environment.local`: never log it. A `BTreeMap` keeps the parity fixture stable.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub execute_env: BTreeMap<String, String>,
 }
 
 /// Who presents an engine's output (`presentedBy` on the wire).
@@ -567,6 +576,17 @@ pub struct TsRecordInfo {
     /// The engine's declared execution-input hash rule (epic decision 35).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hash_definition: Option<HashDefinition>,
+    /// The engine's acknowledgement that it honored core's `presentedBy: "core"` offer: it
+    /// returned the notebook and made no markdown of its own (decision D8). Absent from an
+    /// engine that predates it, or that presented itself. Core presents from the record
+    /// exactly when this is `Core` (`acknowledged_presentation`, OPR-7a).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presented_by: Option<TsPresentedBy>,
+    /// What kind of page-dependency data the engine's outputs carry (OPR-7i); the one value is
+    /// `"jupyter-outputs"`. Core stores it on the engine's entry, only together with the
+    /// `presented_by` acknowledgement. Absent from an older engine: no handling.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependency_data: Option<String>,
 }
 
 fn is_default_coverage(c: &TsCoverage) -> bool {
@@ -674,6 +694,7 @@ mod tests {
             dependencies: true,
             units: None,
             presented_by: None,
+            execute_env: BTreeMap::new(),
         }
     }
 
@@ -1838,6 +1859,24 @@ mod tests {
     }
 
     #[test]
+    fn execute_env_is_absent_when_empty_and_roundtrips() {
+        let v = serde_json::to_value(make_execute_options()).unwrap();
+        assert!(v.get("executeEnv").is_none());
+        let mut opts = make_execute_options();
+        opts.execute_env
+            .insert("QUARTO_DOCUMENT_FILE".to_string(), "doc.qmd".to_string());
+        let v = serde_json::to_value(&opts).unwrap();
+        assert_eq!(v["executeEnv"]["QUARTO_DOCUMENT_FILE"], "doc.qmd");
+        let back: TsExecuteOptions = serde_json::from_value(v).unwrap();
+        assert_eq!(back, opts);
+        // An older core's options, without the key, still deserialize.
+        let mut v = serde_json::to_value(make_execute_options()).unwrap();
+        v.as_object_mut().unwrap().remove("executeEnv");
+        let back: TsExecuteOptions = serde_json::from_value(v).unwrap();
+        assert!(back.execute_env.is_empty());
+    }
+
+    #[test]
     fn execute_options_with_units_roundtrip() {
         let mut opts = make_execute_options();
         opts.units = Some(sample_units());
@@ -1887,6 +1926,8 @@ mod tests {
                 alignment: TsAlignment::Positional,
                 coverage: TsCoverage::Owned,
                 hash_definition: None,
+                presented_by: None,
+                dependency_data: None,
             }),
             ..Default::default()
         };
@@ -1912,6 +1953,8 @@ mod tests {
             alignment: TsAlignment::Ids,
             coverage: TsCoverage::Owned,
             hash_definition: Some(def.clone()),
+            presented_by: None,
+            dependency_data: None,
         };
         let v = serde_json::to_value(&info).unwrap();
         assert_eq!(v["hashDefinition"]["presentationCellOptions"][0], "echo");
@@ -1927,6 +1970,48 @@ mod tests {
             bare.hash_definition_or_conservative("marimo"),
             HashDefinition::conservative("marimo")
         );
+    }
+
+    #[test]
+    fn record_info_presented_by_is_optional_and_roundtrips() {
+        // An engine that predates the acknowledgement sends no field: it parses, as `None`.
+        let old: TsRecordInfo = serde_json::from_str(r#"{"version":1}"#).unwrap();
+        assert_eq!(old.presented_by, None);
+        // ... and `None` is not written back (additive on the wire).
+        assert!(
+            serde_json::to_value(&old)
+                .unwrap()
+                .get("presentedBy")
+                .is_none()
+        );
+
+        // An engine that honored core's offer acknowledges with `"presentedBy": "core"`.
+        let acked: TsRecordInfo =
+            serde_json::from_str(r#"{"version":1,"presentedBy":"core"}"#).unwrap();
+        assert_eq!(acked.presented_by, Some(TsPresentedBy::Core));
+        let v = serde_json::to_value(&acked).unwrap();
+        assert_eq!(v["presentedBy"], "core");
+        let back: TsRecordInfo = serde_json::from_value(v).unwrap();
+        assert_eq!(back, acked);
+    }
+
+    #[test]
+    fn record_info_dependency_data_is_optional_and_roundtrips() {
+        // An older engine sends no field: it parses as `None` and `None` is not written back.
+        let old: TsRecordInfo = serde_json::from_str(r#"{"version":1}"#).unwrap();
+        assert_eq!(old.dependency_data, None);
+        assert!(
+            serde_json::to_value(&old)
+                .unwrap()
+                .get("dependencyData")
+                .is_none()
+        );
+        let labeled: TsRecordInfo =
+            serde_json::from_str(r#"{"version":1,"dependencyData":"jupyter-outputs"}"#).unwrap();
+        assert_eq!(labeled.dependency_data.as_deref(), Some("jupyter-outputs"));
+        let v = serde_json::to_value(&labeled).unwrap();
+        assert_eq!(v["dependencyData"], "jupyter-outputs");
+        assert_eq!(serde_json::from_value::<TsRecordInfo>(v).unwrap(), labeled);
     }
 
     #[test]
@@ -2030,6 +2115,8 @@ mod tests {
             // optional field, so a rename of `coverage` changes the fixture.
             coverage: TsCoverage::Subset,
             hash_definition: Some(hash_def),
+            presented_by: Some(TsPresentedBy::Core),
+            dependency_data: Some("jupyter-outputs".to_string()),
         };
         // `TsUnit` has skipped optionals; the fixture instance is the unit with all of them.
         let full_unit = TsUnit {
@@ -2043,6 +2130,12 @@ mod tests {
         };
         let mut exec_opts = make_execute_options();
         exec_opts.units = Some(vec![full_unit.clone()]);
+        exec_opts.execute_env = [
+            ("QUARTO_DOCUMENT_FILE".to_string(), "doc.qmd".to_string()),
+            ("QUARTO_PROFILE".to_string(), "prod".to_string()),
+        ]
+        .into_iter()
+        .collect();
         let exec_result = TsExecuteResult {
             notebook: Some(serde_json::json!({"nbformat": 4})),
             record_info: Some(record_info.clone()),

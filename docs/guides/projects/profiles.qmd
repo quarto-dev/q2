@@ -15,7 +15,7 @@ When a profile named `production` is active:
    [Project Environment Files](environment.qmd));
 3. content marked `when-profile="production"` appears (and
    `unless-profile="production"` content disappears);
-4. code cells and render scripts see
+4. code cells (Jupyter, knitr, julia and marimo) and render scripts see
    `QUARTO_PROFILE=production`, so Python/R code can branch on it.
 
 ## Activating profiles

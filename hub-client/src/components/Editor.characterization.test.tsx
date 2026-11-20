@@ -137,9 +137,15 @@ vi.mock('../hooks/useAutomergeSync', () => ({
   }),
 }));
 
-vi.mock('../hooks/usePresence', () => ({
-  usePresence: () => ({ remoteUsers: [], userCount: 0, onEditorMount: vi.fn() }),
-}));
+// `remoteUsers` must keep its identity across renders, as the real hook's
+// state does: DocumentEditor reports it up to Editor from an effect keyed on
+// it, so a fresh array per render re-renders forever.
+vi.mock('../hooks/usePresence', () => {
+  const remoteUsers: never[] = [];
+  return {
+    usePresence: () => ({ remoteUsers, userCount: 0, onEditorMount: vi.fn() }),
+  };
+});
 
 vi.mock('../hooks/useIntelligence', () => ({
   useIntelligence: () => ({ symbols: [], loading: false, error: null, refresh: vi.fn() }),

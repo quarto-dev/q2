@@ -8,3 +8,4 @@ website:
       - index.qmd
       - about.qmd
       - posts/first.qmd
+quarto-required: "^2"

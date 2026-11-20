@@ -28,6 +28,15 @@ impl Record {
     pub const RECORD_VERSION: u32 = 1;
     /// Emitted only while the schema subset really is Positron-compatible.
     pub const CACHE_VERSION: u32 = 1;
+
+    /// Whether the record carries anything a reader can use: an engine entry or a cell.
+    ///
+    /// An engine that builds no record leaves one that describes nothing, which must never
+    /// replace the legacy captures (EXR-15). A record with cells and no engines, which only the
+    /// Positron importer produces, does describe something.
+    pub fn describes_something(&self) -> bool {
+        !self.metadata.quarto_engines.is_empty() || !self.cells.is_empty()
+    }
 }
 
 /// Notebook `metadata`: flat keys.
@@ -116,6 +125,23 @@ pub struct EngineEntry {
     /// `quarto_record_version` stays 1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub known_options: Option<Vec<String>>,
+
+    /// Whether the engine presents a cell's outputs interleaved with its source by default, when
+    /// the cell carries anchors (`output-interleave`, 2026-11-13). Absent is `false`: every
+    /// engine holds outputs after the source unless it declares otherwise (knitr does), and the
+    /// author can override either way. Optional, so `quarto_record_version` stays 1.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub interleaves_output: bool,
+
+    /// What kind of page-dependency data the engine's outputs carry (OPR-7i), a label core maps to
+    /// a strategy at present time. The one value today is `"jupyter-outputs"`: the cell outputs
+    /// are nbformat outputs, and the page dependencies (requirejs, jQuery, hoisted libraries) are
+    /// derived from their MIME types. Absent means no handling, so knitr, marimo, an older engine
+    /// and any unknown engine are unchanged. Set only for a record core presented itself
+    /// (`presentedBy: "core"` acknowledged), so "present" means "core presents, so derive".
+    /// Outside the hash definition; optional, so `quarto_record_version` stays 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependency_data: Option<String>,
 
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
@@ -284,6 +310,8 @@ mod tests {
             resource_files: vec!["a.png".into()],
             warnings: vec![json!({"title": "w"})],
             known_options: None,
+            interleaves_output: false,
+            dependency_data: None,
             extra: BTreeMap::new(),
         }
     }
@@ -339,6 +367,27 @@ mod tests {
             },
             cells: vec![cell()],
         }
+    }
+
+    #[test]
+    fn describes_something_is_true_with_engines_or_cells_and_false_when_empty() {
+        let full = record();
+        assert!(full.describes_something());
+
+        let mut cells_only = record();
+        cells_only.metadata.quarto_engines.clear();
+        assert!(!cells_only.cells.is_empty(), "fixture has cells");
+        assert!(cells_only.describes_something());
+
+        let mut engines_only = record();
+        engines_only.cells.clear();
+        assert!(!engines_only.metadata.quarto_engines.is_empty());
+        assert!(engines_only.describes_something());
+
+        let mut empty = record();
+        empty.metadata.quarto_engines.clear();
+        empty.cells.clear();
+        assert!(!empty.describes_something());
     }
 
     #[test]
@@ -465,5 +514,27 @@ mod tests {
         }]);
         assert_eq!(texts.len(), 1);
         assert!(texts.get(1).is_none());
+    }
+
+    // === OPR-7i: the dependency-data label ===
+
+    #[test]
+    fn dependency_data_roundtrips_and_is_omitted_when_none() {
+        let mut e = entry();
+        let v = serde_json::to_value(&e).unwrap();
+        assert!(v.get("dependency_data").is_none(), "{v}");
+        e.dependency_data = Some("jupyter-outputs".into());
+        let v = serde_json::to_value(&e).unwrap();
+        assert_eq!(v["dependency_data"], "jupyter-outputs");
+        let back: EngineEntry = serde_json::from_value(v).unwrap();
+        assert_eq!(back.dependency_data.as_deref(), Some("jupyter-outputs"));
+        assert!(back.extra.is_empty(), "{:?}", back.extra);
+    }
+
+    #[test]
+    fn an_entry_written_before_the_label_still_reads() {
+        let v = serde_json::to_value(entry()).unwrap();
+        let back: EngineEntry = serde_json::from_value(v).unwrap();
+        assert_eq!(back.dependency_data, None);
     }
 }

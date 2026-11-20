@@ -205,6 +205,12 @@ jobs:
         shell: bash
         run: npm run test -w @quarto/engine-host-node
 
+      # engine-host-node: typecheck the sources and the `__type-tests__/` files
+      # (vitest only transforms; nothing else compiles the type tests).
+      - name: Typecheck engine-host-node
+        shell: bash
+        run: npm run typecheck -w @quarto/engine-host-node
+
       # Bundle freshness gate: rebuild engine-host-node.mjs from source and assert
       # the committed bytes are unchanged.  Fails if someone edited TS but forgot
       # to run `npm run bundle`.  build-info.json is gitignored (volatile builtAt);

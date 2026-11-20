@@ -251,6 +251,24 @@ header-includes: |
 
 ### Lists
 
+#### Task lists
+
+Start a list item with `[ ]` or `[x]` (or `[X]`), followed by a space, to make it a task:
+
+```markdown
+- [x] Write the draft
+- [ ] Ask for a review
+- [ ] Publish
+```
+
+In HTML, each task shows a checkbox in place of its bullet, and plain items in the same list keep their bullets.
+In an ordered list, a task keeps its number and the checkbox follows it.
+To hide the numbers too, set `$task-list-ordered-markers: false` in a [custom theme](../formats/html/themes.qmd#task-lists).
+
+The space after the brackets is required: `- [ ]` on its own is an ordinary item, while `- [ ] ` is an empty task.
+The checkboxes in rendered HTML are read-only.
+In the preview of an editable document, clicking one toggles the item between `[ ]` and `[x]` in the source.
+
 ### Escaping syntax characters
 
 A backslash makes any character that qmd uses for markup literal: `\*`, `\_`, `\$`, `\{`, `\[`, `\<`, `\'`.

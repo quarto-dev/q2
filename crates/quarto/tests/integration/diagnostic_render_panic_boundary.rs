@@ -65,7 +65,7 @@ fn run_q2_render_with_fault(dir: &Path, extra_args: &[&str], fault_index: usize)
 fn write_two_unknown_shortcode_pages(dir: &Path) {
     write_file(
         &dir.join("_quarto.yml"),
-        "project:\n  type: website\n  output-dir: _site\n",
+        "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n",
     );
     write_file(
         &dir.join("a.qmd"),
@@ -125,7 +125,7 @@ fn caught_panic_on_a_warning_keeps_exit_code_zero() {
     let dir = TempDir::new().unwrap();
     write_file(
         &dir.path().join("_quarto.yml"),
-        "project:\n  type: website\n  output-dir: _site\n",
+        "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n",
     );
     write_file(
         &dir.path().join("a.qmd"),
@@ -260,7 +260,7 @@ fn caught_panic_on_an_error_keeps_exit_code_nonzero() {
     let dir = TempDir::new().unwrap();
     write_file(
         &dir.path().join("_quarto.yml"),
-        "project:\n  type: website\n  output-dir: _site\n",
+        "quarto-required: \"^2\"\nproject:\n  type: website\n  output-dir: _site\n",
     );
     write_file(&dir.path().join("index.qmd"), DUPLICATE_ID_DOC);
 

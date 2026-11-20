@@ -13,8 +13,11 @@
 //! live Jupyter path, the stored-notebook replay and (later) record presentation can
 //! all call the same functions on every target.
 
+pub mod ansi;
 pub mod cell;
+pub mod cell_step;
 pub mod document;
+pub mod engine_attrs;
 pub mod expansion;
 pub mod figures;
 pub mod inline;
@@ -23,6 +26,7 @@ mod jupyter_option_sweep;
 pub mod knitr_inputs;
 pub mod options;
 pub mod output;
+pub mod page_dependencies;
 #[cfg(test)]
 pub(crate) mod recording_runtime;
 pub mod visibility;

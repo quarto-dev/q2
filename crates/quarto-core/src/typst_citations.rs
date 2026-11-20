@@ -226,7 +226,7 @@ mod tests {
     }
 
     fn cite(keys: &[&str]) -> Inline {
-        Inline::Cite(Cite {
+        Inline::Cite(Box::new(Cite {
             citations: keys
                 .iter()
                 .map(|k| Citation {
@@ -241,7 +241,7 @@ mod tests {
                 .collect(),
             content: vec![],
             source_info: si(),
-        })
+        }))
     }
 
     fn doc(inlines: Vec<Inline>) -> Vec<Block> {

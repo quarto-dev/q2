@@ -32,8 +32,20 @@ import { landing, links } from '../../strings';
  * `errorReason` is the hub's coarse `auth_error` reason, not a flag —
  * `''` (a bare `/?auth_error`) is a *present* error, so presence is
  * tested with `!== undefined` rather than truthiness.
+ *
+ * `onContinueOffline` adds the "or, continue offline…" line under the
+ * sign-in button; App passes it to let a visitor into the local-only
+ * app without a session. Omitted, the line is not rendered.
  */
-export function LoginScreen({ errorReason, message }: { errorReason?: string; message?: string }) {
+export function LoginScreen({
+  errorReason,
+  message,
+  onContinueOffline,
+}: {
+  errorReason?: string;
+  message?: string;
+  onContinueOffline?: () => void;
+}) {
   const provider = useAuthProvider();
 
   return (
@@ -89,6 +101,21 @@ export function LoginScreen({ errorReason, message }: { errorReason?: string; me
             loginUri={window.location.origin + hubPath('/auth/callback')}
           />
         </div>
+
+        {onContinueOffline !== undefined ? (
+          <p className="ls-offline">
+            {landing.continueOfflineLead}{' '}
+            <button
+              type="button"
+              className="ls-offline-link"
+              data-testid="continue-offline"
+              onClick={onContinueOffline}
+            >
+              {landing.continueOffline}
+            </button>
+            .
+          </p>
+        ) : null}
       </div>
     </div>
   );

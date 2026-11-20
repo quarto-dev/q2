@@ -25,6 +25,9 @@
 //! - a smart-include `{text: <literal>}` object,
 //! - or an array of any of the above.
 //!
+//! The legacy inline keys are folded by [`IncludeInlineFoldStage`]
+//! after user filters run (GH #1257), not here.
+//!
 //! Engine-contributed [`PandocIncludes`](super::super::PandocIncludes)
 //! (from `StageContext.includes`) are folded in too, inserted
 //! VERBATIM — this stage never file-reads them. That's safe because
@@ -175,6 +178,74 @@ impl PipelineStage for IncludeResolveStage {
     }
 }
 
+/// Fold the final values of the legacy inline include keys
+/// (`header-includes`, `include-before`, `include-after`) into
+/// `rendered.includes.*`.
+///
+/// Runs right after `UserFiltersStage::post`, so it sees what Lua
+/// filters did to the keys. Pandoc builds the writer's template
+/// context from the final, post-filter metadata, and Quarto 1 filters
+/// rely on that to inject head content (GH #1257). Folding the keys
+/// earlier, in [`IncludeResolveStage`], made filter writes invisible.
+///
+/// The final metadata is authoritative: a filter can append to,
+/// replace, or clear an authored value. The inline keys stay in the
+/// metadata (the HTML template excludes them from its context, so
+/// they are not read twice).
+pub struct IncludeInlineFoldStage;
+
+impl IncludeInlineFoldStage {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for IncludeInlineFoldStage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait(?Send)]
+impl PipelineStage for IncludeInlineFoldStage {
+    fn name(&self) -> &str {
+        "include-inline-fold"
+    }
+
+    fn input_kind(&self) -> PipelineDataKind {
+        PipelineDataKind::DocumentAst
+    }
+
+    fn output_kind(&self) -> PipelineDataKind {
+        PipelineDataKind::DocumentAst
+    }
+
+    async fn run(
+        &self,
+        input: PipelineData,
+        _ctx: &mut StageContext,
+    ) -> Result<PipelineData, PipelineError> {
+        let PipelineData::DocumentAst(mut doc) = input else {
+            return Err(PipelineError::unexpected_input(
+                self.name(),
+                self.input_kind(),
+                input.kind(),
+            ));
+        };
+        fold_inline_includes(&mut doc.ast.meta);
+        Ok(PipelineData::DocumentAst(doc))
+    }
+}
+
+/// Append the inline keys' current values to `rendered.includes.*`.
+pub fn fold_inline_includes(meta: &mut ConfigValue) {
+    let mut inline = PandocIncludes::default();
+    extend_from_inline_key(&mut inline.header_includes, meta, KEY_HEADER_INCLUDES);
+    extend_from_inline_key(&mut inline.include_before, meta, KEY_INCLUDE_BEFORE);
+    extend_from_inline_key(&mut inline.include_after, meta, KEY_INCLUDE_AFTER);
+    append_pandoc_includes(meta, &inline);
+}
+
 /// Resolve user-authored include slots, fold engine contributions,
 /// and write flat lists to `meta.rendered.includes.{header,
 /// before-body, after-body}`.
@@ -184,14 +255,22 @@ impl PipelineStage for IncludeResolveStage {
 /// not produce file-slot entries (no file dependency). Missing files
 /// produce a warning diagnostic and contribute no content.
 ///
+/// The legacy inline keys (`header-includes`, `include-before`,
+/// `include-after`) are **not** read here: a user filter can still
+/// change them, so [`IncludeInlineFoldStage`] folds their final values
+/// after the filters have run (GH #1257).
+///
 /// **Ordering** (mirrors Q1 `pandoc.ts:874-929`):
 ///
 /// - **header** and **before-body**: engine contributions first,
-///   then legacy inline keys, then file-slot keys (in the order they
-///   appear in the array).
-/// - **after-body**: legacy inline keys first, then file-slot keys,
-///   then engine contributions last (Q1 puts engine/extras after
-///   user content for the after-body slot).
+///   then file-slot keys (in the order they appear in the array).
+/// - **after-body**: file-slot keys first, then engine contributions
+///   last (Q1 puts engine/extras after user content for the
+///   after-body slot).
+///
+/// [`IncludeInlineFoldStage`] then appends the inline keys after
+/// these, as Pandoc does (`-H`/`-B`/`-A` files are template
+/// variables, which precede the metadata value of the same name).
 pub fn resolve_includes(
     meta: &mut ConfigValue,
     runtime: &dyn SystemRuntime,
@@ -204,7 +283,6 @@ pub fn resolve_includes(
     // === header ===
     let mut header: Vec<String> = Vec::new();
     header.extend(pandoc_includes.header_includes.iter().cloned());
-    extend_from_inline_key(&mut header, meta, KEY_HEADER_INCLUDES);
     extend_from_file_slot_key(
         &mut header,
         &mut recorded,
@@ -218,7 +296,6 @@ pub fn resolve_includes(
     // === before-body ===
     let mut before_body: Vec<String> = Vec::new();
     before_body.extend(pandoc_includes.include_before.iter().cloned());
-    extend_from_inline_key(&mut before_body, meta, KEY_INCLUDE_BEFORE);
     extend_from_file_slot_key(
         &mut before_body,
         &mut recorded,
@@ -231,7 +308,6 @@ pub fn resolve_includes(
 
     // === after-body ===
     let mut after_body: Vec<String> = Vec::new();
-    extend_from_inline_key(&mut after_body, meta, KEY_INCLUDE_AFTER);
     extend_from_file_slot_key(
         &mut after_body,
         &mut recorded,
@@ -996,20 +1072,20 @@ mod tests {
     // branch.
 
     fn raw_html_block(text: &str) -> Block {
-        Block::RawBlock(RawBlock {
+        Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: text.to_string(),
             source_info: SourceInfo::for_test(),
-        })
+        }))
     }
 
     fn para_of_raw_html(text: &str) -> Block {
         Block::Paragraph(Paragraph {
-            content: vec![Inline::RawInline(RawInline {
+            content: vec![Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: text.to_string(),
                 source_info: SourceInfo::for_test(),
-            })],
+            }))],
             source_info: SourceInfo::for_test(),
         })
     }
@@ -1059,12 +1135,12 @@ mod tests {
 
     #[test]
     fn text_holding_blocks_inside_div_recurses_into_container() {
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: quarto_pandoc_types::empty_attr(),
             content: vec![raw_html_block("<meta name=\"nested\">")],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let (header, diags) = resolve_text_blocks(blocks(vec![div]));
         assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
         assert_eq!(header.len(), 1);
@@ -1155,7 +1231,7 @@ mod tests {
 
     // === Test 6: legacy inline keys (`header-includes` /
     // `include-before` / `include-after`) fold into the right
-    // slots. ===
+    // slots, after the file-slot pass. ===
     #[test]
     fn legacy_inline_keys_fold_into_rendered_lists() {
         let runtime = rt(vec![]);
@@ -1175,6 +1251,13 @@ mod tests {
         );
 
         assert!(diags.is_empty());
+        // `resolve_includes` leaves the inline keys to the post-filter fold
+        // (GH #1257), so a filter's edits to them are seen.
+        assert!(rendered_strings(&meta, "header").is_empty());
+        assert!(rendered_strings(&meta, "before-body").is_empty());
+        assert!(rendered_strings(&meta, "after-body").is_empty());
+
+        fold_inline_includes(&mut meta);
         assert_eq!(rendered_strings(&meta, "header"), vec!["<style>L</style>"]);
         assert_eq!(
             rendered_strings(&meta, "before-body"),
@@ -1246,19 +1329,23 @@ mod tests {
         );
 
         assert!(diags.is_empty());
-        // header & before-body: engine, then inline, then file.
+        // The inline keys fold last, after the filters have run (GH #1257).
+        // Pandoc puts `-H`/`-B`/`-A` file variables before the metadata
+        // value of the same name.
+        fold_inline_includes(&mut meta);
+        // header & before-body: engine, then file, then inline.
         assert_eq!(
             rendered_strings(&meta, "header"),
-            vec!["<h-engine/>", "<h-inline/>", "<h-file/>"]
+            vec!["<h-engine/>", "<h-file/>", "<h-inline/>"]
         );
         assert_eq!(
             rendered_strings(&meta, "before-body"),
-            vec!["<b-engine/>", "<b-inline/>", "<b-file/>"]
+            vec!["<b-engine/>", "<b-file/>", "<b-inline/>"]
         );
-        // after-body: inline, then file, then engine (Q1 parity).
+        // after-body: file, then engine (Q1 parity), then inline.
         assert_eq!(
             rendered_strings(&meta, "after-body"),
-            vec!["<a-inline/>", "<a-file/>", "<a-engine/>"]
+            vec!["<a-file/>", "<a-engine/>", "<a-inline/>"]
         );
     }
 
@@ -1278,32 +1365,32 @@ mod tests {
         // (RawInline + Str + Quoted + Str + RawInline).
         let si = SourceInfo::for_test();
         let inlines = vec![
-            Inline::RawInline(RawInline {
+            Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: "<script>".to_string(),
                 source_info: si.clone(),
-            }),
+            })),
             Inline::Str(Str {
                 text: "console.log(".to_string(),
                 source_info: si.clone(),
             }),
-            Inline::Quoted(Quoted {
+            Inline::Quoted(Box::new(Quoted {
                 quote_type: QuoteType::SingleQuote,
                 content: vec![Inline::Str(Str {
                     text: "AFTER".to_string(),
                     source_info: si.clone(),
                 })],
                 source_info: si.clone(),
-            }),
+            })),
             Inline::Str(Str {
                 text: ");".to_string(),
                 source_info: si.clone(),
             }),
-            Inline::RawInline(RawInline {
+            Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: "</script>".to_string(),
                 source_info: si.clone(),
-            }),
+            })),
         ];
         let parsed_value = ConfigValue {
             value: ConfigValueKind::PandocInlines(inlines),

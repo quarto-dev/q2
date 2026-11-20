@@ -1,6 +1,6 @@
 ---
 title: "Quarto 1 diagram cell is not run"
-description: "Quarto 2 does not run Quarto 1 brace-form mermaid and dot cells; a plain mermaid fence draws a Mermaid diagram."
+description: "Quarto 2 does not run Quarto 1 brace-form mermaid and dot cells; a plain mermaid or dot fence draws the diagram."
 code: Q-2-58
 subsystem: markdown
 status: stub
@@ -24,10 +24,10 @@ diagnostics:
 ## What this means
 
 Quarto 1 draws diagrams from executable cells, written with braces:
-```` ```{mermaid} ```` and ```` ```{dot} ````. Quarto 2 draws Mermaid
-diagrams from the plain fence ```` ```mermaid ````, and has no Graphviz
-support yet. A brace-form cell is left as a code block, so the reader sees
-the diagram's source instead of the diagram.
+```` ```{mermaid} ```` and ```` ```{dot} ````. Quarto 2 draws diagrams
+from the plain fences ```` ```mermaid ```` and ```` ```dot ````. A
+brace-form cell is left as a code block, so the reader sees the diagram's
+source instead of the diagram.
 
 ## How to fix
 
@@ -41,8 +41,19 @@ flowchart LR
 ```
 `````
 
-**For Graphviz (`{dot}`)**, there is no replacement yet. Pre-render the
-diagram to an image and include it, or write the diagram in Mermaid.
+**For Graphviz (`{dot}`)**, drop the braces in the same way. The diagram
+body and its `//|` options need no other change:
+
+`````markdown
+```dot
+digraph G {
+  Draft -> Review
+}
+```
+`````
+
+Graphviz diagrams are drawn in the `html` and `revealjs` formats. In
+other formats a `dot` block is still shown as its source.
 
 **If an engine handles the brace form**, this warning does not apply to
 the cells it claims. If you still see it, or want it gone, turn it off in

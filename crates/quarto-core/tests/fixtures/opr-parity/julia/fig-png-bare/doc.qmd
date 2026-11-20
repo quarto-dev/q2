@@ -1,0 +1,21 @@
+---
+title: Bare PNG figures from Julia
+engine: julia
+---
+
+A prose block before the cells, so the unit ordinal and the cell counter differ.
+
+```{julia}
+using Plots
+display(MIME("image/png"), plot(1:5, (1:5) .^ 2))
+```
+
+Between the cells.
+
+```{julia}
+#| label: fig-b
+#| fig-cap: A labeled bare PNG.
+display(MIME("image/png"), plot(1:5, sqrt.(1:5)))
+```
+
+See @fig-b.

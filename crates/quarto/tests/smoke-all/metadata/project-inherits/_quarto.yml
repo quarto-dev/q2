@@ -1,2 +1,3 @@
 title: "Project Title From Config"
 author: "Project Author"
+quarto-required: "^2"

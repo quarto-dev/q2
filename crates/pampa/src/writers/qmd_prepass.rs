@@ -477,11 +477,11 @@ fn separate_ordered_lists(blocks: &mut Vec<Block>) {
             && needs_list_separator(prev, &block)
         {
             let source_info = prev_list.source_info.clone();
-            out.push(Block::RawBlock(RawBlock {
+            out.push(Block::RawBlock(Box::new(RawBlock {
                 format: "html".to_string(),
                 text: LIST_SEPARATOR.to_string(),
                 source_info,
-            }));
+            })));
         }
         out.push(block);
     }
@@ -507,7 +507,7 @@ fn rewrite(pandoc: &Pandoc) -> Pandoc {
         out.push(block);
         for mut definition in rewriter.definitions.drain(..) {
             definition.source_info = source_info.clone();
-            out.push(Block::NoteDefinitionFencedBlock(definition));
+            out.push(Block::NoteDefinitionFencedBlock(Box::new(definition)));
         }
     }
     separate_ordered_lists(&mut out);

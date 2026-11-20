@@ -1,2 +1,5 @@
+# Written for Quarto 2; Quarto 1 refuses to render it.
+quarto-required: "^2"
+
 project:
   title: "$title$"

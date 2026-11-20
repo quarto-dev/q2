@@ -13,6 +13,16 @@
 //! Quarto 1 records nothing, so an extension it installed has no
 //! record. That case is reported as "untracked" rather than refused —
 //! see [`InstalledState`].
+//!
+//! Other tools (Quarto Wizard) read and write the same file, so two
+//! rules make it safe to share (bd-yjg91sls, GH #1175 / #1176):
+//!
+//! - **Keys q2 doesn't own are kept.** They land in
+//!   [`SourceRecord::extra`] and are written back unchanged when `q2 add`
+//!   replaces the extension.
+//! - **A newer schema version is not read with this version's rules.**
+//!   It is reported as [`EditKind::NewerRecord`], so replacing it needs
+//!   `--force`, the same as a local edit.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -63,6 +73,11 @@ pub struct SourceRecord {
     /// Path (relative to the extension directory, `/`-separated) →
     /// lowercase hex sha256. Excludes this record itself.
     pub files: BTreeMap<String, String>,
+    /// Every top-level key q2 does not define, in the order the file
+    /// had them. Another tool's keys (or a newer q2's additive ones)
+    /// ride along here, so rewriting the record does not drop them.
+    #[serde(flatten)]
+    pub extra: serde_yaml::Mapping,
 }
 
 pub const RECORD_VERSION: u32 = 1;
@@ -100,43 +115,72 @@ pub struct LocalEdit {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditKind {
     Modified,
+    /// The file differs from the record only in its line endings
+    /// (CRLF vs LF), which is what git's `core.autocrlf` does to a
+    /// checkout. Still an edit — the hash rule is exact — but reported
+    /// separately so the error can name the cause and the fix.
+    LineEndings,
     Missing,
     Added,
     /// The record itself could not be read, so nothing can be verified.
     UnreadableRecord,
+    /// The record declares a schema version newer than
+    /// [`RECORD_VERSION`]: a newer q2 (or another tool following a newer
+    /// spec) wrote it, and its contents may not mean what this q2 thinks.
+    NewerRecord(u64),
 }
 
 impl EditKind {
-    pub fn as_str(self) -> &'static str {
+    pub fn describe(self) -> String {
         match self {
-            EditKind::Modified => "modified",
-            EditKind::Missing => "missing",
-            EditKind::Added => "added",
-            EditKind::UnreadableRecord => "unreadable install record",
+            EditKind::Modified => "modified".to_string(),
+            EditKind::LineEndings => "line endings changed".to_string(),
+            EditKind::Missing => "missing".to_string(),
+            EditKind::Added => "added".to_string(),
+            EditKind::UnreadableRecord => "unreadable install record".to_string(),
+            EditKind::NewerRecord(v) => format!(
+                "written by a newer version of q2: record schema version {v}, \
+                 this q2 reads version {RECORD_VERSION}"
+            ),
         }
     }
 }
 
+/// What is installed at an extension's destination, plus the record it
+/// was installed with when that record could be read under this q2's
+/// schema version.
+#[derive(Debug)]
+pub struct Inspection {
+    pub state: InstalledState,
+    /// The parsed record, kept so a reinstall can carry its
+    /// [`SourceRecord::extra`] keys forward. `None` when there is no
+    /// record, or it is unreadable, or it has a newer schema version
+    /// (whose keys this q2 cannot judge).
+    pub record: Option<SourceRecord>,
+}
+
 /// Check an installed extension directory against its record.
-pub fn installed_state(dir: &Path) -> Result<InstalledState, CommandFailure> {
+pub fn inspect(dir: &Path) -> Result<Inspection, CommandFailure> {
+    let only = |state| Inspection {
+        state,
+        record: None,
+    };
     if !dir.exists() {
-        return Ok(InstalledState::Absent);
+        return Ok(only(InstalledState::Absent));
     }
     let record_path = dir.join(RECORD_FILENAME);
     if !record_path.exists() {
-        return Ok(InstalledState::Untracked);
+        return Ok(only(InstalledState::Untracked));
     }
-    // A record we cannot read is not the same as no record: someone or
-    // something changed it, and nothing in the directory can be
-    // verified. Treat it as a local edit so `--force` is needed.
-    let record = std::fs::read_to_string(&record_path)
-        .ok()
-        .and_then(|text| serde_yaml::from_str::<SourceRecord>(&text).ok());
-    let Some(record) = record else {
-        return Ok(InstalledState::Modified(vec![LocalEdit {
+    let record_problem = |kind| {
+        only(InstalledState::Modified(vec![LocalEdit {
             path: RECORD_FILENAME.to_string(),
-            kind: EditKind::UnreadableRecord,
-        }]));
+            kind,
+        }]))
+    };
+    let record = match parse_record(&record_path) {
+        Ok(record) => record,
+        Err(kind) => return Ok(record_problem(kind)),
     };
 
     let current = hash_tree(dir)?;
@@ -149,7 +193,11 @@ pub fn installed_state(dir: &Path) -> Result<InstalledState, CommandFailure> {
             }),
             Some(h) if h != hash => edits.push(LocalEdit {
                 path: path.clone(),
-                kind: EditKind::Modified,
+                kind: if only_line_endings_differ(&dir.join(path), hash) {
+                    EditKind::LineEndings
+                } else {
+                    EditKind::Modified
+                },
             }),
             Some(_) => {}
         }
@@ -163,11 +211,81 @@ pub fn installed_state(dir: &Path) -> Result<InstalledState, CommandFailure> {
         }
     }
     edits.sort_by(|a, b| a.path.cmp(&b.path));
-    Ok(if edits.is_empty() {
+    let state = if edits.is_empty() {
         InstalledState::Unmodified
     } else {
         InstalledState::Modified(edits)
+    };
+    Ok(Inspection {
+        state,
+        record: Some(record),
     })
+}
+
+/// Read a record, checking its schema version *before* the rest of it.
+///
+/// The order matters: a record from a newer q2 may not parse under this
+/// version's shapes at all, and should still be reported as newer, not
+/// as unreadable. A record we cannot read is not the same as no record:
+/// someone or something changed it, and nothing in the directory can be
+/// verified, so either problem is treated as a local edit and replacing
+/// it needs `--force`.
+fn parse_record(path: &Path) -> Result<SourceRecord, EditKind> {
+    let text = std::fs::read_to_string(path).map_err(|_| EditKind::UnreadableRecord)?;
+    let value: serde_yaml::Value =
+        serde_yaml::from_str(&text).map_err(|_| EditKind::UnreadableRecord)?;
+    let version = value
+        .get("version")
+        .and_then(serde_yaml::Value::as_u64)
+        .ok_or(EditKind::UnreadableRecord)?;
+    if version == 0 {
+        return Err(EditKind::UnreadableRecord);
+    }
+    if version > u64::from(RECORD_VERSION) {
+        return Err(EditKind::NewerRecord(version));
+    }
+    serde_yaml::from_value(value).map_err(|_| EditKind::UnreadableRecord)
+}
+
+/// Whether the file at `path` matches `recorded` once its line endings
+/// are converted — CRLF to LF (git checked out an LF file as CRLF), or
+/// LF to CRLF (a CRLF file was normalized to LF on commit). A file with
+/// neither kind of line break cannot have been changed this way.
+fn only_line_endings_differ(path: &Path, recorded: &str) -> bool {
+    let Ok(bytes) = std::fs::read(path) else {
+        return false;
+    };
+    let matches = |converted: Vec<u8>| converted != bytes && sha256_hex(&converted) == recorded;
+    matches(crlf_to_lf(&bytes)) || matches(lf_to_crlf(&bytes))
+}
+
+fn crlf_to_lf(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\r' && bytes.get(i + 1) == Some(&b'\n') {
+            i += 1;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    out
+}
+
+fn lf_to_crlf(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len() + bytes.len() / 16);
+    for (i, &b) in bytes.iter().enumerate() {
+        if b == b'\n' && (i == 0 || bytes[i - 1] != b'\r') {
+            out.push(b'\r');
+        }
+        out.push(b);
+    }
+    out
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
 }
 
 /// sha256 every file under `dir`, keyed by its `/`-separated path
@@ -185,7 +303,7 @@ pub fn hash_tree(dir: &Path) -> Result<BTreeMap<String, String>, CommandFailure>
                 format!("{}: {e}", dir.join(&rel).display()),
             )
         })?;
-        out.insert(key, hex::encode(Sha256::digest(&bytes)));
+        out.insert(key, sha256_hex(&bytes));
     }
     Ok(out)
 }
@@ -269,7 +387,12 @@ mod tests {
             kind: SourceKind::Github,
             git_ref: None,
             files: hash_tree(dir).unwrap(),
+            extra: serde_yaml::Mapping::new(),
         }
+    }
+
+    fn state(dir: &Path) -> Result<InstalledState, CommandFailure> {
+        inspect(dir).map(|i| i.state)
     }
 
     fn write_record(dir: &Path) {
@@ -312,23 +435,17 @@ mod tests {
     fn a_missing_directory_is_absent_and_one_without_a_record_is_untracked() {
         let dir = tree(&[("_extension.yml", "x")]);
         assert_eq!(
-            installed_state(&dir.path().join("nope")).unwrap(),
+            state(&dir.path().join("nope")).unwrap(),
             InstalledState::Absent
         );
-        assert_eq!(
-            installed_state(dir.path()).unwrap(),
-            InstalledState::Untracked
-        );
+        assert_eq!(state(dir.path()).unwrap(), InstalledState::Untracked);
     }
 
     #[test]
     fn an_untouched_install_is_unmodified() {
         let dir = tree(&[("_extension.yml", "x"), ("a/b.lua", "y")]);
         write_record(dir.path());
-        assert_eq!(
-            installed_state(dir.path()).unwrap(),
-            InstalledState::Unmodified
-        );
+        assert_eq!(state(dir.path()).unwrap(), InstalledState::Unmodified);
     }
 
     #[test]
@@ -343,7 +460,7 @@ mod tests {
         std::fs::remove_file(dir.path().join("gone.lua")).unwrap();
         std::fs::write(dir.path().join("new.lua"), "n").unwrap();
 
-        let InstalledState::Modified(edits) = installed_state(dir.path()).unwrap() else {
+        let InstalledState::Modified(edits) = state(dir.path()).unwrap() else {
             panic!("expected edits");
         };
         let got: Vec<(&str, EditKind)> = edits.iter().map(|e| (e.path.as_str(), e.kind)).collect();
@@ -363,9 +480,134 @@ mod tests {
             ("_extension.yml", "x"),
             (RECORD_FILENAME, "files: [not, a, map"),
         ]);
-        let InstalledState::Modified(edits) = installed_state(dir.path()).unwrap() else {
+        let InstalledState::Modified(edits) = state(dir.path()).unwrap() else {
             panic!("expected edits");
         };
         assert_eq!(edits[0].kind, EditKind::UnreadableRecord);
+    }
+
+    fn edits_of(dir: &Path) -> Vec<(String, EditKind)> {
+        let InstalledState::Modified(edits) = state(dir).unwrap() else {
+            panic!("expected edits");
+        };
+        edits.into_iter().map(|e| (e.path, e.kind)).collect()
+    }
+
+    #[test]
+    fn unknown_keys_are_parsed_into_extra_and_written_back_in_order() {
+        let dir = tree(&[("_extension.yml", "x")]);
+        let mut yaml = record_for(dir.path()).to_yaml().unwrap();
+        yaml.push_str(
+            "quarto-wizard:\n  track: branch\n  commit: 3f2a9c1e\nzeta: 1\nalpha: [a, b]\n",
+        );
+        std::fs::write(dir.path().join(RECORD_FILENAME), &yaml).unwrap();
+
+        let inspection = inspect(dir.path()).unwrap();
+        assert_eq!(
+            inspection.state,
+            InstalledState::Unmodified,
+            "keys in the record are not files, so they are never edits"
+        );
+        let record = inspection.record.expect("a readable record is returned");
+        let keys: Vec<&str> = record.extra.keys().filter_map(|k| k.as_str()).collect();
+        assert_eq!(
+            keys,
+            ["quarto-wizard", "zeta", "alpha"],
+            "file order is kept"
+        );
+
+        let rewritten = record.to_yaml().unwrap();
+        let reparsed: SourceRecord = serde_yaml::from_str(&rewritten).unwrap();
+        assert_eq!(reparsed, record, "round-trips:\n{rewritten}");
+        assert!(rewritten.contains("commit: 3f2a9c1e"), "{rewritten}");
+    }
+
+    #[test]
+    fn a_newer_schema_version_is_reported_as_such_and_not_returned() {
+        let dir = tree(&[("_extension.yml", "x")]);
+        // Not even parseable as version 1 (`files` is a list): a newer
+        // record is still reported as newer, not as unreadable.
+        std::fs::write(
+            dir.path().join(RECORD_FILENAME),
+            "version: 2\nfiles: [a, b]\nnew-key: 1\n",
+        )
+        .unwrap();
+        let inspection = inspect(dir.path()).unwrap();
+        assert!(inspection.record.is_none(), "its keys can't be judged");
+        assert_eq!(
+            edits_of(dir.path()),
+            [(RECORD_FILENAME.to_string(), EditKind::NewerRecord(2))]
+        );
+        assert!(
+            EditKind::NewerRecord(2)
+                .describe()
+                .contains("newer version of q2")
+        );
+    }
+
+    #[test]
+    fn a_missing_zero_or_non_integer_version_is_unreadable() {
+        for body in [
+            "files: {}\n",
+            "version: 0\nfiles: {}\n",
+            "version: two\nfiles: {}\n",
+        ] {
+            let dir = tree(&[("_extension.yml", "x"), (RECORD_FILENAME, body)]);
+            assert_eq!(
+                edits_of(dir.path()),
+                [(RECORD_FILENAME.to_string(), EditKind::UnreadableRecord)],
+                "{body:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_crlf_checkout_of_lf_files_is_a_line_ending_edit() {
+        let dir = tree(&[
+            ("_extension.yml", "title: x\nversion: 1\n"),
+            ("bin.dat", "a"),
+        ]);
+        write_record(dir.path());
+        std::fs::write(
+            dir.path().join("_extension.yml"),
+            "title: x\r\nversion: 1\r\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("bin.dat"), "b").unwrap();
+        assert_eq!(
+            edits_of(dir.path()),
+            [
+                ("_extension.yml".to_string(), EditKind::LineEndings),
+                ("bin.dat".to_string(), EditKind::Modified),
+            ]
+        );
+    }
+
+    #[test]
+    fn crlf_files_normalized_to_lf_are_a_line_ending_edit() {
+        let dir = tree(&[("f.lua", "a\r\nb\r\n")]);
+        write_record(dir.path());
+        std::fs::write(dir.path().join("f.lua"), "a\nb\n").unwrap();
+        assert_eq!(
+            edits_of(dir.path()),
+            [("f.lua".to_string(), EditKind::LineEndings)]
+        );
+    }
+
+    #[test]
+    fn a_real_edit_with_crlf_is_still_modified() {
+        let dir = tree(&[("f.lua", "a\nb\n")]);
+        write_record(dir.path());
+        std::fs::write(dir.path().join("f.lua"), "a\r\nchanged\r\n").unwrap();
+        assert_eq!(
+            edits_of(dir.path()),
+            [("f.lua".to_string(), EditKind::Modified)]
+        );
+    }
+
+    #[test]
+    fn line_ending_conversions() {
+        assert_eq!(crlf_to_lf(b"a\r\nb\rc\n"), b"a\nb\rc\n");
+        assert_eq!(lf_to_crlf(b"\na\r\nb\n"), b"\r\na\r\nb\r\n");
     }
 }

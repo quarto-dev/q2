@@ -143,7 +143,7 @@ pub fn process_pandoc_span(
     let mut content_inlines: Vec<Inline> = Vec::new();
     let mut target: Option<(String, String)> = None;
     let mut target_source = TargetSourceInfo::empty();
-    let mut attr = (String::new(), vec![], hashlink::LinkedHashMap::new());
+    let mut attr = crate::pandoc::attr::empty_attr();
     let mut attr_source = AttrSourceInfo::empty();
 
     for (node_name, child) in children {
@@ -242,14 +242,14 @@ pub fn process_pandoc_span(
     // Decide what to create based on presence of target
     if let Some((url, title)) = target {
         // This is a LINK
-        PandocNativeIntermediate::IntermediateInline(Inline::Link(Link {
+        PandocNativeIntermediate::IntermediateInline(Inline::Link(Box::new(Link {
             attr,
             content: content_inlines,
             target: (url, title),
             source_info: node_source_info_with_context(node, context),
             attr_source,
             target_source,
-        }))
+        })))
     } else {
         // No target → Check for special Span classes that map to specific inline types
 
@@ -278,12 +278,12 @@ pub fn process_pandoc_span(
 
         // Default: SPAN (even if attributes are empty)
         // QMD design choice: [text] becomes Span, not literal brackets
-        PandocNativeIntermediate::IntermediateInline(Inline::Span(Span {
+        PandocNativeIntermediate::IntermediateInline(Inline::Span(Box::new(Span {
             attr,
             content: content_inlines,
             source_info: node_source_info_with_context(node, context),
             attr_source,
-        }))
+        })))
     }
 }
 
@@ -296,7 +296,7 @@ pub fn process_pandoc_image(
     let mut alt_inlines: Vec<Inline> = Vec::new();
     let mut target: Option<(String, String)> = None;
     let mut target_source = TargetSourceInfo::empty();
-    let mut attr = (String::new(), vec![], hashlink::LinkedHashMap::new());
+    let mut attr = crate::pandoc::attr::empty_attr();
     let mut attr_source = AttrSourceInfo::empty();
 
     for (node_name, child) in children {
@@ -346,14 +346,14 @@ pub fn process_pandoc_image(
     // Create Image inline
     let (url, title) = target.unwrap_or_else(|| (String::new(), String::new()));
 
-    PandocNativeIntermediate::IntermediateInline(Inline::Image(Image {
+    PandocNativeIntermediate::IntermediateInline(Inline::Image(Box::new(Image {
         attr,
         content: alt_inlines,
         target: (url, title),
         source_info: node_source_info_with_context(node, context),
         attr_source,
         target_source,
-    }))
+    })))
 }
 
 #[cfg(test)]

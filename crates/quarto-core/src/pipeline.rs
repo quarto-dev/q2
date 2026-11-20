@@ -72,27 +72,30 @@ use crate::stage::stages::{
     UnexecutedCellCountStage,
 };
 use crate::stage::{
-    ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
-    DocumentProfileStage, EngineExecutionStage, EquationNumberStage, IncludeExpansionStage,
-    IncludeResolveStage, LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage,
-    LoadedSource, MathJsStage, MathMlStage, MetadataMergeStage, ParseDocumentStage, Pipeline,
-    PipelineData, PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage,
-    SourceConversionStage, StageContext, UnwrapProfileStage, UserFiltersStage,
+    ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, AuthoredMetadataStage,
+    CompileThemeCssStage, DocumentProfileStage, EngineExecutionStage, EquationNumberStage,
+    IncludeExpansionStage, IncludeInlineFoldStage, IncludeResolveStage, LanguageResolveStage,
+    LinkResolutionStage, ListingItemInfoStage, LoadedSource, MathJsStage, MathMlStage,
+    MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData, PipelineStage,
+    PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage, SourceConversionStage,
+    StageContext, UnwrapProfileStage, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
-    AnnouncementGenerateTransform, AnnouncementRenderTransform, AppendixStructureTransform,
-    AttributionRenderTransform, AttributionViewerTransform, AuthorsNormalizeTransform,
-    BookCoverImageTransform, BraceDiagramCellDiagnosticsTransform, BreadcrumbsRenderTransform,
-    CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform,
-    CodeBlockGenerateTransform, CodeBlockRenderTransform, ConditionalContentTransform,
-    CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform, DraftAlertTransform,
-    EditorialMarksOoxmlTransform, EditorialMarksTypstTransform, EquationLabelTransform,
-    ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
-    FooterGenerateTransform, FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform,
-    LinkExternalTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
-    MermaidRenderTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
-    NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    AboutPageDiagnosticsTransform, AnnouncementGenerateTransform, AnnouncementRenderTransform,
+    AppendixStructureTransform, AttributionRenderTransform, AttributionViewerTransform,
+    AuthorsNormalizeTransform, BookCoverImageTransform, BraceDiagramCellDiagnosticsTransform,
+    BreadcrumbsRenderTransform, CalloutResolveTransform, CalloutTransform,
+    CategoriesSidebarTransform, CodeBlockGenerateTransform, CodeBlockRenderTransform,
+    ConditionalContentTransform, CrossrefIndexTransform, CrossrefRenderTransform,
+    CrossrefResolveTransform, DraftAlertTransform, EditorialMarksOoxmlTransform,
+    EditorialMarksTypstTransform, EquationLabelTransform, ExampleEmbedRenderTransform,
+    ExampleEmbedTransform, FloatRefTargetSugarTransform, FooterGenerateTransform,
+    FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform, GraphvizRenderTransform,
+    ImageDimensionsTransform, LinkExternalTransform, LinkRewriteTransform,
+    ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
+    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
+    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
     ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
     ResponsiveImageTransform, SectionizeTransform, ShortcodeResolveTransform,
     SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
@@ -318,32 +321,19 @@ pub fn build_html_pipeline_stages_with_apply_config(
     build_html_pipeline_stages_with_options(apply_config)
 }
 
-/// Like [`build_html_pipeline_stages_with_apply_config`], but also
-/// accepts an optional `ApplyTemplateConfig`.  The engine registry is
-/// now carried on [`crate::stage::StageContext`] (Task 8 of the
-/// ts-engine-extensions plan) — callers that need a non-default
-/// registry set `ctx.engine_registry_override` (or equivalently
-/// `HtmlRenderConfig.engine_registry`) before calling `run_pipeline`,
-/// which applies it after constructing the `StageContext`.
-/// The head pipeline: every stage from the raw source through the
-/// [`DocumentProfileStage`] checkpoint and the Pass-1 analyses that
-/// write to the profile ([`LinkResolutionStage`]). Its output is
-/// [`PipelineData::AtProfile`](crate::stage::PipelineData).
+/// The ingest phase: turn the source into an AST with fully merged
+/// metadata. Source conversion (non-QMD inputs), parse, then the
+/// metadata merge (project `_quarto.yml`, directory `_metadata.yml`
+/// layers, front matter, `format.<id>.*` flattening).
 ///
-/// **Single source of truth for what a profile sees.** The full HTML
-/// pipeline ([`build_html_pipeline_stages_with_options`]) starts with
-/// exactly these stages, and Pass-1 profiling
-/// (`orchestrator::pass1_profile_single_file_live`) runs exactly
-/// these, so a document's Pass-1 profile — the one listings, sidebars
-/// and the dependency graph read — equals the profile its full render
-/// computes. The two lists used to be maintained by hand and drifted:
-/// `IncludeResolveStage`, `ListingItemInfoStage` and
-/// `LanguageResolveStage` were added to the full pipeline only, so
-/// listing autofill never reached listings
-/// (bd-listing-default-no-derived-desc-m0wrr8ty,
-/// bd-listing-description-precedence-x4bh6w3m). Add pre-checkpoint
-/// stages here, never to one caller.
-pub fn build_head_stages() -> Vec<Box<dyn PipelineStage>> {
+/// At the end of this phase `ast.meta` is the document's **authored**
+/// merged metadata: nothing in it was derived by quarto. `q2 get-config`
+/// runs exactly these stages ([`crate::get_config::merge_document_metadata`]),
+/// and [`build_head_stages`] starts with them followed by the
+/// [`AuthoredMetadataStage`] checkpoint, so the two agree by
+/// construction (bd-xzsnuoqq; `get-config` used to keep its own copy of
+/// this list and skipped source conversion, so it failed on `.ipynb`).
+pub fn build_ingest_stages() -> Vec<Box<dyn PipelineStage>> {
     vec![
         // Convert non-QMD files (e.g. .echo, .jl, .ipynb) to QMD before parse.
         // First engine in deterministic order that claims the file wins.
@@ -351,6 +341,17 @@ pub fn build_head_stages() -> Vec<Box<dyn PipelineStage>> {
         Box::new(SourceConversionStage::new()),
         Box::new(ParseDocumentStage::new()),
         Box::new(MetadataMergeStage::new()),
+    ]
+}
+
+/// The enrich phase: stages that add derived information before the
+/// profile checkpoint. Several of them write derived keys into
+/// `ast.meta` (`quarto.language`, `rendered.includes`, `listing-item`)
+/// because templates, Lua filters and listing templates read them from
+/// there — which is why the authored metadata is recorded *before* this
+/// phase (see [`AuthoredMetadataStage`]).
+fn build_enrich_stages() -> Vec<Box<dyn PipelineStage>> {
+    vec![
         // Resolve localized terms (`lang` + `language:` → `quarto.language`
         // metadata) right after the merge so every downstream consumer —
         // profile extraction, transforms, templates — sees the table
@@ -363,10 +364,13 @@ pub fn build_head_stages() -> Vec<Box<dyn PipelineStage>> {
         // `claude-notes/plans/2026-04-24-include-expansion-merge.md`.
         Box::new(IncludeExpansionStage::new()),
         // Resolve include-in-header / include-before-body /
-        // include-after-body authored keys (plus the legacy inline
-        // `header-includes` / `include-before` / `include-after`
-        // keys) into the canonical `rendered.includes.{header,
-        // before-body, after-body}` location. Runs *before* the
+        // include-after-body authored keys into the canonical
+        // `rendered.includes.{header, before-body, after-body}`
+        // location. The legacy inline `header-includes` /
+        // `include-before` / `include-after` keys are NOT read here:
+        // a user filter may still change them, so
+        // `IncludeInlineFoldStage` folds them after the post filters
+        // (GH #1257). Runs *before* the
         // profile checkpoint so file-slot dependencies are
         // recorded into `profile.includes` for `bd-r82e` cache
         // invalidation. Engine-contributed PandocIncludes are
@@ -380,18 +384,64 @@ pub fn build_head_stages() -> Vec<Box<dyn PipelineStage>> {
         // (epic `bd-61cd`, L1 = `bd-izqh`). Author values always win.
         // See `claude-notes/plans/2026-05-05-listings-L1-autofill-stage.md`.
         Box::new(ListingItemInfoStage::new()),
-        // Profile checkpoint: post-merge, pre-mutation. See
-        // `claude-notes/designs/document-profile-contract.md`.
-        Box::new(DocumentProfileStage::new()),
-        // Pass-1 cross-doc body-link resolution. Walks the AST
-        // (read-only) and writes each link target into
-        // `profile.body_link_targets` so the Phase-8 dependency
-        // graph can use them. See
-        // `claude-notes/designs/body-link-resolution-contract.md`.
-        Box::new(LinkResolutionStage::new()),
     ]
 }
 
+/// The head pipeline: every stage from the raw source through the
+/// [`DocumentProfileStage`] checkpoint and the Pass-1 analyses that
+/// write to the profile ([`LinkResolutionStage`]). Its output is
+/// [`PipelineData::AtProfile`](crate::stage::PipelineData).
+///
+/// It runs in named phases:
+///
+/// 1. **Ingest** ([`build_ingest_stages`]): source conversion, parse,
+///    metadata merge.
+/// 2. **Authored-metadata checkpoint** ([`AuthoredMetadataStage`]):
+///    records the merged metadata before anything derived is added.
+/// 3. **Enrich** (`build_enrich_stages`): language terms, include
+///    expansion and resolution, listing autofill.
+/// 4. **Profile checkpoint** ([`DocumentProfileStage`]).
+/// 5. **Pass-1 analyses** that write to the profile
+///    ([`LinkResolutionStage`]).
+///
+/// **Single source of truth for what a profile sees.** The full HTML
+/// pipeline ([`build_html_pipeline_stages_with_options`]) starts with
+/// exactly these stages, and Pass-1 profiling
+/// ([`crate::pass1::profile_document`]) runs exactly
+/// these, so a document's Pass-1 profile — the one listings, sidebars
+/// and the dependency graph read — equals the profile its full render
+/// computes. The two lists used to be maintained by hand and drifted:
+/// `IncludeResolveStage`, `ListingItemInfoStage` and
+/// `LanguageResolveStage` were added to the full pipeline only, so
+/// listing autofill never reached listings
+/// (bd-listing-default-no-derived-desc-m0wrr8ty,
+/// bd-listing-description-precedence-x4bh6w3m). Add pre-checkpoint
+/// stages to the phase they belong to, never to one caller. A stage
+/// that writes derived keys into `ast.meta` belongs in enrich, after the
+/// authored-metadata checkpoint.
+pub fn build_head_stages() -> Vec<Box<dyn PipelineStage>> {
+    let mut stages = build_ingest_stages();
+    stages.push(Box::new(AuthoredMetadataStage::new()));
+    stages.extend(build_enrich_stages());
+    // Profile checkpoint: post-merge, pre-mutation. See
+    // `claude-notes/designs/document-profile-contract.md`.
+    stages.push(Box::new(DocumentProfileStage::new()));
+    // Pass-1 cross-doc body-link resolution. Walks the AST
+    // (read-only) and writes each link target into
+    // `profile.body_link_targets` so the Phase-8 dependency
+    // graph can use them. See
+    // `claude-notes/designs/body-link-resolution-contract.md`.
+    stages.push(Box::new(LinkResolutionStage::new()));
+    stages
+}
+
+/// Like [`build_html_pipeline_stages_with_apply_config`], but also
+/// accepts an optional `ApplyTemplateConfig`.  The engine registry is
+/// now carried on [`crate::stage::StageContext`] (Task 8 of the
+/// ts-engine-extensions plan) — callers that need a non-default
+/// registry set `ctx.engine_registry_override` (or equivalently
+/// `HtmlRenderConfig.engine_registry`) before calling `run_pipeline`,
+/// which applies it after constructing the `StageContext`.
 pub fn build_html_pipeline_stages_with_options(
     apply_config: Option<ApplyTemplateConfig>,
 ) -> Vec<Box<dyn PipelineStage>> {
@@ -457,6 +507,11 @@ pub fn build_html_pipeline_stages_with_options(
     stages.push(Box::new(UserFiltersStage::pre()));
     stages.push(Box::new(AstTransformsStage::new()));
     stages.push(Box::new(UserFiltersStage::post()));
+    // GH #1257: fold the final values of the inline include keys
+    // (`header-includes` / `include-before` / `include-after`) into
+    // `rendered.includes.*`, so what a filter wrote reaches the template
+    // (Pandoc reads these keys from the post-filter metadata).
+    stages.push(Box::new(IncludeInlineFoldStage::new()));
     // bd-o8pr Phase 3: finalize the per-doc resource report
     // (defends against filters that mutate `meta.resources`).
     stages.push(Box::new(ResourceReportStage::new()));
@@ -1131,14 +1186,23 @@ pub fn build_analysis_transform_pipeline() -> TransformPipeline {
 ///
 /// ## Stages
 ///
-/// 1. [`ParseDocumentStage`] — QMD → Pandoc AST
-/// 2. [`MetadataMergeStage`] — merge project / directory / document /
-///    runtime metadata into `pandoc.meta`
+/// 1. The head ([`build_head_stages`]): ingest (source conversion, parse,
+///    metadata merge), the authored-metadata checkpoint, enrich (language
+///    terms, include expansion and resolution, listing autofill), the
+///    [`DocumentProfileStage`] checkpoint and the Pass-1 analyses. Exactly
+///    what a render and Pass 1 run, so an analysis sees the same document
+///    (bd-ojsx06at, decision R3; this used to be its own hand-copied list).
+/// 2. [`UnwrapProfileStage`] — leaves the profile in
+///    `StageContext::document_profile` and continues with the AST
+///    (`DocumentAst::authored_meta` rides along).
 /// 3. [`PreEngineSugaringStage`] — seed the [`RefTypeRegistry`] from
 ///    `crossref.custom` metadata, seed a [`CrossrefIndex`], desugar
 ///    code-block shorthand
 /// 4. [`AstTransformsStage`] with the [`build_analysis_transform_pipeline`]
 ///    subset — apply sugaring + crossref indexing
+///
+/// One run therefore yields the profile, the authored metadata, the
+/// outline-ready AST and every diagnostic.
 ///
 /// After this pipeline runs, the AST is in its outline-ready state:
 /// cross-referenceable blocks are `CustomNode`s with
@@ -1150,19 +1214,12 @@ pub fn build_analysis_transform_pipeline() -> TransformPipeline {
 /// [`RefTypeRegistry`]: crate::crossref::RefTypeRegistry
 /// [`CrossrefIndex`]: crate::crossref::CrossrefIndex
 pub fn build_analysis_pipeline() -> Pipeline {
-    let stages: Vec<Box<dyn PipelineStage>> = vec![
-        Box::new(ParseDocumentStage::new()),
-        Box::new(MetadataMergeStage::new()),
-        // Localized-term resolution — keeps analysis-path transforms in
-        // sync with the render pipelines once they consume terms
-        // (bd-llhlzd7p).
-        Box::new(LanguageResolveStage::new()),
-        Box::new(IncludeExpansionStage::new()),
-        Box::new(PreEngineSugaringStage::new()),
-        Box::new(AstTransformsStage::with_pipeline(
-            build_analysis_transform_pipeline(),
-        )),
-    ];
+    let mut stages = build_head_stages();
+    stages.push(Box::new(UnwrapProfileStage::new()));
+    stages.push(Box::new(PreEngineSugaringStage::new()));
+    stages.push(Box::new(AstTransformsStage::with_pipeline(
+        build_analysis_transform_pipeline(),
+    )));
 
     Pipeline::new(stages).expect("analysis pipeline stages should be compatible")
 }
@@ -2467,6 +2524,10 @@ pub fn build_transform_pipeline(
     // both consumed later (by the template and `IncludeResolveStage`
     // respectively). Self-gates to non-reveal HTML.
     pipeline.push(Box::new(DraftAlertTransform::new()));
+    // `about:` pages (bd-7hzkh4m6): warn (Q-5-57) that Quarto 1's about
+    // templates are not implemented. Read-only; self-gates to non-reveal
+    // HTML in website/book projects, Quarto 1's scope for about pages.
+    pipeline.push(Box::new(AboutPageDiagnosticsTransform::new()));
     // Slide construction for `format: revealjs` replaces the generic
     // title-block + sectionize pair: reveal needs an exactly-two-level slide
     // tree built from `slide-level` (Pandoc keeps reveal slide-construction
@@ -2476,6 +2537,11 @@ pub fn build_transform_pipeline(
         // Columns: rewrite `.column width=X` → `flex-basis` before slide
         // construction (the column Divs are still flat at this point).
         pipeline.push(Box::new(crate::revealjs::RevealColumnsTransform::new()));
+        // Absolute positioning: move the `top`/`left`/… attributes of an
+        // `.absolute` Div, Span or Image into its `style` (Quarto 1's
+        // `applyPosition`). A plain attribute rewrite like the columns one,
+        // so it sits beside it.
+        pipeline.push(Box::new(crate::revealjs::RevealAbsoluteTransform::new()));
         pipeline.push(Box::new(crate::revealjs::RevealSlidesTransform::new()));
         // Alias Quarto-1's reveal `footer:` → `page-footer:` so it flows
         // through the format-agnostic `FooterGenerateTransform` below. Must run
@@ -2493,6 +2559,14 @@ pub fn build_transform_pipeline(
         // must not merge into a section first).
         if !is_dashboard {
             pipeline.push(Box::new(SectionizeTransform::new()));
+            // Columns: rewrite `.column width=X` → an inline `width`, the
+            // `format: html` counterpart of `reveal-columns` above (Pandoc's
+            // HTML writer does this itself; q2's writer does not). Not for
+            // dashboards: there a `.columns` div is a layout container and
+            // `DashboardTransform` reads `width` off its children. Dropped for
+            // Pandoc writers (`PANDOC_TRANSFORM_EXCLUDED`), which need the raw
+            // attribute.
+            pipeline.push(Box::new(crate::transforms::HtmlColumnsTransform::new()));
         }
     }
     pipeline.push(Box::new(FootnotesTransform::new()));
@@ -2781,6 +2855,13 @@ pub fn build_transform_pipeline(
     // `Q2_PREVIEW_TRANSFORM_EXCLUDED` — the React built-in mermaid
     // component consumes the raw CodeBlock there.
     pipeline.push(Box::new(MermaidRenderTransform::new()));
+    // bd-ijlapt70: replace ```dot code blocks with
+    // `<pre class="graphviz">` RawBlocks + the after-body runtime
+    // script. HTML-family self-gated. Must precede `code-block-render`,
+    // for the same reason as `mermaid-render`. Excluded from q2-preview
+    // via `Q2_PREVIEW_TRANSFORM_EXCLUDED` — `GraphvizCodeBlock.tsx`
+    // consumes the raw CodeBlock there.
+    pipeline.push(Box::new(GraphvizRenderTransform::new()));
     // bd-1tl09 Phase 0: code-block decoration Render. Consumes the
     // typed payload produced by `code-block-generate` in the
     // Normalization Phase and emits the outer wrapping markup
@@ -2904,6 +2985,14 @@ pub fn build_transform_pipeline(
             )),
         ));
     }
+    // bd-html-image-dims-t5ogxjxd: rewrite image `width` / `height` into
+    // valid HTML — `N`/`Npx` stays an integer attribute, everything else
+    // moves into `style` (Pandoc's HTML writer does this in Quarto 1).
+    // Last of the content transforms: `responsive-image`, revealjs
+    // auto-stretch and `llms-capture` all read the author's unlifted
+    // values. Still inside `AstTransformsStage`, so Lua post filters see
+    // the lifted form. HTML-family self-gated; runs in the q2-preview too.
+    pipeline.push(Box::new(ImageDimensionsTransform::new()));
     pipeline.push(Box::new(AttributionRenderTransform::new()));
 
     // After attribution-render: auto-inject the default viewer
@@ -3018,6 +3107,9 @@ const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     // mermaid component (ts-packages/preview-renderer) renders the
     // diagram live for both q2-preview and q2-slides (bd-5m4ga0s1).
     "mermaid-render",
+    // `graphviz-render` does the same for ```dot blocks; in preview
+    // `GraphvizCodeBlock.tsx` draws the raw CodeBlock (bd-ijlapt70).
+    "graphviz-render",
     // The tabset pair (bd-toc-tabset-titles-zq93gjvf) builds its nav
     // as *split* RawInlines (`<ul…>`, `<li…><a…>`, title inlines,
     // `</a></li>`, `</ul>`) — correct for the string-concatenating
@@ -3070,6 +3162,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "table-float-class-forward",
     "crossref-render",
     "mermaid-render",
+    "graphviz-render",
     "code-block-render",
     "table-bootstrap-class",
     "components-resolve",
@@ -3080,6 +3173,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "title-block",
     "book-cover-image",
     "sectionize",
+    "html-columns",
     "title-banner",
     "website-title-prefix",
     "website-favicon",
@@ -3117,8 +3211,10 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "attribution-viewer",
     "attribution-render",
     "draft-alert",
+    "about-page-diagnostics",
     "format-css",
     "responsive-image",
+    "image-dimensions",
     "link-external",
     // Swaps a `.hep` plot-document reference for a rendered SVG artifact;
     // no Pandoc-writer analog exists yet (bd-3qych45b covers HTML only).
@@ -3252,6 +3348,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // Writes `rendered.draft-alert-text` + a `quarto:status` header include
     // for the HTML template; sibling of `title-banner`.
     ("draft-alert", Bucket::B2),
+    // Read-only warning for `about:` pages, a website/book HTML feature;
+    // self-gates to non-reveal HTML, so it has no Pandoc-writer role.
+    ("about-page-diagnostics", Bucket::B2),
     // Synthesizes an HTML title-block container from Meta; Pandoc's own
     // templates build the equivalent from the same Meta.
     ("title-block", Bucket::B2),
@@ -3261,6 +3360,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     ("book-cover-image", Bucket::B2),
     // `--section-divs` is an HTML-writer concern.
     ("sectionize", Bucket::B2),
+    // HTML presentation of Pandoc's `.column width=` (an inline `width`); a
+    // Pandoc writer reads the raw attribute, a deck uses `reveal-columns`.
+    ("html-columns", Bucket::B2),
     // --- B3: shared post-core services ------------------------------------
     // Publishes local files that body links point at through
     // `meta.resources` (bd-twfep08m). Format-agnostic like the resources
@@ -3337,6 +3439,7 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     ("table-float-class-forward", Bucket::B4),
     ("crossref-render", Bucket::B4),
     ("mermaid-render", Bucket::B4),
+    ("graphviz-render", Bucket::B4),
     ("code-block-render", Bucket::B4),
     ("table-bootstrap-class", Bucket::B4),
     // Marks bound Divs/Spans with `data-quarto-component`, ships the
@@ -3355,6 +3458,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // which it runs immediately before). No Pandoc-writer analog exists yet.
     ("hephaestus-render", Bucket::B4),
     ("responsive-image", Bucket::B4),
+    // Lifts image `width`/`height` into valid HTML attributes / `style`
+    // (Pandoc's HTML writer does the same at write time). HTML-only.
+    ("image-dimensions", Bucket::B4),
     // Adorns external body links (`link-external-*`): HTML presentation.
     ("link-external", Bucket::B4),
     // Both bake per-node attribution onto `ctx.format_options` fields that
@@ -3709,9 +3815,9 @@ mod tests {
         // there), even without colors. Blocks in other languages, output
         // blocks and language-less blocks stay a bare `<pre>`.
         let content = b"---\ntitle: Test\n---\n\n\
-            ```ini\n[Widget]\nEnabled = true\n```\n\n\
+            ```apache\n<Directory /srv>\nRequire all granted\n</Directory>\n```\n\n\
             ```default\n/opt/widget/bin/widget\n```\n\n\
-            ```conf\nkey = value\n```\n\n\
+            ```cfg\nkey = value\n```\n\n\
             ```text\nplain\n```\n\n\
             ```{.cell-output .cell-output-stdout}\n[1] 2\n```\n\n\
             ```\nno language\n```\n";
@@ -3730,7 +3836,9 @@ mod tests {
         .unwrap();
         let html = &output.html;
 
-        for lang in ["ini", "default", "conf"] {
+        // q2 has no grammar for these; Pandoc knows `cfg` only through
+        // INI's `*.cfg` glob.
+        for lang in ["apache", "default", "cfg"] {
             assert!(
                 html.contains(&format!("<pre class=\"sourceCode {lang}\"")),
                 "`{lang}` block should be pre.sourceCode inside div.sourceCode; got:\n{html}",
@@ -3739,7 +3847,7 @@ mod tests {
         assert_eq!(
             html.matches("<div class=\"sourceCode").count(),
             3,
-            "only the ini/default/conf blocks get the wrapper; got:\n{html}",
+            "only the apache/default/cfg blocks get the wrapper; got:\n{html}",
         );
         for bare in [
             "<pre class=\"text",
@@ -3988,6 +4096,7 @@ mod tests {
                 "source-conversion",
                 "parse-document",
                 "metadata-merge",
+                "authored-metadata",
                 "language-resolve",
                 "include-expansion",
                 "include-resolve",
@@ -4010,87 +4119,93 @@ mod tests {
         // plus LmdDesugarStage before the engine and LmdExecuteStage before
         // the user pre-filters (bd-lmd-exploration-jqv2nbl4), plus
         // ListingResolveStage before lmd-execute (bd-2oqen84t), plus SearchCaptureStage (bd-eip0naf4), plus DashboardJsStage
-        // (bd-dashboard-format-k21hd4vy): 32.
-        assert_eq!(stages.len(), 32);
+        // (bd-dashboard-format-k21hd4vy), plus AuthoredMetadataStage after
+        // the merge (bd-xzsnuoqq): 33.
+        assert_eq!(stages.len(), 34);
         // Pre-parse file-claim/convert (Task 10).
         assert_eq!(stages[0].name(), "source-conversion");
         assert_eq!(stages[1].name(), "parse-document");
         assert_eq!(stages[2].name(), "metadata-merge");
-        // Localized-term resolution (bd-llhlzd7p) directly follows the
-        // metadata merge so `quarto.language` is present for every
+        // Authored-metadata checkpoint (bd-xzsnuoqq): ends the ingest
+        // phase, before any enrich stage writes derived keys into `meta`.
+        assert_eq!(stages[3].name(), "authored-metadata");
+        // Localized-term resolution (bd-llhlzd7p) opens the enrich phase,
+        // right after the merge and its checkpoint, so `quarto.language` is present for every
         // downstream consumer, including the profile checkpoint.
-        assert_eq!(stages[3].name(), "language-resolve");
+        assert_eq!(stages[4].name(), "language-resolve");
         // Include expansion runs before the profile checkpoint (bd-xfwx)
         // so profiles reflect content spliced in via `{{< include ... >}}`.
-        assert_eq!(stages[4].name(), "include-expansion");
+        assert_eq!(stages[5].name(), "include-expansion");
         // include-resolve (bd-8kp3) sits between include-expansion and
         // the profile checkpoint so file-slot include dependencies are
         // recorded into `profile.includes` for cache invalidation.
-        assert_eq!(stages[5].name(), "include-resolve");
+        assert_eq!(stages[6].name(), "include-resolve");
         // Listings auto-fill (bd-izqh, L1) sits between include-resolve
         // and the profile checkpoint so `meta.listing-item.*` enrichment
         // is visible to `DocumentProfile.listing_item`.
-        assert_eq!(stages[6].name(), "listing-item-info");
+        assert_eq!(stages[7].name(), "listing-item-info");
         // Profile checkpoint (Phase 0 website epic, bd-f3jc).
-        assert_eq!(stages[7].name(), "document-profile");
+        assert_eq!(stages[8].name(), "document-profile");
         // Cross-doc body-link resolution (Phase 8 sub-phase 8.0d).
-        assert_eq!(stages[8].name(), "link-resolution");
-        assert_eq!(stages[9].name(), "unwrap-profile");
-        assert_eq!(stages[10].name(), "pre-engine-sugaring");
+        assert_eq!(stages[9].name(), "link-resolution");
+        assert_eq!(stages[10].name(), "unwrap-profile");
+        assert_eq!(stages[11].name(), "pre-engine-sugaring");
         // lmd exploration spike (bd-lmd-exploration-jqv2nbl4): rewrites
         // `{lmd}` cells before any engine can see them.
-        assert_eq!(stages[11].name(), "lmd-desugar");
-        assert_eq!(stages[12].name(), "engine-execution");
-        assert_eq!(stages[13].name(), "compile-theme-css");
+        assert_eq!(stages[12].name(), "lmd-desugar");
+        assert_eq!(stages[13].name(), "engine-execution");
+        assert_eq!(stages[14].name(), "compile-theme-css");
         // Bootstrap JS (bd-4eyf) sits immediately after CompileThemeCssStage
         // so the same theme predicate gates JS and CSS together.
-        assert_eq!(stages[14].name(), "bootstrap-js");
+        assert_eq!(stages[15].name(), "bootstrap-js");
         // ClipboardJsStage (Phase 2 of bd-1tl09) sits next to
         // bootstrap-js because both ship a Project-scoped JS payload
         // gated on minimal-HTML. clipboard-js additionally gates on
         // `code-copy != false`.
-        assert_eq!(stages[15].name(), "clipboard-js");
+        assert_eq!(stages[16].name(), "clipboard-js");
         // TabsetsJsStage (bd-toc-tabset-titles-zq93gjvf) ships the
         // grouped-tabset sync module whenever Bootstrap does — same
         // gate as bootstrap-js, so it sits in the same JS block.
-        assert_eq!(stages[16].name(), "tabsets-js");
+        assert_eq!(stages[17].name(), "tabsets-js");
         // DashboardJsStage ships the dashboard runtime scripts; a no-op for
         // every other format (bd-dashboard-format-k21hd4vy).
-        assert_eq!(stages[17].name(), "dashboard-js");
+        assert_eq!(stages[18].name(), "dashboard-js");
         // Attribution-generate runs before user filters so the
         // `quarto.attribution.*` Lua host binding sees a populated
         // sidecar (bd-0fd0). No-op when no provider is installed.
-        assert_eq!(stages[18].name(), "attribution-generate");
+        assert_eq!(stages[19].name(), "attribution-generate");
         // Listings resolve before the lmd cells and the user pre-filters
         // so both see `meta.listings.<id>` (bd-2oqen84t).
-        assert_eq!(stages[19].name(), "listing-resolve");
+        assert_eq!(stages[20].name(), "listing-resolve");
         // lmd exploration spike 2: cells run after the engine, before user
         // pre-filters.
-        assert_eq!(stages[20].name(), "lmd-execute");
-        assert_eq!(stages[21].name(), "user-filters-pre");
-        assert_eq!(stages[22].name(), "ast-transforms");
-        assert_eq!(stages[23].name(), "user-filters-post");
+        assert_eq!(stages[21].name(), "lmd-execute");
+        assert_eq!(stages[22].name(), "user-filters-pre");
+        assert_eq!(stages[23].name(), "ast-transforms");
+        assert_eq!(stages[24].name(), "user-filters-post");
+        // GH #1257: folds the inline include keys a filter may have written.
+        assert_eq!(stages[25].name(), "include-inline-fold");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[24].name(), "resource-report");
+        assert_eq!(stages[26].name(), "resource-report");
         // Equation-number encoding (bd-vlhi2zkj) must follow
         // user-filters-post: a Lua post filter may rewrite or delete the
         // reserved `quarto-eq-number` attribute the stage consumes.
-        assert_eq!(stages[25].name(), "equation-number");
+        assert_eq!(stages[27].name(), "equation-number");
         // Native MathML (bd-3evfzwal) follows equation-number (the TeX it
         // converts carries no `\tag`) and precedes math-js (which loads
         // MathJax only for what this stage left as TeX).
-        assert_eq!(stages[26].name(), "math-ml");
-        assert_eq!(stages[27].name(), "code-highlight");
+        assert_eq!(stages[28].name(), "math-ml");
+        assert_eq!(stages[29].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, the `\tag{N}` equation-number encoding) is visible.
-        assert_eq!(stages[28].name(), "math-js");
-        assert_eq!(stages[29].name(), "render-html-body");
+        assert_eq!(stages[30].name(), "math-js");
+        assert_eq!(stages[31].name(), "render-html-body");
         // Website search capture (bd-eip0naf4): records the rendered
         // body before the template wraps it.
-        assert_eq!(stages[30].name(), "search-capture");
-        assert_eq!(stages[31].name(), "apply-template");
+        assert_eq!(stages[32].name(), "search-capture");
+        assert_eq!(stages[33].name(), "apply-template");
     }
 
     #[test]
@@ -4101,8 +4216,9 @@ mod tests {
         // EquationNumberStage and MathMlStage, plus LmdDesugarStage and
         // LmdExecuteStage, plus ListingResolveStage (bd-2oqen84t), plus
         // SearchCaptureStage (bd-eip0naf4), plus DashboardJsStage
-        // (bd-dashboard-format-k21hd4vy) → 32 stages.
-        assert_eq!(pipeline.len(), 32);
+        // (bd-dashboard-format-k21hd4vy), plus AuthoredMetadataStage
+        // (bd-xzsnuoqq) → 33 stages.
+        assert_eq!(pipeline.len(), 34);
     }
 
     #[test]
@@ -4110,9 +4226,9 @@ mod tests {
         use crate::stage::PipelineDataKind;
 
         let pipeline = build_analysis_pipeline();
-        // Parse + MetadataMerge + LanguageResolve + IncludeExpansion +
-        // PreEngineSugaring + AstTransforms(analysis subset)
-        assert_eq!(pipeline.len(), 6);
+        // The head + UnwrapProfile + PreEngineSugaring + AstTransforms
+        // (analysis subset), bd-ojsx06at.
+        assert_eq!(pipeline.len(), build_head_stages().len() + 3);
         assert_eq!(pipeline.expected_input(), PipelineDataKind::LoadedSource);
         assert_eq!(pipeline.expected_output(), PipelineDataKind::DocumentAst);
     }
@@ -4872,6 +4988,73 @@ mod tests {
         assert!(
             json.contains("\"CodeBlock\""),
             "the raw CodeBlock must survive for MermaidCodeBlock.tsx; got:\n{json}"
+        );
+    }
+
+    /// bd-ijlapt70: the same contract for Graphviz. `//|` cell options
+    /// on a ```dot block are processed by `PreEngineSugaringStage` in
+    /// preview too, so the preview AST carries the Figure wrapper, the
+    /// option lines are gone from the diagram source, and `fig-alt`,
+    /// `fig-align` and `graph-layout` arrive as attributes on the
+    /// CodeBlock, which is what `GraphvizCodeBlock.tsx` reads.
+    ///
+    /// The `graphviz-render` transform stays excluded, so the diagram
+    /// arrives as a CodeBlock, not a `<pre class="graphviz">` RawBlock.
+    #[test]
+    fn render_qmd_to_preview_ast_processes_graphviz_cell_options() {
+        let content = "---\ntitle: Test\nformat: q2-preview\n---\n\n\
+                        ```dot\n\
+                        //| fig-cap: A tiny graph.\n\
+                        //| fig-alt: Two nodes joined by an arrow.\n\
+                        //| fig-align: right\n\
+                        //| graph-layout: neato\n\
+                        digraph G { a -> b }\n\
+                        ```\n"
+            .as_bytes();
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content,
+            "test.qmd",
+            &mut ctx,
+            runtime,
+            None,
+            CapturePayload::Empty,
+        ))
+        .expect("q2-preview render");
+
+        let json = &output.ast_json;
+        assert!(
+            json.contains("\"Figure\""),
+            "preview AST must carry the Figure wrapper; got:\n{json}"
+        );
+        for attr in [
+            "[\"fig-alt\",\"Two nodes joined by an arrow.\"]",
+            "[\"fig-align\",\"right\"]",
+            "[\"graph-layout\",\"neato\"]",
+        ] {
+            assert!(
+                json.contains(attr),
+                "preview AST must carry the attribute {attr}; got:\n{json}"
+            );
+        }
+        assert!(
+            !json.contains("//|"),
+            "consumed option lines must not reach the preview; got:\n{json}"
+        );
+        assert!(
+            json.contains("\"CodeBlock\""),
+            "the raw CodeBlock must survive for GraphvizCodeBlock.tsx; got:\n{json}"
+        );
+        assert!(
+            !json.contains("pre class=\\\"graphviz"),
+            "graphviz-render must not run in preview; got:\n{json}"
         );
     }
 
@@ -5802,6 +5985,39 @@ mod tests {
     /// (`neutral_core_invariant_no_b2_b4_survives_the_pandoc_cut`).
     ///
     /// See `claude-notes/designs/transform-pipeline-phases.md`.
+    /// `html-columns` is the `format: html` sibling of `reveal-columns`. It
+    /// runs for HTML render and preview only: a deck has its own transform, a
+    /// dashboard reads `width` off the children of a `.columns` container
+    /// itself, and a Pandoc writer (docx, pptx) needs the raw `width`.
+    #[test]
+    fn html_columns_runs_for_html_profiles_only() {
+        for (format, expected) in [
+            ("html", true),
+            ("q2-preview", true),
+            ("revealjs", false),
+            ("q2-slides", false),
+            ("dashboard", false),
+            ("q2-dashboard", false),
+            ("docx", false),
+            ("pptx", false),
+        ] {
+            let pipeline = build_transform_pipeline(
+                vec![],
+                vec![],
+                make_test_runtime(),
+                format.to_string(),
+                crate::format::PipelineProfile::from_format(format),
+                None,
+                None,
+            );
+            let present = pipeline.iter().any(|t| t.name() == "html-columns");
+            assert_eq!(
+                present, expected,
+                "`html-columns` registration for `{format}`"
+            );
+        }
+    }
+
     #[test]
     fn test_build_transform_pipeline_phase_ordering() {
         use crate::transform::TransformPhase;
@@ -6109,6 +6325,7 @@ mod tests {
             vec![
                 "ast-transforms",
                 "user-filters-post",
+                "include-inline-fold",
                 "resource-report",
                 "equation-number",
                 "inline-table-css",
@@ -6135,6 +6352,7 @@ mod tests {
             vec![
                 "ast-transforms",
                 "user-filters-post",
+                "include-inline-fold",
                 "resource-report",
                 "equation-number",
                 "math-ml",
@@ -6859,6 +7077,68 @@ mod tests {
         );
     }
 
+    /// bd-ijlapt70: `graphviz-render` must run for every HTML-family
+    /// render format, after `mermaid-render` (its sibling) and before
+    /// `code-block-render`, so a diagram block is already a `RawBlock`
+    /// before code-block chrome would attach to it.
+    #[test]
+    fn graphviz_render_present_before_code_block_render() {
+        for format in ["html", "revealjs", "dashboard"] {
+            let runtime = make_test_runtime();
+            let pipeline = build_transform_pipeline(
+                vec![],
+                vec![],
+                runtime,
+                format.to_string(),
+                crate::format::PipelineProfile::from_format(format),
+                None,
+                None,
+            );
+            let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+
+            let graphviz_pos = names.iter().position(|&n| n == "graphviz-render");
+            let mermaid_pos = names.iter().position(|&n| n == "mermaid-render");
+            let cbr_pos = names.iter().position(|&n| n == "code-block-render");
+            assert!(
+                graphviz_pos.is_some(),
+                "[{format}] graphviz-render must be in build_transform_pipeline; got: {names:?}",
+            );
+            assert!(
+                mermaid_pos.expect("mermaid-render anchor missing") < graphviz_pos.unwrap()
+                    && graphviz_pos.unwrap() < cbr_pos.expect("code-block-render anchor missing"),
+                "[{format}] graphviz-render must sit between mermaid-render and \
+                 code-block-render; got positions mermaid={mermaid_pos:?}, \
+                 graphviz={graphviz_pos:?}, code-block-render={cbr_pos:?} in {names:?}",
+            );
+        }
+    }
+
+    /// bd-ijlapt70: in `q2 preview` / hub-client the raw `CodeBlock`
+    /// with class `dot` must survive to the React layer, where
+    /// `GraphvizCodeBlock.tsx` owns rendering. The transform is
+    /// therefore on `Q2_PREVIEW_TRANSFORM_EXCLUDED`.
+    #[test]
+    fn q2_preview_pipeline_excludes_graphviz_render() {
+        for format in ["q2-preview", "q2-slides"] {
+            let runtime = make_test_runtime();
+            let pipeline = build_q2_preview_transform_pipeline(
+                vec![],
+                vec![],
+                runtime,
+                format.to_string(),
+                crate::format::PipelineProfile::from_format(format),
+                None,
+                None,
+            );
+            let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+            assert!(
+                !names.contains(&"graphviz-render"),
+                "[{format}] graphviz-render must NOT run in the preview pipeline — the React \
+                 Graphviz component consumes the raw CodeBlock; got: {names:?}",
+            );
+        }
+    }
+
     /// bd-5m4ga0s1: in `q2 preview` / hub-client the raw `CodeBlock`
     /// with class `mermaid` must survive to the React layer (the
     /// built-in mermaid component in ts-packages/preview-renderer owns
@@ -6924,9 +7204,11 @@ mod tests {
                 "website-canonical-url",
                 "format-css",
                 "draft-alert",
+                "about-page-diagnostics",
                 "book-cover-image",
                 "title-block",
                 "sectionize",
+                "html-columns",
                 "footnotes",
                 "footnotes-resolve",
                 "example-embed",
@@ -6971,6 +7253,7 @@ mod tests {
                 "crossref-render",
                 "example-embed-render",
                 "mermaid-render",
+                "graphviz-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
                 "editorial-marks-typst",
@@ -6982,6 +7265,7 @@ mod tests {
                 "responsive-image",
                 "llms-capture",
                 "link-external",
+                "image-dimensions",
                 "attribution-render",
                 "attribution-viewer",
             ]
@@ -7025,7 +7309,9 @@ mod tests {
                 "website-canonical-url",
                 "format-css",
                 "draft-alert",
+                "about-page-diagnostics",
                 "reveal-columns",
+                "reveal-absolute",
                 "reveal-slides",
                 "reveal-footer-alias",
                 "footnotes",
@@ -7074,6 +7360,7 @@ mod tests {
                 "example-embed-render",
                 "reveal-auto-stretch",
                 "mermaid-render",
+                "graphviz-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
                 "editorial-marks-typst",
@@ -7085,6 +7372,7 @@ mod tests {
                 "responsive-image",
                 "llms-capture",
                 "link-external",
+                "image-dimensions",
                 "attribution-render",
                 "attribution-viewer",
             ]
@@ -7410,8 +7698,10 @@ mod tests {
                 "website-canonical-url",
                 "format-css",
                 "draft-alert",
+                "about-page-diagnostics",
                 "book-cover-image",
                 "sectionize",
+                "html-columns",
                 "footnotes",
                 "footnotes-resolve",
                 "example-embed",
@@ -7462,6 +7752,7 @@ mod tests {
                 "responsive-image",
                 "llms-capture",
                 "link-external",
+                "image-dimensions",
                 "attribution-render",
             ]
         );
@@ -7487,6 +7778,34 @@ mod tests {
              {unknown:?}. Likely a typo or a rename — update the const in pipeline.rs. \
              Full HTML stage list: {html_names:?}",
         );
+    }
+
+    /// GH #1257: `IncludeInlineFoldStage` must follow `user-filters-post` in
+    /// every pipeline that carries it, or a filter's `header-includes` /
+    /// `include-before` / `include-after` is read before the filter runs. The
+    /// q2-preview pipeline (head injector) and the render pipeline are
+    /// separate consumers of `rendered.includes.*`; both must see the fold.
+    #[test]
+    fn inline_include_fold_follows_post_filters_in_every_pipeline() {
+        let lists: Vec<(&str, Vec<Box<dyn PipelineStage>>)> = vec![
+            ("html", build_html_pipeline_stages_with_options(None)),
+            (
+                "q2-preview",
+                build_q2_preview_pipeline_stages(CapturePayload::Empty),
+            ),
+        ];
+        for (label, stages) in lists {
+            let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
+            let post = names
+                .iter()
+                .position(|n| *n == "user-filters-post")
+                .unwrap_or_else(|| panic!("{label}: no user-filters-post in {names:?}"));
+            let fold = names
+                .iter()
+                .position(|n| *n == "include-inline-fold")
+                .unwrap_or_else(|| panic!("{label}: no include-inline-fold in {names:?}"));
+            assert!(post < fold, "{label}: fold before post filters: {names:?}");
+        }
     }
 
     /// Task 6 (T6.1): verify every name in [`PANDOC_STAGE_EXCLUDED`] is an
@@ -7530,6 +7849,7 @@ mod tests {
                 "source-conversion",
                 "parse-document",
                 "metadata-merge",
+                "authored-metadata",
                 "language-resolve",
                 "include-expansion",
                 "include-resolve",
@@ -7546,6 +7866,7 @@ mod tests {
                 "user-filters-pre",
                 "ast-transforms",
                 "user-filters-post",
+                "include-inline-fold",
                 "resource-report",
                 // Survives on purpose: NumberEncoding::Writer is a no-op for
                 // every non-HTML format, and the stage still strips the

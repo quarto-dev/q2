@@ -1,0 +1,21 @@
+---
+title: "No Graphviz, No Script"
+# bd-ijlapt70: the runtime is written out and linked only when a dot
+# block exists. A doc with only ordinary code blocks must not reference
+# it, and the ordinary block must keep its normal rendering.
+_quarto:
+  tests:
+    html:
+      dom-parity: true
+      noErrors: true
+      ensureHtmlElements:
+        - []
+        - ["pre.graphviz"]
+      ensureFileRegexMatches:
+        - []
+        - ["viz-global\\.js", "Viz\\.instance"]
+---
+
+```python
+print("hello")
+```

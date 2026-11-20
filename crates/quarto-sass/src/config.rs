@@ -681,9 +681,63 @@ pub fn resolve_brand_variants(
     runtime: &dyn SystemRuntime,
     resolve_path: &BrandPathResolver<'_>,
 ) -> Result<(Option<ResolvedBrand>, Option<ResolvedBrand>), SassError> {
+    Ok(match resolve_both_halves(config, runtime, resolve_path)? {
+        Some(halves) => (Some(halves.light), Some(halves.dark)),
+        None => (None, None),
+    })
+}
+
+/// A brand resolved for consumers that report *which modes the brand
+/// defines* — code cells reading `format.render.brand` through
+/// `QUARTO_EXECUTE_INFO` (bd-8fmuyh4d).
+#[derive(Debug, Clone)]
+pub struct BrandModes {
+    /// The light half.
+    pub light: ResolvedBrand,
+    /// The dark half, present only when the brand defines dark values:
+    /// a `{light:, dark:}` pair with a `dark:` side, or the two-file
+    /// `brand: {light:, dark:}` form.
+    pub dark: Option<ResolvedBrand>,
+}
+
+/// Resolve the `brand:` key into the modes the brand defines.
+///
+/// Like [`resolve_brand_variants`], but the dark half is returned only when
+/// the brand defines dark values. This differs from Quarto 1 in one way:
+/// Quarto 1 also reports a dark half when the document's own metadata turns
+/// dark mode on for a brand with no dark values. That half equals the light
+/// half, so leaving it out loses no information.
+///
+/// `resolve_path` resolves a relative `brand:` path, as in [`resolve_brand`].
+pub fn resolve_brand_modes(
+    config: &ConfigValue,
+    runtime: &dyn SystemRuntime,
+    resolve_path: &BrandPathResolver<'_>,
+) -> Result<Option<BrandModes>, SassError> {
+    Ok(
+        resolve_both_halves(config, runtime, resolve_path)?.map(|halves| BrandModes {
+            light: halves.light,
+            dark: halves.defines_dark.then_some(halves.dark),
+        }),
+    )
+}
+
+/// Both halves of a configured brand, and whether the brand defines dark
+/// values (shared by [`resolve_brand_variants`] and [`resolve_brand_modes`]).
+struct BrandHalves {
+    light: ResolvedBrand,
+    dark: ResolvedBrand,
+    defines_dark: bool,
+}
+
+fn resolve_both_halves(
+    config: &ConfigValue,
+    runtime: &dyn SystemRuntime,
+    resolve_path: &BrandPathResolver<'_>,
+) -> Result<Option<BrandHalves>, SassError> {
     let brand_refs = extract_brand_refs(config.get("brand"))?;
     let Some(light_ref) = brand_refs.light else {
-        return Ok((None, None));
+        return Ok(None);
     };
     let (light_split, light_file) = load_split_brand(&light_ref, runtime, resolve_path)?;
     let light = resolved_brand(light_split.light.clone(), light_file.clone());
@@ -692,14 +746,21 @@ pub fn resolve_brand_variants(
     // file; the single-file form (or a `dark:`-less two-file form)
     // falls back to the light file's own dark half.
     let dark_ref = brand_refs.dark.unwrap_or_else(|| light_ref.clone());
-    let dark = if dark_ref == light_ref {
-        resolved_brand(light_split.dark, light_file)
+    let (dark, defines_dark) = if dark_ref == light_ref {
+        (
+            resolved_brand(light_split.dark, light_file),
+            light_split.enables_dark_mode,
+        )
     } else {
         let (dark_split, dark_file) = load_split_brand(&dark_ref, runtime, resolve_path)?;
-        resolved_brand(dark_split.dark, dark_file)
+        (resolved_brand(dark_split.dark, dark_file), true)
     };
 
-    Ok((Some(light), Some(dark)))
+    Ok(Some(BrandHalves {
+        light,
+        dark,
+        defines_dark,
+    }))
 }
 
 /// A [`ResolvedBrand`] for a half of a split brand: anchored at its

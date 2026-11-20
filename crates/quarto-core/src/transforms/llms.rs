@@ -420,16 +420,16 @@ fn clean_block_into(mut block: Block, cx: &ViewContext, out: &mut Vec<Block>) {
                     .iter()
                     .find(|l| l.listing.container_id() == div.attr.0)
             {
-                out.push(Block::Div(quarto_pandoc_types::block::Div {
-                    attr: (div.attr.0.clone(), vec![], hashlink::LinkedHashMap::new()),
+                out.push(Block::Div(Box::new(quarto_pandoc_types::block::Div {
+                    attr: (div.attr.0.clone(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![synthesize_listing_list(listing, cx)],
                     source_info: div.source_info,
                     attr_source: AttrSourceInfo::empty(),
-                }));
+                })));
                 return;
             }
             if has_class(&div.attr, "callout") {
-                out.extend(rebuild_callout(div, cx));
+                out.extend(rebuild_callout(*div, cx));
                 return;
             }
             if is_float_div(&div.attr) {
@@ -442,12 +442,12 @@ fn clean_block_into(mut block: Block, cx: &ViewContext, out: &mut Vec<Block>) {
                 if id.is_empty() {
                     out.extend(children);
                 } else {
-                    out.push(Block::Div(quarto_pandoc_types::block::Div {
-                        attr: (id, vec![], hashlink::LinkedHashMap::new()),
+                    out.push(Block::Div(Box::new(quarto_pandoc_types::block::Div {
+                        attr: (id, vec![], hashlink::LinkedHashMap::new()).into(),
                         content: children,
                         source_info: div.source_info,
                         attr_source: AttrSourceInfo::empty(),
-                    }));
+                    })));
                 }
                 return;
             }
@@ -551,26 +551,26 @@ fn synthesize_listing_list(
                 ItemTarget::None => title,
                 ItemTarget::Href(raw_href) => {
                     let href = retarget_href(raw_href, cx);
-                    vec![Inline::Link(quarto_pandoc_types::inline::Link {
-                        attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                    vec![Inline::Link(Box::new(quarto_pandoc_types::inline::Link {
+                        attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                         content: title,
                         target: (href, String::new()),
                         source_info: gen_si(),
                         attr_source: AttrSourceInfo::empty(),
                         target_source: quarto_pandoc_types::TargetSourceInfo::empty(),
-                    })]
+                    }))]
                 }
                 ItemTarget::Document { output_href, .. } => {
                     let based = relativize(&cx.cur_dir, output_href);
                     let href = retarget_href(&based, cx);
-                    vec![Inline::Link(quarto_pandoc_types::inline::Link {
-                        attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                    vec![Inline::Link(Box::new(quarto_pandoc_types::inline::Link {
+                        attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                         content: title,
                         target: (href, String::new()),
                         source_info: gen_si(),
                         attr_source: AttrSourceInfo::empty(),
                         target_source: quarto_pandoc_types::TargetSourceInfo::empty(),
-                    })]
+                    }))]
                 }
             };
             let meta_bits: Vec<&str> = [item.date.as_deref(), item.author.as_deref()]
@@ -683,12 +683,12 @@ fn rebuild_callout(div: quarto_pandoc_types::block::Div, cx: &ViewContext) -> Ve
     content.extend(build_llms_view(body, cx));
 
     let class = callout_type.map_or_else(|| "callout".to_string(), |t| format!("callout-{t}"));
-    vec![Block::Div(quarto_pandoc_types::block::Div {
-        attr: (String::new(), vec![class], hashlink::LinkedHashMap::new()),
+    vec![Block::Div(Box::new(quarto_pandoc_types::block::Div {
+        attr: (String::new(), vec![class], hashlink::LinkedHashMap::new()).into(),
         content,
         source_info: div.source_info,
         attr_source: AttrSourceInfo::empty(),
-    })]
+    }))]
 }
 
 /// Flatten the plain text of a block list (for callout titles).
@@ -1450,8 +1450,8 @@ mod tests {
         for (k, v) in kv {
             map.insert(k.to_string(), v.to_string());
         }
-        Inline::Link(Link {
-            attr: (String::new(), vec![], map),
+        Inline::Link(Box::new(Link {
+            attr: (String::new(), vec![], map).into(),
             content: vec![Inline::Str(Str {
                 text: "x".to_string(),
                 source_info: SourceInfo::for_test(),
@@ -1460,7 +1460,7 @@ mod tests {
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(content: Vec<Inline>) -> Block {
@@ -1481,7 +1481,7 @@ mod tests {
             if let Some(content) = content {
                 for i in content {
                     if let Inline::Link(l) = i {
-                        links.push(l);
+                        links.push(&**l);
                     }
                 }
             }

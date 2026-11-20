@@ -1,0 +1,18 @@
+---
+title: "Inline output: Python"
+---
+
+```{python}
+x = [1, 2, 3, 4]
+print("sum:", sum(x))
+```
+
+The value of `x` persists across cells:
+
+```{python}
+[v * v for v in x]
+```
+
+A cell with an error, to see how failures render:
+
+The sum is `{python} sum(x)`.

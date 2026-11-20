@@ -12,6 +12,8 @@
 
 use quarto_source_map::SourceInfo;
 
+use super::ansi::output_text;
+use super::engine_attrs::{ClassPlacement, EngineAttrs, build_head};
 use super::figures::FigureSink;
 use super::options::{CellOptions, FenceKind, OutputKind};
 use super::output::{CellOutput, CellResult, ExecuteStatus, extract_text_content};
@@ -126,6 +128,15 @@ pub fn render_cell_with(
     render_cell_whole(language, code, result, options, &[], fig, visibility)
 }
 
+/// The plots of a cell result that become figures (included graphics carry no figure id).
+fn count_plots(result: &CellResult) -> usize {
+    result
+        .outputs
+        .iter()
+        .filter(|o| is_plot_output(o) && !is_included_graphic(o))
+        .count()
+}
+
 /// [`render_cell_with`] knowing where each expression of `code` starts (`starts`: line
 /// indices, empty when unknown), which knitr's `prompt` needs.
 fn render_cell_whole(
@@ -137,6 +148,7 @@ fn render_cell_whole(
     fig: &mut dyn FigureSink,
     visibility: CellVisibility,
 ) -> String {
+    let options = &options.clone().with_plot_count(count_plots(result));
     let source = if visibility.echo && !code.trim().is_empty() {
         echoed_source_fence_with(language, code, options, starts)
     } else {
@@ -196,6 +208,8 @@ pub fn render_cell_interleaved(
         }
         None => (result, anchors, options),
     };
+    let counted = options.clone().with_plot_count(count_plots(result));
+    let options = &counted;
     let total = code.lines().count();
     let usable = anchors.filter(|a| {
         a.len() == result.outputs.len()
@@ -357,13 +371,48 @@ fn included_graphic(metadata: &serde_json::Value) -> Option<(String, Option<f64>
 }
 
 /// A figure\'s markdown in its output div, or bare for a linked image under `results = "asis"`
-/// (hooks.R).
-fn push_figure(output: &mut String, options: &CellOptions, index: usize, md: &str) {
-    if options.bare_linked_image(index) {
+/// (hooks.R) and for any figure under Jupyter `output: asis` (`jupyter.ts`).
+fn push_figure(
+    output: &mut String,
+    options: &CellOptions,
+    index: usize,
+    md: &str,
+    cell_output: &CellOutput,
+) {
+    if options.bare_linked_image(index) || options.output_asis() {
         output.push_str(&format!("\n{md}\n"));
     } else {
-        output.push_str(&format!("\n::: {{.cell-output-display}}\n\n{md}\n\n:::\n"));
+        let head = output_div_head(None, ".cell-output-display", cell_output);
+        output.push_str(&format!("\n::: {{{head}}}\n\n{md}\n\n:::\n"));
     }
+}
+
+/// The engine\'s `quarto_attrs` for an output, when it is a kind that keeps metadata
+/// (display_data, execute_result). Entries the grammar refuses were already reported by the
+/// cell step; here they are skipped silently.
+fn output_engine_attrs(output: &CellOutput) -> Option<EngineAttrs> {
+    match output {
+        CellOutput::DisplayData { metadata, .. } | CellOutput::ExecuteResult { metadata, .. } => {
+            EngineAttrs::from_holder(metadata).map(|(a, _)| a)
+        }
+        CellOutput::Stream { .. } | CellOutput::Error { .. } => None,
+    }
+}
+
+/// The head of an output div: the presenter\'s id (if any) and space-separated `.class`
+/// text, merged with the output\'s engine attributes (engine classes first).
+fn output_div_head(id: Option<&str>, classes: &str, output: &CellOutput) -> String {
+    let classes: Vec<String> = classes
+        .split_whitespace()
+        .map(|c| c.trim_start_matches('.').to_string())
+        .collect();
+    build_head(
+        id,
+        &classes,
+        &[],
+        output_engine_attrs(output).as_ref(),
+        ClassPlacement::Before,
+    )
 }
 
 /// The `width` and `height` a stored output carries for its image (`metadata[mime]`, the
@@ -399,9 +448,8 @@ pub(crate) fn is_plot_output(o: &CellOutput) -> bool {
 fn wrap_cell(options: &CellOptions, body: &str) -> String {
     if options.needs_cell_div() {
         format!(
-            "::: {{{}.cell{}}}\n\n{body}\n{}:::\n",
-            options.cell_div_id(),
-            options.cell_div_attrs(),
+            "::: {{{}}}\n\n{body}\n{}:::\n",
+            options.cell_div_head(),
             options.cell_caption()
         )
     } else {
@@ -734,14 +782,36 @@ fn fenced_output_div(
     text: &str,
     fence_attrs: Option<String>,
     options: &CellOptions,
+    cell_output: Option<&CellOutput>,
 ) -> String {
     let ticks = ticks_for_code(text);
     let open = fence_attrs.map_or_else(|| ticks.clone(), |a| format!("{ticks}{{{a}}}"));
-    if options.collapse() || options.results_asis() {
+    if options.collapse() || options.results_asis() || options.output_asis() {
         // knitr\'s hook returns the bare fence under `collapse`; `collapse_fences` merges it.
+        // Jupyter `output: asis` writes every output without its div (`jupyter.ts`).
         return format!("\n{open}\n{text}\n{ticks}\n");
     }
-    format!("\n::: {{{classes}}}\n\n{open}\n{text}\n{ticks}\n\n:::\n")
+    let head = match cell_output {
+        Some(o) => output_div_head(None, classes, o),
+        None => classes.to_string(),
+    };
+    format!("\n::: {{{head}}}\n\n{open}\n{text}\n{ticks}\n\n:::\n")
+}
+
+/// `body` in a `::: {<classes>}` output div, or bare under Jupyter `output: asis`, which
+/// writes no output div (`jupyter.ts`).
+fn output_div(
+    classes: &str,
+    body: &str,
+    options: &CellOptions,
+    cell_output: &CellOutput,
+) -> String {
+    if options.output_asis() {
+        format!("\n{body}\n")
+    } else {
+        let head = output_div_head(None, classes, cell_output);
+        format!("\n::: {{{head}}}\n\n{body}\n\n:::\n")
+    }
 }
 
 /// Format kernel outputs as markdown.
@@ -789,8 +859,19 @@ fn format_outputs_with(
         // "stream" with name "stderr") before emitting anything.
         // Errors are a separate output kind and are never dropped
         // here; the error *policy* decides those.
-        if !show_warnings && is_warning_output(cell_output) {
-            continue;
+        //
+        // When the record says what kind each output is (Julia: `output_kinds`), only the
+        // outputs of kind `Warning` go, so `@info` and a raw `println(stderr, ...)` stay
+        // (OPR-4d). With no kind for this output (Jupyter, or a record without the fact),
+        // every stderr stream goes, as above.
+        if !show_warnings {
+            let is_warning = match options.output_kinds().get(first + n) {
+                Some(kind) => *kind == Some(OutputKind::Warning),
+                None => is_warning_output(cell_output),
+            };
+            if is_warning {
+                continue;
+            }
         }
         // knitr `fig.show = "hide"`: the plot stays a piece (it still splits the source) but
         // writes nothing.
@@ -799,6 +880,16 @@ fn format_outputs_with(
         }
         // knitr drops every character piece under `results = "hide"`, a widget included.
         if options.results_hide() && widget_output(cell_output) {
+            continue;
+        }
+        // Jupyter `output: asis`: printed stdout is document markdown, written as is
+        // (`jupyter.ts`: `asis && stream.name === "stdout"`). Other outputs keep their own
+        // markup and only lose the output div.
+        if let CellOutput::Stream { name, text } = cell_output
+            && options.output_asis()
+            && name == "stdout"
+        {
+            output.push_str(&format!("\n{}\n", text.trim_end()));
             continue;
         }
         if is_printed_text(cell_output) {
@@ -815,6 +906,7 @@ fn format_outputs_with(
                         .unwrap_or_default(),
                     CellOutput::Error { .. } => String::new(),
                 };
+                let text = output_text(&text, options.keeps_engine_text());
                 output.push_str(&format!("\n{}\n", text.trim_end()));
                 continue;
             }
@@ -823,7 +915,9 @@ fn format_outputs_with(
             CellOutput::Stream { name, text } => {
                 output.push_str(&fenced_output_div(
                     &format!(".cell-output .cell-output-{}", name),
-                    &options.comment_out(options.trim_output(text)),
+                    &options.comment_out(
+                        options.trim_output(&output_text(text, options.keeps_engine_text())),
+                    ),
                     options.fence_attrs(if name != "stderr" {
                         FenceKind::Output
                     } else {
@@ -834,6 +928,7 @@ fn format_outputs_with(
                         }
                     }),
                     options,
+                    Some(cell_output),
                 ));
             }
             CellOutput::ExecuteResult { data, .. } | CellOutput::DisplayData { data, .. } => {
@@ -845,7 +940,7 @@ fn format_outputs_with(
                     // Opt-in (epic decision 22): the text is written as is, in a display
                     // div (bare under `results = "asis"`, like Q1\'s `wrap_asis_output`).
                     let s = asis.trim_matches('\n');
-                    if options.results_asis() {
+                    if options.results_asis() || options.output_asis() {
                         output.push_str(&format!("\n{s}\n"));
                     } else {
                         // An htmlwidget is wrapped by Q1\'s `add_html_caption`: the figure
@@ -860,22 +955,36 @@ fn format_outputs_with(
                         } else {
                             format!("{caption}\n")
                         };
-                        output.push_str(&format!(
-                            "\n::: {{{id}.cell-output-display}}\n\n{s}\n{caption}\n:::\n"
-                        ));
+                        let head = output_div_head(
+                            Some(id.trim().trim_start_matches('#')).filter(|i| !i.is_empty()),
+                            ".cell-output-display",
+                            cell_output,
+                        );
+                        output.push_str(&format!("\n::: {{{head}}}\n\n{s}\n{caption}\n:::\n"));
                     }
-                } else if let Some(html) = data.get("text/html") {
+                } else if let Some(html) = data.get("text/html").filter(|_| {
+                    // Q1's `displayDataMimeType`: `text/html` leads only for an HTML-compatible
+                    // target; elsewhere it comes last, or only for a table (OPR-9b).
+                    options.target().to_html
+                        || super::inline::display_data_mime_type(data, options.target())
+                            == Some("text/html")
+                }) {
                     let s = extract_text_content(html);
                     let ticks = ticks_for_code(&s);
-                    output.push_str(&format!(
-                        "\n::: {{.cell-output .cell-output-display}}\n\n{ticks}{{=html}}\n{}\n{ticks}\n\n:::\n",
-                        s
+                    output.push_str(&output_div(
+                        ".cell-output .cell-output-display",
+                        &format!("{ticks}{{=html}}\n{s}\n{ticks}"),
+                        options,
+                        cell_output,
                     ));
                 } else if let Some(markdown) = markdown_output(data) {
                     // Written as markdown itself (Q1's `mdMarkdownOutput`), with the
                     // extra class `isMarkdown` adds.
-                    output.push_str(&format!(
-                        "\n::: {{.cell-output .cell-output-display .cell-output-markdown}}\n\n{markdown}\n\n:::\n"
+                    output.push_str(&output_div(
+                        ".cell-output .cell-output-display .cell-output-markdown",
+                        &markdown,
+                        options,
+                        cell_output,
                     ));
                 } else if let Some((path, width)) = included_graphic(match cell_output {
                     CellOutput::DisplayData { metadata, .. } => metadata,
@@ -887,7 +996,7 @@ fn format_outputs_with(
                     let attrs =
                         options.image_attrs_with(*figures, width.map(|w| w.to_string()), None);
                     let md = options.link_image(*figures, format!("![{alt}]({path}){attrs}"));
-                    push_figure(&mut output, options, *figures, &md);
+                    push_figure(&mut output, options, *figures, &md, cell_output);
                     *figures += 1;
                 } else if let Some(rel_path) = image_entry.and_then(|(mime, value)| {
                     let preferred = match cell_output {
@@ -913,22 +1022,26 @@ fn format_outputs_with(
                     let alt = options.figure_cap(*figures);
                     // A stored output may carry the image\'s size in its metadata (nbformat).
                     let (width, height) = match (cell_output, image_entry) {
-                        (CellOutput::DisplayData { metadata, .. }, Some((mime, _))) => {
-                            metadata_size(metadata, mime)
-                        }
+                        (
+                            CellOutput::DisplayData { metadata, .. }
+                            | CellOutput::ExecuteResult { metadata, .. },
+                            Some((mime, _)),
+                        ) => metadata_size(metadata, mime),
                         _ => (None, None),
                     };
                     let attrs = options.plot_image_attrs(*figures, width, height);
                     let md = options.link_image(*figures, format!("![{alt}]({rel_path}){attrs}"));
-                    push_figure(&mut output, options, *figures, &md);
+                    push_figure(&mut output, options, *figures, &md, cell_output);
                     *figures += 1;
                 } else if let Some(text) = data.get("text/plain") {
                     let s = extract_text_content(text);
+                    let s = output_text(&s, options.keeps_engine_text());
                     output.push_str(&fenced_output_div(
                         ".cell-output .cell-output-display",
                         &options.comment_out(options.trim_output(&s)),
                         options.fence_attrs(FenceKind::Output),
                         options,
+                        Some(cell_output),
                     ));
                 } else if image_entry.is_some() {
                     // An image payload we failed to write (bad base64,
@@ -937,9 +1050,12 @@ fn format_outputs_with(
                     // the output silently. The brackets are escaped: a bare
                     // `[Image output]` is a span without attributes, which loses
                     // its brackets and raises Q-2-49.
-                    output.push_str(
-                        "\n::: {.cell-output .cell-output-display}\n\n\\[Image output\\]\n\n:::\n",
-                    );
+                    output.push_str(&output_div(
+                        ".cell-output .cell-output-display",
+                        "\\[Image output\\]",
+                        options,
+                        cell_output,
+                    ));
                 }
             }
             CellOutput::Error {
@@ -952,6 +1068,7 @@ fn format_outputs_with(
                     &options.comment_out(format_error_text(ename, evalue, traceback).trim_end()),
                     options.fence_attrs(FenceKind::Error),
                     options,
+                    Some(cell_output),
                 ));
             }
         }
@@ -971,6 +1088,7 @@ fn format_outputs_with(
                 &options.comment_out(format_error_text(ename, evalue, traceback).trim_end()),
                 options.fence_attrs(FenceKind::Error),
                 options,
+                None,
             ));
         }
     }
@@ -978,49 +1096,25 @@ fn format_outputs_with(
     output
 }
 
-/// `"<ename>: <evalue>"` plus the ANSI-stripped traceback lines.
+/// `"<ename>: <evalue>"` plus the traceback lines, every part through `output_text`.
+///
+/// Errors are always stripped (`keeps_engine_text` is false): kernel tracebacks arrive
+/// colorized, and this path never kept escapes, knitr cells included.
 fn format_error_text(ename: &str, evalue: &str, traceback: &[String]) -> String {
     // An empty `ename` (Ark, knitr) has no `name:` header; the message stands alone, and an
     // empty message leaves the traceback.
-    let evalue = strip_ansi_codes(evalue);
+    let ename = output_text(ename, false);
+    let evalue = output_text(evalue, false);
     let mut error_text = match (ename.is_empty(), evalue.is_empty()) {
         (true, true) => String::new(),
         (true, false) => format!("{evalue}\n"),
         (false, _) => format!("{ename}: {evalue}\n"),
     };
     for line in traceback {
-        error_text.push_str(&strip_ansi_codes(line));
+        error_text.push_str(&output_text(line, false));
         error_text.push('\n');
     }
     error_text
-}
-
-/// Strip ANSI escape codes from a string (kernel tracebacks arrive
-/// colorized).
-fn strip_ansi_codes(s: &str) -> String {
-    // Simple pattern to remove ANSI escape sequences
-    let mut result = String::with_capacity(s.len());
-    let mut chars = s.chars().peekable();
-
-    while let Some(c) = chars.next() {
-        if c == '\x1b' {
-            // Start of escape sequence
-            if chars.peek() == Some(&'[') {
-                chars.next(); // consume '['
-                // Skip until we hit a letter (end of sequence)
-                while let Some(&next) = chars.peek() {
-                    chars.next();
-                    if next.is_ascii_alphabetic() {
-                        break;
-                    }
-                }
-            }
-        } else {
-            result.push(c);
-        }
-    }
-
-    result
 }
 
 #[cfg(test)]
@@ -1613,6 +1707,155 @@ mod tests {
         assert!(!md.contains("Image output"), "got:\n{md}");
     }
 
+    // === OPR-9b: the display priority follows the target ===
+
+    /// What Plots writes: an html `<img>`, two images and a text fallback in one bundle.
+    fn plots_like_bundle() -> std::collections::HashMap<String, serde_json::Value> {
+        let mut data = std::collections::HashMap::new();
+        data.insert(
+            "text/html".to_string(),
+            serde_json::json!("<img src=\"data:image/png;base64,AAAA\">"),
+        );
+        data.insert(
+            "image/png".to_string(),
+            serde_json::json!(PNG_B64_MULTILINE),
+        );
+        data.insert("image/svg+xml".to_string(), serde_json::json!("<svg/>"));
+        data.insert("text/plain".to_string(), serde_json::json!("Plot()"));
+        data
+    }
+
+    /// Present one display-data output for `format` and return the markdown and the directory
+    /// the figure sink wrote under.
+    fn present_bundle(
+        data: std::collections::HashMap<String, serde_json::Value>,
+        format: &str,
+    ) -> String {
+        let result = ok_result(vec![CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({}),
+        }]);
+        let options = CellOptions::default()
+            .with_target(crate::presenter::inline::InlineTarget::from_format(format));
+        format_outputs_with(&result, &mut test_fig(), true, &options, &mut 0, 0)
+    }
+
+    #[test]
+    fn test_display_priority_html_family_takes_the_raw_html() {
+        for format in ["html", "revealjs", "dashboard", "epub"] {
+            let md = present_bundle(plots_like_bundle(), format);
+            assert!(md.contains("```{=html}"), "{format}: raw html; got:\n{md}");
+            assert!(!md.contains("!["), "{format}: no image; got:\n{md}");
+        }
+    }
+
+    #[test]
+    fn test_display_priority_non_html_targets_take_the_image() {
+        // gfm (markdown class), docx, pptx, typst and odt (no class): Q1 picks the svg.
+        for format in ["gfm", "commonmark", "docx", "pptx", "typst", "odt", "rst"] {
+            let md = present_bundle(plots_like_bundle(), format);
+            assert!(!md.contains("{=html}"), "{format}: no raw html; got:\n{md}");
+            assert!(
+                md.contains("![](") && md.contains("cell-1-output-1.svg"),
+                "{format}: the svg file; got:\n{md}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_display_priority_latex_target_does_not_take_the_html() {
+        // `pdf` has the LaTeX flag: images first, never `text/html`.
+        let md = present_bundle(plots_like_bundle(), "pdf");
+        assert!(!md.contains("{=html}"), "got:\n{md}");
+        assert!(md.contains("cell-1-output-1.svg"), "got:\n{md}");
+    }
+
+    #[test]
+    fn test_display_priority_table_keeps_the_html_on_docx() {
+        let mut data = std::collections::HashMap::new();
+        data.insert(
+            "text/html".to_string(),
+            serde_json::json!("<table><tr><td>1</td></tr></table>"),
+        );
+        data.insert("text/plain".to_string(), serde_json::json!("1"));
+        let md = present_bundle(data, "docx");
+        assert!(
+            md.contains("```{=html}"),
+            "a table keeps its html; got:\n{md}"
+        );
+    }
+
+    #[test]
+    fn test_display_priority_html_only_bundle_falls_to_plain_text_on_docx() {
+        let mut data = std::collections::HashMap::new();
+        data.insert("text/html".to_string(), serde_json::json!("<b>5</b>"));
+        data.insert("text/plain".to_string(), serde_json::json!("5"));
+        let md = present_bundle(data, "docx");
+        assert!(!md.contains("{=html}"), "got:\n{md}");
+        assert!(md.contains('5'), "the plain text shows; got:\n{md}");
+    }
+
+    #[test]
+    fn test_display_priority_cell_path_agrees_with_the_shared_fixture() {
+        // The same cases the inline path is checked against (and the TypeScript port): the cell
+        // path must take `text/html` exactly when `display_data_mime_type` says so.
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
+            "../../ts-packages/quarto-api/src/jupyter/__fixtures__/display-data-precedence.json",
+        );
+        let fixture: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let handled = [
+            "text/html",
+            "text/markdown",
+            "text/plain",
+            "image/png",
+            "image/svg+xml",
+            "image/jpeg",
+        ];
+        let mut checked = 0;
+        for case in fixture["cases"].as_array().unwrap() {
+            let flag = |k: &str| case["flags"][k].as_bool().unwrap_or(false);
+            let target = crate::presenter::inline::InlineTarget {
+                to_html: flag("toHtml"),
+                to_latex: flag("toLatex"),
+                to_markdown: flag("toMarkdown"),
+            };
+            let mut data = std::collections::HashMap::new();
+            for (k, v) in case["data"].as_object().unwrap() {
+                data.insert(k.clone(), v.clone());
+            }
+            // Only bundles the cell path has a branch for: no widget, script or latex keys.
+            if !data.keys().all(|k| handled.contains(&k.as_str())) || target.to_latex {
+                continue;
+            }
+            for k in ["image/png", "image/svg+xml", "image/jpeg"] {
+                if data.contains_key(k) {
+                    let v = if k == "image/svg+xml" {
+                        serde_json::json!("<svg/>")
+                    } else {
+                        serde_json::json!(PNG_B64_MULTILINE)
+                    };
+                    data.insert(k.to_string(), v);
+                }
+            }
+            let expected = case["expected"].as_str();
+            let result = ok_result(vec![CellOutput::DisplayData {
+                data,
+                metadata: serde_json::json!({}),
+            }]);
+            let options = CellOptions::default().with_target(target);
+            let md = format_outputs_with(&result, &mut test_fig(), true, &options, &mut 0, 0);
+            assert_eq!(
+                md.contains("{=html}"),
+                expected == Some("text/html"),
+                "case {}: expected {expected:?}; got:\n{md}",
+                case["name"]
+            );
+            checked += 1;
+        }
+        assert!(checked >= 8, "the filter left too few cases: {checked}");
+    }
+
     #[test]
     fn test_format_outputs_image_placeholder_is_display_div() {
         // Until bd-5t6wvu7m lands, image outputs render a placeholder —
@@ -1627,15 +1870,6 @@ mod tests {
             format_outputs(&result, &mut test_fig(), true),
             "\n::: {.cell-output .cell-output-display}\n\n\\[Image output\\]\n\n:::\n"
         );
-    }
-
-    #[test]
-    fn test_strip_ansi_codes() {
-        let input = "\x1b[31mRed\x1b[0m Normal";
-        assert_eq!(strip_ansi_codes(input), "Red Normal");
-
-        let input = "No escape codes";
-        assert_eq!(strip_ansi_codes(input), "No escape codes");
     }
 
     #[test]
@@ -1685,6 +1919,169 @@ mod tests {
                 CellVisibility::VISIBLE,
             ),
             "::: {.cell}\n\n```{.python .cell-code}\nx = 1\n```\n\n:::\n"
+        );
+    }
+
+    // === OPR-7f: engine attributes (`quarto_attrs`) ===
+
+    fn png_data() -> std::collections::HashMap<String, serde_json::Value> {
+        let mut data = std::collections::HashMap::new();
+        data.insert(
+            "image/png".to_string(),
+            serde_json::json!(PNG_B64_MULTILINE),
+        );
+        data
+    }
+
+    fn engine_attrs(v: serde_json::Value) -> super::super::engine_attrs::EngineAttrs {
+        super::super::engine_attrs::EngineAttrs::parse(&v).0
+    }
+
+    #[test]
+    fn engine_attrs_on_the_cell_wrapper_follow_the_grammar_order() {
+        let options = CellOptions::default().with_engine_attrs(engine_attrs(serde_json::json!({
+            "id": "cell-0",
+            "classes": ["extra"],
+            "attributes": {"execution_count": "1"},
+        })));
+        let result = ok_result(vec![CellOutput::Stream {
+            name: "stdout".into(),
+            text: "x\n".into(),
+        }]);
+        let md = render_cell_with(
+            "python",
+            "print(1)\n",
+            &result,
+            &options,
+            &mut test_fig(),
+            CellVisibility::VISIBLE,
+        );
+        assert!(
+            md.starts_with("::: {#cell-0 .cell .extra execution_count='1'}\n"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn a_presenter_wrapper_id_wins_over_the_engine_id() {
+        let mut options = CellOptions::default();
+        options = options.with_engine_attrs(engine_attrs(serde_json::json!({"id": "cell-0"})));
+        let md = wrap_cell(&options, "body");
+        assert!(md.starts_with("::: {#cell-0 .cell}"), "{md}");
+    }
+
+    #[test]
+    fn the_cell_wrapper_that_is_not_written_drops_the_cell_attrs() {
+        // `results = "asis"` with nothing else to carry writes no `.cell` div.
+        let options = CellOptions::from_knitr(&serde_json::json!({"results": "asis"}))
+            .with_engine_attrs(engine_attrs(serde_json::json!({"id": "cell-0"})));
+        assert!(!options.needs_cell_div());
+        let md = wrap_cell(&options, "body");
+        assert!(!md.contains("cell-0"), "{md}");
+    }
+
+    #[test]
+    fn output_attrs_on_a_figure_div_put_the_engine_class_first() {
+        let result = ok_result(vec![CellOutput::DisplayData {
+            data: png_data(),
+            metadata: serde_json::json!({
+                "quarto_attrs": {"classes": ["cell-output"]},
+            }),
+        }]);
+        let md = format_outputs(&result, &mut test_fig(), true);
+        assert!(
+            md.starts_with("\n::: {.cell-output .cell-output-display}\n\n!["),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn output_attrs_on_an_execute_result_carry_the_count() {
+        let mut data = text_plain("2");
+        data.insert("text/html".into(), serde_json::json!("<b>2</b>"));
+        let result = ok_result(vec![CellOutput::ExecuteResult {
+            data: text_plain("2"),
+            metadata: serde_json::json!({
+                "quarto_attrs": {"attributes": {"execution_count": "3"}},
+            }),
+            execution_count: 3,
+        }]);
+        let md = format_outputs(&result, &mut test_fig(), true);
+        assert!(
+            md.starts_with("\n::: {.cell-output .cell-output-display execution_count='3'}\n"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn output_attrs_reach_the_html_and_markdown_divs() {
+        for (mime, value, expected) in [
+            (
+                "text/html",
+                "<b>x</b>",
+                "::: {#h .cell-output .cell-output-display k='v'}",
+            ),
+            (
+                "text/markdown",
+                "**x**",
+                "::: {#h .cell-output .cell-output-display .cell-output-markdown k='v'}",
+            ),
+        ] {
+            let result = display(&[(mime, serde_json::json!(value))]);
+            let CellOutput::DisplayData { data, .. } = &result.outputs[0] else {
+                unreachable!()
+            };
+            let result = ok_result(vec![CellOutput::DisplayData {
+                data: data.clone(),
+                metadata: serde_json::json!({
+                    "quarto_attrs": {"id": "h", "attributes": {"k": "v"}},
+                }),
+            }]);
+            let md = format_outputs(&result, &mut test_fig(), true);
+            assert!(md.contains(expected), "{mime}: {md}");
+        }
+    }
+
+    #[test]
+    fn a_bare_fence_drops_the_output_attrs_by_design() {
+        let options = CellOptions::from_knitr(&serde_json::json!({"collapse": true}));
+        let result = ok_result(vec![CellOutput::ExecuteResult {
+            data: text_plain("2"),
+            metadata: serde_json::json!({"quarto_attrs": {"id": "dropped"}}),
+            execution_count: 1,
+        }]);
+        let md = format_outputs_with(&result, &mut test_fig(), true, &options, &mut 0, 0);
+        assert!(!md.contains("dropped") && !md.contains(":::"), "{md}");
+    }
+
+    #[test]
+    fn malformed_output_attrs_are_skipped_and_the_rest_renders() {
+        let result = ok_result(vec![CellOutput::ExecuteResult {
+            data: text_plain("2"),
+            metadata: serde_json::json!({"quarto_attrs": {
+                "id": "caf\u{e9}",
+                "classes": ["1bad", "ok"],
+                "attributes": {"bad": "a\nb", "good": "v"},
+            }}),
+            execution_count: 1,
+        }]);
+        let md = format_outputs(&result, &mut test_fig(), true);
+        assert!(
+            md.starts_with("\n::: {.ok .cell-output .cell-output-display good='v'}\n"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn output_without_attrs_is_byte_identical() {
+        let result = ok_result(vec![CellOutput::ExecuteResult {
+            data: text_plain("2"),
+            metadata: serde_json::json!({}),
+            execution_count: 1,
+        }]);
+        assert_eq!(
+            format_outputs(&result, &mut test_fig(), true),
+            "\n::: {.cell-output .cell-output-display}\n\n```\n2\n```\n\n:::\n"
         );
     }
 }
@@ -2270,6 +2667,253 @@ mod option_tests {
         assert_eq!(images(&o, vec![plot()]), ["![A *marked up* caption](P)"]);
     }
 
+    // === OPR-7j: group caption and panel ids without a knitr figure count ===
+
+    #[test]
+    fn a_labeled_subcap_group_without_a_figure_count_keeps_caption_and_panel_ids() {
+        // Julia/Jupyter shape: label, fig-cap, fig-subcap and two plots, no `figure_count`.
+        let o = opts(
+            serde_json::json!({"label": "fig-two", "fig.cap": "A group", "fig.subcap": ["First", "Second"]}),
+        );
+        let md = render_figs(&o, vec![plot(), plot()]);
+        assert!(md.contains("::: {#fig-two .cell}"), "{md}");
+        assert!(
+            md.contains("![First](") && md.contains("){#fig-two-1}"),
+            "{md}"
+        );
+        assert!(
+            md.contains("![Second](") && md.contains("){#fig-two-2}"),
+            "{md}"
+        );
+        assert!(md.trim_end().ends_with("\nA group\n:::"), "{md}");
+    }
+
+    #[test]
+    fn a_one_plot_subcap_group_is_not_a_group() {
+        // Negative control: one plot, one subcap. knitr and plain Julia render one figure.
+        let o = opts(
+            serde_json::json!({"label": "fig-two", "fig.cap": "A group", "fig.subcap": ["Only"]}),
+        );
+        let md = render_figs(&o, vec![plot()]);
+        assert!(!md.contains("{#fig-two-1}"), "{md}");
+        assert!(!md.contains("::: {#fig-two .cell}"), "{md}");
+    }
+
+    #[test]
+    fn a_labeled_figure_without_subcap_is_unchanged() {
+        // Negative control: no `fig-subcap`, so no group even with two plots.
+        let o = opts(serde_json::json!({"label": "fig-two", "fig.cap": "Cap"}));
+        let md = render_figs(&o, vec![plot(), plot()]);
+        assert!(!md.contains("{#fig-two-1}"), "{md}");
+        assert!(!md.contains("::: {#fig-two .cell}"), "{md}");
+    }
+
+    #[test]
+    fn a_labeled_single_figure_without_a_figure_count_is_unchanged() {
+        // The case a generic figure count would have broken (D14): one labeled plot.
+        let o = opts(serde_json::json!({"label": "fig-one", "fig.cap": "One"}));
+        let md = render_figs(&o, vec![plot()]);
+        assert!(!md.contains("#fig-one"), "{md}");
+        assert!(!md.contains("::: {#fig-one"), "{md}");
+    }
+
+    #[test]
+    fn subcaptions_recycle_over_more_plots_and_keep_panel_ids() {
+        let o =
+            opts(serde_json::json!({"label": "fig-g", "fig.cap": "G", "fig.subcap": ["C1", "C2"]}));
+        let md = render_figs(&o, vec![plot(), plot(), plot()]);
+        for n in 1..=3 {
+            assert!(md.contains(&format!("{{#fig-g-{n}}}")), "{md}");
+        }
+        assert!(md.contains("![C1](") && md.contains("![C2]("), "{md}");
+    }
+
+    #[test]
+    fn a_plot_and_an_included_graphic_is_not_a_group() {
+        // Included graphics carry no figure id and do not count toward the two plots a group
+        // needs.
+        let graphic = {
+            let mut data = std::collections::HashMap::new();
+            data.insert("image/png".to_string(), serde_json::json!(PNG));
+            CellOutput::DisplayData {
+                data,
+                metadata: serde_json::json!({
+                    "quarto_knitr": {"include_graphics": true},
+                    "quarto_file_path": "x.png"
+                }),
+            }
+        };
+        let o =
+            opts(serde_json::json!({"label": "fig-g", "fig.cap": "G", "fig.subcap": ["A", "B"]}));
+        let md = render_figs(&o, vec![plot(), graphic]);
+        assert!(!md.contains("::: {#fig-g .cell}"), "{md}");
+        assert!(!md.contains("{#fig-g-1}"), "{md}");
+    }
+
+    #[test]
+    fn an_engine_written_panel_id_loses_to_the_generated_one() {
+        // OPR-7j, item 4: the presenter cannot see an id the engine put in an output's own
+        // markdown (a hand-written `{#fig-l-1}` duplicates the generated id; author error,
+        // not reproducible at this level because the cell step does not render that mime).
+        // What it can see is an engine `quarto_attrs` id on a plot: the presenter's id wins
+        // (`build_head`), so the id appears once. Pinned so a change is a visible decision.
+        let mut data = std::collections::HashMap::new();
+        data.insert("image/png".to_string(), serde_json::json!(PNG));
+        let user = CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({"quarto_attrs": {"id": "fig-l-1"}}),
+        };
+        let o =
+            opts(serde_json::json!({"label": "fig-l", "fig.cap": "L", "fig.subcap": ["A", "B"]}));
+        let md = render_figs(&o, vec![user, plot()]);
+        assert_eq!(md.matches("fig-l-1}").count(), 1, "{md}");
+    }
+
+    fn group_opts(extra: serde_json::Value) -> CellOptions {
+        let mut j = serde_json::json!({"label": "fig-g", "fig.cap": "G", "fig.subcap": ["A", "B"]});
+        for (k, v) in extra.as_object().unwrap() {
+            j[k] = v.clone();
+        }
+        opts(j)
+    }
+
+    fn render_group_vis(o: &CellOptions, vis: CellVisibility) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        fig.begin_cell();
+        render_cell_with("r", "x\n", &result(vec![plot(), plot()]), o, &mut fig, vis)
+    }
+
+    fn assert_group(md: &str) {
+        assert!(md.contains("::: {#fig-g .cell"), "{md}");
+        assert!(
+            md.contains("{#fig-g-1}") && md.contains("{#fig-g-2}"),
+            "{md}"
+        );
+        assert!(md.trim_end().ends_with("\nG\n:::"), "{md}");
+    }
+
+    #[test]
+    fn layout_options_keep_the_group_and_panel_ids() {
+        // Design rule 7: the panel references resolve under `layout-ncol` and `layout-nrow`.
+        for (k, v) in [("layout-ncol", 2), ("layout-nrow", 2)] {
+            let md = render_figs(
+                &group_opts(serde_json::json!({ k: v })),
+                vec![plot(), plot()],
+            );
+            assert_group(&md);
+            assert!(md.contains(&format!("{k}=\"2\"")), "{md}");
+        }
+    }
+
+    #[test]
+    fn fig_subcap_without_a_label_has_no_group_and_no_ids() {
+        let o = opts(serde_json::json!({"fig.cap": "G", "fig.subcap": ["A", "B"]}));
+        let md = render_figs(&o, vec![plot(), plot()]);
+        assert!(!md.contains("{#"), "{md}");
+        assert!(md.contains("![A](") && md.contains("![B]("), "{md}");
+        assert!(!md.contains("\nG\n"), "{md}");
+    }
+
+    #[test]
+    fn echo_false_still_renders_the_group() {
+        // The plots are output; hiding the source changes nothing about the group.
+        let vis = CellVisibility {
+            echo: false,
+            ..CellVisibility::VISIBLE
+        };
+        let md = render_group_vis(&group_opts(serde_json::json!({})), vis);
+        assert_group(&md);
+        assert!(!md.contains("cell-code"), "{md}");
+    }
+
+    #[test]
+    fn results_asis_does_not_change_a_plot_group() {
+        let md = render_figs(
+            &group_opts(serde_json::json!({"results": "asis"})),
+            vec![plot(), plot()],
+        );
+        assert_group(&md);
+    }
+
+    #[test]
+    fn a_hidden_group_emits_nothing_and_no_stray_caption() {
+        // `include: false`: nothing renders, so the references stay unresolved as before.
+        let md = render_group_vis(&group_opts(serde_json::json!({})), CellVisibility::HIDDEN);
+        assert!(!md.contains("fig-g"), "{md}");
+        assert!(!md.contains("\nG\n"), "{md}");
+    }
+
+    #[test]
+    fn output_false_gives_no_panels() {
+        // `output: false` with the source shown: the panels are gone; pin whether a caption
+        // is left behind.
+        let vis = CellVisibility {
+            output: false,
+            ..CellVisibility::VISIBLE
+        };
+        let md = render_group_vis(&group_opts(serde_json::json!({})), vis);
+        assert!(!md.contains("{#fig-g-1}"), "{md}");
+        assert!(!md.contains("![A]("), "{md}");
+        // The group caption stays with the cell, with no panels (as plain Julia does).
+        assert!(
+            md.contains("::: {#fig-g .cell}") && md.contains("\nG\n:::"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn fig_subcap_true_keeps_ids_with_empty_subcaptions() {
+        let md = render_figs(
+            &group_opts(serde_json::json!({"fig.subcap": true})),
+            vec![plot(), plot()],
+        );
+        assert_group(&md);
+        assert!(md.contains("![](") && !md.contains("![A]("), "{md}");
+    }
+
+    #[test]
+    fn a_non_fig_label_keeps_the_recorded_routes_behavior() {
+        // Known difference from plain Julia (`foo-1`, `foo-2`); the flip changes it, not 7j.
+        let md = render_figs(
+            &group_opts(serde_json::json!({"label": "foo"})),
+            vec![plot(), plot()],
+        );
+        assert!(!md.contains("{#foo"), "{md}");
+        assert!(!md.contains("\nG\n"), "{md}");
+    }
+
+    #[test]
+    fn a_list_fig_cap_uses_its_first_entry_as_the_group_caption() {
+        let md = render_figs(
+            &group_opts(serde_json::json!({"fig.cap": ["L1", "L2"]})),
+            vec![plot(), plot()],
+        );
+        assert!(md.contains("::: {#fig-g .cell"), "{md}");
+        assert!(md.trim_end().ends_with("\nL1\n:::"), "{md}");
+    }
+
+    #[test]
+    fn a_plot_and_a_widget_is_one_plot_so_not_a_group() {
+        // The widget is not a plot (`is_plot_output`), so the count is 1: no group.
+        let mut data = std::collections::HashMap::new();
+        data.insert(
+            "application/vnd.jupyter.widget-view+json".to_string(),
+            serde_json::json!({"model_id": "abc"}),
+        );
+        data.insert("text/plain".to_string(), serde_json::json!("Widget"));
+        let widget = CellOutput::DisplayData {
+            data,
+            metadata: Default::default(),
+        };
+        let md = render_figs(&group_opts(serde_json::json!({})), vec![plot(), widget]);
+        assert!(!md.contains("{#fig-g-1}"), "{md}");
+        assert!(!md.contains("::: {#fig-g .cell"), "{md}");
+        // What renders instead: the one plot, then the widget's text fallback.
+        assert!(md.contains("![A]("), "{md}");
+        assert!(md.contains("Widget"), "{md}");
+    }
+
     #[test]
     fn each_figure_takes_its_own_subcaption() {
         let o = opts(serde_json::json!({"fig.subcap": ["first", "second"]}));
@@ -2484,6 +3128,23 @@ mod option_tests {
                 vec![image()]
             ),
             ["![](P){width=50% height=200}"]
+        );
+    }
+
+    /// OPR-7h: QuartoNotebookRunner puts the PNG size in the metadata of the last value, which
+    /// arrives as an `execute_result`, not a `display_data`. The plain route reads it from both.
+    #[test]
+    fn an_execute_result_image_takes_its_size_from_the_output_metadata_too() {
+        let mut data = crate::presenter::output::MimeBundle::new();
+        data.insert("image/png".to_string(), serde_json::json!(PNG));
+        let image = CellOutput::ExecuteResult {
+            execution_count: 1,
+            data,
+            metadata: serde_json::json!({"image/png": {"width": 140, "height": 90}}),
+        };
+        assert_eq!(
+            images(&CellOptions::default(), vec![image]),
+            ["![](P){width=140 height=90}"]
         );
     }
 
@@ -3204,5 +3865,399 @@ mod option_tests {
         let options = CellOptions::from_knitr(&serde_json::json!({"warning": false}))
             .with_output_kinds(vec![Some(Warning)]);
         assert_eq!(options.warning_selection(), None);
+    }
+    // ---- OPR-4d: `warning: false` with output kinds hides only the warnings ------------------
+
+    fn warnings_off() -> CellVisibility {
+        CellVisibility {
+            warning: false,
+            ..CellVisibility::VISIBLE
+        }
+    }
+
+    /// With the runner\'s kinds (Julia), `warning: false` drops the `@warn` and keeps the
+    /// `@info` and the raw stderr write, whose kind is `null`.
+    #[test]
+    fn warning_false_with_kinds_hides_only_the_warning_outputs() {
+        let md = render_cell_with(
+            "r",
+            "x",
+            &result(vec![
+                stderr("a message"),
+                stderr("Warning: w"),
+                stderr("plain"),
+            ]),
+            &kinded(),
+            &mut fig(),
+            warnings_off(),
+        );
+        assert!(md.contains("a message") && md.contains("plain"), "{md}");
+        assert!(!md.contains("Warning: w"), "{md}");
+    }
+
+    /// Without kinds (Jupyter) every stderr stream is dropped, as before.
+    #[test]
+    fn warning_false_without_kinds_hides_all_stderr() {
+        let opts = CellOptions::from_knitr(&serde_json::json!({}));
+        let md = render_cell_with(
+            "r",
+            "x",
+            &result(vec![stderr("a message"), stderr("Warning: w")]),
+            &opts,
+            &mut fig(),
+            warnings_off(),
+        );
+        assert!(
+            !md.contains("a message") && !md.contains("Warning: w"),
+            "{md}"
+        );
+    }
+}
+
+/// Jupyter `output: asis` (GH #1156): the shapes Quarto 1's `jupyter.ts` writes, checked
+/// against its renders in `claude-notes/issue-reports/1156/*.q1.md`.
+#[cfg(test)]
+mod jupyter_asis_tests {
+    use super::*;
+    use std::path::Path;
+
+    use crate::cell_options::options_to_config;
+    use crate::presenter::figures::FsFigureSink;
+    use crate::presenter::output::MimeBundle;
+
+    fn jupyter(yaml: &str) -> CellOptions {
+        let parsed = quarto_yaml::parse(yaml).expect("test YAML parses");
+        CellOptions::from_config(Some(&options_to_config(parsed).0))
+    }
+
+    fn stream(name: &str, text: &str) -> CellOutput {
+        CellOutput::Stream {
+            name: name.into(),
+            text: text.into(),
+        }
+    }
+
+    fn bundle(mime: &str, text: &str) -> MimeBundle {
+        let mut data = MimeBundle::new();
+        data.insert(mime.to_string(), serde_json::json!(text));
+        data
+    }
+
+    fn display(mime: &str, text: &str) -> CellOutput {
+        CellOutput::DisplayData {
+            data: bundle(mime, text),
+            metadata: serde_json::json!({}),
+        }
+    }
+
+    fn present(options: &CellOptions, echo: bool, outputs: Vec<CellOutput>) -> String {
+        present_in(Path::new("/nonexistent/doc.qmd"), options, echo, outputs)
+    }
+
+    fn present_in(
+        doc: &Path,
+        options: &CellOptions,
+        echo: bool,
+        outputs: Vec<CellOutput>,
+    ) -> String {
+        let mut fig = FsFigureSink::new(doc);
+        fig.begin_cell();
+        render_cell_with(
+            "python",
+            "print(x)\n",
+            &CellResult {
+                status: ExecuteStatus::Ok,
+                outputs,
+                execution_count: Some(1),
+            },
+            options,
+            &mut fig,
+            CellVisibility {
+                echo,
+                ..CellVisibility::VISIBLE
+            },
+        )
+    }
+
+    const ASIS: &str = "output: asis\n";
+
+    #[test]
+    fn stdout_is_written_as_markdown_without_any_div() {
+        let md = present(
+            &jupyter(ASIS),
+            false,
+            vec![stream(
+                "stdout",
+                "## Generated heading\n\nSome **bold** text.\n\n::: {.callout-note}\nA note.\n:::\n",
+            )],
+        );
+        assert_eq!(
+            md,
+            "\n\n\n## Generated heading\n\nSome **bold** text.\n\n::: {.callout-note}\nA note.\n:::\n"
+        );
+    }
+
+    #[test]
+    fn a_plain_execute_result_stays_a_fenced_block_without_its_div() {
+        // Q1 (`exp-variants.q1.md`, A): `'a trailing value'` is a code block, not markdown.
+        let data = bundle("text/plain", "'a trailing value'");
+        let md = present(
+            &jupyter(ASIS),
+            false,
+            vec![
+                stream("stdout", "Printed **markdown**.\n"),
+                CellOutput::ExecuteResult {
+                    data,
+                    metadata: serde_json::json!({}),
+                    execution_count: 1,
+                },
+            ],
+        );
+        assert!(md.contains("\nPrinted **markdown**.\n"), "{md}");
+        assert!(md.contains("\n```\n'a trailing value'\n```\n"), "{md}");
+        assert!(!md.contains(":::"), "no cell or output div: {md}");
+    }
+
+    #[test]
+    fn stderr_and_errors_are_bare_fences() {
+        let md = present(
+            &jupyter(ASIS),
+            false,
+            vec![
+                stream("stderr", "to stderr\n"),
+                CellOutput::Error {
+                    ename: "ValueError".into(),
+                    evalue: "boom".into(),
+                    traceback: vec![],
+                },
+            ],
+        );
+        assert!(md.contains("\n```\nto stderr\n```\n"), "{md}");
+        assert!(md.contains("\n```\nValueError: boom\n```\n"), "{md}");
+        assert!(!md.contains(":::"), "{md}");
+    }
+
+    #[test]
+    fn markdown_and_html_displays_lose_their_divs() {
+        let md = present(
+            &jupyter(ASIS),
+            false,
+            vec![
+                display("text/markdown", "Displayed *markdown*."),
+                display("text/html", "<b>hi</b>"),
+            ],
+        );
+        assert!(md.contains("\nDisplayed *markdown*.\n"), "{md}");
+        assert!(md.contains("\n```{=html}\n<b>hi</b>\n```\n"), "{md}");
+        assert!(!md.contains(":::"), "{md}");
+    }
+
+    #[test]
+    fn an_image_is_bare_figure_markdown() {
+        let dir = tempfile::tempdir().unwrap();
+        let md = present_in(
+            &dir.path().join("doc.qmd"),
+            &jupyter(ASIS),
+            false,
+            vec![display(
+                "image/png",
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+            )],
+        );
+        assert!(md.contains("\n![]("), "{md}");
+        assert!(!md.contains(":::"), "{md}");
+    }
+
+    #[test]
+    fn an_echoed_source_still_precedes_the_bare_output() {
+        // Q1 (`exp-variants.q1.md`, C): the code fence, then the printed markdown, no div.
+        let md = present(&jupyter(ASIS), true, vec![stream("stdout", "**bold**\n")]);
+        assert_eq!(md, "\n```{.python .cell-code}\nprint(x)\n```\n\n**bold**\n");
+    }
+
+    #[test]
+    fn classes_keep_the_cell_div() {
+        // Q1 (`exp-variants.q1.md`, D): `needCell`.
+        let md = present(
+            &jupyter("output: asis\nclasses: keepme\n"),
+            false,
+            vec![stream("stdout", "Inside a **div**.\n")],
+        );
+        assert!(md.starts_with("::: {.cell .keepme}"), "{md}");
+        assert!(md.contains("\nInside a **div**.\n"), "{md}");
+        assert!(!md.contains("cell-output"), "{md}");
+    }
+
+    #[test]
+    fn a_table_label_keeps_the_cell_div_with_its_id() {
+        // Q1 writes `::: {#tbl-gen .cell tbl-cap='…'}` around the generated pipe table.
+        let md = present(
+            &jupyter("output: asis\nlabel: tbl-gen\ntbl-cap: Generated table\n"),
+            false,
+            vec![stream("stdout", "| a | b |\n|---|---|\n| 1 | 2 |\n")],
+        );
+        assert!(md.starts_with("::: {#tbl-gen .cell"), "{md}");
+        assert!(md.contains("\n| a | b |\n|---|---|\n| 1 | 2 |\n"), "{md}");
+        assert!(!md.contains("cell-output"), "{md}");
+    }
+
+    #[test]
+    fn output_true_and_unset_are_not_asis() {
+        for yaml in ["output: true\n", "echo: false\n"] {
+            let md = present(&jupyter(yaml), false, vec![stream("stdout", "**x**\n")]);
+            assert!(md.contains("cell-output-stdout"), "{yaml}: {md}");
+        }
+    }
+
+    #[test]
+    fn a_cell_output_overrides_a_document_level_asis() {
+        // Q1 (`exp-doc-level.q1.md`): `execute: output: asis`, overridden by a cell.
+        let doc = options_to_config(quarto_yaml::parse(ASIS).unwrap()).0;
+        let resolve = |cell: Option<&str>| {
+            let cell = cell.map(|c| quarto_yaml::parse(c).unwrap());
+            CellOptions::from_config(
+                crate::presenter::visibility::resolve_cell_options(Some(&doc), cell).as_ref(),
+            )
+        };
+        assert!(resolve(None).output_asis());
+        assert!(resolve(Some("echo: false\n")).output_asis());
+        assert!(!resolve(Some("output: true\n")).output_asis());
+    }
+}
+
+/// OPR-7g: printed text goes through `ansi::output_text`; the record stays raw.
+#[cfg(test)]
+mod ansi_tests {
+    use std::collections::HashMap;
+
+    use super::*;
+    use crate::presenter::figures::FsFigureSink;
+
+    const RED: &str = "\x1b[31mred\x1b[0m";
+
+    fn markdown(outputs: Vec<CellOutput>, options: &CellOptions) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        fig.begin_cell();
+        let result = CellResult {
+            status: ExecuteStatus::Ok,
+            outputs,
+            execution_count: Some(1),
+        };
+        format_outputs_with(&result, &mut fig, true, options, &mut 0, 0)
+    }
+
+    fn text_output(variant_display: bool) -> CellOutput {
+        let mut data = HashMap::new();
+        data.insert("text/plain".to_string(), serde_json::json!(RED));
+        let metadata = serde_json::json!({});
+        if variant_display {
+            CellOutput::DisplayData { data, metadata }
+        } else {
+            CellOutput::ExecuteResult {
+                data,
+                metadata,
+                execution_count: 1,
+            }
+        }
+    }
+
+    fn every_text_site() -> Vec<CellOutput> {
+        vec![
+            CellOutput::Stream {
+                name: "stdout".into(),
+                text: RED.into(),
+            },
+            CellOutput::Stream {
+                name: "stderr".into(),
+                text: RED.into(),
+            },
+            text_output(true),
+            text_output(false),
+            CellOutput::Error {
+                ename: "\x1b[1mE\x1b[0m".into(),
+                evalue: RED.into(),
+                traceback: vec![RED.into()],
+            },
+        ]
+    }
+
+    #[test]
+    fn a_cell_with_no_resolved_options_is_presented_without_escapes() {
+        let md = markdown(every_text_site(), &CellOptions::default());
+        assert!(!md.contains('\x1b'), "{md:?}");
+        assert_eq!(md.matches("red").count(), 6, "{md}");
+    }
+
+    #[test]
+    fn a_cell_with_resolved_options_keeps_the_text_it_was_given() {
+        let options = CellOptions::default().with_engine_text(true);
+        let md = markdown(every_text_site()[..4].to_vec(), &options);
+        assert_eq!(md.matches(RED).count(), 4, "{md:?}");
+    }
+
+    #[test]
+    fn results_asis_goes_through_the_same_function() {
+        let asis = CellOptions::from_knitr(&serde_json::json!({"results": "asis"}));
+        let raw = markdown(
+            every_text_site()[..1].to_vec(),
+            &asis.clone().with_engine_text(true),
+        );
+        assert!(raw.contains('\x1b'), "{raw:?}");
+        let stripped = markdown(every_text_site()[..1].to_vec(), &asis);
+        assert!(
+            !stripped.contains('\x1b') && stripped.contains("red"),
+            "{stripped:?}"
+        );
+    }
+
+    #[test]
+    fn an_error_status_with_no_outputs_is_stripped() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        fig.begin_cell();
+        let result = CellResult {
+            status: ExecuteStatus::Error {
+                ename: "E".into(),
+                evalue: RED.into(),
+                traceback: vec![RED.into()],
+            },
+            outputs: vec![],
+            execution_count: None,
+        };
+        let md = format_outputs_with(&result, &mut fig, true, &CellOptions::default(), &mut 0, 0);
+        assert!(!md.contains('\x1b') && md.contains("red"), "{md:?}");
+    }
+
+    #[test]
+    fn presenting_does_not_touch_the_record_text() {
+        let outputs = every_text_site();
+        let _ = markdown(outputs.clone(), &CellOptions::default());
+        match &outputs[0] {
+            CellOutput::Stream { text, .. } => assert_eq!(text, RED),
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn the_stored_record_stays_raw_through_presentation_write_and_read() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/records/basic.json")).unwrap();
+        value["cells"][0]["outputs"] = serde_json::json!([
+            {"output_type": "stream", "name": "stdout", "text": [RED]},
+            {"output_type": "error", "ename": "E", "evalue": RED, "traceback": [RED]}
+        ]);
+        let record = crate::record::read_record_value(value).unwrap();
+        let before = crate::record::write_record(&record).unwrap();
+
+        let result = CellResult::from_nbformat(&record.cells[0].outputs, Some(1));
+        let md = markdown(result.outputs, &CellOptions::default());
+        assert!(!md.contains('\x1b') && md.contains("red"), "{md:?}");
+
+        let written = crate::record::write_record(&record).unwrap();
+        assert_eq!(written, before);
+        assert!(written.contains("\\u001b[31mred"), "{written}");
+        let reread = crate::record::read_record(&written).unwrap();
+        assert_eq!(reread.cells[0].outputs, record.cells[0].outputs);
     }
 }

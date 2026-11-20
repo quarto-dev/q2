@@ -1,0 +1,8 @@
+---
+title: Records marimo
+---
+
+```{python.marimo}
+x = 1
+x + 1
+```

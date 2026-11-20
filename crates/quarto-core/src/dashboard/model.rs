@@ -240,11 +240,11 @@ pub struct Panel {
 
 impl Panel {
     pub fn to_block(self) -> Block {
-        Block::Custom(
+        Block::Custom(Box::new(
             custom(PANEL_TYPE, &self.data, generated())
                 .with_slot("panel", Slot::Blocks(self.panel))
                 .with_slot("content", Slot::Blocks(self.content)),
-        )
+        ))
     }
 
     pub fn from_custom(node: &CustomNode) -> Option<Self> {
@@ -290,7 +290,7 @@ fn generated() -> SourceInfo {
 }
 
 fn empty_attr() -> Attr {
-    (String::new(), Vec::new(), LinkedHashMap::new())
+    (String::new(), Vec::new(), LinkedHashMap::new()).into()
 }
 
 fn data_of<T: for<'de> Deserialize<'de>>(node: &CustomNode) -> Option<T> {
@@ -312,10 +312,10 @@ fn custom(type_name: &str, data: impl Serialize, source_info: SourceInfo) -> Cus
 
 impl Container {
     pub fn to_block(self) -> Block {
-        Block::Custom(
+        Block::Custom(Box::new(
             custom(CONTAINER_TYPE, &self.data, generated())
                 .with_slot("children", Slot::Blocks(self.children)),
-        )
+        ))
     }
 
     pub fn from_custom(node: &CustomNode) -> Option<Self> {
@@ -329,10 +329,10 @@ impl Container {
 
 impl Page {
     pub fn to_block(self) -> Block {
-        Block::Custom(
+        Block::Custom(Box::new(
             custom(PAGE_TYPE, &self.data, generated())
                 .with_slot("content", Slot::Blocks(self.content)),
-        )
+        ))
     }
 
     pub fn from_custom(node: &CustomNode) -> Option<Self> {
@@ -366,7 +366,7 @@ impl Card {
         if !self.sidebar.is_empty() {
             node.set_slot("sidebar", Slot::Blocks(self.sidebar));
         }
-        Block::Custom(node)
+        Block::Custom(Box::new(node))
     }
 
     pub fn from_custom(node: &CustomNode) -> Option<Self> {

@@ -1,3 +1,5 @@
+quarto-required: "^2"
+
 project:
   type: website
   # Staged example output for `.embed-example-iframe` embeds (bd-z1smhvuo).
@@ -53,9 +55,11 @@ website:
           contents:
             - guides/authoring/index.qmd
             - guides/projects/create.qmd
+            - guides/projects/quarto-version.qmd
             - guides/projects/book.qmd
             - guides/projects/preview.qmd
             - guides/projects/render-options.qmd
+            - guides/projects/dry-run.qmd
             - guides/projects/paths.qmd
             - guides/projects/directory-metadata.qmd
             - guides/projects/listings.qmd
@@ -108,10 +112,13 @@ website:
             - guides/authoring/scholarly-writing.qmd
             - guides/authoring/document-language.qmd
             - guides/authoring/computations.qmd
+            - guides/authoring/execution-context.qmd
             - guides/authoring/notebooks.qmd
             - guides/authoring/engines.qmd
             - guides/authoring/jupyter-kernels.qmd
+            - guides/authoring/knitr.qmd
             - guides/authoring/execution-records.qmd
+            - guides/authoring/convert.qmd
             - guides/authoring/navigation.qmd
             - guides/authoring/extensions.qmd
             - guides/authoring/components.qmd
@@ -120,7 +127,9 @@ website:
     - id: tools
       title: "Tools"
       contents:
+        - tools/q2-lsp.qmd
         - tools/q2-mcp.qmd
+        - tools/terminal-output.qmd
     - id: guide
       collapse-level: 1
       contents:
@@ -392,6 +401,11 @@ website:
             - errors/project/Q-5-50.qmd
             - errors/project/Q-5-51.qmd
             - errors/project/Q-5-52.qmd
+            - errors/project/Q-5-53.qmd
+            - errors/project/Q-5-54.qmd
+            - errors/project/Q-5-55.qmd
+            - errors/project/Q-5-56.qmd
+            - errors/project/Q-5-57.qmd
         - section: "include"
           contents:
             - errors/include/Q-17-1.qmd
@@ -455,6 +469,9 @@ website:
             - errors/engine/Q-18-12.qmd
             - errors/engine/Q-18-13.qmd
             - errors/engine/Q-18-14.qmd
+            - errors/engine/Q-18-15.qmd
+            - errors/engine/Q-18-16.qmd
+            - errors/engine/Q-18-17.qmd
         - section: "image"
           contents:
             - errors/image/Q-19-1.qmd

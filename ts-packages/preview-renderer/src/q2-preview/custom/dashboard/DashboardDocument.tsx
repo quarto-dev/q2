@@ -31,7 +31,7 @@ import {
     NavbarSlot,
     SkipLinkSlot,
 } from '../../chromeSlots';
-import { appendColorModeClass } from '../../PreviewDocument';
+import { appendColorModeClass, composeBodyClasses } from '../../PreviewDocument';
 import { DashboardPagesContext } from './shared';
 
 type MetaValue = { t?: string; c?: unknown } | undefined;
@@ -180,13 +180,15 @@ export const DashboardDocument = ({
         extractMetaBool(getMetaPath(meta, ['navigation', 'sidebar', 'pinned'])) === true;
 
     // <body> classes, as the template composes them: the dashboard classes,
-    // then `$body-classes$` (a user `body-classes` wins wholesale; else the
-    // site's classes, `fullcontent`, and `nav-fixed` under a navbar, as in
-    // `PreviewDocument`), then the lowering's.
-    const userBodyClasses = extractMetaString(meta['body-classes']);
-    const structural =
-        userBodyClasses ??
-        [nav('body-classes'), 'fullcontent', navbarHtml ? 'nav-fixed' : null].filter(Boolean).join(' ');
+    // then `$body-classes$` (the site's classes, a user `body-classes` added
+    // on top as in Q1 (GH #1218), `fullcontent`, and `nav-fixed` under a
+    // navbar, as in `PreviewDocument`), then the lowering's.
+    const structural = composeBodyClasses([
+        nav('body-classes'),
+        extractMetaString(meta['body-classes']),
+        'fullcontent',
+        navbarHtml ? 'nav-fixed' : undefined,
+    ]);
     const bodyClasses = appendColorModeClass(
         [
             'quarto-dashboard',

@@ -31,6 +31,7 @@ import { getFileHandle, getIndexHandle, getConnectionInfo } from '@quarto/previe
 import ConnectionStatusDialog from './ConnectionStatusDialog';
 import { useNow } from '../hooks/useNow';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { useSignInStatus } from './auth/SignInStatus';
 import { syncStatus as s } from '../strings';
 import './SyncStatusBadge.css';
 
@@ -86,6 +87,10 @@ export default function SyncStatusBadge({
   const now = useNow(1000);
   const online = useOnlineStatus();
   const [showDialog, setShowDialog] = useState(false);
+  // Signed out (auth configured, no session): sync is gated off, so
+  // "Offline" gets its reason spelled out.
+  const signInStatus = useSignInStatus();
+  const signedOut = signInStatus !== null && signInStatus.email === null;
 
   // Resolve the watched doc on every tick; handles appear as the
   // project loads / files open.
@@ -138,11 +143,17 @@ export default function SyncStatusBadge({
   let detail: string;
   /** Full description for the tooltip and accessible name. */
   let full: string;
+  /** Verbose text after the emphasized "Offline" (disconnected only). */
+  let offlineRest: string | null = null;
+  /** "Offline", plus the reason when signed out. */
+  let offlineLabel: string = s.savingLocally;
   if (!connected) {
     dotClass = 'yellow';
     const ago = lastSyncedAt ? agoText(now - lastSyncedAt) : s.neverSynced;
     detail = ago;
-    full = `${s.savingLocally} — ${lastSyncedAt ? s.syncedAgo(ago) : s.neverSynced}`;
+    offlineRest = lastSyncedAt ? s.syncedAgo(ago) : s.neverSynced;
+    offlineLabel = signedOut ? `${s.savingLocally} · ${s.notSignedIn}` : s.savingLocally;
+    full = `${offlineLabel} — ${offlineRest}`;
   } else if (inMemory && now - inMemory < SYNCING_WINDOW_MS) {
     // Green only for sync activity observed *this session* — the
     // persisted/seeded timestamp must not light "just now" on load.
@@ -173,7 +184,14 @@ export default function SyncStatusBadge({
         {dotPosition === 'start' && dot}
         {visible && (
           <span className="sync-status-text">
-            <em>{visible}</em>
+            {verbose && offlineRest !== null ? (
+              <>
+                <strong className="sync-status-offline">{offlineLabel}</strong>{' '}
+                <em>{offlineRest}</em>
+              </>
+            ) : (
+              <em>{visible}</em>
+            )}
           </span>
         )}
         {dotPosition === 'end' && dot}

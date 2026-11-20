@@ -68,9 +68,15 @@ impl DiagnosticCollector {
         &self.diagnostics
     }
 
-    /// Render all diagnostics to text strings
+    /// Render all diagnostics to plain text strings (no ANSI color, no
+    /// OSC 8 hyperlinks: these are stored strings, not terminal output).
     pub fn to_text(&self) -> Vec<String> {
-        self.diagnostics.iter().map(|d| d.to_text(None)).collect()
+        self.diagnostics
+            .iter()
+            .map(|d| {
+                d.to_text_with_options(None, &quarto_error_reporting::TextRenderOptions::plain())
+            })
+            .collect()
     }
 
     /// Render all diagnostics to JSON strings

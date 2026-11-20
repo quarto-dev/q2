@@ -1,0 +1,37 @@
+---
+source: crates/quarto-highlight/tests/integration/golden.rs
+assertion_line: 49
+description: "# Build stage\nFROM rust:1.80 AS build\nRUN cargo build --release\nCOPY --from=build /app /app\n"
+---
+[
+  [
+    0,
+    14,
+    "comment"
+  ],
+  [
+    14,
+    18,
+    "keyword"
+  ],
+  [
+    23,
+    24,
+    "operator"
+  ],
+  [
+    29,
+    31,
+    "keyword"
+  ],
+  [
+    38,
+    41,
+    "keyword"
+  ],
+  [
+    64,
+    68,
+    "keyword"
+  ]
+]

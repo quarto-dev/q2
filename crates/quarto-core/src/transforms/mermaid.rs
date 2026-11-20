@@ -264,11 +264,11 @@ fn convert_mermaid_blocks(blocks: &mut Blocks, found: &mut bool) {
                 };
                 let text = format!("<pre class=\"{class}\">\n{}\n</pre>", html_escape(&cb.text));
                 let source_info = cb.source_info.clone();
-                *block = Block::RawBlock(RawBlock {
+                *block = Block::RawBlock(Box::new(RawBlock {
                     format: "html".to_string(),
                     text,
                     source_info,
-                });
+                }));
             }
             Block::BlockQuote(bq) => convert_mermaid_blocks(&mut bq.content, found),
             Block::Div(div) => convert_mermaid_blocks(&mut div.content, found),
@@ -351,16 +351,17 @@ mod tests {
     use quarto_source_map::SourceInfo;
 
     fn make_codeblock(classes: &[&str], text: &str) -> Block {
-        Block::CodeBlock(CodeBlock {
+        Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 String::new(),
                 classes.iter().map(|c| c.to_string()).collect(),
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: text.to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn make_test_project() -> ProjectContext {
@@ -829,16 +830,17 @@ mod tests {
         let inner = make_codeblock(&["mermaid"], "flowchart LR\n  a --> b");
         let mut ast = Pandoc {
             meta: default_meta(),
-            blocks: vec![Block::Div(Div {
+            blocks: vec![Block::Div(Box::new(Div {
                 attr: (
                     String::new(),
                     vec!["section".to_string()],
                     hashlink::LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content: vec![inner],
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
         run_transform(&mut ast, Format::html()).await;
 

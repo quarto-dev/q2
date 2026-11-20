@@ -51,6 +51,26 @@ export function appendColorModeClass(structural: string): string {
 }
 
 /**
+ * Join body-class sources in order, dropping empty sources and
+ * emitting each class once at its first position. Mirrors the
+ * dedupe in `crates/quarto-core/src/template.rs`'s body-class compose
+ * (GH #1218: a user `body-classes` adds to the computed classes).
+ */
+export function composeBodyClasses(sources: (string | undefined)[]): string {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const src of sources) {
+        for (const tok of (src ?? '').split(/\s+/)) {
+            if (tok !== '' && !seen.has(tok)) {
+                seen.add(tok);
+                out.push(tok);
+            }
+        }
+    }
+    return out.join(' ');
+}
+
+/**
  * q2-preview's document-root wrapper. Registered into `registry.ts`
  * under the `'Ast'` key. Mirrors the HTML pipeline's
  * `<div id="quarto-content"><main class="content">` wrapper at
@@ -117,36 +137,30 @@ export const PreviewDocument = ({
         'Skip to main content';
 
     // Mirror Rust `render_with_compiled_template`'s body-class
-    // compose (the accumulating list, bd-ersobfbt). Precedence for the
-    // structural base:
-    //   1. User-set top-level `body-classes` (wins WHOLESALE — the
-    //      compose below, including the nav-fixed append, is skipped,
-    //      matching the Rust `ctx.get("body-classes").is_none()` guard).
-    //   2. `rendered.navigation.body-classes` populated by
+    // compose (the accumulating list, bd-ersobfbt), in order:
+    //   1. `rendered.navigation.body-classes` populated by
     //      `SidebarRenderTransform` (e.g. `nav-sidebar floating`,
     //      `nav-sidebar docked`) — required for Bootstrap's
-    //      sidebar-aware grid layout to take effect.
-    //   3. no sidebar → empty base. Falls through to the default
-    //      (no-class) wide grid, whose right margin column is
-    //      `minmax(0.3*mw, 0.58*mw)` and has room for a TOC.
-    // Onto the structural base: `fullcontent` when nothing occupies
-    // the right margin — the TOC, listing categories in the margin, or
-    // the `page-layout: full` main-column remedy below
-    // (bd-no-toc-reserves-margin-column-s8nonx0w). It is orthogonal to
-    // the structural base, so it appends rather than replaces: a page
-    // in a sidebar gets `nav-sidebar docked … fullcontent`. The
-    // `fullcontent` mixin shrinks the right margin to ~70px without a
-    // sidebar (`0.14*mw` per segment) and to zero in the docked/floating
-    // variants; either would squash a TOC.
-    // Then: `nav-fixed` when a navbar is rendered
-    // (bd-ersobfbt — the `#quarto-header` is `fixed-top`, and
-    // `body.nav-fixed { padding-top }` is its pre-JS compensation;
-    // same condition as Q1's postprocessor and the Rust compose in
-    // template.rs — keep the three in sync). A secondary-nav-only
-    // page (sidebar site, no navbar) gets NO nav-fixed, matching Q1.
-    // Empty string for the *structural* class is the user's opt-out;
-    // only `undefined` triggers the fallback chain. The color-mode
-    // class (`quarto-light`) is then appended in all cases (bd-tkamn).
+    //      sidebar-aware grid layout to take effect. No sidebar →
+    //      nothing; the body falls through to the default (no-class)
+    //      wide grid, whose right margin column has room for a TOC.
+    //   2. User-set top-level `body-classes`, added to the computed
+    //      classes rather than replacing them, as in Q1 (GH #1218).
+    //   3. `fullcontent` when nothing occupies the right margin — the
+    //      TOC, listing categories in the margin, or the
+    //      `page-layout: full` main-column remedy below
+    //      (bd-no-toc-reserves-margin-column-s8nonx0w). The
+    //      `fullcontent` mixin shrinks the right margin to ~70px without
+    //      a sidebar (`0.14*mw` per segment) and to zero in the
+    //      docked/floating variants; either would squash a TOC.
+    //   4. `nav-fixed` when a navbar is rendered (bd-ersobfbt — the
+    //      `#quarto-header` is `fixed-top`, and `body.nav-fixed
+    //      { padding-top }` is its pre-JS compensation; same condition
+    //      as Q1's postprocessor and the Rust compose in template.rs —
+    //      keep the three in sync). A secondary-nav-only page (sidebar
+    //      site, no navbar) gets NO nav-fixed, matching Q1.
+    // Repeated classes are emitted once. The color-mode class
+    // (`quarto-light`) is then appended in all cases (bd-tkamn).
     const userBodyClasses = extractMetaString(meta['body-classes']);
     const renderedBodyClasses = extractMetaString(
         getMetaPath(meta, ['rendered', 'navigation', 'body-classes']),
@@ -161,22 +175,14 @@ export const PreviewDocument = ({
     const hasMarginCategories =
         marginCategoriesHtml !== undefined && marginCategoriesHtml !== '';
     const pageLayoutFull = pageLayout === 'full';
-    const structuralBodyClasses =
-        userBodyClasses ??
-        [
-            renderedBodyClasses,
-            !hasToc && !hasMarginCategories && !pageLayoutFull
-                ? 'fullcontent'
-                : undefined,
-        ]
-            .filter((c): c is string => c !== undefined && c !== '')
-            .join(' ');
-    const composedBodyClasses =
-        userBodyClasses === undefined && navbarHtml
-            ? [structuralBodyClasses, 'nav-fixed']
-                  .filter((c) => c !== '')
-                  .join(' ')
-            : structuralBodyClasses;
+    const composedBodyClasses = composeBodyClasses([
+        renderedBodyClasses,
+        userBodyClasses,
+        !hasToc && !hasMarginCategories && !pageLayoutFull
+            ? 'fullcontent'
+            : undefined,
+        navbarHtml ? 'nav-fixed' : undefined,
+    ]);
     // bd-tkamn (D6 react): mirror Rust `template.rs::append_color_mode_class`
     // so the preview's `<body>` carries `quarto-light` regardless of
     // how the structural class was computed (including the TOC-

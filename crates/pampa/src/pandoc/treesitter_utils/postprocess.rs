@@ -301,7 +301,7 @@ fn extract_cell_attrs(blocks: &mut Blocks) -> CellAttrs {
 
 /// Create an empty Attr
 fn empty_table_attr() -> Attr {
-    (String::new(), Vec::new(), LinkedHashMap::new())
+    (String::new(), Vec::new(), LinkedHashMap::new()).into()
 }
 
 /// Compute a tight hull `SourceInfo` spanning from `first.start` to `last.end`.
@@ -448,11 +448,11 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
         }
     }
     let table_attr = (table_id, table_classes, table_kvs);
-    let table_attr_source = AttrSourceInfo {
-        id: div.attr_source.id.clone(),
-        classes: table_class_sources,
-        attributes: table_kv_sources,
-    };
+    let table_attr_source = AttrSourceInfo::new(
+        div.attr_source.id.clone(),
+        table_class_sources,
+        table_kv_sources,
+    );
 
     // Split content: caption blocks vs the rows BulletList
     let mut content = div.content;
@@ -605,8 +605,8 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
         attr_source: empty_attr_source(),
     };
 
-    Block::Table(Table {
-        attr: table_attr,
+    Block::Table(Box::new(Table {
+        attr: table_attr.into(),
         caption,
         colspec,
         head,
@@ -614,7 +614,7 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
         foot,
         source_info,
         attr_source: table_attr_source,
-    })
+    }))
 }
 
 /// Pop a trailing `Inline::Attr` off a table caption's inlines and merge it
@@ -632,8 +632,8 @@ fn take_caption_attr(
         unreachable!("checked above");
     };
     let content = trim_inlines(content).0;
-    let (id, classes, kvs) = inline_attr.attr;
-    let source = inline_attr.attr_source;
+    let (id, classes, kvs) = inline_attr.attr.into_tuple();
+    let source = inline_attr.attr_source.into_parts();
 
     // Pad the source vectors so a short (or empty) AttrSourceInfo never
     // drops a value; a missing source is just `None`.
@@ -1163,12 +1163,12 @@ pub fn postprocess(
                         attr.0 = final_id;
                         if !is_empty_attr(&attr) || trailing_lb_converted {
                             header.attr = attr;
-                            FilterResult(vec![Block::Header(header)], true)
+                            FilterResult(vec![Block::Header(Box::new(header))], true)
                         } else {
                             Unchanged(header)
                         }
                     } else if trailing_lb_converted {
-                        FilterResult(vec![Block::Header(header)], true)
+                        FilterResult(vec![Block::Header(Box::new(header))], true)
                     } else {
                         Unchanged(header)
                     }
@@ -1179,7 +1179,7 @@ pub fn postprocess(
                     header.attr = inline_attr.attr;
                     header.attr_source = inline_attr.attr_source;
                     header.content = trim_inlines(header.content).0;
-                    FilterResult(vec![Block::Header(header)], true)
+                    FilterResult(vec![Block::Header(Box::new(header))], true)
                 }
             })
             // attempt to desugar single-image paragraphs into figures
@@ -1192,7 +1192,7 @@ pub fn postprocess(
                 // Item 3 of the structural desugaring set (`pandoc::desugar`):
                 // a single-image paragraph with alt text is a figure.
                 if let Some(figure) = implicit_figure(&para) {
-                    return FilterResult(vec![Block::Figure(figure)], true);
+                    return FilterResult(vec![Block::Figure(Box::new(figure))], true);
                 }
 
                 // Not a figure conversion case, but may have converted trailing LineBreak
@@ -1220,7 +1220,7 @@ pub fn postprocess(
             // itself (see `desugar_div`).
             .with_block(|block, _ctx| match block {
                 Block::Div(div) => {
-                    Unchanged(desugar_div(div, &mut error_collector_ref.borrow_mut()))
+                    Unchanged(desugar_div(*div, &mut error_collector_ref.borrow_mut()))
                 }
                 other => Unchanged(other),
             })
@@ -1490,7 +1490,7 @@ pub fn postprocess(
                 };
 
                 // Return the transformed table
-                FilterResult(vec![Block::Table(table)], false)
+                FilterResult(vec![Block::Table(Box::new(table))], false)
             })
             // NOTE: We intentionally do NOT convert shortcodes to spans here.
             // Shortcodes remain as Inline::Shortcode so that ShortcodeResolveTransform
@@ -1509,74 +1509,74 @@ pub fn postprocess(
                 let mut kv = LinkedHashMap::new();
                 kv.insert("reference-id".to_string(), note_ref.id.clone());
                 FilterResult(
-                    vec![Inline::Span(Span {
-                        attr: (String::new(), vec!["quarto-note-reference".to_string()], kv),
+                    vec![Inline::Span(Box::new(Span {
+                        attr: (String::new(), vec!["quarto-note-reference".to_string()], kv).into(),
                         content: vec![],
                         source_info: note_ref.source_info,
                         // Both the class and the kv are synthesized; `None`
                         // placeholders keep the sidecar aligned (bd-nq3ed2im).
-                        attr_source: crate::pandoc::attr::AttrSourceInfo {
-                            id: None,
-                            classes: vec![None],
-                            attributes: vec![(None, None)],
-                        },
-                    })],
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::new(None, vec![None], vec![(None, None)]),
+                    }))],
                     false,
                 )
             })
             .with_insert(|insert, _ctx| {
                 let (content, _changed) = trim_inlines(insert.content);
                 let mut classes = vec!["quarto-insert".to_string()];
-                classes.extend(insert.attr.1);
+                let (id, old_classes, kvs) = insert.attr.into_tuple();
+                classes.extend(old_classes);
                 FilterResult(
-                    vec![Inline::Span(Span {
-                        attr: (insert.attr.0, classes, insert.attr.2),
+                    vec![Inline::Span(Box::new(Span {
+                        attr: (id, classes, kvs).into(),
                         content,
                         source_info: insert.source_info,
                         attr_source: with_synthesized_leading_class(insert.attr_source),
-                    })],
+                    }))],
                     true,
                 )
             })
             .with_delete(|delete, _ctx| {
                 let (content, _changed) = trim_inlines(delete.content);
                 let mut classes = vec!["quarto-delete".to_string()];
-                classes.extend(delete.attr.1);
+                let (id, old_classes, kvs) = delete.attr.into_tuple();
+                classes.extend(old_classes);
                 FilterResult(
-                    vec![Inline::Span(Span {
-                        attr: (delete.attr.0, classes, delete.attr.2),
+                    vec![Inline::Span(Box::new(Span {
+                        attr: (id, classes, kvs).into(),
                         content,
                         source_info: delete.source_info,
                         attr_source: with_synthesized_leading_class(delete.attr_source),
-                    })],
+                    }))],
                     true,
                 )
             })
             .with_highlight(|highlight, _ctx| {
                 let (content, _changed) = trim_inlines(highlight.content);
                 let mut classes = vec!["quarto-highlight".to_string()];
-                classes.extend(highlight.attr.1);
+                let (id, old_classes, kvs) = highlight.attr.into_tuple();
+                classes.extend(old_classes);
                 FilterResult(
-                    vec![Inline::Span(Span {
-                        attr: (highlight.attr.0, classes, highlight.attr.2),
+                    vec![Inline::Span(Box::new(Span {
+                        attr: (id, classes, kvs).into(),
                         content,
                         source_info: highlight.source_info,
                         attr_source: with_synthesized_leading_class(highlight.attr_source),
-                    })],
+                    }))],
                     true,
                 )
             })
             .with_edit_comment(|edit_comment, _ctx| {
                 let (content, _changed) = trim_inlines(edit_comment.content);
                 let mut classes = vec!["quarto-edit-comment".to_string()];
-                classes.extend(edit_comment.attr.1);
+                let (id, old_classes, kvs) = edit_comment.attr.into_tuple();
+                classes.extend(old_classes);
                 FilterResult(
-                    vec![Inline::Span(Span {
-                        attr: (edit_comment.attr.0, classes, edit_comment.attr.2),
+                    vec![Inline::Span(Box::new(Span {
+                        attr: (id, classes, kvs).into(),
                         content,
                         source_info: edit_comment.source_info,
                         attr_source: with_synthesized_leading_class(edit_comment.attr_source),
-                    })],
+                    }))],
                     true,
                 )
             })
@@ -1635,12 +1635,12 @@ pub fn postprocess(
                             let mut classes = vec!["quarto-math-with-attribute".to_string()];
                             classes.extend(inline_attr.attr.1.clone());
 
-                            math_processed.push(Inline::Span(Span {
+                            math_processed.push(Inline::Span(Box::new(Span {
                                 attr: (
                                     inline_attr.attr.0.clone(),
                                     classes,
                                     inline_attr.attr.2.clone(),
-                                ),
+                                ).into(),
                                 content: vec![Inline::Math(math.clone())],
                                 source_info: math_with_attr_span_source_info(
                                     &math.source_info,
@@ -1650,7 +1650,7 @@ pub fn postprocess(
                                 attr_source: with_synthesized_leading_class(
                                     inline_attr.attr_source.clone(),
                                 ),
-                            }));
+                            })));
 
                             // Skip the Math, optional Space, and Attr
                             i = attr_idx + 1;
@@ -1687,7 +1687,7 @@ pub fn postprocess(
                                 {
                                     // Valid cite - transition to state 1
                                     state = 1;
-                                    pending_cite = Some(cite.clone());
+                                    pending_cite = Some(*cite.clone());
                                 } else {
                                     // Not a simple cite, just add it
                                     result.push(inline);
@@ -1705,7 +1705,7 @@ pub fn postprocess(
                             } else {
                                 // Not a space, emit pending cite and reset
                                 if let Some(cite) = pending_cite.take() {
-                                    result.push(Inline::Cite(cite));
+                                    result.push(Inline::Cite(Box::new(cite)));
                                 }
                                 result.push(inline);
                                 state = 0;
@@ -1789,13 +1789,13 @@ pub fn postprocess(
                                         // range which is outside the original cite range.
                                         cite.source_info =
                                             hull_source_infos(&cite.source_info, &span.source_info);
-                                        result.push(Inline::Cite(cite));
+                                        result.push(Inline::Cite(Box::new(cite)));
                                     }
                                     state = 0;
                                 } else {
                                     // Invalid span, emit pending cite, space, and span
                                     if let Some(cite) = pending_cite.take() {
-                                        result.push(Inline::Cite(cite));
+                                        result.push(Inline::Cite(Box::new(cite)));
                                     }
                                     if let Some(space) = pending_space.take() {
                                         result.push(Inline::Space(space));
@@ -1806,7 +1806,7 @@ pub fn postprocess(
                             } else {
                                 // Not a span, emit pending cite, space, and current inline
                                 if let Some(cite) = pending_cite.take() {
-                                    result.push(Inline::Cite(cite));
+                                    result.push(Inline::Cite(Box::new(cite)));
                                 }
                                 if let Some(space) = pending_space.take() {
                                     result.push(Inline::Space(space));
@@ -1821,7 +1821,7 @@ pub fn postprocess(
 
                 // Handle any pending cite at the end
                 if let Some(cite) = pending_cite {
-                    result.push(Inline::Cite(cite));
+                    result.push(Inline::Cite(Box::new(cite)));
                     if state == 2
                         && let Some(space) = pending_space
                     {

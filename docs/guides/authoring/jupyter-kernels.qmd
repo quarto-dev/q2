@@ -99,6 +99,21 @@ not make a page without cells start the engine. See
 [Inline expressions](computations.qmd#inline-expressions) for where spans are
 and are not evaluated.
 
+## Each document has its own kernel
+
+Every document runs on its own kernel process, even when several documents of
+a project use the same kernel and render in parallel. One document never sees
+the variables, imports or other state of another, as in Quarto 1.
+
+- `q2 render` starts a document's kernel when the document's first cell runs
+  and shuts it down as soon as the document finishes, so at most one kernel
+  per parallel render job is running at a time.
+- `q2 preview` keeps each previewed document's kernel running between
+  re-renders, so a re-render does not pay the startup cost again (as Quarto 1's
+  preview does). The kernel keeps its state across re-renders: a variable
+  defined by a cell you have since deleted is still defined until the preview
+  stops.
+
 ## Running R cells on Ark {#r-on-jupyter}
 
 By default `{r}` cells run in knitr. To run them on a Jupyter R kernel

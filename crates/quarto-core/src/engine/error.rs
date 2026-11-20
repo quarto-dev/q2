@@ -164,6 +164,18 @@ pub enum ExecutionError {
         preserved: Option<PathBuf>,
     },
 
+    /// A chunk sets an option key Quarto reserves for execution records
+    /// (`quarto-unit-id`). Surfaced as `Q-18-17`; the author must remove the line.
+    #[error("`{key}` is reserved by Quarto (code chunk {chunk})")]
+    ReservedOption {
+        /// The engine whose chunk carries the key.
+        engine: String,
+        /// The reserved key as the author wrote it.
+        key: String,
+        /// 1-indexed position of the chunk among the document's code chunks.
+        chunk: usize,
+    },
+
     /// Engine-specific error with custom message.
     #[error("{0}")]
     Other(String),

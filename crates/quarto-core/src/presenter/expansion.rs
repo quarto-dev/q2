@@ -64,7 +64,7 @@ pub fn render_expansions(
     scope: Option<&ConfigValue>,
     fig: &mut dyn FigureSink,
 ) -> Result<String, String> {
-    render_each(lang, expansions, scope, fig, false)
+    render_each(lang, expansions, scope, true, fig, false)
 }
 
 /// Present an expanded unit as the engine's own markdown does: the author's cell first,
@@ -78,6 +78,7 @@ pub fn render_expanded_unit(
     own_visibility: CellVisibility,
     expansions: &[Expansion],
     scope: Option<&ConfigValue>,
+    presenter_enforces_warning: bool,
     fig: &mut dyn FigureSink,
 ) -> Result<String, String> {
     let own = render_cell_with(
@@ -88,7 +89,14 @@ pub fn render_expanded_unit(
         fig,
         own_visibility,
     );
-    let rest = render_each(lang, expansions, scope, fig, true)?;
+    let rest = render_each(
+        lang,
+        expansions,
+        scope,
+        presenter_enforces_warning,
+        fig,
+        true,
+    )?;
     Ok(if own.is_empty() {
         rest
     } else if rest.is_empty() {
@@ -102,6 +110,7 @@ fn render_each(
     lang: &str,
     expansions: &[Expansion],
     scope: Option<&ConfigValue>,
+    presenter_enforces_warning: bool,
     fig: &mut dyn FigureSink,
     begin_first: bool,
 ) -> Result<String, String> {
@@ -115,7 +124,7 @@ fn render_each(
         .map_err(|e| e.to_string())?;
         let cell_only = cell_config(parsed.options.clone());
         let resolved = resolve_cell_options(scope, parsed.options);
-        let visibility = CellVisibility::resolve(resolved.as_ref());
+        let visibility = CellVisibility::resolve(resolved.as_ref(), presenter_enforces_warning);
         if i > 0 || begin_first {
             fig.begin_cell();
         }
@@ -151,6 +160,45 @@ mod tests {
     fn render(lang: &str, expansions: &[Expansion], scope: Option<&ConfigValue>) -> String {
         let mut fig = FsFigureSink::new(Path::new("/nonexistent/doc.qmd"));
         render_expansions(lang, expansions, scope, &mut fig).unwrap()
+    }
+
+    #[test]
+    fn an_expanded_unit_is_presented_without_escapes() {
+        // Each expansion builds its own options from config, never from knitr's resolved
+        // options, so `ansi::output_text` strips (OPR-7g).
+        let split =
+            split_expansions(&[marker(1, "a()"), stdout(1, "\u{1b}[31mred\u{1b}[0m\n")]).unwrap();
+        let md = render("julia", &split, None);
+        assert!(md.contains("red") && !md.contains('\u{1b}'), "{md:?}");
+    }
+
+    #[test]
+    fn an_expansion_with_two_plots_renders_the_group() {
+        // The plot count is set where options meet the result, not in `CellInputs`, which an
+        // expanded unit never reads (OPR-7j).
+        let plot = |i: u64| {
+            json!({"output_type": "display_data",
+                   "data": {"image/png": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="},
+                   "metadata": {}, "quarto_expansion": {"index": i}})
+        };
+        let split = split_expansions(&[
+            marker(
+                1,
+                "#| label: fig-two\n#| fig-cap: A group\n#| fig-subcap:\n#|   - First\n#|   - Second\nplots()",
+            ),
+            plot(1),
+            plot(1),
+        ])
+        .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        let md = render_expansions("julia", &split, None, &mut fig).unwrap();
+        assert!(md.contains("::: {#fig-two .cell}"), "{md}");
+        assert!(
+            md.contains("{#fig-two-1}") && md.contains("{#fig-two-2}"),
+            "{md}"
+        );
+        assert!(md.trim_end().ends_with("\nA group\n:::"), "{md}");
     }
 
     #[test]

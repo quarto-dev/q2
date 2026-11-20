@@ -273,13 +273,13 @@ fn is_attr_alias(key: &str) -> bool {
 /// both sides in a synthetic Table block and reuse the JSON writer's
 /// source-free comparison (same approach as elements and Citation).
 fn synthetic_table_eq(a: PandocTable, b: PandocTable) -> bool {
-    super::types::block_structurally_eq(&Block::Table(a), &Block::Table(b))
+    super::types::block_structurally_eq(&Block::Table(Box::new(a)), &Block::Table(Box::new(b)))
 }
 
 fn empty_synthetic_table() -> PandocTable {
     let si = || quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown());
     PandocTable {
-        attr: (String::new(), vec![], LinkedHashMap::new()),
+        attr: (String::new(), vec![], LinkedHashMap::new()).into(),
         caption: Caption {
             short: None,
             long: None,
@@ -287,14 +287,14 @@ fn empty_synthetic_table() -> PandocTable {
         },
         colspec: vec![],
         head: TableHead {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             rows: vec![],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         },
         bodies: vec![],
         foot: TableFoot {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             rows: vec![],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -306,7 +306,7 @@ fn empty_synthetic_table() -> PandocTable {
 
 fn synthetic_body_of_rows(rows: Vec<Row>) -> TableBody {
     TableBody {
-        attr: (String::new(), vec![], LinkedHashMap::new()),
+        attr: (String::new(), vec![], LinkedHashMap::new()).into(),
         rowhead_columns: 0,
         head: vec![],
         body: rows,
@@ -699,7 +699,7 @@ impl LuaCell {
         let wrap = |c: &LuaCell| {
             let mut t = empty_synthetic_table();
             let row = Row {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 cells: vec![c.cell.borrow().clone()],
                 source_info: quarto_source_map::SourceInfo::generated(
                     quarto_source_map::By::unknown(),
@@ -1160,11 +1160,11 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 }
             };
             let inlines = peek_inlines_fuzzy(lua, content)?;
-            lua.create_userdata(LuaInline::new(Inline::Quoted(Quoted {
+            lua.create_userdata(LuaInline::new(Inline::Quoted(Box::new(Quoted {
                 quote_type: qt,
                 content: inlines,
                 source_info: filter_source_info(lua),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1173,12 +1173,14 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Code",
         lua.create_function(|lua, (text, attr): (String, Option<Value>)| {
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaInline::new(Inline::Code(crate::pandoc::Code {
-                text,
-                attr,
-                source_info: filter_source_info(lua),
-                attr_source: AttrSourceInfo::empty(),
-            })))
+            lua.create_userdata(LuaInline::new(Inline::Code(Box::new(
+                crate::pandoc::Code {
+                    text,
+                    attr,
+                    source_info: filter_source_info(lua),
+                    attr_source: AttrSourceInfo::empty(),
+                },
+            ))))
         })?,
     )?;
 
@@ -1197,12 +1199,12 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                     ));
                 }
             };
-            lua.create_userdata(LuaInline::new(Inline::Math(Math {
+            lua.create_userdata(LuaInline::new(Inline::Math(Box::new(Math {
                 math_type: mt,
                 text,
                 source_info: filter_source_info(lua),
                 text_source: None,
-            })))
+            }))))
         })?,
     )?;
 
@@ -1210,11 +1212,11 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "RawInline",
         lua.create_function(|lua, (format, text): (String, String)| {
-            lua.create_userdata(LuaInline::new(Inline::RawInline(RawInline {
+            lua.create_userdata(LuaInline::new(Inline::RawInline(Box::new(RawInline {
                 format,
                 text,
                 source_info: filter_source_info(lua),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1226,14 +1228,14 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 let inlines = peek_inlines_fuzzy(lua, content)?;
                 let title = title.unwrap_or_default();
                 let attr = parse_attr(lua, attr)?;
-                lua.create_userdata(LuaInline::new(Inline::Link(Link {
+                lua.create_userdata(LuaInline::new(Inline::Link(Box::new(Link {
                     content: inlines,
                     target: (target, title),
                     attr,
                     source_info: filter_source_info(lua),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
-                })))
+                }))))
             },
         )?,
     )?;
@@ -1246,14 +1248,14 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 let inlines = peek_inlines_fuzzy(lua, content)?;
                 let title = title.unwrap_or_default();
                 let attr = parse_attr(lua, attr)?;
-                lua.create_userdata(LuaInline::new(Inline::Image(Image {
+                lua.create_userdata(LuaInline::new(Inline::Image(Box::new(Image {
                     content: inlines,
                     target: (src, title),
                     attr,
                     source_info: filter_source_info(lua),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
-                })))
+                }))))
             },
         )?,
     )?;
@@ -1264,12 +1266,12 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(|lua, (content, attr): (Value, Option<Value>)| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaInline::new(Inline::Span(Span {
+            lua.create_userdata(LuaInline::new(Inline::Span(Box::new(Span {
                 content: inlines,
                 attr,
                 source_info: filter_source_info(lua),
                 attr_source: AttrSourceInfo::empty(),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1294,11 +1296,11 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(|lua, (content, citations): (Value, Value)| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
             let citations = super::types::lua_table_to_citations(lua, citations)?;
-            lua.create_userdata(LuaInline::new(Inline::Cite(Cite {
+            lua.create_userdata(LuaInline::new(Inline::Cite(Box::new(Cite {
                 citations,
                 content: inlines,
                 source_info: filter_source_info(lua),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1336,13 +1338,13 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(|lua, (level, content, attr): (i64, Value, Option<Value>)| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaBlock::new(Block::Header(Header {
+            lua.create_userdata(LuaBlock::new(Block::Header(Box::new(Header {
                 level: level as usize,
                 content: inlines,
                 attr,
                 source_info: filter_source_info(lua),
                 attr_source: AttrSourceInfo::empty(),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1351,12 +1353,12 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "CodeBlock",
         lua.create_function(|lua, (text, attr): (String, Option<Value>)| {
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaBlock::new(Block::CodeBlock(CodeBlock {
+            lua.create_userdata(LuaBlock::new(Block::CodeBlock(Box::new(CodeBlock {
                 text,
                 attr,
                 source_info: filter_source_info(lua),
                 attr_source: AttrSourceInfo::empty(),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1364,11 +1366,11 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "RawBlock",
         lua.create_function(|lua, (format, text): (String, String)| {
-            lua.create_userdata(LuaBlock::new(Block::RawBlock(RawBlock {
+            lua.create_userdata(LuaBlock::new(Block::RawBlock(Box::new(RawBlock {
                 format,
                 text,
                 source_info: filter_source_info(lua),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1409,11 +1411,11 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                     crate::pandoc::ListNumberDelim::Default,
                 ),
             };
-            lua.create_userdata(LuaBlock::new(Block::OrderedList(OrderedList {
+            lua.create_userdata(LuaBlock::new(Block::OrderedList(Box::new(OrderedList {
                 content,
                 attr,
                 source_info: filter_source_info(lua),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1423,12 +1425,12 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(|lua, (content, attr): (Value, Option<Value>)| {
             let blocks = peek_blocks_fuzzy(lua, content)?;
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaBlock::new(Block::Div(Div {
+            lua.create_userdata(LuaBlock::new(Block::Div(Box::new(Div {
                 content: blocks,
                 attr,
                 source_info: filter_source_info(lua),
                 attr_source: AttrSourceInfo::empty(),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1477,13 +1479,13 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 let blocks = peek_blocks_fuzzy(lua, content)?;
                 let caption = parse_caption(lua, caption)?;
                 let attr = parse_attr(lua, attr)?;
-                lua.create_userdata(LuaBlock::new(Block::Figure(Figure {
+                lua.create_userdata(LuaBlock::new(Block::Figure(Box::new(Figure {
                     content: blocks,
                     caption,
                     attr,
                     source_info: filter_source_info(lua),
                     attr_source: AttrSourceInfo::empty(),
-                })))
+                }))))
             },
         )?,
     )?;
@@ -1507,7 +1509,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 let bodies = parse_table_bodies(lua, bodies)?;
                 let foot = parse_table_foot(lua, foot)?;
                 let attr = parse_attr(lua, attr)?;
-                lua.create_userdata(LuaBlock::new(Block::Table(PandocTable {
+                lua.create_userdata(LuaBlock::new(Block::Table(Box::new(PandocTable {
                     caption,
                     colspec: colspecs,
                     head,
@@ -1516,7 +1518,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                     attr,
                     source_info: filter_source_info(lua),
                     attr_source: AttrSourceInfo::empty(),
-                })))
+                }))))
             },
         )?,
     )?;
@@ -1560,7 +1562,7 @@ pub(crate) fn simpletable_divergence_error(entry_point: &str) -> mlua::Error {
 ///   any other string/number value → attribute
 pub(crate) fn parse_attr(lua: &Lua, attr: Option<Value>) -> Result<crate::pandoc::Attr> {
     match attr {
-        None | Some(Value::Nil) => Ok((String::new(), vec![], LinkedHashMap::new())),
+        None | Some(Value::Nil) => Ok((String::new(), vec![], LinkedHashMap::new()).into()),
         Some(Value::UserData(ud)) => {
             if let Ok(lua_attr) = ud.borrow::<LuaAttr>() {
                 // All variants — Owned / BlockRef / InlineRef — clone
@@ -1570,7 +1572,7 @@ pub(crate) fn parse_attr(lua: &Lua, attr: Option<Value>) -> Result<crate::pandoc
             if let Ok(proxy) = ud.borrow::<super::types::LuaAttributesProxy>() {
                 // An AttributeList value: attributes-only Attr,
                 // matching pandoc's mkAttr userdata branch.
-                return Ok((String::new(), vec![], proxy.snapshot_map()));
+                return Ok((String::new(), vec![], proxy.snapshot_map()).into());
             }
             Err(type_mismatch_error_named(
                 "Attr or AttributeList userdata, table, or string",
@@ -1580,7 +1582,7 @@ pub(crate) fn parse_attr(lua: &Lua, attr: Option<Value>) -> Result<crate::pandoc
         Some(Value::Table(table)) => parse_attr_table(lua, &table),
         Some(Value::String(s)) => {
             // Simple string format: identifier only
-            Ok((s.to_str()?.to_string(), vec![], LinkedHashMap::new()))
+            Ok((s.to_str()?.to_string(), vec![], LinkedHashMap::new()).into())
         }
         Some(other) => Err(type_mismatch_error(
             "Attr userdata, table, or string",
@@ -1608,7 +1610,7 @@ fn parse_attr_table(lua: &Lua, table: &LuaTable) -> Result<crate::pandoc::Attr> 
             Value::Nil => LinkedHashMap::new(),
             v => parse_attribute_list(lua, v)?,
         };
-        return Ok((identifier, classes, attributes));
+        return Ok((identifier, classes, attributes).into());
     }
 
     // HTML-like map (+ q2 named-key extension)
@@ -1646,7 +1648,7 @@ fn parse_attr_table(lua: &Lua, table: &LuaTable) -> Result<crate::pandoc::Attr> 
             }
         }
     }
-    Ok((identifier, classes, attributes))
+    Ok((identifier, classes, attributes).into())
 }
 
 /// A class list: table of strings (numbers coerce, like pandoc's
@@ -1925,7 +1927,7 @@ pub(crate) fn parse_table_head(lua: &Lua, val: Value) -> Result<TableHead> {
             let rows = parse_rows_strict(lua, rows_val)?;
             let attr = match table.get::<Option<Value>>("attr")? {
                 Some(v) => parse_attr(lua, Some(v))?,
-                None => (String::new(), vec![], LinkedHashMap::new()),
+                None => (String::new(), vec![], LinkedHashMap::new()).into(),
             };
             Ok(TableHead {
                 rows,
@@ -1959,7 +1961,7 @@ pub(crate) fn parse_table_foot(lua: &Lua, val: Value) -> Result<TableFoot> {
             let rows = parse_rows_strict(lua, rows_val)?;
             let attr = match table.get::<Option<Value>>("attr")? {
                 Some(v) => parse_attr(lua, Some(v))?,
-                None => (String::new(), vec![], LinkedHashMap::new()),
+                None => (String::new(), vec![], LinkedHashMap::new()).into(),
             };
             Ok(TableFoot {
                 rows,
@@ -2051,7 +2053,7 @@ fn parse_single_table_body(lua: &Lua, val: Value) -> Result<TableBody> {
             let rowhead_columns: i64 = table.get("row_head_columns").unwrap_or(0);
             let attr = match table.get::<Option<Value>>("attr")? {
                 Some(v) => parse_attr(lua, Some(v))?,
-                None => (String::new(), vec![], LinkedHashMap::new()),
+                None => (String::new(), vec![], LinkedHashMap::new()).into(),
             };
             Ok(TableBody {
                 body,
@@ -2103,7 +2105,7 @@ fn parse_single_row(lua: &Lua, val: Value) -> Result<Row> {
                 let cells = parse_cells_strict(lua, cells_val)?;
                 let attr = match table.get::<Option<Value>>("attr")? {
                     Some(v) => parse_attr(lua, Some(v))?,
-                    None => (String::new(), vec![], LinkedHashMap::new()),
+                    None => (String::new(), vec![], LinkedHashMap::new()).into(),
                 };
                 return Ok(Row {
                     cells,
@@ -2132,7 +2134,7 @@ fn parse_single_row(lua: &Lua, val: Value) -> Result<Row> {
             let cells = parse_cells_strict(lua, Value::Table(table))?;
             Ok(Row {
                 cells,
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: filter_source_info(lua),
                 attr_source: AttrSourceInfo::empty(),
             })
@@ -2188,7 +2190,7 @@ fn parse_single_cell(lua: &Lua, val: Value) -> Result<Cell> {
             let col_span: i64 = table.get("col_span").unwrap_or(1);
             let attr = match table.get::<Option<Value>>("attr")? {
                 Some(v) => parse_attr(lua, Some(v))?,
-                None => (String::new(), vec![], LinkedHashMap::new()),
+                None => (String::new(), vec![], LinkedHashMap::new()).into(),
             };
             Ok(Cell {
                 content,
@@ -2269,7 +2271,7 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(
             |lua, (first, classes, attributes): (Option<Value>, Option<Value>, Option<Value>)| {
                 let attr = match first {
-                    None | Some(Value::Nil) => (String::new(), Vec::new(), LinkedHashMap::new()),
+                    None | Some(Value::Nil) => quarto_pandoc_types::empty_attr(),
                     Some(Value::String(s)) => {
                         let id = s.to_str()?.to_string();
                         // `classes` and `attributes` accept plain Lua
@@ -2286,7 +2288,7 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                             None | Some(Value::Nil) => LinkedHashMap::new(),
                             Some(v) => parse_attribute_list(lua, v)?,
                         };
-                        (id, cls, attrs)
+                        (id, cls, attrs).into()
                     }
                     // Table or userdata first arg: the whole attr in
                     // one value (remaining args ignored, like pandoc).
@@ -2305,7 +2307,7 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "AttributeList",
         lua.create_function(|lua, value: Value| {
             let map = parse_attribute_list(lua, value)?;
-            let owner = LuaAttr::new((String::new(), Vec::new(), map));
+            let owner = LuaAttr::new((String::new(), Vec::new(), map).into());
             lua.create_userdata(super::types::LuaAttributesProxy::new(owner))
         })?,
     )?;
@@ -2735,11 +2737,11 @@ mod tests {
         let head = TableHead {
             rows: vec![Row {
                 cells: vec![],
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
             }],
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -2759,7 +2761,8 @@ mod tests {
                 "test-id".into(),
                 vec!["class1".into()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -2775,7 +2778,7 @@ mod tests {
         let lua = create_lua_env();
         let head = TableHead {
             rows: vec![],
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -2791,7 +2794,7 @@ mod tests {
         let lua = create_lua_env();
         let head = TableHead {
             rows: vec![],
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -2810,11 +2813,11 @@ mod tests {
         let foot = TableFoot {
             rows: vec![Row {
                 cells: vec![],
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
             }],
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -2830,7 +2833,7 @@ mod tests {
         let lua = create_lua_env();
         let foot = TableFoot {
             rows: vec![],
-            attr: ("foot-id".into(), vec![], LinkedHashMap::new()),
+            attr: ("foot-id".into(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -2846,7 +2849,7 @@ mod tests {
         let lua = create_lua_env();
         let foot = TableFoot {
             rows: vec![],
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -2862,7 +2865,7 @@ mod tests {
         let lua = create_lua_env();
         let foot = TableFoot {
             rows: vec![],
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -2881,13 +2884,13 @@ mod tests {
         let body = TableBody {
             body: vec![Row {
                 cells: vec![],
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
             }],
             head: vec![],
             rowhead_columns: 0,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -2905,12 +2908,12 @@ mod tests {
             body: vec![],
             head: vec![Row {
                 cells: vec![],
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
             }],
             rowhead_columns: 0,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -2928,7 +2931,7 @@ mod tests {
             body: vec![],
             head: vec![],
             rowhead_columns: 2,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -2946,7 +2949,7 @@ mod tests {
             body: vec![],
             head: vec![],
             rowhead_columns: 0,
-            attr: ("body-id".into(), vec![], LinkedHashMap::new()),
+            attr: ("body-id".into(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -2964,7 +2967,7 @@ mod tests {
             body: vec![],
             head: vec![],
             rowhead_columns: 0,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -2982,7 +2985,7 @@ mod tests {
             body: vec![],
             head: vec![],
             rowhead_columns: 0,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3004,11 +3007,11 @@ mod tests {
                 alignment: Alignment::Default,
                 row_span: 1,
                 col_span: 1,
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
             }],
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3024,7 +3027,7 @@ mod tests {
         let lua = create_lua_env();
         let row = Row {
             cells: vec![],
-            attr: ("row-id".into(), vec![], LinkedHashMap::new()),
+            attr: ("row-id".into(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3040,7 +3043,7 @@ mod tests {
         let lua = create_lua_env();
         let row = Row {
             cells: vec![],
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3056,7 +3059,7 @@ mod tests {
         let lua = create_lua_env();
         let row = Row {
             cells: vec![],
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3080,7 +3083,7 @@ mod tests {
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 1,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3099,7 +3102,7 @@ mod tests {
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 1,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3118,7 +3121,7 @@ mod tests {
             alignment: Alignment::Left,
             row_span: 1,
             col_span: 1,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3137,7 +3140,7 @@ mod tests {
             alignment: Alignment::Center,
             row_span: 1,
             col_span: 1,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3156,7 +3159,7 @@ mod tests {
             alignment: Alignment::Right,
             row_span: 1,
             col_span: 1,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3175,7 +3178,7 @@ mod tests {
             alignment: Alignment::Default,
             row_span: 3,
             col_span: 1,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3194,7 +3197,7 @@ mod tests {
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 2,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3213,7 +3216,7 @@ mod tests {
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 1,
-            attr: ("cell-id".into(), vec![], LinkedHashMap::new()),
+            attr: ("cell-id".into(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3232,7 +3235,7 @@ mod tests {
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 1,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3251,7 +3254,7 @@ mod tests {
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 1,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -3951,7 +3954,8 @@ mod tests {
     #[test]
     fn test_parse_attr_userdata() {
         let lua = create_lua_env();
-        let attr = LuaAttr::new(("test-id".into(), vec!["cls".into()], LinkedHashMap::new()));
+        let attr =
+            LuaAttr::new(("test-id".into(), vec!["cls".into()], LinkedHashMap::new()).into());
         let ud = lua.create_userdata(attr).unwrap();
         let result = parse_attr(&lua, Some(Value::UserData(ud))).unwrap();
         assert_eq!(result.0, "test-id");
@@ -4282,7 +4286,7 @@ mod tests {
         let lua = create_lua_env();
         let head = TableHead {
             rows: vec![],
-            attr: ("head-id".into(), vec![], LinkedHashMap::new()),
+            attr: ("head-id".into(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -4315,7 +4319,7 @@ mod tests {
         let lua = create_lua_env();
         let foot = TableFoot {
             rows: vec![],
-            attr: ("foot-id".into(), vec![], LinkedHashMap::new()),
+            attr: ("foot-id".into(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -4359,7 +4363,7 @@ mod tests {
             body: vec![],
             head: vec![],
             rowhead_columns: 1,
-            attr: ("body-id".into(), vec![], LinkedHashMap::new()),
+            attr: ("body-id".into(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -4404,7 +4408,7 @@ mod tests {
         let lua = create_lua_env();
         let row = Row {
             cells: vec![],
-            attr: ("row-id".into(), vec![], LinkedHashMap::new()),
+            attr: ("row-id".into(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -4450,7 +4454,7 @@ mod tests {
             alignment: Alignment::Center,
             row_span: 2,
             col_span: 3,
-            attr: ("cell-id".into(), vec![], LinkedHashMap::new()),
+            attr: ("cell-id".into(), vec![], LinkedHashMap::new()).into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };

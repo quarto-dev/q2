@@ -96,16 +96,16 @@ mod tests {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
-                Block::Header(Header {
+                Block::Header(Box::new(Header {
                     level: 2,
-                    attr: ("sec-a".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                    attr: ("sec-a".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![Inline::Str(Str {
                         text: "Section A".to_string(),
                         source_info: dummy_source_info(),
                     })],
                     source_info: dummy_source_info(),
                     attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-                }),
+                })),
                 Block::Paragraph(Paragraph {
                     content: vec![Inline::Str(Str {
                         text: "Content.".to_string(),

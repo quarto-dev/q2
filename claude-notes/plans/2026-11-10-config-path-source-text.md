@@ -2,7 +2,7 @@
 title: 'Config paths: read markdown-parsed strings from their source span (GH #1152)'
 date: 2026-11-10
 description: 'Extension theme paths with two underscores lost them on pages that run code, because the path was recovered by flattening markdown inlines; read the source text instead.'
-status: active
+status: done  # Merged in PR #1164 (d84b9ad12), 2026-11-10; its span-reading code was reverted by #1180
 braid:
   strand: bd-d50anjlg
 ---

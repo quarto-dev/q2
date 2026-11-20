@@ -468,10 +468,13 @@ fn take_plain_prefix(inlines: &[Inline], budget: &mut usize) -> Inlines {
     }
     macro_rules! container {
         ($out:ident, $variant:ident, $node:ident, $budget:ident) => {
-            $out.push(Inline::$variant($variant {
-                content: take_plain_prefix(&$node.content, $budget),
-                ..$node.clone()
-            }))
+            $out.push(Inline::$variant(
+                $variant {
+                    content: take_plain_prefix(&$node.content, $budget),
+                    ..$variant::clone($node)
+                }
+                .into(),
+            ))
         };
     }
     let mut out = Inlines::new();
@@ -484,10 +487,10 @@ fn take_plain_prefix(inlines: &[Inline], budget: &mut usize) -> Inlines {
                 text: cut(&s.text, budget),
                 ..s.clone()
             })),
-            Inline::Code(c) => out.push(Inline::Code(Code {
+            Inline::Code(c) => out.push(Inline::Code(Box::new(Code {
                 text: cut(&c.text, budget),
-                ..c.clone()
-            })),
+                ..Code::clone(c)
+            }))),
             Inline::Space(_) | Inline::SoftBreak(_) | Inline::LineBreak(_) => {
                 whole(inline, 1, budget, &mut out)
             }

@@ -98,8 +98,10 @@ async fn run(args: ProvideHubArgs) -> Result<()> {
     // Validate mode/args before connecting so mistakes fail fast. A
     // malformed `-M` fails here, before any network.
     validate_mode(args.watch, &args.file)?;
+    // Resolved and checked before any network, like `validate_mode`.
     let overlay = quarto_core::metadata_flag::overlay_from_metadata_flags(&args.metadata)
         .map_err(|e| anyhow::anyhow!(e))?;
+    let record_sources = resolve_record_sources(&args.metadata)?;
 
     // Build the consent gate up front. `--dangerously-accept-requests` opts out
     // of the prompt entirely; otherwise we prompt interactively, and if there
@@ -140,7 +142,18 @@ async fn run(args: ProvideHubArgs) -> Result<()> {
     // The beacon's actorId is the samod peer id (stable for this process);
     // Phase 5 swaps in the per-project actor id from /auth/actor.
     let self_actor_id = repo.peer_id().to_string();
-    let provider = Provider::new_with_overlay(repo, index, self_actor_id, consent, None, overlay);
+    let provider = Provider::new_with_records(
+        repo,
+        index,
+        self_actor_id,
+        consent,
+        None,
+        overlay,
+        record_sources,
+        quarto_core::engine::capture_files::record_writing_enabled(
+            quarto_core::engine::capture_files::WriterSurface::Provider,
+        ),
+    );
 
     if args.watch {
         run_watch(&provider).await;
@@ -161,6 +174,29 @@ fn validate_mode(watch: bool, file: &Option<String>) -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// The host's record source list: `-M 'execute: {record-sources: ...}'`, else `engine`. It is the
+/// ceiling a hub document's own `execute: record-sources` may only reorder or narrow. `cache` and
+/// directories are not available here (ignored with an info line); an unknown entry fails at
+/// start-up.
+fn resolve_record_sources(metadata: &[String]) -> Result<quarto_core::record::RecordSources> {
+    use quarto_core::record::{CommandSources, host_record_sources};
+    let parsed = quarto_core::metadata_flag::parse_metadata_flags(metadata)
+        .map_err(|e| anyhow::anyhow!(e))?;
+    let cwd = std::env::current_dir().context("reading the working directory")?;
+    let resolved = host_record_sources(
+        parsed.as_ref(),
+        &cwd,
+        &cwd,
+        &quarto_system_runtime::NativeRuntime::new(),
+        &CommandSources::PROVIDE_HUB,
+    )
+    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    for note in &resolved.notes {
+        eprintln!("info: {}", note.text);
+    }
+    Ok(resolved.sources)
 }
 
 /// The consent gate to use, decided purely from flags + TTY state (no I/O, so
@@ -340,5 +376,34 @@ mod tests {
                 allow_accept_all: true
             }
         );
+    }
+
+    #[test]
+    fn record_sources_default_to_engine_only() {
+        let got = resolve_record_sources(&[]).unwrap();
+        assert_eq!(got, quarto_core::record::RecordSources::provider_default());
+    }
+
+    #[test]
+    fn record_sources_read_the_metadata_flag() {
+        use quarto_core::record::RecordSource as S;
+        let m = ["execute:{record-sources: 'q2,positron,engine'}".to_string()];
+        let got = resolve_record_sources(&m).unwrap();
+        assert_eq!(got.as_slice(), [S::Q2, S::Positron, S::Engine]);
+    }
+
+    #[test]
+    fn record_sources_cache_and_directories_are_ignored_here() {
+        use quarto_core::record::RecordSource as S;
+        let m = ["execute:{record-sources: 'cache,./recs,engine'}".to_string()];
+        let got = resolve_record_sources(&m).unwrap();
+        assert_eq!(got.as_slice(), [S::Engine]);
+    }
+
+    #[test]
+    fn record_sources_unknown_entry_is_a_startup_error() {
+        let m = ["execute:{record-sources: bogus}".to_string()];
+        let err = resolve_record_sources(&m).unwrap_err();
+        assert!(err.to_string().contains("bogus"), "{err}");
     }
 }

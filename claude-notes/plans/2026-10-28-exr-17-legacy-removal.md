@@ -115,9 +115,16 @@ owner decides when the trigger holds and when to act on it.
 1. EXR-6, EXR-8, EXR-9, EXR-11, EXR-12, EXR-14 and EXR-15 have landed, **or** the epic has an
    explicit dated entry declaring that engine "not migrating" and why (for example a
    third-party TS engine that never returns records). A non-migrating engine keeps the
-   legacy arm alive for that engine only; deletion then happens per engine.
-2. The record-writing gate (EXR-13) has defaulted to on. (Readers having shipped one
-   release before writers is EXR-13\'s rule and is already behind this point.)
+   legacy arm alive for that engine only; deletion then happens per engine. Since the
+   records-in-use epic (2026-11-06) a document that uses an engine without records is stored
+   whole in the legacy format and a diagnostic names the engine, so that list is the
+   inventory of engines still keeping the arm alive; extension engines that never build
+   records are the expected members.
+2. The record-writing gate (EXR-13) has defaulted to on for every writer: the local preview
+   (records-in-use RIU-1) and `provide-hub` (its flip, after the hosted hub reads records).
+   (Readers having shipped before writers, per writer and reader pair, is EXR-13\'s rule and
+   is already behind this point.) Documents already stored in the legacy format, in hubs,
+   kept data directories and old cache entries, stay readable until step 3 allows otherwise.
 3. A `hub admin scan` against the project\'s own deployed hub store shows no referenced
    legacy captures that matter (or the owner has decided they may degrade, see below).
 4. No committed test, fixture or trace file needs the legacy shape, other than what the
@@ -217,6 +224,24 @@ owner decides when the trigger holds and when to act on it.
 - The workspace baseline delta is exactly the deleted tests.
 - Old hub documents degrade to source with a notice instead of erroring.
 - `ReplayEngine` and trace-based replay still pass their tests.
+
+## Status after RIU-2 (2026-11-06)
+
+RIU-2 (records replace the capture cache) made a record alone sufficient for preview and the hub
+provider, but it deliberately kept the legacy form alive. What remains for this plan, found while
+implementing it:
+
+- The legacy arm of `encode_capture_payload` and the refusal predicate `record_has_no_legacy_form`
+  (`crates/quarto-core/src/engine/capture_files.rs`) exist only because the writer gate can be off.
+  With the gate gone, `encode_for_publish` loses its `PublishError::RecordWriterOff` case.
+- `store_run` in `crates/quarto-preview/src/cache.rs` still writes the `.bin` whenever captures
+  exist, and `lookup_cached_run` still accepts a `.bin`-only hit. Both are legacy readers and
+  writers to delete.
+- `CaptureRun::captures` and `CaptureRun::has_content()` keep a legacy field next to the record;
+  the guards moved to `has_content()` so deleting the field is a one-line change per guard.
+- `write_capture_doc` in `crates/quarto-hub-provider/src/execute.rs` and `write_capture_doc_gated`
+  in `crates/quarto-preview/src/capture_driver.rs` both go through one pair, `encode_for_publish`
+  and `publish_payload_doc`; this plan only has to change that pair.
 
 ## Risks and open questions
 

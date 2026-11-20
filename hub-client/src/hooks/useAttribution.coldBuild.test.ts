@@ -64,7 +64,7 @@ describe('useAttribution cold-build races', () => {
       sourceText: fixture.text,
     });
     expect(gate.pending).toBe(1);
-    expect(result.current).toEqual({ payload: null, generating: true });
+    expect(result.current).toEqual({ payload: null, generating: true, pending: false });
 
     fixture.append('X', 2);
     fixture.append('Y', 3);
@@ -103,7 +103,7 @@ describe('useAttribution cold-build races', () => {
       await Promise.resolve();
     });
 
-    expect(result.current).toEqual({ payload: null, generating: false });
+    expect(result.current).toEqual({ payload: null, generating: false, pending: false });
   });
 
   it('ignores an old file late completion and catches up the new file build', async () => {
@@ -131,7 +131,7 @@ describe('useAttribution cold-build races', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(result.current).toEqual({ payload: null, generating: true });
+    expect(result.current).toEqual({ payload: null, generating: true, pending: false });
 
     second.append('X', 2);
     second.append('Y', 3);

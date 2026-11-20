@@ -55,7 +55,7 @@ impl SpanPlan {
             .owned_languages
             .iter()
             .any(|o| o.eq_ignore_ascii_case(SPAN_LANGUAGE));
-        if !ctx.want_record || ctx.units.is_empty() || !owned {
+        if !ctx.builds_record() || ctx.units.is_empty() || !owned {
             return plan;
         }
         for unit in locate_units(&ctx.units, text) {

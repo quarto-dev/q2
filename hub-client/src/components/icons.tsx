@@ -248,6 +248,19 @@ export function FolderIcon({ size }: IconProps) {
   );
 }
 
+/** Folder with the filled Quarto mark in its body — a Quarto project. */
+export function QuartoFolderIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+      <path d="M11.4 12.9 L11.4 10.5 A2.4 2.4 0 0 0 9 12.9 Z" fill="currentColor" stroke="none" />
+      <path d="M12.6 12.9 L15 12.9 A2.4 2.4 0 0 0 12.6 10.5 Z" fill="currentColor" stroke="none" />
+      <path d="M11.4 14.1 L9 14.1 A2.4 2.4 0 0 0 11.4 16.5 Z" fill="currentColor" stroke="none" />
+      <path d="M12.6 14.1 L12.6 16.5 A2.4 2.4 0 0 0 15 14.1 Z" fill="currentColor" stroke="none" />
+    </StrokeIcon>
+  );
+}
+
 /** Folder with a plus — "new folder" action. */
 export function FolderPlusIcon({ size }: IconProps) {
   return (

@@ -80,10 +80,13 @@ fn pipelines_run_language_resolve_right_after_metadata_merge() {
         .iter()
         .position(|n| *n == "metadata-merge")
         .expect("metadata-merge present");
+    // Only the authored-metadata checkpoint (bd-xzsnuoqq), which records
+    // `meta` before anything derived is added, may sit between the merge
+    // and language resolution.
     assert_eq!(
-        names.get(merge + 1).copied(),
-        Some("language-resolve"),
-        "language-resolve must directly follow metadata-merge: {names:?}"
+        names.get(merge + 1..merge + 3),
+        Some(&["authored-metadata", "language-resolve"][..]),
+        "language-resolve must follow metadata-merge and its checkpoint: {names:?}"
     );
 
     // The former `build_wasm_html_pipeline()` half of this test is gone with

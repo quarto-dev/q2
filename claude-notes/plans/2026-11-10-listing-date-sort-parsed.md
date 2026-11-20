@@ -2,7 +2,7 @@
 title: 'Listing sort: order date fields by parsed date (bd-cysydu8x)'
 date: 2026-11-10
 description: 'A listing with sort by date compared the raw date text, so M/D/YYYY dates sorted wrong; compare parsed dates chronologically, as Quarto 1 does.'
-status: active
+status: done
 braid:
   strand: bd-cysydu8x
 ---

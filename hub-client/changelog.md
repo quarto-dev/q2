@@ -23,6 +23,28 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-11-17
+
+- [`e3a801cac`](https://github.com/quarto-dev/q2/commits/e3a801cac): Projects whose `_quarto.yml` does not declare `quarto-required: "^2"` now show a warning (Q-5-53), since such projects are presumed to be Quarto 1 projects; new projects declare it
+- [`74930907d`](https://github.com/quarto-dev/q2/commits/74930907d): Comments in user-supplied tree-sitter grammars whose query also tags them for spell checking (`@spell`) are now colored as comments in the preview
+- [`0093f3443`](https://github.com/quarto-dev/q2/commits/0093f3443): PowerShell code blocks (`powershell`, `ps1`) are now syntax-highlighted
+- [`2773a34b3`](https://github.com/quarto-dev/q2/commits/2773a34b3): INI, TOML (also `conf`), XML and Dockerfile code blocks are now syntax-highlighted
+
+### 2026-11-16
+
+- [`17792be75`](https://github.com/quarto-dev/q2/commits/17792be75): In preview comments, Shift+Enter now starts a new line in a comment (Enter still adds it), and pasting text with blank lines into a comment no longer breaks the document
+- [`087d309a6`](https://github.com/quarto-dev/q2/commits/087d309a6): Math in the sandboxed preview now renders with KaTeX 0.19.1, matching the version used by `q2 render`
+
+### 2026-11-13
+
+- [`05b9c3bd1`](https://github.com/quarto-dev/q2/commits/05b9c3bd1): Typing with the authors overlay on no longer slows down as the document grows
+- [`5a8f1d60d`](https://github.com/quarto-dev/q2/commits/5a8f1d60d): Authors overlay now follows every edit immediately, so it no longer shows the wrong author while people are typing, and on a local branch it shows the branch's own authorship
+- [`d7aaeb3d3`](https://github.com/quarto-dev/q2/commits/d7aaeb3d3): Authors overlay in replay now shows who wrote each word at that point in history, instead of the final document's authorship laid over earlier text
+
+### 2026-11-12
+
+- [`2ec078671`](https://github.com/quarto-dev/q2/commits/2ec078671): Task-list items in the preview now show their checkbox in place of the bullet (also in lists that mix tasks and plain items), and an empty `- [ ] ` item shows its checkbox as soon as you type it.
+
 ### 2026-11-10
 
 - [`f2b971353`](https://github.com/quarto-dev/q2/commits/f2b971353): Collaborator display names now accept full Connect first/last-name combinations (up to 513 Unicode code points) and remain readable in presence, version history, tooltips, and attribution on narrow screens.

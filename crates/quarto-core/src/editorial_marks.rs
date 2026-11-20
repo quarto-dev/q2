@@ -80,12 +80,12 @@ pub fn new_span(
     attrs: LinkedHashMap<String, String>,
     content: Inlines,
 ) -> Inline {
-    Inline::Span(Span {
-        attr: (String::new(), classes, attrs),
+    Inline::Span(Box::new(Span {
+        attr: (String::new(), classes, attrs).into(),
         content,
         source_info: generated(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ fn is_gap(inline: &Inline) -> bool {
 /// content **ends in** a run of one or more `quarto-edit-comment` spans. A span with
 /// attributes, or whose comment isn't trailing, isn't one.
 pub fn commented_range(span: &Span) -> Option<CommentedRange> {
-    let (id, classes, attrs) = &span.attr;
+    let (id, classes, attrs) = &*span.attr;
     if !id.is_empty() || !classes.is_empty() || !attrs.is_empty() {
         return None;
     }
@@ -255,17 +255,17 @@ fn block_to_inlines(block: &Block) -> Inlines {
             }
             out
         }
-        Block::CodeBlock(cb) => vec![Inline::Code(Code {
+        Block::CodeBlock(cb) => vec![Inline::Code(Box::new(Code {
             attr: cb.attr.clone(),
             text: cb.text.clone(),
             source_info: generated(),
             attr_source: AttrSourceInfo::empty(),
-        })],
-        Block::RawBlock(rb) => vec![Inline::RawInline(RawInline {
+        }))],
+        Block::RawBlock(rb) => vec![Inline::RawInline(Box::new(RawInline {
             format: rb.format.clone(),
             text: rb.text.clone(),
             source_info: generated(),
-        })],
+        }))],
         Block::Div(d) => blocks_to_inlines(&d.content),
         Block::BlockQuote(bq) => blocks_to_inlines(&bq.content),
         Block::Figure(f) => blocks_to_inlines(&f.content),
@@ -352,7 +352,7 @@ mod tests {
 
     fn plain_span(content: Inlines) -> Span {
         match new_span(Vec::new(), LinkedHashMap::new(), content) {
-            Inline::Span(s) => s,
+            Inline::Span(s) => *s,
             _ => unreachable!(),
         }
     }
@@ -396,12 +396,12 @@ mod tests {
     #[test]
     fn blocks_to_inlines_matches_pandoc_utils() {
         // The verified case: Para, Para, CodeBlock, BulletList -> one LB two LB Code LB li.
-        let code = Block::CodeBlock(CodeBlock {
+        let code = Block::CodeBlock(Box::new(CodeBlock {
             attr: Default::default(),
             text: "x=1".into(),
             source_info: generated(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let list = Block::BulletList(BulletList {
             content: vec![vec![para(vec![s("li")])]],
             source_info: generated(),
@@ -419,12 +419,12 @@ mod tests {
             content: vec![vec![para(vec![s("a")])], vec![para(vec![s("b")])]],
             source_info: generated(),
         });
-        let div = Block::Div(quarto_pandoc_types::block::Div {
+        let div = Block::Div(Box::new(quarto_pandoc_types::block::Div {
             attr: Default::default(),
             content: vec![para(vec![s("x")]), para(vec![s("y")])],
             source_info: generated(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         assert_eq!(describe(&blocks_to_inlines(&[list])), ["a", "b"]);
         assert_eq!(describe(&blocks_to_inlines(&[div])), ["x", "LB", "y"]);
         assert!(blocks_to_inlines(&[]).is_empty());

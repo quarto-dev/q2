@@ -80,5 +80,5 @@ pub fn process_commonmark_attribute(
         };
     }
 
-    PandocNativeIntermediate::IntermediateAttr(attr, attr_source, span)
+    PandocNativeIntermediate::IntermediateAttr(attr.into(), attr_source, span)
 }

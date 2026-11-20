@@ -1,12 +1,15 @@
-//! Task-list parsing and rendering (bd-obkvhlam).
+//! Task-list parsing and rendering (bd-obkvhlam, bd-2ydvebkc).
 //!
 //! `- [ ] todo` / `- [x] done` follow Pandoc's convention: the item's
 //! first inline is `Str "☐"` (U+2610) or `Str "☒"` (U+2612) followed by
-//! `Space`. The HTML writer mirrors Pandoc's writer exactly:
-//! `<ul class="task-list">` when every item is a task item, and each
-//! task item's marker becomes `<label><input type="checkbox"
-//! [checked=""] />…</label>`. The qmd writer round-trips the ballot-box
-//! Str back to `[ ]` / `[x]`.
+//! `Space`; an empty item (`- [ ] `) is `Plain [Str "☐"]`, as in Pandoc.
+//! The HTML writer follows Pandoc's writer — `<ul class="task-list">` when
+//! every item is a task item, and each task item's marker becomes
+//! `<label><input type="checkbox" [checked=""] disabled="" />…</label>` —
+//! plus two deliberate departures (GH #892): every task `<li>` carries
+//! `class="task-list-item"` so CSS can hide the marker per item, and the
+//! static checkbox is `disabled` (Pandoc ≥ 3.0.1 emits it enabled). The qmd
+//! writer round-trips the ballot-box Str back to `[ ]` / `[x]`.
 
 use pampa::pandoc::ast_context::ASTContext;
 use pampa::pandoc::{Block, Inline};
@@ -144,11 +147,15 @@ fn html_all_task_items_gets_task_list_class() {
         "missing ul.task-list in: {html}"
     );
     assert!(
-        html.contains("<label><input type=\"checkbox\" />todo</label>"),
+        html.contains(
+            "<li class=\"task-list-item\"><label><input type=\"checkbox\" disabled=\"\" />todo</label></li>"
+        ),
         "missing unchecked checkbox in: {html}"
     );
     assert!(
-        html.contains("<label><input type=\"checkbox\" checked=\"\" />done</label>"),
+        html.contains(
+            "<li class=\"task-list-item\"><label><input type=\"checkbox\" checked=\"\" disabled=\"\" />done</label></li>"
+        ),
         "missing checked checkbox in: {html}"
     );
     assert!(!html.contains('☐'), "ballot box leaked into HTML: {html}");
@@ -161,12 +168,18 @@ fn html_mixed_list_has_no_task_list_class_but_renders_checkboxes() {
     // render checkboxes individually.
     let html = to_html("- [ ] todo\n- plain\n");
     assert!(
-        !html.contains("task-list"),
+        html.contains("<ul>"),
         "mixed list must not get task-list class: {html}"
     );
     assert!(
-        html.contains("<input type=\"checkbox\" />"),
-        "task item in mixed list still renders checkbox: {html}"
+        html.contains(
+            "<li class=\"task-list-item\"><label><input type=\"checkbox\" disabled=\"\" />"
+        ),
+        "task item in mixed list still renders a checkbox and the per-item class: {html}"
+    );
+    assert!(
+        html.contains("<li>plain</li>"),
+        "plain item in mixed list gets no task-list-item class: {html}"
     );
 }
 
@@ -174,12 +187,12 @@ fn html_mixed_list_has_no_task_list_class_but_renders_checkboxes() {
 fn html_ordered_task_items_render_checkboxes_without_class() {
     let html = to_html("1. [x] done\n");
     assert!(
-        html.contains("<input type=\"checkbox\" checked=\"\" />"),
-        "ordered task item renders checkbox: {html}"
+        html.contains("<li class=\"task-list-item\"><label><input type=\"checkbox\" checked=\"\" disabled=\"\" />"),
+        "ordered task item renders checkbox and the per-item class: {html}"
     );
     assert!(
-        !html.contains("task-list"),
-        "ordered lists never get the class (Pandoc parity): {html}"
+        !html.contains("class=\"task-list\""),
+        "ordered lists never get the list class (Pandoc parity): {html}"
     );
 }
 
@@ -195,4 +208,84 @@ fn qmd_round_trip_preserves_task_markers() {
     assert!(out.contains("[x] done"), "checked round-trip, got: {out}");
     assert!(!out.contains('☐'), "ballot box leaked into qmd: {out}");
     assert!(!out.contains('☒'), "ballot box leaked into qmd: {out}");
+}
+
+// ============================================================================
+// Empty task items (bd-2ydvebkc)
+// ============================================================================
+
+#[test]
+fn empty_task_item_parses_to_lone_ballot_box_str() {
+    // `- [ ] ` is what a user has typed just before the item text; Pandoc
+    // reads it as `Plain [Str "☐"]` (no Space).
+    for (src, glyph) in [("- [ ] \n", "☐"), ("- [x] \n- [ ] next\n", "☒")] {
+        let (pandoc, _) = parse_qmd(src);
+        let inlines = first_item_inlines(&pandoc);
+        assert_eq!(inlines.len(), 1, "for {src:?}: {inlines:?}");
+        match &inlines[0] {
+            Inline::Str(s) => {
+                assert_eq!(s.text, glyph, "for {src:?}");
+                assert_eq!(s.source_info.start_offset(), 2, "for {src:?}");
+                assert_eq!(s.source_info.end_offset(), 5, "for {src:?}");
+            }
+            other => panic!("Expected Str {glyph} for {src:?}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn html_empty_task_item_renders_checkbox() {
+    let html = to_html("- [ ] \n");
+    assert!(
+        html.contains("<ul class=\"task-list\">"),
+        "an empty task item is still a task item: {html}"
+    );
+    assert!(
+        html.contains(
+            "<li class=\"task-list-item\"><label><input type=\"checkbox\" disabled=\"\" /></label></li>"
+        ),
+        "empty task item renders an empty checkbox: {html}"
+    );
+    assert!(!html.contains('☐'), "ballot box leaked into HTML: {html}");
+}
+
+#[test]
+fn html_task_item_class_composes_with_item_attr() {
+    // A trailing block attribute is hoisted onto the <li> (bd-aeyss6p5);
+    // the per-item task class must compose with it, not replace it.
+    let html = to_html("- [ ] todo {.extra}\n");
+    assert!(
+        html.contains("<li class=\"task-list-item extra\">"),
+        "task-list-item composes with the item attr: {html}"
+    );
+}
+
+#[test]
+fn qmd_round_trip_preserves_empty_task_item() {
+    let out = to_qmd("- [ ] \n- [x] done\n");
+    let (pandoc, _) = parse_qmd(&out);
+    let inlines = first_item_inlines(&pandoc);
+    assert!(
+        matches!(&inlines[0], Inline::Str(s) if s.text == "☐"),
+        "empty task item must re-parse as a task item; qmd was {out:?}"
+    );
+}
+
+#[test]
+fn html_loose_task_items_keep_their_paragraphs() {
+    // Pandoc renders a loose task item as `<li><p><label>…</label></p></li>`;
+    // the `<p>` must survive the checkbox rewrite (bd-nnvvomg6).
+    let html = to_html("- [ ] todo\n\n- [x] done\n");
+    assert!(
+        html.contains(
+            "<li class=\"task-list-item\"><p><label><input type=\"checkbox\" disabled=\"\" />todo</label></p>"
+        ),
+        "loose unchecked item: {html}"
+    );
+    assert!(
+        html.contains(
+            "<li class=\"task-list-item\"><p><label><input type=\"checkbox\" checked=\"\" disabled=\"\" />done</label></p>"
+        ),
+        "loose checked item: {html}"
+    );
 }

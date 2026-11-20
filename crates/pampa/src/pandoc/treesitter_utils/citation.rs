@@ -68,7 +68,7 @@ where
     let whole_si = node_source_info_with_context(node, context);
     let tight_si = tight_source_info_for_node(node, context);
 
-    let cite = Inline::Cite(Cite {
+    let cite = Inline::Cite(Box::new(Cite {
         citations: vec![Citation {
             id: citation_id,
             prefix: vec![],
@@ -83,7 +83,7 @@ where
             source_info: tight_si.clone(),
         })],
         source_info: tight_si.clone(),
-    });
+    }));
 
     // Build result with leading Space if needed to distinguish "Hi @cite" from "Hi@cite"
     if has_leading_space {
