@@ -1,0 +1,56 @@
+{
+  "platform": "win32",
+  "node": "v24.21.0",
+  "q2": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2",
+  "files": 4000,
+  "differing": 800,
+  "steps": [
+    {
+      "step": "invoke",
+      "ok": true,
+      "observed": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2 preview --no-browser --data-dir C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-data9-0Kq6Lr --allow-edit --ui editor --git track --host 127.0.0.1 --port 65140 C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-hub9-PhuAEe"
+    },
+    {
+      "step": "progress: the mirror holds every file",
+      "ok": true,
+      "observed": {
+        "files": 4005,
+        "seconds": 0,
+        "hubAlive": true
+      }
+    },
+    {
+      "step": "9 ctrl-c helper",
+      "ok": true,
+      "observed": {
+        "status": 0,
+        "stderr": ""
+      }
+    },
+    {
+      "step": "9 stop the hub during the switch",
+      "ok": true,
+      "observed": {
+        "markerSeen": true,
+        "switchCode": 0,
+        "hubExit": 0,
+        "exitSeconds": 240,
+        "skippedFlushLogged": true,
+        "logTail": "2m:\u001b[0m Hub server listening (project mode) \u001b[3maddr\u001b[0m\u001b[2m=\u001b[0m127.0.0.1:65140\n\u001b[2m2026-11-20T03:54:14.631202Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mquarto_hub::server\u001b[0m\u001b[2m:\u001b[0m Starting periodic sync task \u001b[3minterval_secs\u001b[0m\u001b[2m=\u001b[0m5\n\u001b[2m2026-11-20T03:54:14.632214Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mquarto_hub::watch\u001b[0m\u001b[2m:\u001b[0m Started filesystem watcher \u001b[3mpath\u001b[0m\u001b[2m=\u001b[0mC:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-hub9-PhuAEe \u001b[3mdebounce_ms\u001b[0m\u001b[2m=\u001b[0m500 \u001b[3mfilter\u001b[0m\u001b[2m=\u001b[0mPreviewBroad \u001b[3msingle_file\u001b[0m\u001b[2m=\u001b[0mNone \u001b[3msingle_file_dep_count\u001b[0m\u001b[2m=\u001b[0m0\n\u001b[2m2026-11-20T03:54:14.632257Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mquarto_hub::server\u001b[0m\u001b[2m:\u001b[0m Starting filesystem watcher\n\u001b[2m2026-11-20T03:55:27.453747Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mquarto_hub::server\u001b[0m\u001b[2m:\u001b[0m Received Ctrl-C, initiating graceful shutdown...\n\u001b[2m2026-11-20T03:55:27.453860Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mquarto_hub::server\u001b[0m\u001b[2m:\u001b[0m Server shutting down...\n\u001b[2m2026-11-20T03:55:28.048900Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mquarto_hub::server\u001b[0m\u001b[2m:\u001b[0m Performing final filesystem sync before shutdown...\n\n  Received Ctrl-C, shutting down the preview…\n\u001b[2m2026-11-20T03:55:38.253531Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::server\u001b[0m\u001b[2m:\u001b[0m git operation in progress: the shutdown flush was skipped; 1 document(s) hold edits that did not reach disk \u001b[3munwritten\u001b[0m\u001b[2m=\u001b[0m1\n\u001b[2m2026-11-20T03:55:38.253574Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mquarto_hub::server\u001b[0m\u001b[2m:\u001b[0m Final filesystem sync complete \u001b[3msynced\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3merrors\u001b[0m\u001b[2m=\u001b[0m0\n"
+      }
+    },
+    {
+      "step": "invoke",
+      "ok": true,
+      "observed": "C:\\Users\\GordonWoodhull\\src\\fuck\\q2\\target\\debug\\q2 preview --no-browser --data-dir C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-data9-0Kq6Lr --allow-edit --ui editor --git track --host 127.0.0.1 --port 59953 C:\\Users\\GordonWoodhull\\AppData\\Local\\Temp\\c1-hub9-PhuAEe"
+    },
+    {
+      "step": "9 restart",
+      "ok": true,
+      "observed": {
+        "skippedFlushLogged": true,
+        "tail": "preview…\n\u001b[2m2026-11-20T03:55:38.253531Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mquarto_hub::server\u001b[0m\u001b[2m:\u001b[0m git operation in progress: the shutdown flush was skipped; 1 document(s) hold edits that did not reach disk \u001b[3munwritten\u001b[0m\u001b[2m=\u001b[0m1\n\u001b[2m2026-11-20T03:55:38.253574Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mquarto_hub::server\u001b[0m\u001b[2m:\u001b[0m Final filesystem sync complete \u001b[3msynced\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3merrors\u001b[0m\u001b[2m=\u001b[0m0\n"
+      }
+    }
+  ]
+}
