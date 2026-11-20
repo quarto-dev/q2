@@ -92,6 +92,8 @@ test('(b) a ws URL from another folder creates a mirror inside the workspace fol
   const mirror = await waitFor(async () => {
     const entries = await fs.readdir(work, { withFileTypes: true });
     for (const e of entries) {
+      // Not the staging folder createProjectFolder renames into place: it already holds .quarto-hub/project.json but not yet the files (GE-17, Windows).
+      if (e.name.startsWith('.quarto-hub-tmp-')) continue;
       if (e.isDirectory() && (await fs.stat(path.join(work, e.name, '.quarto-hub', 'project.json')).catch(() => null))) return path.join(work, e.name);
     }
     return null;
