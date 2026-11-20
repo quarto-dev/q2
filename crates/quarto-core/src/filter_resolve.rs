@@ -88,6 +88,12 @@ pub struct CiteprocDefaults {
     /// margin handler needs the original `Cite` nodes (see
     /// [`margin_citations`]).
     pub margin_handled_elsewhere: bool,
+    /// Place the added entry before the `"quarto"` sentinel, so citeproc
+    /// runs in the pre-crossref group instead of after it. True for a
+    /// multi-file HTML book: its chapters pause between the two groups so
+    /// the book-wide bibliography can be merged, and only a citeproc that
+    /// has already run by then contributes its citations (`Q-23-1`).
+    pub before_quarto: bool,
 }
 
 /// Whether `meta` names a bibliography: a non-empty `bibliography` or
@@ -127,8 +133,10 @@ fn has_non_citeproc_cite_method(meta: &ConfigValue) -> bool {
 ///
 /// The entry is placed after the `"quarto"` sentinel (added if absent) so
 /// it lands in the post-crossref group, as Q1 runs citeproc after
-/// cross-reference resolution: a pre-crossref citeproc would consume
-/// `@fig-x` crossref `Cite` nodes as unresolved citations.
+/// cross-reference resolution. With `defaults.before_quarto` it goes
+/// before the sentinel instead, into the pre-crossref group; there
+/// `UserFiltersStage` drops the unknown-key warnings citeproc raises for
+/// `@fig-x` crossref keys, and crossref still resolves them afterwards.
 pub fn apply_citeproc_default(meta: &mut ConfigValue, defaults: CiteprocDefaults) -> bool {
     use quarto_pandoc_types::config_value::ConfigValueKind;
 
@@ -162,10 +170,20 @@ pub fn apply_citeproc_default(meta: &mut ConfigValue, defaults: CiteprocDefaults
     if listed("citeproc") {
         return false;
     }
-    if !listed("quarto") {
-        items.push(ConfigValue::new_string("quarto", si.clone()));
+    if defaults.before_quarto {
+        // Before the sentinel when there is one; with no sentinel every
+        // listed filter already runs in the pre group, so the end is fine.
+        let pos = items
+            .iter()
+            .position(|i| i.as_plain_text().is_some_and(|s| s == "quarto"))
+            .unwrap_or(items.len());
+        items.insert(pos, ConfigValue::new_string("citeproc", si.clone()));
+    } else {
+        if !listed("quarto") {
+            items.push(ConfigValue::new_string("quarto", si.clone()));
+        }
+        items.push(ConfigValue::new_string("citeproc", si.clone()));
     }
-    items.push(ConfigValue::new_string("citeproc", si.clone()));
     meta.insert_path(&["filters"], ConfigValue::new_array(items, si));
     true
 }
@@ -666,6 +684,15 @@ mod tests {
     const HTML: CiteprocDefaults = CiteprocDefaults {
         from_bibliography: true,
         margin_handled_elsewhere: false,
+        before_quarto: false,
+    };
+
+    /// The defaults a multi-file HTML book chapter applies: as [`HTML`],
+    /// but citeproc must run before the book's merge point.
+    const HTML_BOOK: CiteprocDefaults = CiteprocDefaults {
+        from_bibliography: true,
+        margin_handled_elsewhere: false,
+        before_quarto: true,
     };
 
     /// The defaults a Typst render applies: Q1 registers Typst with
@@ -673,6 +700,7 @@ mod tests {
     const TYPST: CiteprocDefaults = CiteprocDefaults {
         from_bibliography: false,
         margin_handled_elsewhere: true,
+        before_quarto: false,
     };
 
     #[test]
@@ -683,6 +711,52 @@ mod tests {
         let result = resolve(&meta, &[], &TestRuntime::new());
         assert!(result.pre.is_empty());
         assert_eq!(result.post, vec![FilterSpec::Citeproc]);
+    }
+
+    #[test]
+    fn before_quarto_puts_citeproc_in_the_pre_group() {
+        let mut meta = cv_map(vec![("bibliography", cv_str("refs.bib"))]);
+        assert!(apply_citeproc_default(&mut meta, HTML_BOOK));
+        assert_eq!(filter_names(&meta), vec!["citeproc"]);
+        let result = resolve(&meta, &[], &TestRuntime::new());
+        assert_eq!(result.pre, vec![FilterSpec::Citeproc]);
+        assert!(result.post.is_empty());
+    }
+
+    #[test]
+    fn before_quarto_inserts_ahead_of_an_existing_sentinel() {
+        let mut meta = cv_map(vec![
+            ("citeproc", cv_true()),
+            (
+                "filters",
+                cv_array(vec![cv_str("a.lua"), cv_str("quarto"), cv_str("b.lua")]),
+            ),
+        ]);
+        assert!(apply_citeproc_default(&mut meta, HTML_BOOK));
+        assert_eq!(
+            filter_names(&meta),
+            vec!["a.lua", "citeproc", "quarto", "b.lua"]
+        );
+    }
+
+    #[test]
+    fn before_quarto_leaves_an_explicit_entry_and_citeproc_false_alone() {
+        let mut listed = cv_map(vec![
+            ("bibliography", cv_str("refs.bib")),
+            (
+                "filters",
+                cv_array(vec![cv_str("quarto"), cv_str("citeproc")]),
+            ),
+        ]);
+        assert!(!apply_citeproc_default(&mut listed, HTML_BOOK));
+        assert_eq!(filter_names(&listed), vec!["quarto", "citeproc"]);
+
+        let mut off = cv_map(vec![
+            ("bibliography", cv_str("refs.bib")),
+            ("citeproc", cv_false()),
+        ]);
+        assert!(!apply_citeproc_default(&mut off, HTML_BOOK));
+        assert!(off.get("filters").is_none());
     }
 
     #[test]

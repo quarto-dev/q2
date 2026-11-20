@@ -2274,6 +2274,20 @@
     "docs_url": "https://quarto.org/docs/errors/citeproc/Q-23-2",
     "since_version": "99.9.9"
   },
+  "Q-23-3": {
+    "subsystem": "citeproc",
+    "title": "Book Has No References Chapter",
+    "message_template": "A book's chapters cite references, but no chapter can hold the bibliography, so the book has no reference list and its citations are not linked.",
+    "docs_url": "https://quarto.org/docs/errors/citeproc/Q-23-3",
+    "since_version": "99.9.9"
+  },
+  "Q-23-4": {
+    "subsystem": "citeproc",
+    "title": "References Div Outside The References Chapter",
+    "message_template": "A book chapter has a `#refs` div, but the book's bibliography goes into another chapter. This div stays empty.",
+    "docs_url": "https://quarto.org/docs/errors/citeproc/Q-23-4",
+    "since_version": "99.9.9"
+  },
   "Q-24-1": {
     "subsystem": "import",
     "title": "Unsupported Import File Type",

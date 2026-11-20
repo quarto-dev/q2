@@ -26,8 +26,9 @@ use crate::crossref::project_index::{ChapterCrossrefInventory, aggregate_chapter
 use crate::error::QuartoError;
 use crate::format::Format;
 use crate::pipeline::{
-    BookChapterPauseState, PartialKind, RenderOutput, build_html_pipeline_finishing_stages,
-    render_qmd_to_ast_partial, run_pipeline_from_ast,
+    BookChapterPauseState, PartialKind, RenderOutput,
+    build_html_pipeline_finishing_stages_with_options, render_qmd_to_ast_partial,
+    run_pipeline_from_ast,
 };
 use crate::project::book::render_item::{BookRenderItem, BookRenderItemKind};
 use crate::project::book::{aggregate_chapter_citations, build_merged_bibliography};
@@ -41,6 +42,7 @@ use crate::render_to_file::{
 };
 use crate::resource_resolver::ResourceResolverContext;
 use crate::stage::DocumentAst;
+use crate::stage::stages::ApplyTemplateConfig;
 use crate::transform::TransformPhase;
 
 /// Everything one chapter's pause leg produced that the resume leg needs:
@@ -56,6 +58,9 @@ struct HeldChapter {
     render_format: Format,
     pause_diagnostics: Vec<DiagnosticMessage>,
     output_path: PathBuf,
+    /// `output_path` relative to the book's output directory, with forward
+    /// slashes (`part/deep.html`): what another chapter links to.
+    output_href: String,
     resources_dir: PathBuf,
     resolver: ResourceResolverContext,
     chapter_seed: Option<ChapterSeed>,
@@ -87,6 +92,91 @@ fn citeproc_post_ordering_diagnostic(input_path: &std::path::Path) -> Diagnostic
              project's) `filters:` list so it resolves in `.pre`.",
         )
         .build()
+}
+
+/// `Q-23-3`: chapters cite references, but no chapter can hold the merged
+/// bibliography, so the book has no reference list at all.
+fn no_references_chapter_diagnostic() -> DiagnosticMessage {
+    DiagnosticMessageBuilder::warning("Book Has No References Chapter")
+        .with_code("Q-23-3")
+        .problem(
+            "This book's chapters cite references, but no chapter can hold the \
+             bibliography, so the book has no reference list and its citations \
+             are not linked.",
+        )
+        .add_hint(
+            "Add an empty `::: {#refs}` div to the chapter that should list the \
+             references, or name that chapter with `book.references` in `_quarto.yml`.",
+        )
+        .build()
+}
+
+/// `Q-23-4`: a chapter holds a `#refs` div, but another chapter is the
+/// book's references chapter, so this div stays empty (GH #1227).
+fn stray_refs_div_diagnostic(input_path: &std::path::Path) -> DiagnosticMessage {
+    DiagnosticMessageBuilder::warning("References Div Outside The References Chapter")
+        .with_code("Q-23-4")
+        .problem(format!(
+            "The book chapter `{}` has a `#refs` div, but a book has one \
+             bibliography and it goes into another chapter. This div stays empty.",
+            input_path.display()
+        ))
+        .add_hint(
+            "Remove the `#refs` div from this chapter. The references chapter is \
+             the one `book.references` names, or else the first chapter with a \
+             `#refs` div.",
+        )
+        .build()
+}
+
+/// Point every citation link under `blocks` at the references chapter.
+///
+/// Citeproc links a citation to `#ref-<key>`. With `references_url` (the
+/// references chapter's URL relative to this chapter's page) the target
+/// becomes `<references_url>#ref-<key>`; with `None` the link is replaced
+/// by its content. Only links inside a `Cite` are touched.
+fn retarget_citation_links(
+    blocks: &mut [quarto_pandoc_types::block::Block],
+    references_url: Option<&str>,
+) {
+    use quarto_pandoc_types::inline::{Inline, Inlines};
+
+    fn retarget(inlines: &mut Inlines, references_url: Option<&str>) {
+        let mut i = 0;
+        while i < inlines.len() {
+            let is_entry_link =
+                matches!(&inlines[i], Inline::Link(link) if link.target.0.starts_with("#ref-"));
+            match (is_entry_link, references_url) {
+                (true, Some(url)) => {
+                    if let Inline::Link(link) = &mut inlines[i] {
+                        link.target.0 = format!("{url}{}", link.target.0);
+                    }
+                }
+                (true, None) => {
+                    let Inline::Link(link) = inlines.remove(i) else {
+                        unreachable!("is_entry_link only matches links");
+                    };
+                    let content = link.content;
+                    let n = content.len();
+                    inlines.splice(i..i, content);
+                    i += n;
+                    continue;
+                }
+                (false, _) => {
+                    if let Inline::Span(span) = &mut inlines[i] {
+                        retarget(&mut span.content, references_url);
+                    }
+                }
+            }
+            i += 1;
+        }
+    }
+
+    crate::ast_walk::for_each_inline_mut(blocks, &mut |inline| {
+        if let Inline::Cite(cite) = inline {
+            retarget(&mut cite.content, references_url);
+        }
+    });
 }
 
 /// Render a book project to multi-file HTML with project-wide crossref
@@ -349,6 +439,7 @@ pub(crate) async fn render_book_multi_file_html(
             render_format,
             pause_diagnostics,
             output_path,
+            output_href,
             resources_dir: resource_paths.resource_dir,
             resolver,
             chapter_seed,
@@ -364,41 +455,80 @@ pub(crate) async fn render_book_multi_file_html(
     let registry = Arc::new(registry_index);
 
     // ── Bibliography aggregate: one merged, deduplicated bibliography,
-    // spliced into the designated references chapter's paused AST before
-    // it resumes (book-projects P6). No-op when no chapter cited anything,
-    // or when the book declares no `book.references` chapter.
-    if !citation_manifests.is_empty()
-        && let Some(references_chapter) = held.iter_mut().find(|c| c.is_references)
-    {
-        let (cited_order, references) = aggregate_chapter_citations(&citation_manifests);
-        let config = pampa::citeproc_filter::extract_config(&references_chapter.paused.ast);
-        let base_dir = references_chapter
-            .input_path
-            .parent()
-            .map_or_else(|| project.dir.clone(), |p| p.to_path_buf());
-        match build_merged_bibliography(
-            &config,
-            &base_dir,
-            &cited_order,
-            references,
-            runtime.as_ref(),
-        ) {
-            Ok(bib_blocks) => {
-                pampa::citeproc_filter::insert_bibliography(
-                    &mut references_chapter.paused.ast.blocks,
-                    bib_blocks,
-                );
-            }
-            Err(e) => {
-                failures.push(file_failure_from_error(
-                    references_chapter.input_path.clone(),
-                    e,
-                ));
-                if fail_fast {
-                    return Ok((outputs, failures, aggregate_diagnostics));
+    // spliced into the references chapter's paused AST before it resumes
+    // (book-projects P6).
+    //
+    // The references chapter is the one `book.references` names. Without
+    // that key it is, as in Quarto 1's `bookBibliographyPostRender`, the
+    // first chapter that holds a `#refs` div (the Quarto 1 scaffold lists
+    // `references.qmd` as an ordinary chapter).
+    let references_index = held.iter().position(|c| c.is_references).or_else(|| {
+        held.iter()
+            .position(|c| pampa::citeproc_filter::contains_refs_div(&c.paused.ast.blocks))
+    });
+    let mut aggregate_diagnostics = aggregate_diagnostics;
+
+    // GH #1227: a `#refs` div anywhere else cannot receive the merged
+    // list. It stays empty, so say so on that chapter.
+    for (i, chapter) in held.iter_mut().enumerate() {
+        if Some(i) != references_index
+            && pampa::citeproc_filter::contains_refs_div(&chapter.paused.ast.blocks)
+        {
+            let diagnostic = stray_refs_div_diagnostic(&chapter.input_path);
+            chapter.pause_diagnostics.push(diagnostic);
+        }
+    }
+
+    if !citation_manifests.is_empty() {
+        if let Some(references_chapter) = references_index.map(|i| &mut held[i]) {
+            let (cited_order, references) = aggregate_chapter_citations(&citation_manifests);
+            let config = pampa::citeproc_filter::extract_config(&references_chapter.paused.ast);
+            let base_dir = references_chapter
+                .input_path
+                .parent()
+                .map_or_else(|| project.dir.clone(), |p| p.to_path_buf());
+            match build_merged_bibliography(
+                &config,
+                &base_dir,
+                &cited_order,
+                references,
+                runtime.as_ref(),
+            ) {
+                Ok(bib_blocks) => {
+                    pampa::citeproc_filter::insert_bibliography(
+                        &mut references_chapter.paused.ast.blocks,
+                        bib_blocks,
+                    );
+                }
+                Err(e) => {
+                    failures.push(file_failure_from_error(
+                        references_chapter.input_path.clone(),
+                        e,
+                    ));
+                    if fail_fast {
+                        return Ok((outputs, failures, aggregate_diagnostics));
+                    }
                 }
             }
+        } else {
+            aggregate_diagnostics.push(no_references_chapter_diagnostic());
         }
+    }
+
+    // ── Citation links: a chapter's citeproc links each citation to
+    // `#ref-<key>`, an entry on its own page. In a book the entries are on
+    // the references chapter's page, so point the links there, as Quarto
+    // 1 does. With no references chapter there is no entry anywhere, and
+    // the link is dropped rather than left dangling.
+    let references_href = references_index.map(|i| held[i].output_href.clone());
+    for (i, chapter) in held.iter_mut().enumerate() {
+        if Some(i) == references_index {
+            continue;
+        }
+        let references_url = references_href
+            .as_deref()
+            .map(|href| chapter.resolver.page_url_for(href));
+        retarget_citation_links(&mut chapter.paused.ast.blocks, references_url.as_deref());
     }
 
     // ── Resume leg: every held chapter from Finalization.. ──────────
@@ -419,7 +549,13 @@ pub(crate) async fn render_book_multi_file_html(
         }
         ctx = ctx.with_cross_chapter_crossref_registry(registry.clone());
 
-        let finishing_stages = build_html_pipeline_finishing_stages(TransformPhase::Finalization);
+        // `ApplyTemplateStage` runs on this leg, so it needs the chapter's
+        // resolver to link the shared CSS / JS under `site_libs/` (with
+        // the right `../` depth) rather than by bare artifact path.
+        let finishing_stages = build_html_pipeline_finishing_stages_with_options(
+            TransformPhase::Finalization,
+            Some(ApplyTemplateConfig::new().with_resolver(chapter.resolver.clone())),
+        );
         let (finished, finishing_diagnostics) = match run_pipeline_from_ast(
             chapter.paused,
             &mut ctx,

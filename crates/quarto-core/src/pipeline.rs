@@ -973,7 +973,25 @@ pub fn build_html_pipeline_pause_stages(
 pub fn build_html_pipeline_finishing_stages(
     lower_bound: crate::transform::TransformPhase,
 ) -> Vec<Box<dyn PipelineStage>> {
-    finishing_stages_from(build_html_pipeline_stages_with_options(None), lower_bound)
+    build_html_pipeline_finishing_stages_with_options(lower_bound, None)
+}
+
+/// [`build_html_pipeline_finishing_stages`] with an optional
+/// [`ApplyTemplateConfig`] for the final `ApplyTemplateStage`.
+///
+/// A resumed render that writes a page to disk must pass a config with
+/// the page's resolver: `ApplyTemplateStage` runs in this half of the
+/// pipeline, and without a resolver it links each CSS / JS artifact by its
+/// bare path (`quarto/quarto-theme-….css`) instead of its place under the
+/// project's lib dir (`site_libs/quarto/…`).
+pub fn build_html_pipeline_finishing_stages_with_options(
+    lower_bound: crate::transform::TransformPhase,
+    apply_config: Option<ApplyTemplateConfig>,
+) -> Vec<Box<dyn PipelineStage>> {
+    finishing_stages_from(
+        build_html_pipeline_stages_with_options(apply_config),
+        lower_bound,
+    )
 }
 
 /// The Pandoc-hybrid stage list paused after `upper_bound` — P2's

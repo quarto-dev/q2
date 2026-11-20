@@ -1647,6 +1647,18 @@ fn find_refs_div(blocks: &mut [Block]) -> Option<&mut Div> {
     None
 }
 
+/// Whether `blocks` hold a Div with id="refs", at any depth of nested Divs.
+///
+/// A book's references chapter is, as in Quarto 1, a chapter that carries
+/// this div; the book orchestrator uses this to find it when
+/// `book.references` does not name one.
+pub fn contains_refs_div(blocks: &[Block]) -> bool {
+    blocks.iter().any(|block| match block {
+        Block::Div(d) => d.attr.0 == "refs" || contains_refs_div(&d.content),
+        _ => false,
+    })
+}
+
 /// Insert bibliography into the document.
 ///
 /// If a Div with id="refs" exists, replace its contents.
