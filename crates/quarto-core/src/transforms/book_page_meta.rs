@@ -111,6 +111,73 @@ impl AstTransform for BookPageMetaTransform {
     }
 }
 
+/// AST transform: the title block of a book's home page.
+///
+/// Quarto 1 opens the home page (`index.*`) with the book's own title
+/// block: `book.title`, and `book.subtitle`, `book.author`, `book.date`,
+/// `book.description` and `book.abstract` where set. The page's own first
+/// heading ("Preface") stays in the body below it (bd-tqeeqx1c).
+///
+/// The book title always replaces the page's `title`. The other keys
+/// fill in only what the page does not set itself. Runs before
+/// `MetadataNormalizeTransform`, so the copied values are normalized and
+/// formatted like any document's. A no-op on every other page.
+pub struct BookHomeMetaTransform;
+
+impl BookHomeMetaTransform {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for BookHomeMetaTransform {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// `book.*` keys the home page's title block shows, besides `title`.
+const BOOK_HOME_KEYS: &[&str] = &["subtitle", "author", "date", "description", "abstract"];
+
+#[async_trait::async_trait(?Send)]
+impl AstTransform for BookHomeMetaTransform {
+    fn name(&self) -> &str {
+        "book-home-meta"
+    }
+
+    fn phase(&self) -> TransformPhase {
+        TransformPhase::Normalization
+    }
+
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
+        let is_home = ctx.project.book_render_items.as_ref().is_some_and(|items| {
+            crate::project::book::render_item::render_item_for_input(
+                &ctx.project.dir,
+                items,
+                &ctx.document.input,
+            )
+            .is_some_and(|item| item.kind == BookRenderItemKind::Index)
+        });
+        if !is_home {
+            return Ok(());
+        }
+        let Some(book) = ast.meta.get("book").cloned() else {
+            return Ok(());
+        };
+        if let Some(title) = book.get("title") {
+            ast.meta.insert_path(&["title"], title.clone());
+        }
+        for key in BOOK_HOME_KEYS {
+            if ast.meta.get(key).is_none()
+                && let Some(value) = book.get(key)
+            {
+                ast.meta.insert_path(&[key], value.clone());
+            }
+        }
+        Ok(())
+    }
+}
+
 /// The book item the current document renders, unless it is the book's
 /// home page, which keeps the book title.
 fn book_item_for<'a>(ctx: &'a RenderContext) -> Option<&'a BookRenderItem> {

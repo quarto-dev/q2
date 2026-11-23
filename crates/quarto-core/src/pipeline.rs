@@ -2523,6 +2523,10 @@ pub fn build_transform_pipeline(
     // transform's metadata walk — registered immediately after — sees
     // live Shortcode/RawInline nodes instead of literal scalars
     // (bd-shortcodes-in-metadata-bp06aub8).
+    // A book's home page opens with the book's own title block
+    // (bd-tqeeqx1c): copy `book.*` into the page metadata before dates
+    // are formatted (inside shortcode-resolve) and metadata is normalized.
+    pipeline.push(Box::new(crate::transforms::BookHomeMetaTransform::new()));
     pipeline.push(Box::new(crate::transforms::ConfigMarkdownTransform::new()));
     pipeline.push(Box::new(ShortcodeResolveTransform::with_lua_support(
         shortcode_paths,
@@ -3254,6 +3258,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "sectionize",
     "html-columns",
     "title-banner",
+    "book-home-meta",
     "book-page-meta",
     "website-title-prefix",
     "website-favicon",
@@ -3419,6 +3424,7 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     ("example-embed-render", Bucket::B1),
     // --- B2: format-family scaffolding ------------------------------------
     ("title-banner", Bucket::B2),
+    ("book-home-meta", Bucket::B2),
     ("book-page-meta", Bucket::B2),
     ("website-title-prefix", Bucket::B2),
     ("website-favicon", Bucket::B2),
@@ -7274,6 +7280,7 @@ mod tests {
                 "callout",
                 "panel-tabset",
                 "panel-tabset-resolve",
+                "book-home-meta",
                 "config-markdown",
                 "shortcode-resolve",
                 "heading-id",
@@ -7381,6 +7388,7 @@ mod tests {
                 "callout",
                 "panel-tabset",
                 "panel-tabset-resolve",
+                "book-home-meta",
                 "config-markdown",
                 "shortcode-resolve",
                 "heading-id",
@@ -7772,6 +7780,7 @@ mod tests {
                 "reference-link-diagnostics",
                 "brace-diagram-cell-diagnostics",
                 "callout",
+                "book-home-meta",
                 "config-markdown",
                 "shortcode-resolve",
                 "heading-id",

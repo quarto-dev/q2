@@ -514,6 +514,68 @@ book:
     );
 }
 
+/// bd-tqeeqx1c: the home page opens with the book's title block (title,
+/// subtitle, description, authors, date), and the page's own first
+/// heading stays in the body under it. No other page gets the block.
+#[test]
+fn home_page_opens_with_the_book_title_block() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        r#"project:
+  type: book
+
+book:
+  title: "Home Book"
+  subtitle: "A subtitle for the book"
+  author:
+    - "Ada Example"
+    - "Grace Sample"
+  date: "2026-11-20"
+  description: "What the book is about."
+  chapters:
+    - index.qmd
+    - one.qmd
+"#,
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "# Preface {.unnumbered}\n\nHello.\n",
+    );
+    write(&project_dir.join("one.qmd"), "# One\n\nText.\n");
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+    let index = read_output(&outputs, "index");
+    let one = read_output(&outputs, "one");
+
+    let header_start = index
+        .find("<header id=\"title-block-header\"")
+        .unwrap_or_else(|| panic!("home page has no title block: {index}"));
+    let header_end = index[header_start..].find("</header>").unwrap() + header_start;
+    let block = &index[header_start..header_end];
+    assert!(
+        block.contains("<h1 class=\"title\">Home Book</h1>"),
+        "{block}"
+    );
+    assert!(block.contains("A subtitle for the book"), "{block}");
+    assert!(block.contains("What the book is about."), "{block}");
+    assert!(
+        block.contains("Ada Example") && block.contains("Grace Sample"),
+        "{block}"
+    );
+    assert!(block.contains("November 20, 2026"), "{block}");
+
+    assert!(
+        index[header_end..].contains("Preface</h1>"),
+        "the page's own heading stays in the body, after the title block"
+    );
+    assert!(index.contains("<title>Home Book</title>"), "{index}");
+    assert!(
+        !one.contains("Ada Example") && !one.contains("A subtitle for the book"),
+        "a chapter page must not show the book's title block: {one}"
+    );
+}
+
 /// Sections of an unnumbered chapter (a preface, say) carry no number.
 /// Quarto 1 turns section numbering off for such a chapter; without that
 /// the sections count from an unset chapter slot and read "0.1", "0.2".

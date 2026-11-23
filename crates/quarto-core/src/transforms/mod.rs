@@ -172,7 +172,7 @@ pub(crate) use attribution_render::query_attribution;
 pub use attribution_viewer::AttributionViewerTransform;
 pub use authors_normalize::{AuthorsNormalizeTransform, normalize_authors_meta};
 pub use book_cover_image::BookCoverImageTransform;
-pub use book_page_meta::BookPageMetaTransform;
+pub use book_page_meta::{BookHomeMetaTransform, BookPageMetaTransform};
 pub use brace_diagram_cell_diagnostics::BraceDiagramCellDiagnosticsTransform;
 pub use breadcrumbs_render::BreadcrumbsRenderTransform;
 pub use callout::CalloutTransform;

@@ -1453,6 +1453,14 @@ details > summary > p:only-child {
   font-weight: 600;
 }
 
+// A book's cover image on its home page (transforms/book_cover_image.rs
+// emits `<img class="quarto-cover-image">`). from _quarto-rules.scss:370-375.
+.quarto-cover-image {
+  max-width: 35%;
+  float: right;
+  margin-left: 30px;
+}
+
 // from _quarto-rules.scss:436-438.
 a {
   text-underline-offset: 3px;
