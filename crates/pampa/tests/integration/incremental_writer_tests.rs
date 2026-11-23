@@ -2202,3 +2202,73 @@ fn hard_break_before_emphasis_keeps_emphasis_when_sibling_edited() {
 fn idempotent_hard_break() {
     assert_idempotent("Last line\\\nnext line.\n");
 }
+
+// =============================================================================
+// Emphasis delimiters inside a recursed container (GH #1268)
+//
+// When reconciliation keeps an original emphasis container and recurses into
+// its changed children, the container's delimiters are copied from the source
+// but the new children are written by `write_single_inline` with an empty
+// emphasis stack. A new `Emph` inside an original `**…**` therefore picks `*`
+// and the splice reads `***Quarto***` — invalid qmd.
+// =============================================================================
+
+/// Incrementally rewrite `original` so it matches the AST of `edited`, then
+/// check that the result re-parses to the same document as `edited`.
+fn assert_incremental_edit_roundtrips(original: &str, edited: &str) -> String {
+    let new_ast = parse_qmd(edited);
+    let result = incremental_write_via_json_roundtrip(original, &new_ast);
+    assert!(
+        !result.contains("***") && !result.contains("___"),
+        "incremental write produced a triple delimiter: {result:?}"
+    );
+    assert_eq!(
+        write_qmd(&parse_qmd(&result)),
+        write_qmd(&new_ast),
+        "incremental write changed the document: {result:?}"
+    );
+    result
+}
+
+#[test]
+fn new_emph_inside_original_strong_does_not_triple_delimit() {
+    // What the hub rich-text editor sends after italicising "a Quarto website"
+    // in a paragraph whose source already has `**Quarto**`.
+    let result = assert_incremental_edit_roundtrips(
+        "This is a **Quarto** website.\n",
+        "This is _a_ **_Quarto_** _website_.\n",
+    );
+    assert_eq!(result, "This is *a* **_Quarto_** *website*.\n");
+}
+
+#[test]
+fn new_strong_inside_original_emph_does_not_triple_delimit() {
+    let result =
+        assert_incremental_edit_roundtrips("This is *Quarto*.\n", "This is *__Quarto__*.\n");
+    assert_eq!(result, "This is *__Quarto__*.\n");
+}
+
+#[test]
+fn new_strong_two_levels_inside_kept_emphasis_does_not_triple_delimit() {
+    // Two kept containers (`**…**` around `*…*`): the spliced Strong must see
+    // the innermost one, not just the outermost.
+    let result = assert_incremental_edit_roundtrips(
+        "Intro text here. **a *b c d* f** outro text.\n",
+        "Intro text here. **a *b c __d__* f** outro text.\n",
+    );
+    assert_eq!(result, "Intro text here. **a *b c __d__* f** outro text.\n");
+}
+
+#[test]
+fn new_strong_two_levels_inside_kept_emphasis_keeps_structure() {
+    // Same shape with the new Strong mid-run: `__` keeps it distinct from the
+    // enclosing `**…**`.
+    let result = assert_incremental_edit_roundtrips(
+        "Intro text here. **a *b c d e* f** outro text.\n",
+        "Intro text here. **a *b c __d__ e* f** outro text.\n",
+    );
+    assert_eq!(
+        result,
+        "Intro text here. **a *b c __d__ e* f** outro text.\n"
+    );
+}
