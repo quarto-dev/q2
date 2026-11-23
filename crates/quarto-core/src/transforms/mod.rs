@@ -78,7 +78,7 @@ mod config_markdown;
 pub(crate) mod cross_chapter_crossref_resolve;
 mod crossref_index;
 pub(crate) mod crossref_render;
-mod crossref_resolve;
+pub(crate) mod crossref_resolve;
 pub(crate) mod date_normalize;
 mod draft_alert;
 mod editorial_marks_ooxml;

@@ -308,6 +308,73 @@ book:
     );
 }
 
+/// Every "unresolved crossref" warning a whole-book render reports, on
+/// any chapter.
+fn unresolved_crossref_warnings(project_dir: &Path) -> Vec<String> {
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let mut project = ProjectContext::discover(project_dir, runtime.as_ref()).unwrap();
+    let project_type = project_type_for(&project);
+    let format = Format::from_format_string("html").unwrap();
+    let options = RenderToFileOptions::default();
+    let mut pipeline = ProjectPipeline::new(
+        &mut project,
+        project_type,
+        format,
+        "html",
+        &options,
+        runtime,
+    );
+    let summary = pollster::block_on(pipeline.run_with_book_support())
+        .unwrap_or_else(|e| panic!("run_with_book_support failed: {e}"));
+    summary
+        .outputs
+        .iter()
+        .flat_map(|o| o.render_output.diagnostics.iter())
+        .chain(summary.project_diagnostics.iter())
+        .map(|d| d.title.clone())
+        .filter(|t| t.contains("unresolved crossref"))
+        .collect()
+}
+
+/// bd-e4bgx1r0: a reference to a target in another chapter resolves on
+/// the resume leg, from the book-wide registry. The chapter's own pass
+/// cannot see that target, and used to warn "unresolved crossref" for
+/// every such reference although the written link was correct. Only a
+/// reference no chapter defines may warn, and it warns once.
+#[test]
+fn cross_chapter_references_do_not_warn_unresolved() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minibook(&project_dir);
+    write(
+        &project_dir.join("ch1.qmd"),
+        &chapter_source(
+            "Chapter One",
+            "fig-one",
+            "A figure in chapter one",
+            "Forward to @fig-two, and own @fig-one.",
+        ),
+    );
+    assert_eq!(
+        unresolved_crossref_warnings(&project_dir),
+        Vec::<String>::new(),
+        "every reference in the book has a target"
+    );
+
+    write(
+        &project_dir.join("ch1.qmd"),
+        &chapter_source(
+            "Chapter One",
+            "fig-one",
+            "A figure in chapter one",
+            "Forward to @fig-two, and a missing @fig-nope.",
+        ),
+    );
+    let warnings = unresolved_crossref_warnings(&project_dir);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("@fig-nope"), "{warnings:?}");
+}
+
 /// Sections of an unnumbered chapter (a preface, say) carry no number.
 /// Quarto 1 turns section numbering off for such a chapter; without that
 /// the sections count from an unset chapter slot and read "0.1", "0.2".

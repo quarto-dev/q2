@@ -44,6 +44,7 @@ use crate::resource_resolver::ResourceResolverContext;
 use crate::stage::DocumentAst;
 use crate::stage::stages::ApplyTemplateConfig;
 use crate::transform::TransformPhase;
+use crate::transforms::crossref_resolve::is_unresolved_crossref_warning;
 
 /// Everything one chapter's pause leg produced that the resume leg needs:
 /// the extracted [`BookChapterPauseState`] (artifacts, diagnostics,
@@ -403,7 +404,16 @@ pub(crate) async fn render_book_multi_file_html(
                 continue;
             }
         };
-        let state = BookChapterPauseState::extract_from(&mut ctx);
+        let mut state = BookChapterPauseState::extract_from(&mut ctx);
+
+        // bd-e4bgx1r0: the chapter's own crossref pass knows only this
+        // chapter's targets, so it warns for every reference to another
+        // chapter. `CrossChapterCrossrefResolveTransform` resolves those
+        // on the resume leg and warns for the ones no chapter defines.
+        pause_diagnostics.retain(|d| !is_unresolved_crossref_warning(d));
+        state
+            .diagnostics
+            .retain(|d| !is_unresolved_crossref_warning(d));
 
         // Book-projects P6: a chapter whose `filters:` placed `citeproc`
         // into `.post` never captured a citation manifest — diagnose it by
