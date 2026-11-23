@@ -183,8 +183,8 @@ fn three_chapter_book_renders_separate_files_with_chapter_local_numbers() {
 
     // Chapter 1: H1 numbers "1"; its own figure and in-text ref are 1.1.
     assert!(
-        ch1.contains("header-section-number\">1<"),
-        "ch1 H1 must number 1: {}",
+        ch1.contains("<span class=\"chapter-number\">1</span>"),
+        "ch1's title must number 1: {}",
         ch1
     );
     assert!(
@@ -201,8 +201,8 @@ fn three_chapter_book_renders_separate_files_with_chapter_local_numbers() {
     // Chapter 2: H1 numbers "2" — this is the assertion the flat counter
     // fails (today it renders "1"); its figure is 2.1, not 1.1 or 2.2.
     assert!(
-        ch2.contains("header-section-number\">2<"),
-        "ch2 H1 must number 2 (seeded chapter number): {}",
+        ch2.contains("<span class=\"chapter-number\">2</span>"),
+        "ch2's title must number 2 (seeded chapter number): {}",
         ch2
     );
     assert!(
@@ -224,13 +224,8 @@ fn three_chapter_book_renders_separate_files_with_chapter_local_numbers() {
     // Appendix: "Appendix A —" H1 shape; the figure letters A.1 —
     // a separate sequence from the numeric chapters, not "3.1"/"4.1".
     assert!(
-        app_a.contains("header-section-number\">A<"),
-        "appendix H1 must number as letter A: {}",
-        app_a
-    );
-    assert!(
-        app_a.contains("Appendix <span class=\"header-section-number\">A</span> —"),
-        "appendix H1 must carry the 'Appendix A —' prefix shape: {}",
+        app_a.contains("<h1 class=\"title\">") && app_a.contains(">Appendix A — "),
+        "the appendix title must carry the 'Appendix A —' prefix: {}",
         app_a
     );
     assert!(
@@ -284,8 +279,8 @@ book:
     // (a) The unnumbered chapter is invisible to the chapter sequence:
     // chapter 2 still numbers 2 / 2.1.
     assert!(
-        ch2.contains("header-section-number\">2<"),
-        "ch2 H1 must still number 2 — the unnumbered interlude consumed no slot: {}",
+        ch2.contains("<span class=\"chapter-number\">2</span>"),
+        "ch2's title must still number 2 — the unnumbered interlude consumed no slot: {}",
         ch2
     );
     assert!(
@@ -509,7 +504,7 @@ book:
     assert_eq!(next_of(&part), "../two.html");
     // The chapter after the part still counts 2.
     assert!(
-        read_output(&outputs, "two").contains("header-section-number\">2<"),
+        read_output(&outputs, "two").contains("<span class=\"chapter-number\">2</span>"),
         "the part page must not take a chapter number"
     );
 }
@@ -661,6 +656,179 @@ book:
 
     // From a subfolder the download link climbs to the book root.
     at(&deep, "href=\"../Tools-Book.epub\" title=\"Download ePub\"");
+}
+
+/// bd-jib92bnc: a chapter's title is the page's `h1.title`, numbered,
+/// whether the author wrote it as a first heading or as front matter
+/// `title:`. The heading leaves the body, its id moves onto the title so
+/// `page.html#sec-id` still works, and sections number inside the chapter
+/// in both forms. Markup verified against Quarto 1.9.38.
+#[test]
+fn chapter_title_is_the_numbered_title_block_heading() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        r#"project:
+  type: book
+
+book:
+  title: "Title Forms"
+  chapters:
+    - index.qmd
+    - heading.qmd
+    - frontmatter.qmd
+    - late.qmd
+    - plain.qmd
+  appendices:
+    - extra.qmd
+"#,
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "# Preface {.unnumbered}\n\nSee @sec-heading, @sec-late and @sec-extra.\n",
+    );
+    write(
+        &project_dir.join("heading.qmd"),
+        "---\nsubtitle: \"A subtitle\"\n---\n\n# Heading *Form* {#sec-heading}\n\nText.\n\n## First\n\nx\n",
+    );
+    write(
+        &project_dir.join("frontmatter.qmd"),
+        "---\ntitle: \"Front Matter Form\"\n---\n\nText.\n\n## First\n\nx\n\n## Second\n\nx\n",
+    );
+    // Quarto 1 takes the first heading of any level, wherever it sits.
+    write(
+        &project_dir.join("late.qmd"),
+        "Words before any heading.\n\n## Late Heading {#sec-late}\n\nText.\n\n## Sub\n\nx\n",
+    );
+    write(
+        &project_dir.join("plain.qmd"),
+        "# Plain {.unnumbered}\n\nText.\n\n## Sub\n\nx\n",
+    );
+    write(
+        &project_dir.join("extra.qmd"),
+        "# Extra Material {#sec-extra}\n\nText.\n\n## Sub\n\nx\n",
+    );
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+    let page = |stem: &str| read_output(&outputs, stem);
+    let h1s = |html: &str| html.matches("<h1").count();
+
+    // Heading form: numbered h1.title carrying the id; nothing left in the body.
+    let heading = page("heading");
+    assert!(
+        heading.contains(
+            "<h1 class=\"title\"><span id=\"sec-heading\" class=\"quarto-section-identifier\">\
+             <span class=\"chapter-number\">1</span>\u{a0} \
+             <span class=\"chapter-title\">Heading <em>Form</em></span></span></h1>"
+        ),
+        "{heading}"
+    );
+    assert_eq!(
+        h1s(&heading),
+        1,
+        "the heading must leave the body: {heading}"
+    );
+    assert!(
+        heading.find("<h1 class=\"title\">").unwrap() < heading.find("A subtitle").unwrap(),
+        "the title comes before the subtitle"
+    );
+    assert!(
+        heading.contains("header-section-number\">1.1<"),
+        "{heading}"
+    );
+    assert!(
+        heading.contains("<title>1\u{a0} Heading Form – Title Forms</title>"),
+        "{heading}"
+    );
+
+    // Front matter form: same numbered title, and sections 2.1, 2.2.
+    let frontmatter = page("frontmatter");
+    assert!(
+        frontmatter.contains(
+            "<h1 class=\"title\"><span class=\"chapter-number\">2</span>\u{a0} \
+             <span class=\"chapter-title\">Front Matter Form</span></h1>"
+        ),
+        "{frontmatter}"
+    );
+    assert!(
+        frontmatter.contains("header-section-number\">2.1<")
+            && frontmatter.contains("header-section-number\">2.2<"),
+        "sections number inside chapter 2: {frontmatter}"
+    );
+
+    // A first heading that is neither level 1 nor the first block.
+    let late = page("late");
+    assert!(
+        late.contains("<span class=\"chapter-number\">3</span>")
+            && late.contains("<span class=\"chapter-title\">Late Heading</span>"),
+        "{late}"
+    );
+    assert!(late.contains("Words before any heading."), "{late}");
+    assert!(late.contains("header-section-number\">3.1<"), "{late}");
+
+    // An unnumbered chapter: bare title, no numbers anywhere.
+    let plain = page("plain");
+    let plain_title = &plain[plain.find("<h1 class=\"title\">").unwrap()..];
+    let plain_title = &plain_title[..plain_title.find("</h1>").unwrap()];
+    assert!(plain_title.ends_with(">Plain</span>"), "{plain_title}");
+    assert!(!plain_title.contains("chapter-number"), "{plain_title}");
+    assert!(!plain.contains("header-section-number"), "{plain}");
+
+    // An appendix: "Appendix A — Title", sections A.1.
+    let extra = page("extra");
+    assert!(
+        extra.contains(
+            "<h1 class=\"title\"><span id=\"sec-extra\" class=\"quarto-section-identifier\">\
+             Appendix A — Extra Material</span></h1>"
+        ),
+        "{extra}"
+    );
+    assert!(extra.contains("header-section-number\">A.1<"), "{extra}");
+
+    // Cross-references to the lifted headings still resolve and land.
+    let index = page("index");
+    assert!(
+        index.contains("href=\"heading.html#sec-heading\""),
+        "{index}"
+    );
+    assert!(
+        index.contains(">Chapter\u{a0}1</a>") || index.contains(">Chapter 1</a>"),
+        "{index}"
+    );
+    assert!(index.contains("href=\"late.html#sec-late\""), "{index}");
+    assert!(index.contains("href=\"extra.html#sec-extra\""), "{index}");
+    assert!(!index.contains("quarto-unresolved-ref"), "{index}");
+    // The home page keeps its own heading in the body.
+    assert!(index.contains("Preface</h1>"), "{index}");
+}
+
+/// Quarto 1 does no appendix processing on a book page: footnotes stay a
+/// plain list at the end of the chapter, with no "Footnotes" heading and
+/// no `#quarto-appendix` container. A chapter's own section that happens
+/// to be titled "Footnotes" must survive: the appendix step used to take
+/// it for the generated footnote list and remove it from the page.
+#[test]
+fn book_pages_get_no_appendix_processing() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minibook(&project_dir);
+    write(
+        &project_dir.join("ch1.qmd"),
+        "# Chapter One\n\nText.\n\n## Footnotes\n\nSECTION-BODY has a note.[^1]\n\n[^1]: NOTE-TEXT here.\n",
+    );
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+    let ch1 = read_output(&outputs, "ch1");
+
+    assert!(
+        ch1.contains("SECTION-BODY"),
+        "the author's section must stay: {ch1}"
+    );
+    assert!(ch1.contains("NOTE-TEXT"), "{ch1}");
+    assert!(
+        ch1.contains("id=\"fnref1\""),
+        "the note's back-link target must exist: {ch1}"
+    );
+    assert!(!ch1.contains("quarto-appendix"), "{ch1}");
 }
 
 /// Sections of an unnumbered chapter (a preface, say) carry no number.

@@ -2541,6 +2541,14 @@ pub fn build_transform_pipeline(
     // heading text after the reader derived ids from it (bd-2wv8431v,
     // bd-lmd-exploration-jqv2nbl4 spike 5). Before sectionize and the TOC.
     pipeline.push(Box::new(crate::transforms::HeadingIdTransform::new()));
+    // A book chapter's title moves into the title block, numbered, as in
+    // Quarto 1 (bd-jib92bnc). After heading ids are final, and before the
+    // metadata is normalized so `pagetitle` derives from the new title.
+    // Render only: `q2 preview` draws its own title block from the
+    // chapter heading and its number kv, and keeps doing so.
+    if matches!(pipeline_profile, crate::format::PipelineProfile::HtmlRender) {
+        pipeline.push(Box::new(crate::transforms::BookChapterTitleTransform::new()));
+    }
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     // Author/label normalization (bd-gx9cic8z P1): derives `by-author`,
     // `labels`, and `rendered.has-title-block` from raw metadata for
@@ -3258,6 +3266,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "sectionize",
     "html-columns",
     "title-banner",
+    "book-chapter-title",
     "book-home-meta",
     "book-page-meta",
     "website-title-prefix",
@@ -3424,6 +3433,7 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     ("example-embed-render", Bucket::B1),
     // --- B2: format-family scaffolding ------------------------------------
     ("title-banner", Bucket::B2),
+    ("book-chapter-title", Bucket::B2),
     ("book-home-meta", Bucket::B2),
     ("book-page-meta", Bucket::B2),
     ("website-title-prefix", Bucket::B2),
@@ -7284,6 +7294,7 @@ mod tests {
                 "config-markdown",
                 "shortcode-resolve",
                 "heading-id",
+                "book-chapter-title",
                 "metadata-normalize",
                 "authors-normalize",
                 "title-banner",

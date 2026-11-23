@@ -54,6 +54,11 @@ filters:
   - citeproc
 ```
 
+A chapter's title is its first heading, or the `title:` in its front
+matter; both give the same numbered title at the top of the page. To
+make a chapter a cross-reference target, use a heading with an id
+(`# Methods {#sec-methods}`).
+
 `book.chapters` lists the files to render, in book order. The first
 entry named `index.*` becomes the book's home page automatically,
 wherever it appears in the list. A chapter is numbered unless its
@@ -199,10 +204,6 @@ and warns with [`Q-5-42`](../../errors/project/Q-5-42.qmd).
 Book projects are new in this release. A few gaps are worth knowing
 about up front, rather than discovering them mid-project:
 
-- **Per-chapter front matter beyond the title is dropped in multi-file
-  HTML.** A chapter's `subtitle`, `author`, `date`, and `abstract`
-  fields don't render — only the book-level versions of these fields
-  do.
 - **Numeric citation styles renumber independently per chapter in
   multi-file HTML.** The bibliography itself merges correctly across
   chapters, but a numeric CSL style (`[1]`, `[2]`, …) numbers each
