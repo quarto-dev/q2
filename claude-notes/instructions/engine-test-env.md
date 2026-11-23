@@ -41,7 +41,8 @@ The root `rproj.toml` and `rproj.lock` define the test environment:
 - `[dependencies]` contains the engine minimum: knitr, rmarkdown, and
   jsonlite.
 - `[dependency-groups.fixtures]` contains packages used by corpus fixtures:
-  ggplot2, gt, flextable, bslib, bsicons, shiny, dplyr, readr, and xml2.
+  ggplot2, gt, flextable, bslib, bsicons, shiny, dplyr, readr, xml2,
+  plotly, DBI, RSQLite, and png.
 - The lock currently names R 4.6.2 and has Windows, Linux, macOS, and source
   targets.
 
@@ -204,19 +205,20 @@ occurred; run the smoke document and inspect its output.
 
 ### Known failures from the Windows verification
 
-In the full locked-library run on 2026-11-23, nextest reported 543 selected
-tests: 538 passed and 5 failed. Passed includes tests that returned early.
-The locked library has no plotly, DBI, RSQLite or png, so the widget
-fixtures (`s2/03_htmlwidget`, `s2/09_widget_filters`,
-`s9/03_inline_block_widget`) and `s5/01_odd_chunks` are unavailable, and
-`a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live` returns before
-its assertion. Four failures reproduce without the shim and are
-Windows CRLF issues (bd-qmp87pxy and bd-08jz7o8j). The remaining failure is
-`capture_include_graphics_is_an_image_paths_piece`: the approved main and
-fixtures package list does not include the optional `png` package, so knitr
-returns no computed image width. The same assertion passes in a user library
-that has `png`. This dependency question is tracked as bd-b0o2lxnv; do not
-mistake it for a Windows path failure.
+Four failures reproduce without the shim and are Windows CRLF issues
+(bd-qmp87pxy and bd-08jz7o8j).
+
+`a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live` fails under the
+locked knitr 1.52, as under knitr 1.52.3: knitr refuses `#|` options in a
+`{sql}` chunk and asks for `--|` (bd-lnu81d4a). Without DBI and RSQLite the
+test returns early and counts as passed.
+
+The `fixtures` group declares plotly, DBI, RSQLite and png because tests
+need them. Without plotly the widget fixtures (`s2/03_htmlwidget`,
+`s2/09_widget_filters`, `s9/03_inline_block_widget`) are unavailable;
+without DBI and RSQLite `s5/01_odd_chunks` is unavailable; without png,
+`capture_include_graphics_is_an_image_paths_piece` fails because knitr
+computes no image width.
 
 The exact commands, baseline comparison, and output snippets are in
 `claude-notes/plans/2026-11-23-ci-engine-test-env-r-jupyter.md`.

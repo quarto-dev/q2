@@ -150,8 +150,8 @@ user `python3` kernelspec present: the kernel's `sys.executable` is inside
   `rproj.lock` (see Approach).
 - **Packages:** `main` holds the engine minimum (knitr, rmarkdown,
   jsonlite). A `fixtures` dependency group holds what the corpus fixtures
-  use (ggplot2, gt, flextable, bslib, bsicons, shiny, dplyr, readr, xml2,
-  …). Whether CI syncs `--group fixtures` is decided on measurements:
+  and other R tests use (ggplot2, gt, flextable, bslib, bsicons, shiny,
+  dplyr, readr, xml2, plotly, DBI, RSQLite, png). Whether CI syncs `--group fixtures` is decided on measurements:
   install time and test time separately, since R being present turns on
   `knitr_corpus_control.rs`, which reruns the corpus. Fixtures whose
   packages are missing skip through the corpus runner's `Missing package`
@@ -314,10 +314,25 @@ them: the locked library has no DBI or RSQLite, so the test returns before
 its assertion and nextest counts it as passed. The version comparison needs
 a run with both packages available.
 
-The locked library also lacks plotly, so the corpus fixtures
+The locked library also lacked plotly, so the corpus fixtures
 `s2/03_htmlwidget`, `s2/09_widget_filters` and `s9/03_inline_block_widget`
-are unavailable, as is `s5/01_odd_chunks` (DBI, RSQLite). Whether to add
-plotly, DBI, RSQLite and png to the `fixtures` group is open.
+were unavailable, as was `s5/01_odd_chunks` (DBI, RSQLite).
+
+Decided 2026-11-23: packages that tests need belong in the `fixtures`
+group, so plotly, DBI, RSQLite and png were added and the lock regenerated
+with rig 0.11.1. The relock only added packages (420 platform entries
+against 388; no existing version changed) and kept R 4.6.2 on all four
+targets; `rig proj sync` left `.gitignore` unchanged. With the shim:
+
+```powershell
+cargo nextest run -p quarto-core --no-fail-fast -E "test(a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live) | test(capture_include_graphics_is_an_image_paths_piece)"
+```
+
+`capture_include_graphics_is_an_image_paths_piece` now passes (bd-b0o2lxnv).
+The SQL test now executes and fails under locked knitr 1.52 too:
+`Error: The chunk options should start with '--| ' instead of '#| '.`, the
+same failure as knitr 1.52.3 (bd-lnu81d4a). The plotly fixtures were not
+rerun; the corpus control tests take over 833 seconds each.
 
 ## Checklist
 
