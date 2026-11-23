@@ -1453,6 +1453,14 @@ details > summary > p:only-child {
   font-weight: 600;
 }
 
+// q2 renders the prev/next strip inside `main` (Q1 gives it a grid row of
+// its own after `main`), so it must clear anything floated in the page
+// body. A book's home page floats its cover image; without this the
+// strip sits beside the cover instead of under it.
+main .page-navigation {
+  clear: both;
+}
+
 // A book's cover image on its home page (transforms/book_cover_image.rs
 // emits `<img class="quarto-cover-image">`). from _quarto-rules.scss:370-375.
 .quarto-cover-image {

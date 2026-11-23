@@ -533,4 +533,4 @@
 # stylesheet from `main`). doc.html hash
 # unchanged: the fixture has no columns.
 doc.html cb911871a3a0f9328ae6a32df4e2d72da647ff8696169aec56c01d66984cd8ef
-doc_files/styles.css d5f65f5d75f82b7327ddb46363073aa35710850148f6603a38f1a6cb5da94d60
+doc_files/styles.css c3c267b86b9095fbb5e9f69c25af0bb0ee4b83f12df2af80fdb436d6bf84c0b4

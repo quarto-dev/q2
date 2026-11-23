@@ -576,6 +576,36 @@ book:
     );
 }
 
+/// A book page uses Bootstrap Icons for the sidebar's section chevrons,
+/// the prev/next arrows and the repository icon, so the icon stylesheet
+/// and its font must ship with the book. Without them those icons are
+/// empty boxes of zero width.
+#[test]
+fn book_pages_ship_the_icon_font() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minibook(&project_dir);
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+    let ch1 = read_output(&outputs, "ch1");
+
+    assert!(
+        ch1.contains("bi-arrow-"),
+        "the page nav uses icon classes: {ch1}"
+    );
+    let href = ch1
+        .split("href=\"")
+        .skip(1)
+        .map(|rest| rest.split('"').next().unwrap())
+        .find(|url| url.ends_with("bootstrap-icons.css"))
+        .unwrap_or_else(|| panic!("no icon stylesheet link: {ch1}"));
+    let css = project_dir.join("_book").join(href);
+    assert!(css.exists(), "linked icon stylesheet {href} is not on disk");
+    assert!(
+        css.with_file_name("bootstrap-icons.woff").exists(),
+        "the icon font must sit beside its stylesheet"
+    );
+}
+
 /// Sections of an unnumbered chapter (a preface, say) carry no number.
 /// Quarto 1 turns section numbering off for such a chapter; without that
 /// the sections count from an unset chapter slot and read "0.1", "0.2".
