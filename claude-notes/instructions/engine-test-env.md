@@ -1,8 +1,8 @@
 # Engine test environments: R and Jupyter
 
 This note describes the local runtimes for tests that execute document
-engines. The R setup below was verified on Windows 11 with rig 0.11.1 and
-R 4.6.2 on 2026-11-23. The Python/Jupyter section is only an outline until
+engines. The R setup below was verified on Windows 11 on 2026-11-23. The
+Python/Jupyter section is only an outline until
 Phase 3 is verified. The locked CI provisioning has not been added yet; the
 existing test-suite step still installs Jupyter and registers a Python
 kernel on Linux and macOS, and nothing installs the R packages.
@@ -36,15 +36,16 @@ cargo nextest run -p quarto-core -E 'test(knitr)' --no-fail-fast
 
 ### The committed rig project
 
-The root `rproj.toml` and `rproj.lock` define the test environment:
+The root `rproj.toml` and `rproj.lock` define the test environment; read
+them for the current packages and R version:
 
-- `[dependencies]` contains the engine minimum: knitr, rmarkdown, and
-  jsonlite.
-- `[dependency-groups.fixtures]` contains packages used by corpus fixtures:
-  ggplot2, gt, flextable, bslib, bsicons, shiny, dplyr, readr, xml2,
-  plotly, DBI, RSQLite, and png.
-- The lock currently names R 4.6.2 and has Windows, Linux, macOS, and source
-  targets.
+- `[dependencies]` in `rproj.toml` holds what the knitr engine itself needs.
+- `[dependency-groups.fixtures]` holds what corpus fixtures and other R tests
+  need. A test that needs a package belongs here; without it, the test
+  skips or its fixture is reported unavailable, and a green run hides the
+  gap.
+- `rproj.lock` pins the R version and every package for Windows, Linux,
+  macOS, and source installs.
 
 `rig proj` is experimental. This lockfile was generated and verified with
 rig 0.11.1; check `rig --version` if a newer rig behaves differently. Do not
@@ -98,7 +99,7 @@ From the repository root, install the R version named by the lock and sync
 the main and fixture packages:
 
 ```sh
-rig add 4.6.2
+rig add <version>   # the r_version in rproj.lock
 rig proj sync --locked --group fixtures
 ```
 
@@ -142,8 +143,8 @@ Confirm that the wrapper and project library are selected:
 Rscript -e 'cat(R.version.string, "\n"); cat(.libPaths(), sep = "\n"); cat("knitr=", as.character(packageVersion("knitr")), "\n", sep = "")'
 ```
 
-The first library should be the checkout's `.rvenv/lib`. The Windows
-verification used knitr 1.52, rmarkdown 2.32, and jsonlite 2.0.0.
+The first library should be the checkout's `.rvenv/lib`, and the knitr
+version should match `rproj.lock`.
 
 ### Acceptance: execute a smoke document
 
@@ -179,14 +180,11 @@ user and system libraries instead of `.rvenv/lib`.
 ### Without rig
 
 rig is not required. The tests and engine use the first `Rscript` on PATH.
-Install the main packages into your usual R library, for example:
-
-```sh
-Rscript -e 'install.packages(c("knitr", "rmarkdown", "jsonlite"))'
-```
-
-Install the packages in `[dependency-groups.fixtures]` as well when running
-corpus fixtures. Keep `QUARTO_R` unset or make it name the same R installation
+Install the packages listed under `[dependencies]` in `rproj.toml` into your
+usual R library with `install.packages()`, and those under
+`[dependency-groups.fixtures]` as well when running corpus fixtures. Your
+versions may differ from the lock, so a failure can come from a version
+difference rather than from q2. Keep `QUARTO_R` unset or make it name the same R installation
 that PATH selects.
 
 If you synced the rig project earlier, its ignored root `.Renviron` still
@@ -203,24 +201,12 @@ are missing. Gates that check only for `Rscript` can instead fail with
 `Missing package: <name>`. Passing totals alone do not establish which case
 occurred; run the smoke document and inspect its output.
 
-### Known failures from the Windows verification
+### Known failures
 
-Four failures reproduce without the shim and are Windows CRLF issues
-(bd-qmp87pxy and bd-08jz7o8j).
-
-`a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live` fails under the
-locked knitr 1.52, as under knitr 1.52.3: knitr refuses `#|` options in a
-`{sql}` chunk and asks for `--|` (bd-lnu81d4a). Without DBI and RSQLite the
-test returns early and counts as passed.
-
-The `fixtures` group declares plotly, DBI, RSQLite and png because tests
-need them. Without plotly the widget fixtures (`s2/03_htmlwidget`,
-`s2/09_widget_filters`, `s9/03_inline_block_widget`) are unavailable;
-without DBI and RSQLite `s5/01_odd_chunks` is unavailable; without png,
-`capture_include_graphics_is_an_image_paths_piece` fails because knitr
-computes no image width.
-
-The exact commands, baseline comparison, and output snippets are in
+Failures seen with the locked library are tracked as braid strands, not
+listed here: Windows CRLF goldens (bd-qmp87pxy, bd-08jz7o8j) and the SQL
+chunk `#|` refusal (bd-lnu81d4a). The Windows verification run, with its
+commands and output, is in
 `claude-notes/plans/2026-11-23-ci-engine-test-env-r-jupyter.md`.
 
 ## Python / Jupyter: outline, not yet verified
