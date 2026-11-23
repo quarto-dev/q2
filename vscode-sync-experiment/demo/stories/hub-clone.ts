@@ -49,7 +49,7 @@ export function hubCloneStory(d: Demo): Step[] {
     {
       id: 'commit',
       caption: 'Myra commits. Nothing swaps.',
-      command: "git add -A && git commit -qm 'Spectra: a sentence from Maurice'",
+      command: "git add -A && git commit -qm 'Spectra: motivate the periodogram'",
       check: async () => {
         if (d.o.hubGit === 'track') await until('the hub moved forward', async () => (await gitStatus(d.hubHttp)).decisions.slice(decisions).some((x) => x.kind === 'moved-forward'));
         expect(await d.notices('host')).toBe(0);

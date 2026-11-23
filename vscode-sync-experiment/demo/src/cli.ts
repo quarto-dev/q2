@@ -74,7 +74,7 @@ async function main() {
   let code = 0;
   try {
     await d.openHostTerminal();
-    if (play && d.kinds.host === 'vscode' && preset !== 'hubless') await d.openHostVscodeEarly();
+    if (play && d.kinds.host === 'vscode') await d.openHostVscodeEarly();
     if (!play) {
       if (preset === 'hubless') {
         await d.startQhubProcess();

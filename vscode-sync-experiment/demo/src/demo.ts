@@ -19,7 +19,7 @@ import { terminalAssets, terminalPageHtml, STRIP_LINES } from './terminal-page';
 import { launchVscode, type RunningVscode } from '../../e2e/helpers/launch';
 import { HeadlessPeer, ensureWasm } from '../../e2e/helpers/hub';
 import { bindFolder, deriveWsUrl } from '../../src/core/join';
-import { activeEditorText, fillInputBox, openFile as openVscodeFile, runCommand } from '../../e2e/helpers/palette';
+import { activeEditorText, openFile as openVscodeFile } from '../../e2e/helpers/palette';
 import net from 'node:net';
 import { createTypist, type PasteMode, type Typist } from './typing';
 import { connectDocReader, type DocReader } from './doc-reader';
@@ -179,6 +179,8 @@ export class Demo {
       JUPYTER_PATH: path.join(venv, 'share', 'jupyter'),
       PATH: [path.join(venv, 'bin'), path.dirname(Q2_BINARY), process.env.PATH ?? ''].join(path.delimiter),
       RUST_LOG: process.env.RUST_LOG ?? 'warn',
+      // The local demo hub needs no sign-in; `q2 provide-hub` takes this token (the hub ignores it).
+      QUARTO_HUB_TOKEN: 'demo',
     };
   }
 
@@ -403,25 +405,58 @@ export class Demo {
     await this.waitForQhub();
   }
 
+  /** A pause that a viewer needs (none in `--fast`). */
+  pause(ms: number): Promise<void> {
+    return this.o.fast ? Promise.resolve() : new Promise((r) => setTimeout(r, ms));
+  }
+
+  /** Run a command from the palette at a human pace: open it, type the title, let it settle, accept. */
+  private async paletteCommand(page: Page, title: string): Promise<void> {
+    await page.bringToFront();
+    await page.keyboard.press('F1');
+    const input = page.locator('.quick-input-widget input.input');
+    await input.waitFor({ state: 'visible' });
+    await this.pause(800);
+    await page.keyboard.type(`>${title}`, { delay: this.o.fast ? 0 : 70 });
+    await page.locator('.quick-input-list .monaco-list-row', { hasText: title }).first().waitFor();
+    await this.pause(1200);
+    await page.keyboard.press('Enter');
+  }
+
+  /** Answer the open input box by pasting `text` (a value copied from elsewhere), then accept it. */
+  private async pasteInput(page: Page, text: string): Promise<void> {
+    await page.locator('.quick-input-widget input.input').waitFor({ state: 'visible' });
+    await this.pause(1000);
+    await page.keyboard.insertText(text);
+    await this.pause(1500);
+    await page.keyboard.press('Enter');
+  }
+
   /** The originator's VS Code window on the journal, with Share this folder run up to the confirmation modal. */
   async originateStart(): Promise<void> {
     await ensureWasm();
-    const v = await launchVscode({ workspace: this.journal, env: { QUARTO_HUB_TEST_SYNC_SERVER: this.qhubWs }, settings: VSCODE_SETTINGS });
-    this.vscode.host = v;
-    this.computeLayout();
-    await this.placeVscode(v, this.layout.hostEditor);
-    await runCommand(v.page, 'Quarto Hub: Share this folder');
-    await fillInputBox(v.page, this.qhubWs);
+    // Already open when the story starts (play); launched here for the fast runs and the tests.
+    if (!this.vscode.host) {
+      const v = await launchVscode({ workspace: this.journal, env: { QUARTO_HUB_TEST_SYNC_SERVER: this.qhubWs }, settings: VSCODE_SETTINGS });
+      this.vscode.host = v;
+      this.computeLayout();
+      await this.placeVscode(v, this.layout.hostEditor);
+    }
+    const v = this.vscode.host!;
+    await this.paletteCommand(v.page, 'Quarto Hub: Share this folder');
+    await this.pasteInput(v.page, this.qhubWs);
     await v.page.locator('.monaco-dialog-box').waitFor({ state: 'visible', timeout: 30_000 });
   }
 
   /** Confirm the modal, wait for the share panel, and take the `q2 preview` command it copies. */
   async originateConfirm(): Promise<{ id: string; command: string }> {
     const v = this.vscode.host!;
+    await this.pause(2500); // the dialog says what is about to be published: let it be read
     await v.page.locator('.monaco-dialog-box').getByRole('button', { name: 'Share' }).click();
     await v.app.evaluate(({ clipboard: c }) => c.writeText(''));
     const row = v.page.locator('.quick-input-list .monaco-list-row', { hasText: 'q2 preview command' });
     await row.waitFor({ timeout: 60_000 });
+    await this.pause(2000);
     await row.click();
     const deadline = Date.now() + 30_000;
     let command = '';
@@ -622,10 +657,12 @@ export class Demo {
    */
   async openHostVscodeEarly(): Promise<void> {
     await ensureWasm();
-    const v = await launchVscode({ workspace: this.journal, settings: VSCODE_SETTINGS });
+    const hubless = this.o.preset === 'hubless';
+    // In `hubless` the window is the originator: it shares through the standalone hub, whose address it is launched with.
+    const v = await launchVscode({ workspace: this.journal, env: hubless ? { QUARTO_HUB_TEST_SYNC_SERVER: this.qhubWs } : undefined, settings: VSCODE_SETTINGS });
     this.vscode.host = v;
     await this.placeVscode(v, this.layout.hostEditor);
-    await openVscodeFile(v.page, PY_PAPER);
+    await openVscodeFile(v.page, hubless ? R_PAPER : PY_PAPER);
   }
 
   /**
@@ -637,28 +674,14 @@ export class Demo {
     const open = this.vscode.host;
     if (open) {
       const page = open.page;
-      const pause = (ms: number) => (this.o.fast ? Promise.resolve() : new Promise((r) => setTimeout(r, ms)));
-      // Visible, at a human pace: open the palette, type the command, paste the URL, pick the offer, confirm.
-      await page.bringToFront();
-      await page.keyboard.press('F1');
-      const input = page.locator('.quick-input-widget input.input');
-      await input.waitFor({ state: 'visible' });
-      await pause(800);
-      await page.keyboard.type('>Quarto Hub: Join Session', { delay: this.o.fast ? 0 : 70 });
-      await page.locator('.quick-input-list .monaco-list-row', { hasText: 'Join Session' }).first().waitFor();
-      await pause(1200);
-      await page.keyboard.press('Enter');
-      await input.waitFor({ state: 'visible' });
-      await pause(1000);
-      await page.keyboard.insertText(this.hubHttp); // pasted: the URL the hub printed
-      await pause(1500);
-      await page.keyboard.press('Enter');
+      await this.paletteCommand(page, 'Quarto Hub: Join Session');
+      await this.pasteInput(page, this.hubHttp); // the URL the hub printed
       await page.locator('.quick-input-list .monaco-list-row').first().waitFor({ timeout: 60_000 });
-      await pause(2000);
+      await this.pause(2000);
       await page.keyboard.press('Enter'); // the default offer: editor only
       const button = page.locator('.monaco-dialog-box').getByRole('button', { name: 'Use as editor only' });
       await button.waitFor({ state: 'visible', timeout: 30_000 });
-      await pause(2000);
+      await this.pause(2000);
       await button.click();
       await page.locator('.statusbar').getByText('Quarto Hub: editor only').waitFor({ timeout: 60_000 });
       await openVscodeFile(page, PY_PAPER);
@@ -718,6 +741,8 @@ export class Demo {
   async typeUnder(who: 'host' | 'guest', heading: string, text: string): Promise<void> {
     const page = this.editorPage(who);
     const vs = this.kinds[who] === 'vscode';
+    // Monaco renders only the visible lines, and a synced preview may have scrolled this editor away from the heading.
+    await this.scrollTop(who);
     await page.locator(vs ? '.editor-instance .view-line' : '.monaco-editor .view-line', { hasText: heading }).first().click();
     await page.keyboard.press('End');
     await page.keyboard.press('Enter');
@@ -744,6 +769,33 @@ export class Demo {
       } catch (e) {
         this.record('demo', 'final-state', `${who}: unreadable (${e instanceof Error ? e.message : e})`);
       }
+    }
+  }
+
+  /**
+   * Replace the first `words` words of the line containing `lineNeedle` with `text`, typed at a human tempo (a copy edit:
+   * select the opening words with the keyboard, then type over them).
+   */
+  async replaceLead(who: 'host' | 'guest', lineNeedle: string, words: number, text: string): Promise<void> {
+    const page = this.editorPage(who);
+    const vs = this.kinds[who] === 'vscode';
+    await this.scrollTop(who);
+    await page.locator(vs ? '.editor-instance .view-line' : '.monaco-editor .view-line', { hasText: lineNeedle }).first().click();
+    await page.keyboard.press('Home');
+    const wordRight = process.platform === 'darwin' ? 'Alt+Shift+ArrowRight' : 'Control+Shift+ArrowRight';
+    for (let i = 0; i < words; i++) {
+      await page.keyboard.press(wordRight);
+      if (!this.o.fast) await new Promise((r) => setTimeout(r, 350));
+    }
+    if (!this.o.fast) await new Promise((r) => setTimeout(r, 800)); // the selection is visible before it is replaced
+    const plan = this.typist.plan(text, { paste: 'none' });
+    const wait = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+    await wait(plan.lead);
+    for (const step of plan.steps) {
+      await wait(step.wait);
+      if (step.backspace) await page.keyboard.press('Backspace');
+      else if (step.paste) await page.keyboard.insertText(step.text ?? '');
+      else await page.keyboard.type(step.text ?? '');
     }
   }
 
@@ -923,6 +975,20 @@ export class Demo {
       if (Date.now() > deadline) throw new Error('the shell did not return to its prompt');
       await new Promise((r) => setTimeout(r, 150));
     }
+  }
+
+  /** Wait until `re` matches the terminal's output (ANSI stripped). */
+  async waitOutput(re: RegExp, who: 'host' | 'guest' = 'host', timeoutMs = 60_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (!re.test(stripAnsi(this.terminal(who).output()))) {
+      if (Date.now() > deadline) throw new Error(`the terminal never showed ${re}`);
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }
+
+  /** Type into a terminal without waiting for the shell prompt (the command asks a question, such as a consent prompt). */
+  async typeNoWait(command: string, who: 'host' | 'guest' = 'host', paste?: PasteMode): Promise<void> {
+    await this.terminal(who).type(command, { timing: this.typist.plan(command, { paste }) });
   }
 
   async type(command: string, who: 'host' | 'guest' = 'host', paste?: PasteMode): Promise<void> {

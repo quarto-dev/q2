@@ -78,7 +78,7 @@ export function hubStory(d: Demo): Step[] {
     {
       id: 'commit',
       caption: 'Myra commits. Nothing swaps and no notice appears.',
-      command: "git add -A && git commit -qm 'Spectra: a sentence from Maurice'",
+      command: "git add -A && git commit -qm 'Spectra: motivate the periodogram'",
       check: async () => {
         // An untracked hub (the E8 control) records no decisions.
         if (d.o.hubGit === 'track') await until('the hub moved forward', () => newDecision(['moved-forward']));

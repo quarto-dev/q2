@@ -17,6 +17,10 @@ export const EDITS = {
   /** The same, for the tip extension paper in the hubless story. */
   tip: 'Tip extension depends on turgor, and turgor follows the humidity schedule with a lag, so we expect the dry and cycling regimes to differ most at the start of each cycle.',
   tipNeedle: 'dry and cycling regimes to differ most',
+  /** Myra's copy edit: both Introduction paragraphs open with "Tip extension", so she rewords her own opening. */
+  copyLine: 'remains poorly characterized',
+  copyLead: 'Growth at the hyphal tip',
+  copyNeedle: 'Growth at the hyphal tip remains poorly characterized',
 } as const;
 
 export const GITIGNORE = '.venv/\n__pycache__/\n.quarto/\n*_files/\n_site/\n';
