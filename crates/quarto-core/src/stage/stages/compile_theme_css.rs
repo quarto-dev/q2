@@ -64,6 +64,11 @@ use crate::trace_event;
 ///   3 of the bd-k8y0 plan adds an explicit `sidebar.border:` YAML
 ///   knob and threads it through here.
 ///
+/// - `$sidebar-bg-as-page: true` for a floating sidebar, and for any
+///   sidebar beside a navbar, unless `sidebar.background:` is
+///   set. Same Q1 source; `sidebar.background:` itself is not threaded
+///   here yet.
+///
 /// Multi-sidebar projects pick the **first** sidebar's setting, matching
 /// Q1's per-format behavior. A future pass that wants per-sidebar
 /// borders would need a different mechanism (the `$sidebar-border` rule
@@ -84,6 +89,21 @@ pub fn derive_doc_scss_layer(meta: &ConfigValue) -> SassLayer {
                 .border
                 .unwrap_or(matches!(first.style, SidebarStyle::Docked));
             defaults.push_str(&format!("$sidebar-border: {};\n", border));
+
+            // Q1 parity (`format-html-scss.ts`, same block): with no
+            // explicit `sidebar.background:`, a floating sidebar, and any
+            // sidebar on a site with a navbar, takes the page background.
+            // Only a docked sidebar with no navbar keeps the framework
+            // default (`$light`, the grey panel). Emitted as a flag: this
+            // layer is merged ahead of the theme, where `$body-bg` is not
+            // known yet, so `_bootstrap-variables.scss` resolves the
+            // colour. A theme that sets `$sidebar-bg` itself still wins.
+            let has_navbar = resolve_website_value(meta, "navbar").is_some();
+            if first.background.is_none()
+                && (matches!(first.style, SidebarStyle::Floating) || has_navbar)
+            {
+                defaults.push_str("$sidebar-bg-as-page: true;\n");
+            }
         }
     }
 
@@ -3207,6 +3227,86 @@ mod tests {
         assert!(
             layer.defaults.contains("$sidebar-border: false;"),
             "floating sidebar should emit `$sidebar-border: false;`, got defaults: {:?}",
+            layer.defaults
+        );
+    }
+
+    /// The flag written for a sidebar that takes the page background.
+    const SIDEBAR_BG_AS_PAGE: &str = "$sidebar-bg-as-page: true;";
+
+    /// `meta` with a `website.navbar` added.
+    fn with_navbar(mut meta: ConfigValue) -> ConfigValue {
+        meta.insert_path(
+            &["website", "navbar"],
+            ConfigValue::new_map(vec![], SourceInfo::for_test()),
+        );
+        meta
+    }
+
+    /// `meta` with `background:` set on its first sidebar.
+    fn with_sidebar_background(mut meta: ConfigValue, color: &str) -> ConfigValue {
+        let mut sidebars = meta
+            .get_path(&["website", "sidebar"])
+            .and_then(|s| s.as_array())
+            .map(|a| a.to_vec())
+            .unwrap();
+        sidebars[0].insert_path(
+            &["background"],
+            ConfigValue::new_string(color, SourceInfo::for_test()),
+        );
+        meta.insert_path(
+            &["website", "sidebar"],
+            ConfigValue::new_array(sidebars, SourceInfo::for_test()),
+        );
+        meta
+    }
+
+    // Quarto 1's sidebar background (`format-html-scss.ts`, the
+    // `sidebar.style === "floating" || navbar` branch), one test per case.
+    // Measured on Quarto 1.9.38: floating -> page background; docked with
+    // no navbar -> `$light`; either style with a navbar -> page background.
+
+    #[test]
+    fn doc_scss_layer_floating_sidebar_takes_the_page_background() {
+        let layer = derive_doc_scss_layer(&meta_with_website_sidebar_style("floating"));
+        assert!(
+            layer.defaults.contains(SIDEBAR_BG_AS_PAGE),
+            "got: {:?}",
+            layer.defaults
+        );
+    }
+
+    #[test]
+    fn doc_scss_layer_docked_sidebar_without_navbar_keeps_the_default_background() {
+        let layer = derive_doc_scss_layer(&meta_with_website_sidebar_style("docked"));
+        assert!(
+            !layer.defaults.contains("$sidebar-bg-as-page"),
+            "a docked sidebar with no navbar keeps the framework's `$light` panel, got: {:?}",
+            layer.defaults
+        );
+    }
+
+    #[test]
+    fn doc_scss_layer_sidebar_beside_a_navbar_takes_the_page_background() {
+        for style in ["docked", "floating"] {
+            let layer = derive_doc_scss_layer(&with_navbar(meta_with_website_sidebar_style(style)));
+            assert!(
+                layer.defaults.contains(SIDEBAR_BG_AS_PAGE),
+                "{style} sidebar beside a navbar, got: {:?}",
+                layer.defaults
+            );
+        }
+    }
+
+    #[test]
+    fn doc_scss_layer_explicit_sidebar_background_is_left_alone() {
+        let layer = derive_doc_scss_layer(&with_sidebar_background(
+            meta_with_website_sidebar_style("floating"),
+            "dark",
+        ));
+        assert!(
+            !layer.defaults.contains("$sidebar-bg-as-page"),
+            "an explicit `background:` is the author's choice, got: {:?}",
             layer.defaults
         );
     }

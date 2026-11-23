@@ -158,7 +158,17 @@ $navbar-dark-brand-color: $navbar-brand;
 $navbar-dark-brand-hover-color: $navbar-brand-hl;
 
 // Sidebar coloring
-$sidebar-bg: if(variable-exists(light), $light, #fff) !default;
+// `$sidebar-bg-as-page` is set per document by
+// `derive_doc_scss_layer` (quarto-core) for the sidebars Quarto 1 gives
+// the page background: a floating sidebar, and any sidebar beside a
+// navbar. It is a flag, not a colour, because that layer is merged ahead
+// of the theme, where `$body-bg` is not known yet; here it is.
+$sidebar-bg-as-page: false !default;
+$sidebar-bg: if(
+  $sidebar-bg-as-page,
+  if(variable-exists(body-bg), $body-bg, #fff),
+  if(variable-exists(light), $light, #fff)
+) !default;
 $sidebar-fg: null !default;
 @if $sidebar-bg == transparent {
   $sidebar-fg: theme-contrast($body-contrast-color, $body-contrast-bg) !default;

@@ -701,6 +701,19 @@ $sidebar-disabled-color: rgba($sidebar-fg, 0.75) !default;
     flex-direction: column;
   }
 
+  // Sidebar text sizes on wide screens: items in `$sidebar-font-size`,
+  // items inside a section and the prev/next text one step smaller.
+  // from quarto-nav.scss:646-653. Guarded by
+  // `test_sidebar_text_uses_the_sidebar_font_sizes_at_lg` (quarto-sass).
+  .nav-page .nav-page-text,
+  .sidebar-navigation .sidebar-section .sidebar-item {
+    font-size: $sidebar-font-size-section;
+  }
+
+  .sidebar-navigation .sidebar-item {
+    font-size: $sidebar-font-size;
+  }
+
   .sidebar.sidebar-navigation {
     display: block;
     position: sticky;

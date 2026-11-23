@@ -1012,6 +1012,44 @@ mod tests {
         );
     }
 
+    /// On wide screens Quarto 1 sets sidebar items in `$sidebar-font-size`
+    /// (0.925rem), items inside a section and the prev/next text in
+    /// `$sidebar-font-size-section` (0.875rem); quarto-nav.scss:641-653.
+    /// Without these rules every sidebar item is body size (17px against
+    /// 15.7px and 14.9px, measured on Quarto 1.9.38).
+    #[test]
+    fn test_sidebar_text_uses_the_sidebar_font_sizes_at_lg() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, false).unwrap();
+
+        let size_at_lg = |wanted: &str| -> Option<String> {
+            media_blocks(&css)
+                .into_iter()
+                .filter(|(prelude, _)| prelude.contains("min-width"))
+                .flat_map(|(_, body)| rules(&body))
+                .find(|(selector, _)| selector.split(',').any(|s| s.trim() == wanted))
+                .and_then(|(_, decls)| {
+                    decls.split(';').find_map(|d| {
+                        d.split_once(':')
+                            .filter(|(p, _)| p.trim() == "font-size")
+                            .map(|(_, v)| v.trim().to_string())
+                    })
+                })
+        };
+        assert_eq!(
+            size_at_lg(".sidebar-navigation .sidebar-item").as_deref(),
+            Some("0.925rem")
+        );
+        assert_eq!(
+            size_at_lg(".sidebar-navigation .sidebar-section .sidebar-item").as_deref(),
+            Some("0.875rem")
+        );
+        assert_eq!(
+            size_at_lg(".nav-page .nav-page-text").as_deref(),
+            Some("0.875rem")
+        );
+    }
+
     /// bd-ersobfbt: the fixed scroll-away header's SCSS contract. The
     /// template emits `<header id="quarto-header" class="headroom
     /// fixed-top">` and `body.nav-fixed` — a fixed header WITHOUT the
