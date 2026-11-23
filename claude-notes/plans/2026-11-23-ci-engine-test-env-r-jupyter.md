@@ -320,8 +320,8 @@ were unavailable, as was `s5/01_odd_chunks` (DBI, RSQLite).
 
 Decided 2026-11-23: packages that tests need belong in the `fixtures`
 group, so plotly, DBI, RSQLite and png were added and the lock regenerated
-with rig 0.11.1. The relock only added packages (420 platform entries
-against 388; no existing version changed) and kept R 4.6.2 on all four
+with rig 0.11.1. The relock only added packages (424 package entries
+across the four targets against 392; no existing version changed) and kept R 4.6.2 on all four
 targets; `rig proj sync` left `.gitignore` unchanged. With the shim:
 
 ```powershell

@@ -39,9 +39,10 @@ them for the current packages and R version:
 
 - `[dependencies]` in `rproj.toml` holds what the knitr engine itself needs.
 - `[dependency-groups.fixtures]` holds what corpus fixtures and other R tests
-  need. A test that needs a package belongs here; without it, the test
-  skips or its fixture is reported unavailable, and a green run hides the
-  gap.
+  need. A test that needs a package belongs here. Without it, the test
+  skips, its fixture is reported unavailable, or it fails an assertion:
+  `capture_include_graphics_is_an_image_paths_piece` checks only for R and
+  gets no image width without `png`. A green run can hide the first two.
 - `rproj.lock` pins the R version and every package for Windows, Linux,
   macOS, and source installs.
 
@@ -93,11 +94,11 @@ guide](https://r-lib.github.io/rig/install.html).
 
 ### Sync and select the project R
 
-From the repository root, install the R version named by the lock and sync
-the main and fixture packages:
+Install the R version that `rproj.lock` names in its `r_version` field by
+passing it to `rig add`. Then, from the repository root, sync the main and
+fixture packages:
 
 ```sh
-rig add <version>   # the r_version in rproj.lock
 rig proj sync --locked --group fixtures
 ```
 
@@ -190,9 +191,11 @@ applies to any R started from the checkout root. R reads `.Renviron` from
 the working directory in place of `~/.Renviron`, so a personal `~/.Renviron`
 is skipped there too. With `.rvenv` removed, that R warns
 `Project is not synced` and loses your user library. To return to your
-usual R, delete the root `.Renviron` and `.rvenvlib/` (a later `rig proj
-sync` recreates them), and check `.libPaths()` from the checkout root before
-installing packages.
+usual R, open a fresh shell without `.rvenv/bin` on PATH, rename the root
+`.Renviron` (for example to `.Renviron.rig`) rather than deleting it, since
+rig keeps settings you added outside its marked block there, and delete
+`.rvenvlib/`, which a later `rig proj sync` recreates. Then check
+`.libPaths()` from the checkout root before installing packages.
 
 Tests whose gates include their required packages skip when those packages
 are missing. Gates that check only for `Rscript` can instead fail with
