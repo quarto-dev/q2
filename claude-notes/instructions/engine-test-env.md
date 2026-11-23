@@ -191,9 +191,10 @@ applies to any R started from the checkout root. R reads `.Renviron` from
 the working directory in place of `~/.Renviron`, so a personal `~/.Renviron`
 is skipped there too. With `.rvenv` removed, that R warns
 `Project is not synced` and loses your user library. To return to your
-usual R, open a fresh shell without `.rvenv/bin` on PATH, rename the root
-`.Renviron` (for example to `.Renviron.rig`) rather than deleting it, since
-rig keeps settings you added outside its marked block there, and delete
+usual R, open a fresh shell without `.rvenv/bin` on PATH and move the root
+`.Renviron` outside the checkout. Don't delete it: rig keeps settings you
+added outside its marked block there. Don't rename it in place either: git
+ignores only `/.Renviron`, so a renamed copy could be committed. Delete
 `.rvenvlib/`, which a later `rig proj sync` recreates. Then check
 `.libPaths()` from the checkout root before installing packages.
 
