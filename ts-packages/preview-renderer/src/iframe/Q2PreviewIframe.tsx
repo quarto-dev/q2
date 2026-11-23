@@ -476,7 +476,7 @@ export function Q2PreviewIframe({
       ref={iframeRef}
       src="q2-preview.html"
       title="q2-preview Renderer"
-      sandbox="allow-scripts allow-same-origin"
+      sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
       style={{
         width: '100%',
         height: '100%',

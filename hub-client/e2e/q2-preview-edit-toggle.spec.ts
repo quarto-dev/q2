@@ -17,6 +17,8 @@
  *   3. reload → still OFF (persisted), pill reads "Editing off";
  *   4. click the pill again → ON: affordances return.
  *
+ * Also: with editing off, an external link opens an unsandboxed new tab.
+ *
  * Run via:
  *   cd hub-client && VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws npm run build
  *   npx playwright test e2e/q2-preview-edit-toggle.spec.ts --project=chromium --workers=1
@@ -165,5 +167,38 @@ test.describe('Edit pill — q2-preview editable / read-only toggle (real browse
         await expect(input).toHaveCount(0);
         // Still no content edit surface.
         await expect(iframe.locator('[data-block-pool-id]')).toHaveCount(0);
+    });
+
+    // The link handler opens external links with `window.open`, which the
+    // preview iframe's sandbox blocks without `allow-popups`. Without
+    // `allow-popups-to-escape-sandbox` the new tab inherits the sandbox, and
+    // `confirm()` then returns false (no `allow-modals`).
+    test('with editing off, an external link opens an unsandboxed new tab', async ({ page }) => {
+        const url = 'https://quarto.org/';
+        // A popup is not covered by `page.route`, so stub at context level.
+        await page.context().route('https://quarto.org/**', (route) =>
+            route.fulfill({ contentType: 'text/html', body: '<p>stub</p>' }),
+        );
+        const serverUrl = getServerUrl();
+        const docId = await createProjectOnServer(serverUrl, [
+            { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
+            {
+                path: 'main.qmd',
+                content: `---\nformat: q2-preview\n---\n\nSee the [Quarto](${url}) site for details.\n`,
+                contentType: 'text',
+            },
+        ]);
+        const iframe = await openProjectFile(page, serverUrl, docId, 'main.qmd');
+
+        await pill(page).click();
+        await expect(iframe.locator('[data-block-pool-id]')).toHaveCount(0, { timeout: 10_000 });
+
+        const popupPromise = page.context().waitForEvent('page', { timeout: 10_000 });
+        await iframe.getByRole('link', { name: 'Quarto' }).click();
+        const popup = await popupPromise;
+
+        await expect(popup).toHaveURL(url);
+        popup.once('dialog', (d) => void d.accept());
+        expect(await popup.evaluate(() => confirm('x'))).toBe(true);
     });
 });
