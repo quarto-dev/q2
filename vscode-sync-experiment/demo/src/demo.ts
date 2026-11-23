@@ -29,6 +29,20 @@ const repoRoot = path.resolve(here, '..', '..', '..');
 const assets = path.join(here, '..', 'journal');
 export const Q2_BINARY = process.env.Q2_BINARY ?? path.join(repoRoot, 'target', 'debug', 'q2');
 
+/** Break `text` at spaces so no line is longer than `width` (a single longer word keeps its own line). */
+export function wrapText(text: string, width: number): string {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (line && line.length + 1 + word.length > width) {
+      lines.push(line);
+      line = word;
+    } else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(line);
+  return lines.join('\n');
+}
+
 export type Preset = 'hub-browser' | 'hub-vscode-host' | 'hub-vscode-clone' | 'hubless';
 
 export interface DemoOptions {
@@ -577,11 +591,15 @@ export class Demo {
       const host = await this.window();
       await this.place(host, this.layout.hostEditor);
       this.hostEditor = host;
-      await this.openProject(host.page, R_PAPER);
+      await this.openProject(host.page, PY_PAPER);
     } else {
       await this.openVscodeHost();
     }
     if (this.kinds.guest === 'browser') {
+      if (!this.o.fast) {
+        this.say('narration', 'Myra shares the hub URL with Maurice. He opens it in his browser and joins.');
+        await new Promise((r) => setTimeout(r, 3500));
+      }
       const guest = await this.window();
       await this.place(guest, this.layout.guestEditor);
       this.guestEditor = guest;
@@ -598,15 +616,60 @@ export class Demo {
     }, r);
   }
 
-  /** The host's VS Code: an editor-only window on the journal folder the hub serves. */
+  /**
+   * Myra's VS Code, open on her journal before any hub exists: she has been working here already. The story's hub
+   * command then starts the hub, and `openVscodeHost` joins it from this same window.
+   */
+  async openHostVscodeEarly(): Promise<void> {
+    await ensureWasm();
+    const v = await launchVscode({ workspace: this.journal, settings: VSCODE_SETTINGS });
+    this.vscode.host = v;
+    await this.placeVscode(v, this.layout.hostEditor);
+    await openVscodeFile(v.page, PY_PAPER);
+  }
+
+  /**
+   * The host's VS Code: an editor-only window on the journal folder the hub serves. With a window already open, Myra
+   * runs Join session and pastes the hub's URL; otherwise (reset, headless runs) the folder is bound and launched.
+   */
   private async openVscodeHost(): Promise<void> {
     await ensureWasm();
+    const open = this.vscode.host;
+    if (open) {
+      const page = open.page;
+      const pause = (ms: number) => (this.o.fast ? Promise.resolve() : new Promise((r) => setTimeout(r, ms)));
+      // Visible, at a human pace: open the palette, type the command, paste the URL, pick the offer, confirm.
+      await page.bringToFront();
+      await page.keyboard.press('F1');
+      const input = page.locator('.quick-input-widget input.input');
+      await input.waitFor({ state: 'visible' });
+      await pause(800);
+      await page.keyboard.type('>Quarto Hub: Join Session', { delay: this.o.fast ? 0 : 70 });
+      await page.locator('.quick-input-list .monaco-list-row', { hasText: 'Join Session' }).first().waitFor();
+      await pause(1200);
+      await page.keyboard.press('Enter');
+      await input.waitFor({ state: 'visible' });
+      await pause(1000);
+      await page.keyboard.insertText(this.hubHttp); // pasted: the URL the hub printed
+      await pause(1500);
+      await page.keyboard.press('Enter');
+      await page.locator('.quick-input-list .monaco-list-row').first().waitFor({ timeout: 60_000 });
+      await pause(2000);
+      await page.keyboard.press('Enter'); // the default offer: editor only
+      const button = page.locator('.monaco-dialog-box').getByRole('button', { name: 'Use as editor only' });
+      await button.waitFor({ state: 'visible', timeout: 30_000 });
+      await pause(2000);
+      await button.click();
+      await page.locator('.statusbar').getByText('Quarto Hub: editor only').waitFor({ timeout: 60_000 });
+      await openVscodeFile(page, PY_PAPER);
+      return;
+    }
     await bindFolder({ root: this.journal, indexDocId: this.projectId, syncServer: this.wsUrl, mode: 'editor-only' });
     const v = await launchVscode({ workspace: this.journal, settings: VSCODE_SETTINGS });
     this.vscode.host = v;
     await this.placeVscode(v, this.layout.hostEditor);
     await v.page.locator('.statusbar').getByText('Quarto Hub: editor only').waitFor({ timeout: 60_000 });
-    await openVscodeFile(v.page, R_PAPER);
+    await openVscodeFile(v.page, PY_PAPER);
   }
 
   /** The guest's VS Code: a clone of the journal attached to the project, with Maurice's terminal beside it. */
@@ -642,6 +705,53 @@ export class Demo {
       else if (step.paste) await page.keyboard.insertText(step.text ?? '');
       else await page.keyboard.type(step.text ?? '');
     }
+  }
+
+  private editorPage(who: 'host' | 'guest'): Page {
+    return this.kinds[who] === 'vscode' ? this.vscode[who]!.page : (who === 'host' ? this.hostEditor : this.guestEditor)!.page;
+  }
+
+  /**
+   * Type a new paragraph right under a heading that is on screen, so the edit shows in every pane at once (an edit
+   * at the end of the document sits below the fold of the other window). The text is typed at a human tempo.
+   */
+  async typeUnder(who: 'host' | 'guest', heading: string, text: string): Promise<void> {
+    const page = this.editorPage(who);
+    const vs = this.kinds[who] === 'vscode';
+    await page.locator(vs ? '.editor-instance .view-line' : '.monaco-editor .view-line', { hasText: heading }).first().click();
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    // Hard-wrapped, as an author's editor would: a long unbroken line runs off the pane in VS Code.
+    const plan = this.typist.plan(wrapText(text, 64), { paste: 'none' });
+    const wait = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+    await wait(plan.lead);
+    for (const step of plan.steps) {
+      await wait(step.wait);
+      if (step.backspace) await page.keyboard.press('Backspace');
+      else if (step.paste) await page.keyboard.insertText(step.text ?? '');
+      else await page.keyboard.type(step.text ?? '');
+    }
+  }
+
+  /** Record what each editor window shows right now (the story's end state), for the event log. */
+  async recordFinalState(): Promise<void> {
+    for (const who of ['host', 'guest'] as const) {
+      try {
+        const text = (await this.shown(who)).replace(/\s+/g, ' ');
+        const where = this.kinds[who] === 'browser' ? (who === 'host' ? this.hostEditor : this.guestEditor)?.page.url() : 'vscode';
+        this.record('demo', 'final-state', `${who}: ${where} shows: ${text.slice(0, 160)}`, { who, where, text: text.slice(0, 600) });
+      } catch (e) {
+        this.record('demo', 'final-state', `${who}: unreadable (${e instanceof Error ? e.message : e})`);
+      }
+    }
+  }
+
+  /** Open a file in an editor window (the host or guest follows along in the same document). */
+  async showFile(who: 'host' | 'guest', file: string): Promise<void> {
+    if (this.kinds[who] === 'vscode') return openVscodeFile(this.vscode[who]!.page, file);
+    const { openFile } = await import('../../../q2-preview-spa/e2e/helpers/editor');
+    await openFile(this.editorPage(who), file);
   }
 
   /** Scroll an editor to the top of its document (Monaco renders only the visible lines). */
@@ -870,7 +980,7 @@ export class Demo {
             if (!w) continue;
             await w.page.goto(this.hubUrl);
           }
-          if (this.hostEditor) await this.openProject(this.hostEditor.page, R_PAPER);
+          if (this.hostEditor) await this.openProject(this.hostEditor.page, PY_PAPER);
           if (this.guestEditor) await this.openProject(this.guestEditor.page, PY_PAPER);
         },
         // A fresh hub has a new project id (G19), so the VS Code windows are relaunched and rebound at the same place

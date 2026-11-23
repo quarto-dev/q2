@@ -7,7 +7,8 @@ import { gitStatus } from '../../../q2-preview-spa/e2e/helpers/editor';
 import { expect } from '@playwright/test';
 import type { Step } from '../src/driver';
 import { Demo, PY_PAPER } from '../src/demo';
-import { disk, shows, until } from './hub';
+import { EDITS } from '../src/journal-content';
+import { disk, diskFlat, shows, until } from './hub';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -28,7 +29,7 @@ export function hubCloneStory(d: Demo): Step[] {
         }
       },
       check: async () => {
-        await shows(d, 'host', 'Tip extension');
+        await shows(d, 'host', 'Fusion spectra');
         await shows(d, 'guest', 'Fusion spectra');
         expect((await gitStatus(d.hubHttp)).tracking).toBe(d.o.hubGit === 'track');
       },
@@ -37,11 +38,12 @@ export function hubCloneStory(d: Demo): Step[] {
       id: 'maurice-types',
       caption: "Maurice types in his clone: the edit reaches Myra's disk.",
       action: async () => {
-        await d.typeAtEnd('guest', 'Maurice adds a sentence. ');
+        await d.typeUnder('guest', 'Introduction', EDITS.maurice);
         await mark();
       },
       check: async () => {
-        await until("the hub wrote Maurice's text", () => disk(d, PY_PAPER).includes('Maurice adds a sentence.'));
+        await until("the hub wrote Maurice's text", () => diskFlat(d, PY_PAPER).includes(EDITS.mauriceNeedle));
+        await shows(d, 'host', EDITS.mauriceNeedle);
       },
     },
     {
@@ -51,7 +53,8 @@ export function hubCloneStory(d: Demo): Step[] {
       check: async () => {
         if (d.o.hubGit === 'track') await until('the hub moved forward', async () => (await gitStatus(d.hubHttp)).decisions.slice(decisions).some((x) => x.kind === 'moved-forward'));
         expect(await d.notices('host')).toBe(0);
-        await shows(d, 'guest', 'Maurice adds a sentence.');
+        await shows(d, 'guest', EDITS.mauriceNeedle);
+        await shows(d, 'host', EDITS.mauriceNeedle);
       },
     },
     {
@@ -62,7 +65,7 @@ export function hubCloneStory(d: Demo): Step[] {
       check: async () => {
         await shows(d, 'host', 'After reanalysis');
         await until("Maurice's disk is untouched", () => cloneDisk(d, PY_PAPER).includes('0.6 *') && !cloneDisk(d, PY_PAPER).includes('0.9 *'));
-        await shows(d, 'guest', 'Maurice adds a sentence.');
+        await shows(d, 'guest', EDITS.mauriceNeedle);
       },
     },
     {

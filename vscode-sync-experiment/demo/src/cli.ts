@@ -74,6 +74,7 @@ async function main() {
   let code = 0;
   try {
     await d.openHostTerminal();
+    if (play && d.kinds.host === 'vscode' && preset !== 'hubless') await d.openHostVscodeEarly();
     if (!play) {
       if (preset === 'hubless') {
         await d.startQhubProcess();
@@ -87,6 +88,7 @@ async function main() {
     console.log(`demo root: ${d.root}\nevent log: ${d.logs}/events.jsonl\nhub: ${d.hubUrl || '(started by the story)'}`);
     if (play) {
       await playStory(d);
+      await d.recordFinalState();
       console.log('story finished');
     }
     if (!v.fast) {

@@ -29,9 +29,18 @@ export async function openFile(page: Page, name: string): Promise<void> {
   await page.keyboard.press('Enter');
 }
 
-/** The text of the active editor, as rendered (lines joined with \n). */
+/**
+ * The text of the active editor, as rendered (lines joined with \n). Reads each rendered line's `textContent` in
+ * order of its vertical position: Monaco reuses and reorders line nodes as the document changes, and `innerText` can
+ * come back empty for a line it has just redrawn, so a paragraph typed across several lines read back with gaps.
+ */
 export async function activeEditorText(page: Page): Promise<string> {
-  const lines = await page.locator('.editor-instance .view-lines .view-line').allInnerTexts();
+  const lines = await page.locator('.editor-instance .view-lines .view-line').evaluateAll((els) =>
+    els
+      .map((e) => ({ top: parseFloat((e as HTMLElement).style.top || '0'), text: e.textContent ?? '' }))
+      .sort((a, b) => a.top - b.top)
+      .map((l) => l.text),
+  );
   // Monaco renders spaces as non-breaking spaces.
-  return lines.map((l) => l.replace(/ /g, ' ')).join('\n');
+  return lines.map((l) => l.replace(/\u00a0/g, ' ')).join('\n');
 }

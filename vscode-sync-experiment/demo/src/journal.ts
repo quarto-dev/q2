@@ -17,6 +17,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const assets = path.join(here, '..', 'journal');
 
 const R_PAPER = 'celia-2026-tip-extension-lmm.qmd';
+const PY_PAPER = 'morel-2026-fusion-spectra.qmd';
 const PILOT = 'rott-mildew-2025-preliminary-fusion.qmd';
 const CORRIGENDUM = 'celia-2026-corrigendum-variance-components.qmd';
 
@@ -99,10 +100,12 @@ export function buildJournal(dir: string): string {
   // revision forks here and rewrites the abstract line main rewrites next.
   git(undefined, 'branch', 'revision');
   write(dir, R_PAPER, papers('main-edit')[R_PAPER]!);
+  write(dir, PY_PAPER, papers('main-edit')[PY_PAPER]!);
   commit('2026-03-09T09:00:00Z', 'Celia: tighten the abstract');
 
   git(undefined, 'switch', '--quiet', 'revision');
   write(dir, R_PAPER, papers('revision')[R_PAPER]!);
+  write(dir, PY_PAPER, papers('revision')[PY_PAPER]!);
   commit('2026-03-10T09:00:00Z', 'Reviewer 2: soften the abstract');
 
   git(undefined, 'switch', '--quiet', '-c', 'feature', 'main');

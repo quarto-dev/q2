@@ -2,15 +2,18 @@
  * The scripted hub story (DM7) for `hub-browser` and `hub-vscode-host`: four beats on one hub and one repository.
  * Each side's editor is a browser or a VS Code window (`Demo.kinds`); the checks read both through `Demo.shown`.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect } from '@playwright/test';
 import { gitStatus, pausedIndicator } from '../../../q2-preview-spa/e2e/helpers/editor';
 import type { Step } from '../src/driver';
 import { Demo, PY_PAPER, R_PAPER } from '../src/demo';
+import { EDITS } from '../src/journal-content';
 
 export const disk = (d: Demo, rel: string) => readFileSync(path.join(d.journal, rel), 'utf8');
 export const T = 30_000;
+/** A file on Myra's disk with whitespace collapsed: typed paragraphs are hard-wrapped, so a needle may span lines. */
+export const diskFlat = (d: Demo, rel: string) => disk(d, rel).replace(/\s+/g, ' ');
 
 export async function until(what: string, f: () => boolean | Promise<boolean>, timeout = 30_000): Promise<void> {
   await expect.poll(async () => f(), { timeout, message: what }).toBe(true);
@@ -27,7 +30,11 @@ export async function shows(d: Demo, who: 'host' | 'guest', needle: string | Reg
       return (typeof needle === 'string' ? last.includes(needle) : needle.test(last)) === present;
     },
     T,
-  ).catch((e) => {
+  ).catch(async (e) => {
+    // Keep the evidence: a screenshot of the window and the whole text read from it.
+    const page = d.kinds[who] === 'vscode' ? d.vscode[who]?.page : (who === 'host' ? d.hostEditor : d.guestEditor)?.page;
+    await page?.screenshot({ path: path.join(d.logs, `fail-${who}.png`) }).catch(() => {});
+    writeFileSync(path.join(d.logs, `fail-${who}.txt`), last);
     throw new Error(`${(e as Error).message}\nthe ${who} editor showed: ${last.slice(0, 300)}`);
   });
 }
@@ -51,7 +58,7 @@ export function hubStory(d: Demo): Step[] {
         }
       },
       check: async () => {
-        await shows(d, 'host', 'Tip extension');
+        await shows(d, 'host', 'Fusion spectra');
         await shows(d, 'guest', 'Fusion spectra');
         expect((await gitStatus(d.hubHttp)).tracking).toBe(d.o.hubGit === 'track');
       },
@@ -60,11 +67,12 @@ export function hubStory(d: Demo): Step[] {
       id: 'maurice-types',
       caption: 'Maurice, the guest, types into his paper.',
       action: async () => {
-        await d.typeAtEnd(guest, 'Maurice adds a sentence. ');
+        await d.typeUnder(guest, 'Introduction', EDITS.maurice);
         await mark();
       },
       check: async () => {
-        await until("the hub wrote Maurice's text", () => disk(d, PY_PAPER).includes('Maurice adds a sentence.'));
+        await until("the hub wrote Maurice's text", () => diskFlat(d, PY_PAPER).includes(EDITS.mauriceNeedle));
+        await shows(d, 'host', EDITS.mauriceNeedle);
       },
     },
     {
@@ -75,7 +83,8 @@ export function hubStory(d: Demo): Step[] {
         // An untracked hub (the E8 control) records no decisions.
         if (d.o.hubGit === 'track') await until('the hub moved forward', () => newDecision(['moved-forward']));
         for (const who of ['host', 'guest'] as const) expect(await d.notices(who)).toBe(0);
-        await shows(d, guest, 'Maurice adds a sentence.');
+        await shows(d, guest, EDITS.mauriceNeedle);
+        await shows(d, 'host', EDITS.mauriceNeedle);
       },
     },
     {
@@ -106,18 +115,22 @@ export function hubStory(d: Demo): Step[] {
       id: 'guest-edit',
       caption: 'Maurice has an unsaved idea...',
       action: async () => {
-        await d.typeAtEnd(guest, 'UNSAVED-IDEA ');
-        await until('the hub wrote the idea', () => disk(d, PY_PAPER).includes('UNSAVED-IDEA'));
+        await d.typeUnder(guest, 'Introduction', EDITS.idea);
+        await until('the hub wrote the idea', () => diskFlat(d, PY_PAPER).includes(EDITS.ideaNeedle));
         await mark();
       },
-      check: async () => shows(d, guest, 'UNSAVED-IDEA'),
+      check: async () => {
+        await shows(d, guest, EDITS.ideaNeedle);
+        await shows(d, 'host', EDITS.ideaNeedle);
+      },
     },
     {
       id: 'reset-hard',
       caption: "...and Myra runs git reset --hard. The guest's edit is discarded, and the status says so.",
       command: 'git reset --hard -q',
       check: async () => {
-        await shows(d, guest, 'UNSAVED-IDEA', false);
+        await shows(d, guest, EDITS.ideaNeedle, false);
+        await shows(d, 'host', EDITS.ideaNeedle, false);
         await until('the status reports the discarded edit', async () => (await gitStatus(d.hubHttp)).decisions.slice(decisions).some((x) => (x.discarded ?? 0) >= 1));
       },
     },
@@ -135,12 +148,29 @@ export function hubStory(d: Demo): Step[] {
     {
       id: 'resolve',
       caption: 'Myra keeps her wording and continues the rebase: one swap.',
-      command: `git checkout --theirs ${R_PAPER} && git add -A && git rebase --continue`,
+      command: `git checkout --theirs ${R_PAPER} ${PY_PAPER} && git add -A && git rebase --continue`,
       check: async () => {
         await until('the hub resumed', async () => !(await gitStatus(d.hubHttp)).paused);
         if (d.kinds.host === 'browser') await expect(pausedIndicator(d.hostEditor!.page)).toHaveCount(0, { timeout: T });
-        await shows(d, 'host', 'differs reliably');
+        await shows(d, 'host', 'shows a reliable peak');
+        await shows(d, guest, 'shows a reliable peak');
+        await shows(d, 'host', EDITS.mauriceNeedle);
+        await shows(d, guest, EDITS.mauriceNeedle);
         await shows(d, 'host', /<<<<<<<|>>>>>>>/, false);
+      },
+    },
+    {
+      id: 'maurice-retypes',
+      caption: 'The rebase is over and sync is back: Maurice retypes the thought he lost, in different words, and it reaches Myra.',
+      action: async () => {
+        await d.typeUnder(guest, 'Introduction', EDITS.ideaAgain);
+      },
+      check: async () => {
+        await until("the hub wrote Maurice's retyped thought", () => diskFlat(d, PY_PAPER).includes(EDITS.ideaAgainNeedle));
+        await shows(d, 'host', EDITS.ideaAgainNeedle);
+        await shows(d, guest, EDITS.ideaAgainNeedle);
+        // The wording that was discarded stays gone.
+        expect(diskFlat(d, PY_PAPER)).not.toContain(EDITS.ideaNeedle);
       },
     },
   ];

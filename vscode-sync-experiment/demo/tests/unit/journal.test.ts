@@ -41,7 +41,7 @@ describe('journal builder (DM9)', () => {
     expect(git(d, 'status', '--porcelain').trim()).toBe('');
   });
 
-  it('rebasing revision onto main stops with a conflict in the R paper abstract', () => {
+  it('rebasing revision onto main stops with a conflict in both abstracts (the R paper and the shared fusion spectra paper)', () => {
     const d = buildJournal(tmp());
     git(d, 'switch', 'revision');
     // revision must diverge from main: build puts main one commit ahead of the fork point
@@ -52,7 +52,7 @@ describe('journal builder (DM9)', () => {
       failed = true;
     }
     expect(failed).toBe(true);
-    expect(git(d, 'diff', '--name-only', '--diff-filter=U').trim()).toBe('celia-2026-tip-extension-lmm.qmd');
+    expect(git(d, 'diff', '--name-only', '--diff-filter=U').trim()).toBe('celia-2026-tip-extension-lmm.qmd\nmorel-2026-fusion-spectra.qmd');
     git(d, 'rebase', '--abort');
   });
 

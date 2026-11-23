@@ -2,6 +2,23 @@
 
 export type Variant = 'main' | 'main-edit' | 'revision' | 'feature';
 
+/** What the authors type in the demo: on-topic paragraphs, long enough to be seen across the room. */
+export const EDITS = {
+  /** Maurice's paragraph, typed under the Introduction of the fusion spectra paper. */
+  maurice:
+    'Spectral analysis is a natural fit for fusion events: if anastomosis is driven by the humidity cycle, the periodogram of fusion times should concentrate its power at the driving frequency.',
+  mauriceNeedle: 'concentrate its power at the driving frequency',
+  /** Maurice's unsaved idea, typed and then discarded by Myra's `git reset --hard`. */
+  idea: 'An open question for the discussion: does the spectral peak survive when colonies of different ages are pooled into a single series?',
+  ideaNeedle: 'colonies of different ages are pooled',
+  /** Maurice's lost thought, retyped after the rebase in different words. */
+  ideaAgain: 'One open question for the discussion: would the spectral peak hold up if we pooled colonies of different ages into one series?',
+  ideaAgainNeedle: 'pooled colonies of different ages into one series',
+  /** The same, for the tip extension paper in the hubless story. */
+  tip: 'Tip extension depends on turgor, and turgor follows the humidity schedule with a lag, so we expect the dry and cycling regimes to differ most at the start of each cycle.',
+  tipNeedle: 'dry and cycling regimes to differ most',
+} as const;
+
 export const GITIGNORE = '.venv/\n__pycache__/\n.quarto/\n*_files/\n_site/\n';
 
 export function quartoYml(): string {
@@ -117,6 +134,13 @@ const ABSTRACT: Record<Variant, string> = {
   feature: 'After reanalysis with a corrected variance structure, tip extension differs across regimes (p = 0.031).',
 };
 
+const PY_ABSTRACT: Record<Variant, string> = {
+  main: 'The periodogram of fusion events shows a peak at the humidity oscillation frequency.',
+  'main-edit': 'The periodogram of fusion events shows a reliable peak at the humidity oscillation frequency.',
+  revision: 'The periodogram of fusion events appears to show a peak at the humidity oscillation frequency, though marginally.',
+  feature: 'After reanalysis with a stronger noise model, the periodogram of fusion events shows a sharper peak at the humidity oscillation frequency.',
+};
+
 export function papers(v: Variant): Record<string, string> {
   const feat = v === 'feature';
   const out: Record<string, string> = {
@@ -157,7 +181,7 @@ export function papers(v: Variant): Record<string, string> {
         title: 'Fusion Events as a Point Process: Spectral Signatures of Anastomosis',
         authors: ['Maurice Morel'],
         doi: '10.5555/jtm.17.3.004',
-        abstract: 'The periodogram of fusion events shows a peak at the humidity oscillation frequency.',
+        abstract: PY_ABSTRACT[v],
         keywords: ['point process', 'periodogram', 'bootstrap'],
       }) +
       `\n${prose('Fusion spectra')}\n## Results\n\n${feat ? PY_CHUNK_FEATURE : PY_CHUNK_MAIN}\n` +

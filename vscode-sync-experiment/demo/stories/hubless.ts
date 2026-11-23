@@ -6,7 +6,8 @@
 import { expect } from '@playwright/test';
 import type { Step } from '../src/driver';
 import { Demo, R_PAPER } from '../src/demo';
-import { disk, shows, until } from './hub';
+import { EDITS } from '../src/journal-content';
+import { diskFlat, disk, shows, until } from './hub';
 
 export function hublessStory(d: Demo): Step[] {
   return [
@@ -66,9 +67,10 @@ export function hublessStory(d: Demo): Step[] {
     {
       id: 'maurice-types',
       caption: 'Maurice types in the browser: the edit appears in her editor.',
-      action: () => d.typeAtEnd('guest', 'Maurice adds a sentence. '),
+      action: () => d.typeUnder('guest', 'Introduction', EDITS.tip),
       check: async () => {
-        await shows(d, 'guest', 'Maurice adds a sentence.');
+        await shows(d, 'guest', EDITS.tipNeedle);
+        await shows(d, 'host', EDITS.tipNeedle);
       },
     },
     {
@@ -80,11 +82,11 @@ export function hublessStory(d: Demo): Step[] {
         await until('Maurice\'s text reached the saved file', async () => {
           await page.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S');
           await new Promise((r) => setTimeout(r, 700));
-          return disk(d, R_PAPER).includes('Maurice adds a sentence.');
+          return diskFlat(d, R_PAPER).includes(EDITS.tipNeedle);
         });
       },
       check: async () => {
-        expect(disk(d, R_PAPER)).toContain('Maurice adds a sentence.');
+        expect(diskFlat(d, R_PAPER)).toContain(EDITS.tipNeedle);
       },
     },
     {
