@@ -3,7 +3,13 @@
 This note describes the local runtimes for tests that execute document
 engines. The R setup below was verified on Windows 11 with rig 0.11.1 and
 R 4.6.2 on 2026-11-23. The Python/Jupyter section is only an outline until
-Phase 3 is verified. CI provisioning has not been added yet.
+Phase 3 is verified. The locked CI provisioning has not been added yet; the
+existing test-suite step still installs Jupyter and registers a Python
+kernel on Linux and macOS, and nothing installs the R packages.
+
+Commands in this note quote arguments with single quotes. Run them from
+PowerShell or a POSIX shell: Command Prompt does not group single-quoted
+arguments.
 
 ## R / knitr
 
@@ -182,6 +188,15 @@ Install the packages in `[dependency-groups.fixtures]` as well when running
 corpus fixtures. Keep `QUARTO_R` unset or make it name the same R installation
 that PATH selects.
 
+If you synced the rig project earlier, its ignored root `.Renviron` still
+applies to any R started from the checkout root. R reads `.Renviron` from
+the working directory in place of `~/.Renviron`, so a personal `~/.Renviron`
+is skipped there too. With `.rvenv` removed, that R warns
+`Project is not synced` and loses your user library. To return to your
+usual R, delete the root `.Renviron` and `.rvenvlib/` (a later `rig proj
+sync` recreates them), and check `.libPaths()` from the checkout root before
+installing packages.
+
 Tests whose gates include their required packages skip when those packages
 are missing. Gates that check only for `Rscript` can instead fail with
 `Missing package: <name>`. Passing totals alone do not establish which case
@@ -189,8 +204,13 @@ occurred; run the smoke document and inspect its output.
 
 ### Known failures from the Windows verification
 
-The full locked-library run on 2026-11-23 executed all 543 selected tests:
-538 passed and 5 failed. Four failures reproduce without the shim and are
+In the full locked-library run on 2026-11-23, nextest reported 543 selected
+tests: 538 passed and 5 failed. Passed includes tests that returned early.
+The locked library has no plotly, DBI, RSQLite or png, so the widget
+fixtures (`s2/03_htmlwidget`, `s2/09_widget_filters`,
+`s9/03_inline_block_widget`) and `s5/01_odd_chunks` are unavailable, and
+`a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live` returns before
+its assertion. Four failures reproduce without the shim and are
 Windows CRLF issues (bd-qmp87pxy and bd-08jz7o8j). The remaining failure is
 `capture_include_graphics_is_an_image_paths_piece`: the approved main and
 fixtures package list does not include the optional `png` package, so knitr

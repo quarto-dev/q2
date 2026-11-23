@@ -308,9 +308,16 @@ recorded in bd-b0o2lxnv.
 The baseline had one additional, different failure in place of the shim's
 image-width failure:
 `knitr_replay_equals_live::a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live`.
-The user library's knitr 1.52.3 rejects `#|` options for its SQL chunk;
-locked knitr 1.52 accepts them and the test passes. This was already filed
-as bd-lnu81d4a.
+The user library's knitr 1.52.3 rejects `#|` options for its SQL chunk
+(bd-lnu81d4a). The shim run does not show that locked knitr 1.52 accepts
+them: the locked library has no DBI or RSQLite, so the test returns before
+its assertion and nextest counts it as passed. The version comparison needs
+a run with both packages available.
+
+The locked library also lacks plotly, so the corpus fixtures
+`s2/03_htmlwidget`, `s2/09_widget_filters` and `s9/03_inline_block_widget`
+are unavailable, as is `s5/01_odd_chunks` (DBI, RSQLite). Whether to add
+plotly, DBI, RSQLite and png to the `fixtures` group is open.
 
 ## Checklist
 
@@ -324,9 +331,9 @@ as bd-lnu81d4a.
 ### Phase 2: CI R step (all legs)
 
 - [ ] Install a pinned rig version per OS (one `RIG_VERSION` env value, like `TYPST_VERSION`): Windows via `choco install rig --version`, or the release installer; Linux and macOS from the versioned release assets (commands to verify against the rig install docs).
-- [ ] `rig add <r_version from rproj.lock>`, then `rig proj sync --locked`, and append `.rvenv/bin` to `$GITHUB_PATH`.
+- [ ] `rig add <r_version from rproj.lock>`, then `rig proj sync --locked`, and append the absolute `$GITHUB_WORKSPACE/.rvenv/bin` to `$GITHUB_PATH` (a relative entry would not resolve when nextest runs tests from a crate directory).
 - [ ] Order on Linux: after "Free disk space", which removes the tool cache.
-- [ ] Cache the project library keyed on `rproj.lock` and the runner OS.
+- [ ] Cache the project library keyed on `rproj.lock`, the runner OS and the synced dependency groups, so a main-only cache is never restored for a fixtures install.
 - [ ] Dispatch on all three runners with `filter='test(knitr) | test(engine_visibility) | test(docs_knitr)'` and triage what real knitr coverage turns up on Linux and macOS.
 - [ ] Acceptance: pass/skip counts cannot prove execution (the gates return normally when R is absent). On each runner, render a one-cell knitr smoke document (for example `` `r 6 * 7` `` and a chunk printing `R.version.string`) and check the output holds the computed values.
 - [ ] Measure package install time and test time separately (main group vs `fixtures`) and record the `fixtures` decision here.
