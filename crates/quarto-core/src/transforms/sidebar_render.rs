@@ -179,6 +179,27 @@ impl AstTransform for SidebarRenderTransform {
             surface,
             &mut local_diags,
         );
+        // Tool links resolve like any sidebar link: a root-relative
+        // download (`/Book.epub`) becomes page-relative, and an external
+        // or share link passes through.
+        for tool in sidebar.tools.iter_mut() {
+            for link in
+                std::iter::once(&mut tool.href).chain(tool.menu.iter_mut().map(|m| &mut m.href))
+            {
+                if let Some(href) = link.as_mut() {
+                    *href = resolve_href_for_html(
+                        href,
+                        ctx.resource_resolver.as_ref(),
+                        ctx.project_index.as_deref(),
+                        NavSurface::Sidebar {
+                            id: sidebar_id.as_deref(),
+                        },
+                        None,
+                        &mut local_diags,
+                    );
+                }
+            }
+        }
         ctx.diagnostics = local_diags;
 
         // Compute the page-relative URL of the site root directory

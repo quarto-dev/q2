@@ -541,6 +541,39 @@ nav.sidebar.sidebar-navigation:not(.rollup) {
   text-decoration: none;
 }
 
+// Sidebar tools: the icon links and dropdown menus beside the sidebar
+// title (`sidebar.tools`; a book's repository, download and share
+// tools). from quarto-nav.scss:294-296, 323-345. The dropdown trigger is
+// a `<button>` in q2, so it also drops the button chrome.
+.sidebar-title .sidebar-tools-main {
+  margin-top: -6px;
+}
+
+.sidebar-navigation .quarto-navigation-tool {
+  opacity: 0.7;
+  font-size: 0.875rem;
+}
+
+.sidebar-navigation button.quarto-navigation-tool {
+  background: none;
+  border: 0;
+  color: inherit;
+}
+
+.sidebar-tools-main {
+  display: inline-flex;
+  margin-left: 0px;
+  order: 2;
+}
+
+.sidebar-tools-main:not(.tools-wide) {
+  vertical-align: middle;
+}
+
+.sidebar-navigation .quarto-navigation-tool.dropdown-toggle::after {
+  display: none;
+}
+
 // Sidebar item layout (vertical rhythm and section indent).
 $sidebar-items-gap-spacing: 0.2em !default;
 $sidebar-section-indent: 0.5em !default;

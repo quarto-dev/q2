@@ -321,14 +321,42 @@ pub fn book_sidebar_contents(
     contents
 }
 
+/// The sidebar tool for `book.repo-url`: a "Source Code" icon link to the
+/// repository, with the GitHub mark for a github.com URL and the generic
+/// git icon otherwise (Q1's `repoUrlIcon`). `repo-link-target` and
+/// `repo-link-rel` carry over. `None` without a `repo-url`.
+pub fn repo_tool(book: &ConfigValue) -> Option<ConfigValue> {
+    let text = |key: &str| {
+        book.get(key)
+            .and_then(|v| v.as_plain_text())
+            .filter(|v| !v.trim().is_empty())
+    };
+    let repo_url = text("repo-url")?;
+    let icon = if repo_url.contains("github.com") {
+        "github"
+    } else {
+        "git"
+    };
+    let mut entries = vec![
+        ("icon", ConfigValue::new_string(icon, gen_si())),
+        ("text", ConfigValue::new_string("Source Code", gen_si())),
+        ("href", ConfigValue::new_string(repo_url, gen_si())),
+    ];
+    if let Some(target) = text("repo-link-target") {
+        entries.push(("target", ConfigValue::new_string(target, gen_si())));
+    }
+    if let Some(rel) = text("repo-link-rel") {
+        entries.push(("rel", ConfigValue::new_string(rel, gen_si())));
+    }
+    Some(new_map(entries))
+}
+
 /// Sidebar tool entries for `book.downloads` — one entry per
-/// downloadable single-file format (`pdf`, `epub`, `docx`), a lone
-/// entry flattening to a single download button. Port of Q1's
+/// downloadable single-file format (`pdf`, `epub`, `docx`); several
+/// fold into one "Download" menu. Port of Q1's
 /// `downloadTools`.
 ///
-/// **Q2 has no sidebar-tools renderer (bd-fod3)** — these are inert
-/// config entries written so that the shape is right when the renderer
-/// lands. Divergence from Q1: unknown download names are skipped; Q1's
+/// Divergence from Q1: unknown download names are skipped; Q1's
 /// fallback produces a literally broken `Download action}` text (a
 /// missing `${}` in its template literal) that nothing could want.
 pub fn download_tools(book: &ConfigValue, project_dir: &Path) -> Vec<ConfigValue> {
@@ -367,13 +395,10 @@ pub fn download_tools(book: &ConfigValue, project_dir: &Path) -> Vec<ConfigValue
     }
     match entries.len() {
         0 => Vec::new(),
-        1 => {
-            // A lone download flattens to a single button with the
-            // generic download icon.
-            let mut entry = entries.pop().unwrap();
-            entry.insert_path(&["icon"], ConfigValue::new_string("download", gen_si()));
-            vec![entry]
-        }
+        // A lone download is a single button with its format's own icon.
+        // (Q1 writes `{icon: "download", ...download}`, and the spread
+        // puts the format's icon back over the generic one.)
+        1 => entries,
         _ => vec![new_map(vec![
             ("icon", ConfigValue::new_string("download", gen_si())),
             ("text", ConfigValue::new_string("Download", gen_si())),
@@ -386,9 +411,8 @@ pub fn download_tools(book: &ConfigValue, project_dir: &Path) -> Vec<ConfigValue
 /// (`linkedin`, `facebook`, `twitter`), multiple entries folding into a
 /// "Share" menu. Port of Q1's `sharingTools`, including its `kSharingUrls`
 /// quirk: LinkedIn's entry carries `href` while Facebook/Twitter carry
-/// `url` — a real Q1 inconsistency, ported literally since these entries
-/// are inert config in Q2 (no tools renderer, bd-fod3) and fidelity is
-/// the goal.
+/// `url` — a real Q1 inconsistency, ported literally; the sidebar's tool
+/// parser accepts either key.
 pub fn sharing_tools(book: &ConfigValue) -> Vec<ConfigValue> {
     let Some(sharing) = book.get("sharing").and_then(|s| s.as_array()) else {
         return Vec::new();
@@ -969,14 +993,40 @@ mod tests {
         ]);
         let tools = download_tools(&book, dir);
         assert_eq!(tools.len(), 1);
+        // Verified against Quarto 1.9.38: `<i class="bi bi-journal">`.
         assert_eq!(
             tools[0].get("icon").unwrap().as_plain_text().as_deref(),
-            Some("download")
+            Some("journal")
         );
         assert_eq!(
             tools[0].get("href").unwrap().as_plain_text().as_deref(),
             Some("/the-book.epub")
         );
+    }
+
+    #[test]
+    fn repo_tool_links_the_repository_with_a_matching_icon() {
+        let github = map(vec![
+            ("repo-url", s("https://github.com/example/book")),
+            ("repo-link-target", s("_blank")),
+        ]);
+        let tool = repo_tool(&github).unwrap();
+        let get = |key: &str| tool.get(key).and_then(|v| v.as_plain_text());
+        assert_eq!(get("icon").as_deref(), Some("github"));
+        assert_eq!(get("text").as_deref(), Some("Source Code"));
+        assert_eq!(
+            get("href").as_deref(),
+            Some("https://github.com/example/book")
+        );
+        assert_eq!(get("target").as_deref(), Some("_blank"));
+
+        let other = map(vec![("repo-url", s("https://gitlab.com/example/book"))]);
+        let tool = repo_tool(&other).unwrap();
+        assert_eq!(
+            tool.get("icon").unwrap().as_plain_text().as_deref(),
+            Some("git")
+        );
+        assert!(repo_tool(&map(vec![])).is_none());
     }
 
     #[test]

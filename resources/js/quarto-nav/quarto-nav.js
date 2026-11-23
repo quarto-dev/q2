@@ -332,6 +332,22 @@
     }
   });
 
+  // Share links carry a `|url|` placeholder for the page's own address
+  // (a book's `sharing:` tools); fill it in, as Q1's quarto-nav.js does.
+  // Runs once at init, like the sidebar scroll below.
+  const sharingLinks = window.document.querySelectorAll(
+    "a.sidebar-tools-main-item, a.quarto-navigation-tool"
+  );
+  for (const sharingLink of sharingLinks) {
+    const href = sharingLink.getAttribute("href");
+    if (href && href.includes("|url|")) {
+      sharingLink.setAttribute(
+        "href",
+        href.replace("|url|", encodeURIComponent(window.location.href))
+      );
+    }
+  }
+
   // Scroll the active sidebar item into view, if necessary (Q1's block
   // of the same name; GH #1065). A ResizeObserver on the scrollable nav
   // waits until its height has resolved; while it is still laying out,

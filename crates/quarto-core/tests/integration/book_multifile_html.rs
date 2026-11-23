@@ -606,6 +606,63 @@ fn book_pages_ship_the_icon_font() {
     );
 }
 
+/// bd-fod3: a book's `repo-url`, `downloads` and `sharing` show as
+/// sidebar tools beside the title, in Quarto 1's order: a repository
+/// icon, a download link relative to the page, and a share menu.
+#[test]
+fn book_sidebar_shows_repository_download_and_share_tools() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        r#"project:
+  type: book
+
+book:
+  title: "Tools Book"
+  repo-url: https://github.com/example/tools-book
+  downloads: [epub]
+  sharing: [twitter, facebook]
+  chapters:
+    - index.qmd
+    - part/deep.qmd
+"#,
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "# Preface {.unnumbered}\n\nHello.\n",
+    );
+    write(
+        &project_dir.join("part").join("deep.qmd"),
+        "# Deep\n\nText.\n",
+    );
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+    let index = read_output(&outputs, "index");
+    let deep = read_output(&outputs, "deep");
+
+    let at = |html: &str, needle: &str| {
+        html.find(needle)
+            .unwrap_or_else(|| panic!("`{needle}` not found in: {html}"))
+    };
+    let repo = at(
+        &index,
+        "href=\"https://github.com/example/tools-book\" title=\"Source Code\"",
+    );
+    let download = at(&index, "href=\"Tools-Book.epub\" title=\"Download ePub\"");
+    let share = at(&index, "title=\"Share\"");
+    assert!(repo < download && download < share, "Quarto 1's tool order");
+    assert!(index.contains("bi bi-github"), "{index}");
+    assert!(
+        index.contains("href=\"https://twitter.com/intent/tweet?url=|url|\"")
+            && index.contains("href=\"https://www.facebook.com/sharer/sharer.php?u=|url|\""),
+        "share links keep the |url| placeholder for quarto-nav.js: {index}"
+    );
+    assert!(index.contains("sidebar-tools-main tools-wide"), "{index}");
+
+    // From a subfolder the download link climbs to the book root.
+    at(&deep, "href=\"../Tools-Book.epub\" title=\"Download ePub\"");
+}
+
 /// Sections of an unnumbered chapter (a preface, say) carry no number.
 /// Quarto 1 turns section numbering off for such a chapter; without that
 /// the sections count from an unset chapter slot and read "0.1", "0.2".
