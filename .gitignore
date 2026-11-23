@@ -129,3 +129,15 @@ ts-packages/quarto-hub-mcp/.qmd-parser-unavailable
 # hub-mcp eval suite raw stream-json (bulky; the condensed transcript-*.md
 # and summary.json ARE committed per the plan's "commit the transcripts").
 ts-packages/quarto-hub-mcp/eval/results/*/raw/
+
+# Local rig project bootstrap. Do not commit .Renviron or .rvenvlib: without
+# a synced project library they hide a contributor's usual R package library.
+/.rvenvlib/
+/.Renviron
+
+# rig rvenv start
+# Everything in .rvenv is machine-specific output of `rig proj sync`; it can
+# be deleted and rebuilt at any time. The committed rvenv shim package lives
+# in .rvenvlib instead.
+/.rvenv/
+# rig rvenv end

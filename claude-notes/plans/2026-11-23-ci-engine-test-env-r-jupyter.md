@@ -2,7 +2,7 @@
 title: 'CI and local engine test environment: R via `rig proj`, Jupyter via uv (bd-9kbjjeb6, bd-yhl7tb3g)'
 date: 2026-11-23
 description: 'Provision R (rig, with packages from a committed rig project) and Python/Jupyter (uv) on every test-suite leg including Windows, and document the same setup for running the engine tests locally.'
-status: draft
+status: in-progress
 braid:
   strand: bd-9kbjjeb6
   priority: P2
