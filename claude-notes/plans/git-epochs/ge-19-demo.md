@@ -555,3 +555,16 @@ next agent: switching this worktree to the old `parking/workspace-8` branch (whi
 deleted the ignored `dist/`, so every VS Code preset timed out waiting for the "Quarto Hub" status bar item (8 failures)
 until `npm run build` rebuilt it. A VS Code window left running by an interrupted headed run (`pkill -INT` on the
 launcher does not close it) is a second thing to rule out before reading such failures as defects.
+
+### Share tunnel and the `vscode-share` rename (2026-11-22)
+
+- The preset `hubless` is now `vscode-share` (the story file is `stories/vscode-share.ts`). Earlier sections of this note
+  keep the old name.
+- `hub-browser` and `hub-vscode-host` run the hub with `q2 preview --share`. Two steps follow `start-hub`:
+  `share-ticket` (Myra reads the join string with `grep` on the hub log, so the ticket is on camera) and `guest-join`
+  (Maurice pastes `q2 preview --join <ticket>` into his own terminal and opens the local proxy). The hub's own URL no
+  longer reaches Maurice. A spike over a real `--share` and `--join` pair passed commit, branch switch, `reset --hard`, a
+  paused rebase, and retyping, with the guest's `git-status` route working through the proxy.
+- Not covered: `hub-vscode-clone` (the clone attaches by project id over the hub websocket; whether it can attach through
+  the proxy's `/ws` is untested), NAT traversal and relay behavior (one laptop), and Myra's VS Code Join Session, which
+  still pastes the hub's loopback URL.

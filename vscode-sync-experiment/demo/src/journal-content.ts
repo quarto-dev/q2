@@ -14,7 +14,7 @@ export const EDITS = {
   /** Maurice's lost thought, retyped after the rebase in different words. */
   ideaAgain: 'One open question for the discussion: would the spectral peak hold up if we pooled colonies of different ages into one series?',
   ideaAgainNeedle: 'pooled colonies of different ages into one series',
-  /** The same, for the tip extension paper in the hubless story. */
+  /** The same, for the tip extension paper in the vscode-share story. */
   tip: 'Tip extension depends on turgor, and turgor follows the humidity schedule with a lag, so we expect the dry and cycling regimes to differ most at the start of each cycle.',
   tipNeedle: 'dry and cycling regimes to differ most',
   /** Myra's copy edit: both Introduction paragraphs open with "Tip extension", so she rewords her own opening. */

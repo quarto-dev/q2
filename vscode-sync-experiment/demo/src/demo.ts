@@ -43,7 +43,7 @@ export function wrapText(text: string, width: number): string {
   return lines.join('\n');
 }
 
-export type Preset = 'hub-browser' | 'hub-vscode-host' | 'hub-vscode-clone' | 'hubless';
+export type Preset = 'hub-browser' | 'hub-vscode-host' | 'hub-vscode-clone' | 'vscode-share';
 
 export interface DemoOptions {
   preset: Preset;
@@ -207,11 +207,11 @@ export class Demo {
       this.lastActivity = Date.now();
       this.record('terminal', 'command', line, { line });
     });
-    if (this.o.preset === 'hub-vscode-clone' || this.o.preset === 'hubless') {
-      // Maurice's clone, or (hubless) an empty directory: his only tool there is the pasted `q2 preview` command.
-      if (this.o.preset === 'hubless') {
+    if (this.hasGuestTerminal) {
+      // Maurice's clone, or (vscode-share, shared) an empty directory: his only tool there is the pasted `q2 preview` command.
+      if (this.o.preset === 'vscode-share' || this.shares) {
         mkdirSync(this.guestDir, { recursive: true });
-        this.qhubPort = await Demo.freePort();
+        if (this.o.preset === 'vscode-share') this.qhubPort = await Demo.freePort();
       }
       else this.cloneJournal();
       this.guestTerminal = await startTerminalServer({
@@ -274,8 +274,21 @@ export class Demo {
 
   // ---- the hub -------------------------------------------------------------------------------------------------
 
+  /**
+   * Myra shares her preview over iroh and Maurice joins with the ticket from another terminal, as two machines would
+   * (`hub-browser`, `hub-vscode-host`). The guest has no clone: `q2 preview --join` runs a proxy to her session.
+   */
+  get shares(): boolean {
+    return this.o.preset === 'hub-browser' || this.o.preset === 'hub-vscode-host';
+  }
+
+  /** Presets where Maurice has a terminal of his own. */
+  get hasGuestTerminal(): boolean {
+    return this.o.preset === 'hub-vscode-clone' || this.o.preset === 'vscode-share' || this.shares;
+  }
+
   hubArgs(): string[] {
-    return ['preview', '--no-browser', '--git', this.o.hubGit, '--ui', 'editor', '--allow-edit', '--data-dir', path.join(this.root, 'data'), '.'];
+    return ['preview', ...(this.shares ? ['--share'] : []), '--no-browser', '--git', this.o.hubGit, '--ui', 'editor', '--allow-edit', '--data-dir', path.join(this.root, 'data'), '.'];
   }
 
   /** The command line a person (or the scripted story) types in the host terminal; the hub's output goes to a log file. */
@@ -302,13 +315,16 @@ export class Demo {
     while (Date.now() < deadline) {
       const text = existsSync(log) ? readFileSync(log, 'utf8') : '';
       const m = text.match(/→\s+(http:\/\/[^\s]+)/);
-      if (m) {
+      // Under --share the banner also prints the join string, a few lines below the URL.
+      const j = text.match(/q2 preview --join (q2preview[a-z0-9]+)/);
+      if (m && (!this.shares || j)) {
         url = m[1]!;
+        if (j) this.joinCommand = `q2 preview --join ${j[1]}`;
         break;
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-    if (!url) throw new Error(`the hub printed no URL within ${timeoutMs} ms; see ${log}`);
+    if (!url) throw new Error(`the hub printed no URL${this.shares ? ' and join string' : ''} within ${timeoutMs} ms; see ${log}`);
     this.hubUrl = url;
     this.hubHttp = new URL('/', url).toString();
     for (;;) {
@@ -348,11 +364,13 @@ export class Demo {
     await new Promise((r) => setTimeout(r, 800));
   }
 
-  // ---- hubless (DM6): a standalone q2 hub, a VS Code originator, and a pasted q2 preview command ------------------------
+  // ---- vscode-share (DM6): a standalone q2 hub, a VS Code originator, and a pasted q2 preview command ------------------------
 
   qhubPort = 0;
   guestPreviewUrl = '';
   shareCommand = '';
+  /** `q2 preview --join <ticket>`, as the shared hub printed it (`shares`). */
+  joinCommand = '';
   private qhubProc?: ChildProcess;
   private guestPreviewProc?: ChildProcess;
 
@@ -474,7 +492,26 @@ export class Demo {
 
   /** What the guest terminal types: the copied command, without a browser window, its log in a file. */
   guestPreviewCommandLine(): string {
+    if (this.shares) return `${this.joinCommand} --no-browser > ../logs/guest-preview.log 2>&1 &`;
     return `${this.shareCommand} --no-browser --data-dir ../data-guest > ../logs/guest-preview.log 2>&1 &`;
+  }
+
+  /** What Myra types to read the join string out of the hub's log (the banner went to a file, not to her screen). */
+  joinStringCommandLine(): string {
+    return "grep -o 'q2 preview --join q2preview[a-z0-9]*' ../logs/hub.log";
+  }
+
+  /** Free play and reset (`shares`): join as Maurice from the launcher, and open his browser on the proxy. */
+  async joinGuestFromLauncher(): Promise<void> {
+    const log = path.join(this.logs, 'guest-preview.log');
+    writeFileSync(log, '');
+    const parts = this.joinCommand.split(' ').slice(1);
+    const proc = spawn(Q2_BINARY, [...parts, '--no-browser'], { cwd: this.guestDir, env: { ...process.env, ...this.env() }, stdio: ['ignore', 'pipe', 'pipe'] });
+    proc.stdout?.on('data', (c) => appendFileSync(log, c));
+    proc.stderr?.on('data', (c) => appendFileSync(log, c));
+    this.guestPreviewProc = proc;
+    await this.waitForGuestPreview();
+    await this.openGuestBrowser(this.guestPreviewUrl, PY_PAPER);
   }
 
   async waitForGuestPreview(timeoutMs = 60_000): Promise<string> {
@@ -493,7 +530,7 @@ export class Demo {
   }
 
   /** Free play and reset: share silently, start the guest preview from the launcher, and open the guest's browser on it. */
-  async hublessAll(): Promise<void> {
+  async vscodeShareAll(): Promise<void> {
     await this.originateStart();
     await this.originateConfirm();
     await openVscodeFile(this.vscode.host!.page, R_PAPER);
@@ -512,7 +549,7 @@ export class Demo {
     await this.openGuestBrowser(this.guestPreviewUrl);
   }
 
-  async openGuestBrowser(url: string): Promise<void> {
+  async openGuestBrowser(url: string, file = R_PAPER): Promise<void> {
     this.computeLayout();
     if (!this.guestEditor) {
       const guest = await this.window();
@@ -521,7 +558,7 @@ export class Demo {
     }
     const { openProject, openFile } = await import('../../../q2-preview-spa/e2e/helpers/editor');
     await openProject(this.guestEditor.page, url);
-    await openFile(this.guestEditor.page, R_PAPER);
+    await openFile(this.guestEditor.page, file);
   }
 
   private async killProc(p: ChildProcess | undefined): Promise<void> {
@@ -540,7 +577,7 @@ export class Demo {
   }
 
   /** Stop the standalone hub and the guest preview, whether the launcher or the terminal started them. */
-  async stopHubless(): Promise<void> {
+  async stopStandaloneHub(): Promise<void> {
     await this.killProc(this.guestPreviewProc);
     await this.killProc(this.qhubProc);
     this.guestPreviewProc = this.qhubProc = undefined;
@@ -578,7 +615,7 @@ export class Demo {
   }
 
   computeLayout(): Layout {
-    this.layout = computeLayout(screenFrame(this.o.screen), { guestTerminal: this.o.preset === 'hub-vscode-clone' || this.o.preset === 'hubless' });
+    this.layout = computeLayout(screenFrame(this.o.screen), { guestTerminal: this.hasGuestTerminal });
     return this.layout;
   }
 
@@ -612,7 +649,7 @@ export class Demo {
 
   /** The kind of editor each side has in this preset. */
   get kinds(): { host: 'browser' | 'vscode'; guest: 'browser' | 'vscode' } {
-    const host = this.o.preset === 'hub-vscode-host' || this.o.preset === 'hubless' ? 'vscode' : 'browser';
+    const host = this.o.preset === 'hub-vscode-host' || this.o.preset === 'vscode-share' ? 'vscode' : 'browser';
     return { host, guest: this.o.preset === 'hub-vscode-clone' ? 'vscode' : 'browser' };
   }
 
@@ -630,7 +667,10 @@ export class Demo {
     } else {
       await this.openVscodeHost();
     }
-    if (this.kinds.guest === 'browser') {
+    if (this.shares) {
+      // The story has Maurice join with the ticket; free play and reset do it for him.
+      if (!this.o.typedHub) await this.joinGuestFromLauncher();
+    } else if (this.kinds.guest === 'browser') {
       if (!this.o.fast) {
         this.say('narration', 'Myra shares the hub URL with Maurice. He opens it in his browser and joins.');
         await new Promise((r) => setTimeout(r, 3500));
@@ -657,12 +697,12 @@ export class Demo {
    */
   async openHostVscodeEarly(): Promise<void> {
     await ensureWasm();
-    const hubless = this.o.preset === 'hubless';
-    // In `hubless` the window is the originator: it shares through the standalone hub, whose address it is launched with.
-    const v = await launchVscode({ workspace: this.journal, env: hubless ? { QUARTO_HUB_TEST_SYNC_SERVER: this.qhubWs } : undefined, settings: VSCODE_SETTINGS });
+    const viaQhub = this.o.preset === 'vscode-share';
+    // In `vscode-share` the window is the originator: it shares through the standalone hub, whose address it is launched with.
+    const v = await launchVscode({ workspace: this.journal, env: viaQhub ? { QUARTO_HUB_TEST_SYNC_SERVER: this.qhubWs } : undefined, settings: VSCODE_SETTINGS });
     this.vscode.host = v;
     await this.placeVscode(v, this.layout.hostEditor);
-    await openVscodeFile(v.page, hubless ? R_PAPER : PY_PAPER);
+    await openVscodeFile(v.page, viaQhub ? R_PAPER : PY_PAPER);
   }
 
   /**
@@ -873,8 +913,8 @@ export class Demo {
   }
 
   private async poll(): Promise<void> {
-    // `hubless` has no tracking hub, so no status route: the observer then narrates files and checks invariants only.
-    if (!this.hubHttp && this.o.preset !== 'hubless') return;
+    // `vscode-share` has no tracking hub, so no status route: the observer then narrates files and checks invariants only.
+    if (!this.hubHttp && this.o.preset !== 'vscode-share') return;
     const next: StatusBody | null = this.hubHttp ? await this.status() : null;
     const files = this.listFiles();
     const events: DemoEvent[] = next ? deriveEvents(this.prevStatus, next, { prevFiles: this.prevFiles, nextFiles: files }) : [];
@@ -895,7 +935,7 @@ export class Demo {
     // The hub's disk against the docs its pointers name (only when quiet, and only where a tracking hub exists).
     const hubDisk: Record<string, string> = {};
     let pointerDocs: Record<string, string> = {};
-    if (quiet && this.hubHttp && this.o.preset !== 'hubless') {
+    if (quiet && this.hubHttp && this.o.preset !== 'vscode-share') {
       try {
         this.docReader ??= await connectDocReader(this.wsUrl, this.projectId);
         const current = await this.docReader.pointerTexts(docs.map((d) => d.path));
@@ -1011,7 +1051,7 @@ export class Demo {
           this.stopObserver();
           await this.closeVscode();
           await this.stopHub();
-          await this.stopHubless();
+          await this.stopStandaloneHub();
         },
         rebuildJournal: async () => {
           // The shell must not sit inside the directory while it is rebuilt.
@@ -1031,17 +1071,23 @@ export class Demo {
           this.cloneJournal();
         },
         startHub: async () => {
-          if (this.o.preset === 'hubless') {
+          if (this.o.preset === 'vscode-share') {
             // The project id exists only once the folder is shared again; everything follows from that.
             await this.startQhubProcess();
-            await this.hublessAll();
+            await this.vscodeShareAll();
           } else {
             await this.startHubProcess();
           }
           return this.projectId;
         },
         navigateBrowsers: async () => {
-          if (this.o.preset === 'hubless') return;
+          if (this.o.preset === 'vscode-share') return;
+          if (this.shares) {
+            // The new hub printed a new ticket: Maurice joins again, and his old proxy is gone.
+            if (this.hostEditor) await this.openProject(this.hostEditor.page, PY_PAPER);
+            await this.joinGuestFromLauncher();
+            return;
+          }
           for (const w of [this.hostEditor, this.guestEditor]) {
             if (!w) continue;
             await w.page.goto(this.hubUrl);
@@ -1052,7 +1098,7 @@ export class Demo {
         // A fresh hub has a new project id (G19), so the VS Code windows are relaunched and rebound at the same place
         // (the plan's Join session route would need the share link; the relaunch is recorded as a deviation).
         rejoinVscode: async () => {
-          if (this.o.preset === 'hubless') return;
+          if (this.o.preset === 'vscode-share') return;
           if (this.kinds.host === 'vscode') await this.openVscodeHost();
           if (this.kinds.guest === 'vscode') await this.openVscodeGuest();
         },
@@ -1083,7 +1129,7 @@ export class Demo {
     await this.closeVscode();
     await this.browser?.close().catch(() => {});
     await this.stopHub();
-    await this.stopHubless();
+    await this.stopStandaloneHub();
     await this.hostTerminal.close().catch(() => {});
     await this.guestTerminal?.close().catch(() => {});
   }

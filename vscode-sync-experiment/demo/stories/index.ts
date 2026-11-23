@@ -2,7 +2,7 @@ import type { Demo } from '../src/demo';
 import type { Step } from '../src/driver';
 import { hubStory } from './hub';
 import { hubCloneStory } from './hub-clone';
-import { hublessStory } from './hubless';
+import { vscodeShareStory } from './vscode-share';
 
 export function storyFor(d: Demo): Step[] {
   switch (d.o.preset) {
@@ -11,7 +11,7 @@ export function storyFor(d: Demo): Step[] {
       return hubStory(d);
     case 'hub-vscode-clone':
       return hubCloneStory(d);
-    case 'hubless':
-      return hublessStory(d);
+    case 'vscode-share':
+      return vscodeShareStory(d);
   }
 }

@@ -7,7 +7,7 @@ import { storyFor } from '../stories';
 import type { Where } from './captions';
 
 const USAGE = `usage: npm run demo -w quarto-hub-vscode -- [options]
-  --preset hub-browser|hub-vscode-host|hub-vscode-clone|hubless   (default hub-browser)
+  --preset hub-browser|hub-vscode-host|hub-vscode-clone|vscode-share   (default hub-browser)
   --play                 run the scripted story (default: free play)
   --pace auto|key        pacing of the story (default auto)
   --dwell <ms>           dwell in auto pace (default 2500)
@@ -55,7 +55,7 @@ async function main() {
   });
   if (v.help) return void console.log(USAGE);
   const preset = (v.preset ?? 'hub-browser') as Preset;
-  if (!['hub-browser', 'hub-vscode-host', 'hub-vscode-clone', 'hubless'].includes(preset)) throw new Error(`preset ${preset} is not built yet`);
+  if (!['hub-browser', 'hub-vscode-host', 'hub-vscode-clone', 'vscode-share'].includes(preset)) throw new Error(`preset ${preset} is not built yet`);
   const play = !!v.play || !!v.fast;
   const d = await Demo.create(
     defaultOptions({
@@ -76,9 +76,9 @@ async function main() {
     await d.openHostTerminal();
     if (play && d.kinds.host === 'vscode') await d.openHostVscodeEarly();
     if (!play) {
-      if (preset === 'hubless') {
+      if (preset === 'vscode-share') {
         await d.startQhubProcess();
-        await d.hublessAll();
+        await d.vscodeShareAll();
       } else {
         await d.startHubProcess();
         await d.openEditors();

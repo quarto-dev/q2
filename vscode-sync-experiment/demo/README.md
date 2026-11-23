@@ -42,10 +42,17 @@ npm run demo -w quarto-hub-vscode -- --preset <preset> [options]
 
 | Preset | What it shows |
 |---|---|
-| `hub-browser` (default) | Myra edits in a browser on a tracking hub; Maurice follows in another browser. The full story: edit, commit, switch branch, reset, rebase with a conflict. |
-| `hub-vscode-host` | Myra edits in an editor-only VS Code window on the hub's own folder; Maurice follows in a browser. |
+| `hub-browser` (default) | Myra edits in a browser on a tracking hub; Maurice joins from his own terminal with the join string her `--share` hub prints, and follows in another browser. The full story: edit, commit, switch branch, reset, rebase with a conflict. |
+| `hub-vscode-host` | Myra edits in an editor-only VS Code window on the hub's own folder; Maurice joins with her join string, as in `hub-browser`, and follows in a browser. |
 | `hub-vscode-clone` | Myra uses a browser on the hub; Maurice has his own VS Code clone with its own terminal. |
-| `hubless` | A standalone `q2 hub` with no git tracking: Myra shares from VS Code (the dialog is on camera), and Maurice joins with the copied command. |
+| `vscode-share` | A standalone `q2 hub` with no git tracking: Myra shares from VS Code (the dialog is on camera), and Maurice joins with the copied command. (Formerly `hubless`.) |
+
+In `hub-browser` and `hub-vscode-host` the hub runs with `--share`, so Myra and Maurice are on different machines as far
+as the demo is concerned: Myra reads the `q2 preview --join q2preview…` string the hub printed, and Maurice pastes it
+into his own terminal. His browser opens his local proxy, not her hub's URL. Everything between them crosses an
+encrypted iroh tunnel (on one laptop it is a direct connection, so the demo shows no relay or NAT traversal).
+`hub-vscode-clone` cannot do this yet: Maurice's clone attaches to the hub's websocket by project id, and `--join` has
+no local project. In `vscode-share` both sides already connect to a standalone server.
 
 Without `--play` the demo starts in **free play**: the windows open, the hub runs, and you type in the terminal window
 as Myra (or Maurice, in the presets that have his terminal). With `--play` it runs the preset's **scripted story**.
@@ -80,7 +87,7 @@ from the doc its pointer names once the doc has held still for 8 seconds (the hu
 clone on another branch whose disk was rewritten.
 
 To restore the starting state, type `reset` and Enter in the shell that runs `npm run demo`. The launcher stops the hub
-(and the standalone hub in `hubless`), rebuilds the journal and the clone, starts a fresh hub with a new project id, and
+(and the standalone hub in `vscode-share`), rebuilds the journal and the clone, starts a fresh hub with a new project id, and
 points the open windows at it. The windows and terminals stay open.
 
 ## The event log, for agents

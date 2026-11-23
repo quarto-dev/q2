@@ -15,9 +15,9 @@ export async function startDemo(over: Partial<DemoOptions>): Promise<Demo> {
 /** Free play: the launcher starts the hub and opens both editors. */
 export async function startFreePlay(over: Partial<DemoOptions> = {}): Promise<Demo> {
   const d = await startDemo(over);
-  if (d.o.preset === 'hubless') {
+  if (d.o.preset === 'vscode-share') {
     await d.startQhubProcess();
-    await d.hublessAll();
+    await d.vscodeShareAll();
   } else {
     await d.startHubProcess();
     await d.openEditors();

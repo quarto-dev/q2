@@ -1,5 +1,5 @@
 /**
- * The scripted story for `hubless` (DM6): a standalone `q2 hub` started in the host terminal, Myra's VS Code window
+ * The scripted story for `vscode-share` (DM6): a standalone `q2 hub` started in the host terminal, Myra's VS Code window
  * sharing the folder on camera, and Maurice's terminal pasting the copied `q2 preview --hub-url` command. No tracking
  * hub is involved: the originator's VS Code window is the owner, and the guest follows through the relay. Nothing runs
  * code until Myra runs `q2 provide-hub`, which executes the paper and sends the result to every collaborator.
@@ -10,7 +10,7 @@ import { Demo, R_PAPER } from '../src/demo';
 import { EDITS } from '../src/journal-content';
 import { diskFlat, disk, shows, until } from './hub';
 
-export function hublessStory(d: Demo): Step[] {
+export function vscodeShareStory(d: Demo): Step[] {
   return [
     {
       id: 'start-hub',
@@ -76,7 +76,7 @@ export function hublessStory(d: Demo): Step[] {
         // The result travels through the hub: no process held the project before this, so no chart showed.
         const img = d.guestEditor!.page.frameLocator('iframe').locator('img').first();
         await img.waitFor({ state: 'visible', timeout: 60_000 });
-        d.record('finding', 'live-chunks-hubless', 'the R paper shows its chart through --hub-url once a provider runs it', { seen: true });
+        d.record('finding', 'live-chunks-vscode-share', 'the R paper shows its chart through --hub-url once a provider runs it', { seen: true });
       },
     },
     {

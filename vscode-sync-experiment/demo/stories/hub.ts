@@ -59,10 +59,12 @@ export function hubStory(d: Demo): Step[] {
       },
       check: async () => {
         await shows(d, 'host', 'Fusion spectra');
-        await shows(d, 'guest', 'Fusion spectra');
+        // Under --share Maurice has not joined yet: he needs the ticket first.
+        if (!d.shares) await shows(d, 'guest', 'Fusion spectra');
         expect((await gitStatus(d.hubHttp)).tracking).toBe(d.o.hubGit === 'track');
       },
     },
+    ...(d.shares ? shareSteps(d) : []),
     {
       id: 'maurice-types',
       caption: 'Maurice, the guest, types into his paper.',
@@ -171,6 +173,36 @@ export function hubStory(d: Demo): Step[] {
         await shows(d, guest, EDITS.ideaAgainNeedle);
         // The wording that was discarded stays gone.
         expect(diskFlat(d, PY_PAPER)).not.toContain(EDITS.ideaNeedle);
+      },
+    },
+  ];
+}
+
+/** `--share`: Myra reads the join string the hub printed and sends it; Maurice pastes it into his own terminal. */
+function shareSteps(d: Demo): Step[] {
+  return [
+    {
+      id: 'share-ticket',
+      caption: 'The hub prints a join string for the shared session. Myra copies it and sends it to Maurice.',
+      command: () => d.joinStringCommandLine(),
+      check: async () => {
+        expect(d.joinCommand).toMatch(/^q2 preview --join q2preview[a-z0-9]+$/);
+        // Long enough that the echoed grep pattern cannot match.
+        await d.waitOutput(/q2preview[a-z0-9]{40,}/, 'host', 15_000);
+      },
+    },
+    {
+      id: 'guest-join',
+      caption: 'Maurice pastes it into his terminal. His preview is a local proxy to her session, over an encrypted peer-to-peer tunnel.',
+      command: () => d.guestPreviewCommandLine(),
+      who: 'guest',
+      paste: 'all', // sent by Myra, so it appears at once
+      action: async () => {
+        await d.waitForGuestPreview();
+        await d.openGuestBrowser(d.guestPreviewUrl, PY_PAPER);
+      },
+      check: async () => {
+        await shows(d, 'guest', 'Fusion spectra');
       },
     },
   ];

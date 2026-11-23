@@ -12,7 +12,7 @@ test.afterEach(stopAll);
 
 const storyLog = (d: { events: { source: string; kind: string; summary: string }[] }) => d.events.filter((e) => e.source === 'story');
 
-const PRESETS = ['hub-browser', 'hub-vscode-host', 'hub-vscode-clone', 'hubless'] as const;
+const PRESETS = ['hub-browser', 'hub-vscode-host', 'hub-vscode-clone', 'vscode-share'] as const;
 
 for (const preset of PRESETS) {
   test(`E1: ${preset} story in --fast: every check passes and the step log equals the story`, async () => {
@@ -95,7 +95,7 @@ test('E5: hub-browser: reset restores the journal and a fresh hub; the windows s
   expect(d.events.some((e) => e.source === 'demo' && e.kind === 'reset')).toBe(true);
 });
 
-for (const preset of ['hub-vscode-host', 'hub-vscode-clone', 'hubless'] as const) {
+for (const preset of ['hub-vscode-host', 'hub-vscode-clone', 'vscode-share'] as const) {
   test(`E5: ${preset}: reset restores the journal and a fresh project; the editors come back on it`, async () => {
     const d = await startFreePlay({ preset });
     const firstId = d.projectId;
@@ -105,7 +105,8 @@ for (const preset of ['hub-vscode-host', 'hub-vscode-clone', 'hubless'] as const
     expect(d.git('branch', '--show-current').trim()).toBe('main');
     expect(d.projectId).not.toBe(firstId);
     expect(d.terminalPages[0]!.page.isClosed()).toBe(false);
-    await expect.poll(() => d.shown('host'), { timeout: 90_000 }).toContain('Tip extension');
+    // The VS Code presets reopen the paper they showed (the Python paper; vscode-share shows the R paper).
+    await expect.poll(() => d.shown('host'), { timeout: 90_000 }).toContain(preset === 'vscode-share' ? 'Tip extension' : 'Fusion spectra');
     expect(await d.shown('host')).not.toContain('After reanalysis');
     if (preset === 'hub-vscode-clone') await expect.poll(() => d.shown('guest'), { timeout: 90_000 }).toContain('Fusion');
     expect(d.events.some((e) => e.source === 'demo' && e.kind === 'reset')).toBe(true);
@@ -161,7 +162,7 @@ test('E7b: layout: the VS Code windows report the bounds the layout computed (he
   const b = await d.vscode.guest!.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.getBounds());
   const r = d.layout.guestEditor;
   expect(b).toEqual({ x: r.left, y: r.top, width: r.width, height: r.height });
-  const h = await startFreePlay({ preset: 'hubless', headless: false });
+  const h = await startFreePlay({ preset: 'vscode-share', headless: false });
   const hb = await h.vscode.host!.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.getBounds());
   const hr = h.layout.hostEditor;
   expect(hb).toEqual({ x: hr.left, y: hr.top, width: hr.width, height: hr.height });
