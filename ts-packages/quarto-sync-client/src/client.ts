@@ -15,8 +15,8 @@ import type {
 import {
   from as automergeFrom,
   save as automergeSerialize,
-  getChanges as automergeGetChanges,
-  decodeChange as automergeDecodeChange,
+  getChangesMetaSince as automergeGetChangesMetaSince,
+  getHeads as automergeGetHeads,
   getActorId as automergeGetActorId,
   getBackend as automergeGetBackend,
 } from '@automerge/automerge';
@@ -776,8 +776,14 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       if (doc === undefined) return;
       try {
         const localActor = automergeGetActorId(doc);
-        const changes = automergeGetChanges(patchInfo.before, patchInfo.after);
-        if (changes.some(c => automergeDecodeChange(c).actor !== localActor)) {
+        // Metadata only: decoding the full changes (getChanges + decodeChange)
+        // re-encodes and re-parses every op, which for a freshly created or
+        // uploaded multi-MB document doubled tool latency in hub-mcp.
+        const changes = automergeGetChangesMetaSince(
+          patchInfo.after,
+          automergeGetHeads(patchInfo.before),
+        );
+        if (changes.some(c => c.actor !== localActor)) {
           // Text docs (schema TextDocumentContent) carry a `text` field;
           // capture before/after so the UI can render a real diff view.
           const textOf = (d: unknown): string | undefined => {
