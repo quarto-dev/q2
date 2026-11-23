@@ -48,9 +48,10 @@ export function hubCloneStory(d: Demo): Step[] {
     },
     {
       id: 'commit',
-      caption: 'Myra commits. Nothing swaps.',
-      command: "git add -A && git commit -qm 'Spectra: motivate the periodogram'",
+      caption: 'Myra commits and pushes to the team remote. Nothing swaps.',
+      command: "git add -A && git commit -qm 'Spectra: motivate the periodogram' && git push -q",
       check: async () => {
+        await until('the remote has her commit', () => d.git('rev-parse', 'HEAD').trim() === d.git('--git-dir', d.remoteDir, 'rev-parse', 'main').trim());
         if (d.o.hubGit === 'track') await until('the hub moved forward', async () => (await gitStatus(d.hubHttp)).decisions.slice(decisions).some((x) => x.kind === 'moved-forward'));
         expect(await d.notices('host')).toBe(0);
         await shows(d, 'guest', EDITS.mauriceNeedle);
@@ -94,6 +95,23 @@ export function hubCloneStory(d: Demo): Step[] {
       check: async () => {
         await shows(d, 'host', 'After reanalysis', false);
         await until('the guest paper holds the main code on the hub', () => disk(d, PY_PAPER).includes('0.6 *'));
+      },
+    },
+    {
+      id: 'myra-edits',
+      caption: "Both are on main again. Myra types a reply. Maurice pulls her commit while she types, and her words reach him live.",
+      action: async () => {
+        // Maurice takes a little while, then pulls in his own terminal; Myra is still typing.
+        const typing = d.typeUnder('host', 'Introduction', EDITS.myra);
+        await new Promise((r) => setTimeout(r, 4000));
+        await d.type('git pull -q', 'guest');
+        await typing;
+      },
+      check: async () => {
+        await until("Maurice's clone holds Myra's commit", () => cloneDisk(d, PY_PAPER).replace(/\s+/g, ' ').includes(EDITS.mauriceNeedle));
+        await until("the hub wrote Myra's text", () => diskFlat(d, PY_PAPER).includes(EDITS.myraNeedle));
+        await shows(d, 'guest', EDITS.myraNeedle);
+        await shows(d, 'host', EDITS.myraNeedle);
       },
     },
   ];

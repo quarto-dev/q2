@@ -14,6 +14,9 @@ export const EDITS = {
   /** Maurice's lost thought, retyped after the rebase in different words. */
   ideaAgain: 'One open question for the discussion: would the spectral peak hold up if we pooled colonies of different ages into one series?',
   ideaAgainNeedle: 'pooled colonies of different ages into one series',
+  /** Myra's reply, typed under the Introduction at the end of the clone story to show the two are connected again. */
+  myra: 'The humidity chamber runs on a 24-hour schedule, so the periodogram should peak near one cycle per day; a peak elsewhere would be worth a second look.',
+  myraNeedle: 'peak near one cycle per day',
   /** The same, for the tip extension paper in the vscode-share story. */
   tip: 'Tip extension depends on turgor, and turgor follows the humidity schedule with a lag, so we expect the dry and cycling regimes to differ most at the start of each cycle.',
   tipNeedle: 'dry and cycling regimes to differ most',

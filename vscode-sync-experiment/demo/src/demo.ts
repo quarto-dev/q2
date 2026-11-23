@@ -115,6 +115,8 @@ export class Demo {
   guestTerminal?: TerminalServer;
   /** Maurice's clone of the journal (presets with a clone guest). */
   readonly guestDir: string;
+  /** The bare repository both authors push to and pull from (a stand-in for the team's remote), in `hub-vscode-clone`. */
+  readonly remoteDir: string;
   vscode: { host?: RunningVscode; guest?: RunningVscode } = {};
   hubUrl = '';
   hubHttp = '';
@@ -145,6 +147,7 @@ export class Demo {
     this.journal = path.join(this.root, 'journal');
     this.logs = path.join(this.root, 'logs');
     this.guestDir = path.join(this.root, 'maurice');
+    this.remoteDir = path.join(this.root, 'origin.git');
     this.typist = createTypist({ baseMs: o.fast ? 0 : 40, seed: o.seed });
   }
 
@@ -228,10 +231,23 @@ export class Demo {
     }
   }
 
-  /** Maurice's clone: a plain `git clone` of Myra's journal (before it is attached to the project). */
+  /**
+   * Maurice's clone (before it is attached to the project). The two are on different machines, so they share a bare
+   * remote, as a team would: Myra's journal gets it as `origin` and tracks its branches, and Maurice clones from it.
+   */
   private cloneJournal(): void {
+    const git = (cwd: string | undefined, ...args: string[]) => execFileSync('git', args, { cwd, env: gitEnv(), stdio: 'ignore' });
     rmSync(this.guestDir, { recursive: true, force: true });
-    execFileSync('git', ['clone', '--quiet', this.journal, this.guestDir], { env: gitEnv(), stdio: 'ignore' });
+    rmSync(this.remoteDir, { recursive: true, force: true });
+    git(undefined, 'init', '--bare', '--quiet', '--initial-branch=main', this.remoteDir);
+    try {
+      git(this.journal, 'remote', 'remove', 'origin');
+    } catch {
+      // no remote yet
+    }
+    git(this.journal, 'remote', 'add', 'origin', this.remoteDir);
+    git(this.journal, 'push', '--quiet', '--set-upstream', 'origin', '--all');
+    git(undefined, 'clone', '--quiet', this.remoteDir, this.guestDir);
   }
 
   terminal(who: 'host' | 'guest'): TerminalServer {

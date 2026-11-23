@@ -37,7 +37,7 @@ export function terminalPageHtml(wsUrl: string, title: string): string {
 <script src="/xterm.js?token=${token}"></script>
 <script src="/addon-fit.js?token=${token}"></script>
 <script>
-  const term = new Terminal({ fontFamily: 'Menlo, monospace', fontSize: 14, cursorBlink: true, convertEol: false, theme: { background: '#1e1e1e' } });
+  const term = new Terminal({ fontFamily: 'Menlo, monospace', fontSize: 14, cursorBlink: false, cursorStyle: 'block', cursorInactiveStyle: 'outline', convertEol: false, theme: { background: '#1e1e1e' } });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.open(document.getElementById('term'));
