@@ -94,6 +94,23 @@ book:
 Parts nest one level only — a `part:` entry cannot contain another
 `part:` entry.
 
+A part can have a page of its own. Name a file instead of a title, and
+the part takes its title from that file and links to it from the
+sidebar:
+
+```yaml
+book:
+  chapters:
+    - index.qmd
+    - part: getting-started.qmd
+      chapters:
+        - installation.qmd
+        - quickstart.qmd
+```
+
+The part page is not numbered, and it sits between the chapters around
+it when a reader pages through the book.
+
 `book.appendices` is a second, separate chapter list that numbers
 independently (rendered as letters — Appendix A, B, …) and appears
 under its own "Appendices" divider in the sidebar:
