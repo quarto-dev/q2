@@ -185,9 +185,26 @@ fn chapter_to_sidebar_item(
         let title = part
             .as_plain_text()
             .unwrap_or_else(|| "Untitled part".to_string());
+        // `part: file.qmd`: the render item for that file holds the part
+        // page's title, and the section links to the page (bd-d8hb5zh1).
+        let part_page = match entry.get("href") {
+            Some(_) => None,
+            None => render_items.iter().find(|i| {
+                i.kind == BookRenderItemKind::Part
+                    && i.file
+                        .as_ref()
+                        .is_some_and(|f| f.as_path() == Path::new(&title))
+            }),
+        };
+        let title = part_page.and_then(|i| i.text.clone()).unwrap_or(title);
         let mut item = vec![("section", ConfigValue::new_string(title, gen_si()))];
         if let Some(href) = entry.get("href") {
             item.push(("href", href.clone()));
+        } else if let Some(file) = part_page.and_then(|i| i.file.as_ref()) {
+            item.push((
+                "href",
+                ConfigValue::new_string(quarto_util::to_forward_slashes(file), gen_si()),
+            ));
         }
         if let Some(chapters) = entry.get("chapters").and_then(|c| c.as_array()) {
             item.push((

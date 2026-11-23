@@ -442,6 +442,78 @@ book:
     }
 }
 
+/// bd-d8hb5zh1: `part: file.qmd` makes the part a page, as in Quarto 1.
+/// The sidebar section takes the file's title and links to the page, the
+/// page sits between the chapters around it in the prev/next chain, and
+/// it carries no chapter number.
+#[test]
+fn part_naming_a_file_renders_a_part_page() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        r#"project:
+  type: book
+
+book:
+  title: "Parts Book"
+  chapters:
+    - index.qmd
+    - one.qmd
+    - part: parts/second.qmd
+      chapters:
+        - two.qmd
+"#,
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "# Preface {.unnumbered}\n\nHello.\n",
+    );
+    write(&project_dir.join("one.qmd"), "# One\n\nText.\n");
+    write(
+        &project_dir.join("parts").join("second.qmd"),
+        "# The Second Part\n\nPART-PAGE-TEXT about this part.\n\n## A part section\n\nText.\n",
+    );
+    write(&project_dir.join("two.qmd"), "# Two\n\nText.\n");
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+
+    let part = read_output(&outputs, "second");
+    assert!(part.contains("PART-PAGE-TEXT"), "{part}");
+    assert!(
+        part.contains("<title>The Second Part – Parts Book</title>"),
+        "{part}"
+    );
+    assert!(
+        !part.contains("header-section-number"),
+        "a part page takes no chapter or section number: {part}"
+    );
+
+    let index = read_output(&outputs, "index");
+    assert!(
+        index.contains("The Second Part") && !index.contains("parts/second.qmd"),
+        "the sidebar section must show the part's title, not its path: {index}"
+    );
+    assert!(
+        index.contains(r#"href="parts/second.html""#),
+        "the sidebar section must link to the part page: {index}"
+    );
+
+    // one -> part page -> two.
+    let next_of = |html: &str| {
+        let at = html.find("nav-page-next").expect("page has a next slot");
+        let rest = &html[at..];
+        let href = rest.find("href=\"").map(|i| i + 6).expect("next link");
+        rest[href..].split('"').next().unwrap().to_string()
+    };
+    assert_eq!(next_of(&read_output(&outputs, "one")), "parts/second.html");
+    assert_eq!(next_of(&part), "../two.html");
+    // The chapter after the part still counts 2.
+    assert!(
+        read_output(&outputs, "two").contains("header-section-number\">2<"),
+        "the part page must not take a chapter number"
+    );
+}
+
 /// Sections of an unnumbered chapter (a preface, say) carry no number.
 /// Quarto 1 turns section numbering off for such a chapter; without that
 /// the sections count from an unset chapter slot and read "0.1", "0.2".

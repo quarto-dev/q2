@@ -250,13 +250,35 @@ fn find_inputs(
                 .as_plain_text()
                 .unwrap_or_else(|| "Untitled part".to_string());
             let href = entry.get("href").and_then(|h| h.as_plain_text());
+            // `part: file.qmd` (Q1): the part is a page. Its title is the
+            // file's own, and the file is rendered like a chapter
+            // (bd-d8hb5zh1). An explicit `href:` keeps the given title.
+            let part_file = match &href {
+                Some(_) => None,
+                None => part_page_file(project_dir, &part_title, runtime),
+            };
+            let (part_title, href, heading_title) = match part_file {
+                Some((file, full_path)) => {
+                    let title = if read_numbering {
+                        runtime
+                            .file_read_string(&full_path)
+                            .ok()
+                            .and_then(|content| chapter_title(&content))
+                    } else {
+                        None
+                    };
+                    let title = title.unwrap_or(part_title);
+                    (title.clone(), Some(file), Some(title))
+                }
+                None => (part_title, href, None),
+            };
             items.push(BookRenderItem {
                 kind: BookRenderItemKind::Part,
                 depth,
                 text: Some(part_title),
                 file: href.map(PathBuf::from),
                 number: None,
-                heading_title: None,
+                heading_title,
             });
             if let Some(chapters) = entry.get("chapters").and_then(|c| c.as_array()) {
                 // Nested parts are unsupported (Q-5-34); detect before recursing.
@@ -367,6 +389,63 @@ fn find_inputs(
         });
     }
     Ok(())
+}
+
+/// The file a `part:` value names, when it names one: its
+/// project-relative spelling and its full path. Q1 treats a `part` whose
+/// value is an existing project file as a part page.
+fn part_page_file(
+    project_dir: &Path,
+    part: &str,
+    runtime: &dyn SystemRuntime,
+) -> Option<(String, PathBuf)> {
+    let path_ctx = crate::config_paths::PathCtx {
+        source_context: None,
+        project_dir,
+        document_dir: project_dir,
+    };
+    let full_path = crate::config_paths::resolve_config_path_str(
+        part,
+        &quarto_source_map::SourceInfo::for_test(),
+        &path_ctx,
+    )
+    .file()
+    .unwrap_or_else(|| project_dir.join(part));
+    if !runtime.is_file(&full_path).unwrap_or(false) {
+        return None;
+    }
+    let file = full_path
+        .strip_prefix(project_dir)
+        .map_or_else(|_| part.to_string(), quarto_util::to_forward_slashes);
+    Some((file, full_path))
+}
+
+/// A page's title as Q1's `inputTargetIndex` finds it: the front-matter
+/// `title`, else the first heading.
+fn chapter_title(content: &str) -> Option<String> {
+    let (front_matter, _) = partition_front_matter(content);
+    front_matter
+        .as_deref()
+        .and_then(front_matter_title)
+        .or_else(|| chapter_heading_title(content))
+}
+
+/// The render item `input` is, if it is one of the book's files.
+pub fn render_item_for_input<'a>(
+    project_dir: &Path,
+    items: &'a [BookRenderItem],
+    input: &Path,
+) -> Option<&'a BookRenderItem> {
+    let canonical_input = quarto_system_runtime::canonicalize(input).ok();
+    items.iter().find(|item| {
+        item.file.as_ref().is_some_and(|file| {
+            let path = project_dir.join(file);
+            path == input
+                || canonical_input.as_ref().is_some_and(|c| {
+                    quarto_system_runtime::canonicalize(&path).is_ok_and(|p| p == *c)
+                })
+        })
+    })
 }
 
 /// Per-chapter seeds for multi-file HTML rendering (book-projects P4):
@@ -728,6 +807,55 @@ mod tests {
         // Part divider carries its title; the index was moved to front.
         assert_eq!(items[2].text.as_deref(), Some("Part I"));
         assert_eq!(items[0].file, Some(PathBuf::from("index.qmd")));
+    }
+
+    /// bd-d8hb5zh1: `part: file.qmd` makes the part a page. The item
+    /// carries the file and takes its title from it.
+    #[test]
+    fn part_naming_a_file_is_a_part_page_titled_by_the_file() {
+        let dir = book_dir(&[
+            ("index.qmd", "# Preface {.unnumbered}\n"),
+            ("parts/one.qmd", "# Part One Title\n\nPart text.\n"),
+            (
+                "parts/two.qmd",
+                "---\ntitle: \"Part Two Title\"\n---\n\nText.\n",
+            ),
+            ("chap1.qmd", "# Chapter 1\n"),
+            ("chap2.qmd", "# Chapter 2\n"),
+        ]);
+        let book = map(vec![(
+            "chapters",
+            arr(vec![
+                s("index.qmd"),
+                map(vec![
+                    ("part", s("parts/one.qmd")),
+                    ("chapters", arr(vec![s("chap1.qmd")])),
+                ]),
+                map(vec![
+                    ("part", s("parts/two.qmd")),
+                    ("chapters", arr(vec![s("chap2.qmd")])),
+                ]),
+            ]),
+        )]);
+        let items = render_items(dir.path(), &book).unwrap();
+
+        let parts: Vec<_> = items
+            .iter()
+            .filter(|i| i.kind == BookRenderItemKind::Part)
+            .collect();
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0].file, Some(PathBuf::from("parts/one.qmd")));
+        assert_eq!(parts[0].text.as_deref(), Some("Part One Title"));
+        assert_eq!(parts[0].heading_title.as_deref(), Some("Part One Title"));
+        assert_eq!(parts[0].number, None);
+        assert_eq!(parts[1].text.as_deref(), Some("Part Two Title"));
+        // A part page takes no chapter number: the chapters still count 1, 2.
+        let numbers: Vec<_> = items
+            .iter()
+            .filter(|i| i.kind == BookRenderItemKind::Chapter)
+            .map(|i| i.number)
+            .collect();
+        assert_eq!(numbers, vec![Some(1), Some(2)]);
     }
 
     #[test]

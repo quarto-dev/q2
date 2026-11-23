@@ -136,7 +136,14 @@ impl AstTransform for CrossrefIndexTransform {
             section_ids: Vec::new(),
             number_sections,
             number_depth,
-            book: ctx.project.project_kind() == crate::project::ProjectKind::Book,
+            unnumbered_book_page: ctx.project.book_render_items.as_ref().is_some_and(|items| {
+                crate::project::book::render_item::render_item_for_input(
+                    &ctx.project.dir,
+                    items,
+                    &ctx.document.input,
+                )
+                .is_some_and(|item| item.number.is_none())
+            }),
         };
         walker.visit_blocks(&mut ast.blocks);
         let diagnostics = walker.diagnostics;
@@ -183,10 +190,11 @@ struct Walker<'a> {
     /// `number-depth` document metadata (default 6) — a header deeper than
     /// this never gets the visible `number` kv, even with `number-sections`.
     number_depth: u32,
-    /// Whether the document belongs to a book project. In a book a
-    /// section that sits under no numbered chapter heading (the sections
-    /// of an `.unnumbered` preface) shows no number.
-    book: bool,
+    /// Whether the document is a book page without a chapter number: an
+    /// `.unnumbered` chapter (a preface) or a part page. Q1 turns
+    /// `number-sections` off for such a page, so none of its headings
+    /// shows a number.
+    unnumbered_book_page: bool,
 }
 
 impl<'a> Walker<'a> {
@@ -355,15 +363,10 @@ impl<'a> Walker<'a> {
         // of whether it's also an `@sec-` target. HTML-only: non-HTML
         // writers (Typst, pandoc-hybrid docx/pptx/etc.) do their own native
         // heading numbering and never consume this kv.
-        // In a book, a section path whose chapter slot is still 0 belongs
-        // to an unnumbered chapter (no seed, and no numbered level-1
-        // heading above it). Q1 turns `number-sections` off for such a
-        // chapter, so its sections show no number rather than "0.1".
-        let in_unnumbered_chapter = self.book && self.index.sections.first() == Some(&0);
         if self.html
             && self.number_sections
             && (header.level as u32) <= self.number_depth
-            && !in_unnumbered_chapter
+            && !self.unnumbered_book_page
         {
             header.attr.2.insert(
                 "number".to_string(),

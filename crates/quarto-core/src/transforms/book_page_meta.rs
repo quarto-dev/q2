@@ -112,28 +112,15 @@ impl AstTransform for BookPageMetaTransform {
 }
 
 /// The book item the current document renders, unless it is the book's
-/// home page (`index.*` at the project root), which keeps the book title.
+/// home page, which keeps the book title.
 fn book_item_for<'a>(ctx: &'a RenderContext) -> Option<&'a BookRenderItem> {
-    let input = &ctx.document.input;
-    let canonical_input = quarto_system_runtime::canonicalize(input).ok();
-    let item = ctx
-        .project
-        .book_render_items
-        .as_ref()?
-        .iter()
-        .find(|item| {
-            item.file.as_ref().is_some_and(|file| {
-                let path = ctx.project.dir.join(file);
-                path == *input
-                    || canonical_input.as_ref().is_some_and(|c| {
-                        quarto_system_runtime::canonicalize(&path).is_ok_and(|p| p == *c)
-                    })
-            })
-        })?;
-    let file = item.file.as_ref()?;
-    let is_home = file.parent().is_none_or(|p| p.as_os_str().is_empty())
-        && file.file_stem().is_some_and(|stem| stem == "index");
-    (!is_home).then_some(item)
+    let items = ctx.project.book_render_items.as_ref()?;
+    crate::project::book::render_item::render_item_for_input(
+        &ctx.project.dir,
+        items,
+        &ctx.document.input,
+    )
+    .filter(|item| item.kind != BookRenderItemKind::Index)
 }
 
 /// A chapter's title as its page shows it: `N<nbsp> Title` for a numbered
