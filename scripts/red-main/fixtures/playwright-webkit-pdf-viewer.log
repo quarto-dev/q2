@@ -1,0 +1,311 @@
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	﻿2026-10-28T07:13:26.6308993Z Current runner version: '2.338.0'
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:13:26.6330184Z ##[group]Runner Image Provisioner
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:13:26.6330932Z Hosted Compute Agent
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:13:26.6331462Z Version: 20261021.618
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:13:26.6331973Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:13:26.6332604Z Build Date: 2026-10-21T00:45:21Z
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:13:26.6333163Z Worker ID: {3b9df03a-b8ef-49c3-8036-d3be3adcfa13}
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:13:26.6333815Z Region: westus3
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:13:33.6568498Z ##[group]Run actions/checkout@v6
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:13:41.7329701Z ##[group]Run git ls-files | while read file; do
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:20.1087551Z ##[group]Run dtolnay/rust-toolchain@nightly
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:20.1193702Z ##[group]Run if [[ -z $toolchain ]]; then
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:20.1373695Z ##[group]Run echo CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:20.1511927Z ##[group]Run if ! command -v rustup &>/dev/null; then
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:20.1663414Z ##[group]Run set -f  # split targets and components on commas and whitespace, without glob expansion
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:29.6540878Z ##[group]Run rustup default "$toolchain" --force-non-host
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:29.6901998Z ##[group]Run DATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:29.7283225Z ##[group]Run if [ -z "${CARGO_INCREMENTAL+set}" ]; then
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:29.7434863Z ##[group]Run if [ -z "${CARGO_TERM_COLOR+set}" ]; then
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:29.7576637Z ##[group]Run # implemented in 1.66, stabilized in 1.68, made default in 1.70
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:29.7926396Z ##[group]Run # https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:29.8445388Z ##[group]Run rustc +"$toolchain" --version --verbose
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:29.8808612Z ##[group]Run egor-tensin/setup-clang@v2
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:29.8840680Z ##[group]Run $linux_host = 'Linux' -eq 'Linux'
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:53.9190893Z ##[group]Run $linux_host = 'Linux' -eq 'Linux'
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:14:54.2635190Z ##[group]Run Swatinem/rust-cache@v2
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7323611Z ##[group]Run taiki-e/install-action@wasm-pack
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7356137Z ##[group]Run bail() {
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7356862Z ^[[36;1m  printf '::error::install-action: %s\n' "$*"^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7357112Z ^[[36;1m  exit 1^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7357276Z ^[[36;1m}^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7357612Z ^[[36;1m# If /bin/sh is dash, environment variable containing % is not imported, but is fine^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7358033Z ^[[36;1m# because it also means that it will not be exposed to subprocess.^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7358366Z ^[[36;1mif /usr/bin/env | grep -Eq '^BASH_FUNC_'; then^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7358791Z ^[[36;1m  bail 'bash function injection via BASH_FUNC_ environment variable is not allowed for security reasons'^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7359213Z ^[[36;1mfi^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7359427Z ^[[36;1mif ! command -v bash >/dev/null; then^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7359725Z ^[[36;1m  if grep -Eq '^ID=alpine' /etc/os-release; then^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7360112Z ^[[36;1m    printf '::group::Install packages required for install-action (bash)\n'^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7360456Z ^[[36;1m    # NB: sync with apk_install in main.sh^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7360720Z ^[[36;1m    if command -v sudo >/dev/null; then^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7360972Z ^[[36;1m      sudo apk --no-cache add bash^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:06.7361230Z ^[[36;1m    elif command -v doas >/dev/null; then^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:15:07.1637783Z ##[group]Run VERSION=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/version = |"/, ""); print; exit}' Cargo.lock)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:16:24.8983092Z ##[group]Run curl -LO https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-linux-x86.gz
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:16:25.3630647Z ##[group]Run actions/setup-node@v6
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:16:31.5350386Z ##[group]Run npm ci
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:16:51.8086734Z ##[group]Run npm install -g binaryen@132.0.0
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:16:52.9304317Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:23:49.0593324Z ##[group]Run actions/cache@v4
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:23:50.6769584Z ##[group]Run node scripts/fetch-pandoc-wasm.mjs --require
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:23:59.1485241Z ##[group]Run for pkg in ts-packages/*/; do
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:25:31.7687181Z ##[group]Run cargo build --bin hub
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:28:31.4299308Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:28:32.2834295Z ##[group]Run actions/cache@v4
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:28:32.5750478Z ##[group]Run cargo build -p quarto-output-extract
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:28:38.5883808Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:29:02.4108242Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:29:45.9009965Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:07.8910095Z [WebServer] ^[[2m7:30:07 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:07.8913694Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:07.8914402Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:07.8915370Z [WebServer] ^[[2m7:30:07 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy socket error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:07.8916074Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:07.8920521Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:09.2569864Z ··Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:09.2614327Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:09.2616856Z [createNewProject] Creating index document with ID 3gNGTNsVUqVuaaKbfC8tTwP4uKM2
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:09.2625944Z [createNewProject] Index document created, ID: 3gNGTNsVUqVuaaKbfC8tTwP4uKM2
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:10.5928563Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:10.6010016Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:10.6011073Z [createNewProject] Creating index document with ID 2MHu6ag8PAvgHGq64TAHiarcd2od
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:10.6012163Z [createNewProject] Index document created, ID: 2MHu6ag8PAvgHGq64TAHiarcd2od
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:15.3483321Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:15.3575843Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:15.3577104Z [createNewProject] Creating index document with ID T66GymqD2FoSJr6aoU3oPFBVgsd
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:15.3620401Z [createNewProject] Index document created, ID: T66GymqD2FoSJr6aoU3oPFBVgsd
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:49.3259544Z [WebServer] ^[[2m7:30:49 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:49.3260134Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:49.3260784Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:49.3261683Z [WebServer] ^[[2m7:30:49 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy socket error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:49.3262256Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:49.3262866Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:49.6143809Z ··Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:49.6170139Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:49.6193544Z [createNewProject] Creating index document with ID LDRr5JfUxLzhS3QNhBtwEtPGKau
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:49.6218951Z [createNewProject] Index document created, ID: LDRr5JfUxLzhS3QNhBtwEtPGKau
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:53.6844165Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:53.6896985Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:53.6907029Z [createNewProject] Creating index document with ID 3RghEim61FHakfBkbBEuJg5XThM3
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:53.6908568Z [createNewProject] Index document created, ID: 3RghEim61FHakfBkbBEuJg5XThM3
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:54.0739949Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:54.0781273Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:54.0782245Z [createNewProject] Creating index document with ID BzUASswUaHZFqq5g3QnzvnaKaB3
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:54.0788616Z [createNewProject] Index document created, ID: BzUASswUaHZFqq5g3QnzvnaKaB3
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:58.1764386Z [WebServer] ^[[2m7:30:58 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:58.1766040Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:58.1767146Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:58.1769034Z [WebServer] ^[[2m7:30:58 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy socket error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:58.1769549Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:58.1770043Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:58.2181570Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:58.2205420Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:58.2206677Z [createNewProject] Creating index document with ID wuVHkedijX59kTWetmt9bCX65mv
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:58.2237815Z [createNewProject] Index document created, ID: wuVHkedijX59kTWetmt9bCX65mv
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:58.7685980Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:58.7732734Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:58.7749346Z [createNewProject] Creating index document with ID 38fKGHPVvLcNmgVjkEAFW1rnqa37
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:30:58.7752602Z [createNewProject] Index document created, ID: 38fKGHPVvLcNmgVjkEAFW1rnqa37
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:00.7423182Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:00.7488200Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:00.7507539Z [createNewProject] Creating index document with ID 3kSWru25fA1bdE2vcu952HWmL36o
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:00.7517037Z [createNewProject] Index document created, ID: 3kSWru25fA1bdE2vcu952HWmL36o
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:45.6228527Z [WebServer] ^[[2m7:31:45 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:45.6293112Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:45.6303019Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:45.6327478Z [WebServer] ^[[2m7:31:45 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy socket error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:45.6357224Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:45.6384521Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:46.6884131Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:46.6916469Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:46.6931798Z [createNewProject] Creating index document with ID 3WYiGqZLR7Wn6Vc4oNo7r3jxjTYi
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:46.6937261Z [createNewProject] Index document created, ID: 3WYiGqZLR7Wn6Vc4oNo7r3jxjTYi
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:47.4895380Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:47.4913260Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:47.4914925Z [createNewProject] Creating index document with ID 3gEXX9Gebaed27qiue7nuqfjL2CQ
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:47.4928599Z [createNewProject] Index document created, ID: 3gEXX9Gebaed27qiue7nuqfjL2CQ
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:51.1076649Z soft-wrap-hop geo at end: {"markerOffsetTop":67,"fullHeight":88,"lineHeightPx":21.0375,"isLastLine":true,"selectionStart":197,"value":"This is a very long paragraph that is intentionally long enough to soft-wrap across multiple visual rows in the browser viewport at typical zoom levels. It keeps going and going to ensure the wrap."}
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:51.7496920Z ·T21a: single-line check: {"isSingleLine":true,"value":"Item one"}
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:51.7601000Z T21a: isOnLastVisualLine geometry for single-line tight list item: {"markerOffsetTop":4,"fullHeight":25,"lineHeightPx":21.0375,"isLastLine":true,"selectionStart":8,"value":"Item one"}
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:51.9230700Z [WebServer] ^[[2m7:31:51 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:51.9235990Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:51.9236995Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:51.9238183Z [WebServer] ^[[2m7:31:51 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy socket error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:51.9238827Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:51.9239654Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:51.9298996Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:51.9319239Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:51.9320329Z [createNewProject] Creating index document with ID 3FWwLE9psP1hbLK2WyuyLTaYpkyJ
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:51.9332381Z [createNewProject] Index document created, ID: 3FWwLE9psP1hbLK2WyuyLTaYpkyJ
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:52.2347344Z Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:52.2370305Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:52.2371591Z [createNewProject] Creating index document with ID 3Fkat78LU45jwKcybtauuGdcXpUP
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:52.2380966Z [createNewProject] Index document created, ID: 3Fkat78LU45jwKcybtauuGdcXpUP
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:56.5488467Z T21b: geometry at pos 0 of multi-line para: {"markerOffsetTop":2,"fullHeight":109,"lineHeightPx":21.0375,"isLastLine":false,"selectionStart":0,"value":"This is a very long paragraph that is intentionally long enough to soft-wrap across multiple visual rows in the browser viewport at typical zoom levels. It keeps going and going to ensure the wrap and stays in the editor."}
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:56.7128386Z ··Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:56.7148176Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:31:56.7148818Z [createNewProject] Creating index document with ID jGyY2jKM4qw9Gr8qomTGJcQddbk
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:40.5483106Z [WebServer] ^[[2m7:33:40 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:40.5524464Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:40.5547531Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:40.5549129Z [WebServer] ^[[2m7:33:40 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy socket error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:40.5549976Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:40.5550976Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:42.7629989Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:42.7656746Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:42.7709283Z [createNewProject] Creating index document with ID 3gExSKy9a51wyeEvtLTnZMX38iPP
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:42.7797523Z [createNewProject] Index document created, ID: 3gExSKy9a51wyeEvtLTnZMX38iPP
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:43.0554355Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:43.0556106Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:43.0557182Z [createNewProject] Creating index document with ID 38QKpgnQAwwsH9mLcpXC2dU2cLPi
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:43.0604607Z [createNewProject] Index document created, ID: 38QKpgnQAwwsH9mLcpXC2dU2cLPi
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:46.3035110Z ····
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:46.3035376Z --- E2E Global Teardown ---
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:46.4106497Z Hub server stopped
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:46.4107880Z --- E2E Global Teardown Complete ---
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:46.4241801Z   1 skipped
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:46.4242156Z   97 passed (4.0m)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:33:46.6004410Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:16.4826641Z   4 passed (29.1s)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:16.5248309Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:35.3389681Z [WebServer] ^[[2m7:34:35 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:35.3391352Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:35.3392254Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:35.3393311Z [WebServer] ^[[2m7:34:35 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy socket error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:35.3393971Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:35.3394708Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:35.3827526Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:35.3864512Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:35.3865419Z [createNewProject] Creating index document with ID 2ypwCBSHdoTxzmWboedfhSUzGy2V
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:35.3885525Z [createNewProject] Index document created, ID: 2ypwCBSHdoTxzmWboedfhSUzGy2V
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:40.6839264Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:40.6901657Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:40.6939637Z [createNewProject] Creating index document with ID 3wqqiBUWTZThfKYcBEjDnme1nM62
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:40.6957089Z [createNewProject] Index document created, ID: 3wqqiBUWTZThfKYcBEjDnme1nM62
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:41.3193616Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:41.3277748Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:41.3296566Z [createNewProject] Creating index document with ID 4TXtxT5bisAompmNoPdF1rXo6BXS
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:34:41.3337194Z [createNewProject] Index document created, ID: 4TXtxT5bisAompmNoPdF1rXo6BXS
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:05.0268161Z [WebServer] ^[[2m7:35:05 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:05.0296138Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:05.0327575Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:05.0377880Z [WebServer] ^[[2m7:35:05 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy socket error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:05.0378706Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:05.0379459Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:05.0851775Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:05.1067573Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:05.1107265Z [createNewProject] Creating index document with ID MbwSy6tvYD2HLqh6ufbTxaFBi5n
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:05.1108438Z [createNewProject] Index document created, ID: MbwSy6tvYD2HLqh6ufbTxaFBi5n
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:06.1244427Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:06.1364198Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:06.1370000Z [createNewProject] Creating index document with ID Hn9nKyJHs7q4rRFeryj68wCMv6U
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:06.1376607Z [createNewProject] Index document created, ID: Hn9nKyJHs7q4rRFeryj68wCMv6U
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:06.6782507Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:06.6838043Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:06.6841102Z [createNewProject] Creating index document with ID 33zMVQDjWBwamFZT437iSvvbzStp
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:35:06.6880197Z [createNewProject] Index document created, ID: 33zMVQDjWBwamFZT437iSvvbzStp
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:10.9598342Z [WebServer] ^[[2m7:36:10 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:10.9600573Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:10.9601278Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:10.9602292Z [WebServer] ^[[2m7:36:10 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy socket error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:10.9602952Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:10.9603742Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:11.0240300Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:11.0303777Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:11.0306074Z [createNewProject] Creating index document with ID 3o5CsGKB39D4G7xgQxjVCiPahT1E
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:11.0324234Z [createNewProject] Index document created, ID: 3o5CsGKB39D4G7xgQxjVCiPahT1E
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:12.0822520Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:12.0868982Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:12.0875713Z [createNewProject] Creating index document with ID FYCS3ek1kokEbgo3nEmDRu93Xzd
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:12.0907227Z [createNewProject] Index document created, ID: FYCS3ek1kokEbgo3nEmDRu93Xzd
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:15.7011227Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:15.7056052Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:15.7057437Z [createNewProject] Creating index document with ID 4WDNdesoWVP3xtya6JMgNAgjCHiV
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:36:15.7069938Z [createNewProject] Index document created, ID: 4WDNdesoWVP3xtya6JMgNAgjCHiV
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4679508Z [WebServer] ^[[2m7:41:03 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4680054Z [WebServer] Error: write EPIPE
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4680605Z [WebServer]     at afterWriteDispatched (node:internal/stream_base_commons:159:15)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4681740Z [WebServer]     at writeGeneric (node:internal/stream_base_commons:150:3)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4682274Z [WebServer]     at Socket._writeGeneric (node:net:1262:11)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4682720Z [WebServer]     at Socket._write (node:net:1274:8)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4683236Z [WebServer]     at writeOrBuffer (node:internal/streams/writable:574:12)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4683785Z [WebServer]     at _write (node:internal/streams/writable:503:10)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4684355Z [WebServer]     at Writable.write (node:internal/streams/writable:512:10)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4684940Z [WebServer]     at Socket.ondata (node:internal/streams/readable:1021:24)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4685428Z [WebServer]     at Socket.emit (node:events:514:28)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4685933Z [WebServer]     at addChunk (node:internal/streams/readable:568:12)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4686847Z [WebServer] ^[[2m7:41:03 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy socket error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4687329Z [WebServer] Error: write EPIPE
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4687849Z [WebServer]     at afterWriteDispatched (node:internal/stream_base_commons:159:15)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4688556Z [WebServer]     at writeGeneric (node:internal/stream_base_commons:150:3)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4689149Z [WebServer]     at Socket._writeGeneric (node:net:1262:11)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4689629Z [WebServer]     at Socket._write (node:net:1274:8)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4690187Z [WebServer]     at writeOrBuffer (node:internal/streams/writable:574:12)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4690803Z [WebServer]     at _write (node:internal/streams/writable:503:10)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4691416Z [WebServer]     at Writable.write (node:internal/streams/writable:512:10)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4692052Z [WebServer]     at Socket.ondata (node:internal/streams/readable:1021:24)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4692597Z [WebServer]     at Socket.emit (node:events:514:28)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4693142Z [WebServer]     at addChunk (node:internal/streams/readable:568:12)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.4960348Z Peer connected - online mode
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.5018634Z [createNewProject] Creating index document with ID 2xjwEf7nZZUJtPNR1k2QoiJJ8kj6
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:03.5067509Z [createNewProject] Index document created, ID: 2xjwEf7nZZUJtPNR1k2QoiJJ8kj6
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:57.3998374Z [WebServer] ^[[2m7:41:57 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:57.4016926Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:57.4017540Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:57.4057357Z [WebServer] ^[[2m7:41:57 AM^[[22m ^[[31m^[[1m[vite]^[[22m^[[39m ^[[31mws proxy socket error:^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:57.4058270Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:57.4087123Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:58.2528693Z ··[smoke-diag] dom-assertions-skipped strand=bd-47afd5ro kind=q2-preview
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:58.4514885Z ·
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:58.4515227Z --- E2E Global Teardown ---
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:58.8505344Z Hub server stopped
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:58.8507749Z --- E2E Global Teardown Complete ---
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:58.8508003Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:58.8681121Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:58.8686713Z   4 skipped
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:58.8687083Z   175 passed (7.7m)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:59.0218246Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:59.0218481Z ^[[36;1mcd hub-client^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:41:59.0218812Z ^[[36;1mnpx playwright test --config playwright.harness.config.ts --project=chromium^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:49:49.2414442Z   11 skipped
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:49:49.2414749Z   348 passed (7.8m)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:49:49.4636562Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:49:59.0889602Z   1 passed (8.9s)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T07:49:59.1347168Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0943839Z   1) [webkit] › e2e/pandoc-pdf-viewer.harness.spec.ts:77:3 › PDF viewer › the preview pane: it compiles on mount, an edit recompiles in place and keeps the reader where they were 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0944561Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0945179Z     Error: ^[[2mexpect(^[[22m^[[31mreceived^[[39m^[[2m).^[[22mtoBe^[[2m(^[[22m^[[32mexpected^[[39m^[[2m) // Object.is equality^[[22m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0945507Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0945630Z     Expected: ^[[32m0^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0945869Z     Received: ^[[31m2^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0946049Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0946914Z       117 |     await expect.poll(() => viewState(page), { timeout: 30_000 }).toMatchObject({ page: 7, scale: 1.5, pages: PAGES });
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0947930Z       118 |     await expect.poll(() => page.evaluate(() => document.querySelectorAll('#pdf-viewer-host iframe').length)).toBe(1);
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0949223Z     > 119 |     expect(await page.evaluate(() => { const w = window as unknown as { __empty: number; __sample: boolean }; w.__sample = false; return w.__empty; })).toBe(0);
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0950038Z           |                                                                                                                                                         ^
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0950372Z       120 |
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0950643Z       121 |     // A broken edit keeps the last PDF under an error banner.
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0951335Z       122 |     await write(page, '/doc/p.qmd', '---\ntitle: Bad\n---\n\n```{=typst}\n#no-such-function()\n```\n');
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0952090Z         at /home/runner/work/q2/q2/hub-client/e2e/pandoc-pdf-viewer.harness.spec.ts:119:153
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0962008Z   1 failed
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0962684Z     [webkit] › e2e/pandoc-pdf-viewer.harness.spec.ts:77:3 › PDF viewer › the preview pane: it compiles on mount, an edit recompiles in place and keeps the reader where they were 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0963220Z   11 skipped
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.0963400Z   78 passed (11.7m)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.1880574Z ##[error]Process completed with exit code 1.
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.1928593Z ##[group]Run npm test -w ts-packages/sync-test-harness
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.1928913Z ^[[36;1mnpm test -w ts-packages/sync-test-harness^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.1986886Z shell: /usr/bin/bash -e {0}
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.1987102Z env:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.1987278Z   CARGO_HOME: /home/runner/.cargo
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.1987501Z   CARGO_INCREMENTAL: 0
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.1987688Z   CARGO_TERM_COLOR: always
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.1987876Z   CACHE_ON_FAILURE: true
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.1988060Z ##[endgroup]
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.3141336Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.3142205Z > @quarto/sync-test-harness@0.0.1 test
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.3142548Z > vitest run
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.3142656Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.6963209Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:01:44.6965918Z ^[[1m^[[46m RUN ^[[49m^[[22m ^[[36mv3.2.6 ^[[39m^[[90m/home/runner/work/q2/q2/ts-packages/sync-test-harness^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-10-28T08:02:01.4603033Z ##[group]Run actions/upload-artifact@v7

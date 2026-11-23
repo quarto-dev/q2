@@ -2,7 +2,7 @@
 title: 'Auto-file a GitHub issue for every test that fails on main'
 date: 2026-11-23
 description: 'A workflow_run-triggered filer that turns each red main run into one deduplicated GitHub issue per failing test (or per failed job when no test is identifiable), so repeated failures accumulate in one place instead of being re-run away as one-off flakes.'
-status: proposed
+status: in-progress
 ---
 
 **Braid:** bd-red-main-issues-fs4r6cp0 (discovered from bd-classifier-perf-s7ay426r)
@@ -68,10 +68,9 @@ keeps the script small and makes dry runs from a laptop work out of the box.
 ```yaml
 on:
   workflow_run:
-    workflows: ["Test Suite", "TS Test Suite", "Hub-Client E2E Tests", "Nightly"]
+    workflows: ["Test Suite", "TS Test Suite", "Hub-Client E2E Tests"]
     types: [completed]
 permissions: { issues: write, actions: read, contents: read }
-concurrency: { group: red-main-filer, cancel-in-progress: false }   # serialize → no duplicate issues
 jobs:
   file:
     if: >-
@@ -115,7 +114,9 @@ rather than N issues. A mass failure almost always has a single cause.
 
 - Key = `sha1(runner + normalized test id)`, truncated to 12 hex. It is embedded
   in the issue body as `<!-- red-main-key: … -->` and found with
-  `gh issue list --label red-main --state all --search "<key> in:body"`.
+  a single `gh issue list --label red-main --state all` (newest 300), matched locally.
+  This avoids search, whose index lags just after an issue is created and would let
+  two quick failures open duplicates.
 - **Open issue exists** → add a comment with the run link, SHA, job/OS, attempt,
   duration if known, and the first ~30 lines of the failure.
 - **Closed less than 30 days ago** → reopen and comment "recurred after close". A
@@ -156,14 +157,36 @@ mention a `bd-` id alone apart from adding comments.
    say "took 44 s, 30-day median 28 s". It's out of scope for the first cut.
    Wiring reporters into ~30 separate test invocations is its own chunk of work.
 
-## Open questions
+## Decisions (2026-11-23)
 
-- **Non-gating failures are invisible.** Firefox/webkit E2E legs use
-  `continue-on-error`, and `quarto-sync-client` runs with `--retry=2`. Neither
-  makes the run red, so the filer never sees them. Phase 4's structured reports
-  could surface them as "flaky, not failing". Should they be filed too?
-- **Which workflows?** The proposal watches the four test-bearing workflows. Deploy
-  and publish failures on main are also "wonky", but they're usually infra.
-  Include them under the fallback key, or leave them to their own notifications?
-- **Notification:** the `red-main` label plus GitHub's issue notifications may be
-  enough. A Slack ping on *new* issues only (not on comments) is an easy follow-up.
+- **Workflows:** only the test-running ones: Test Suite, TS Test Suite and
+  Hub-Client E2E Tests. Nightly, deploy and publish are excluded; Nightly's red
+  runs in the sample were release gates, not tests.
+- **Hidden flakes** (non-gating legs, `--retry`-then-pass): not filed. We run the
+  filer for a while first and see whether main gets greener.
+- **Notifications:** none beyond the `red-main` label. The repo is watched
+  closely already.
+- **No concurrency group** on the filer job. GitHub keeps only one *pending* run
+  per group, so a third red run arriving while one files and one waits would be
+  cancelled and never filed. A duplicate issue needs the same test failing in two
+  workflows within seconds of each other, and the script is idempotent per run
+  attempt.
+
+## Status
+
+Phases 1 and 2 are implemented on `braid/bd-red-main-issues-fs4r6cp0-ci-auto-file-github`:
+
+- `scripts/red-main/extract.mjs`, `file-issues.mjs`, and 31 `node --test` tests,
+  with 5 trimmed real logs as fixtures.
+- `.github/workflows/red-main.yml`, triggered by `workflow_run`. Automatic runs
+  are dry runs that write the job summary. `workflow_dispatch` takes `run_id` or
+  `since` plus a `dry_run` toggle. PRs that touch the filer run its unit tests.
+- **Replay** of 2026-10-24 → 2026-11-23 (read-only, `--dry-run --since`):
+  71 occurrences → **35 issues**. The top ones are exit-drain (8), `jupyter_markdown_goldens`
+  legacy capture (6), webkit `pandoc-pdf-viewer` (6), webkit `pandoc-warm` timing (5)
+  and `jupyter_markdown_matches_goldens` (5). Flaky-but-passed Playwright tests are
+  correctly left out. One run had no log on GitHub, so it fell back to a job/step issue.
+
+**Remaining:** merge, watch a week of dry-run summaries, then set `DRY_RUN` to
+`'0'` for automatic runs (Phase 3). Optionally backfill with
+`workflow_dispatch since=2026-10-24 dry_run=false`.
