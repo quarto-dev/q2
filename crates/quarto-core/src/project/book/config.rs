@@ -351,6 +351,26 @@ pub fn repo_tool(book: &ConfigValue) -> Option<ConfigValue> {
     Some(new_map(entries))
 }
 
+/// The files `book.downloads` links to, as `(download name, q2 format,
+/// file name in the output directory)`: one per download
+/// [`download_tools`] makes an entry for. `pdf` is rendered by the
+/// `typst` format in Quarto 2.
+pub fn download_files(book: &ConfigValue, project_dir: &Path) -> Vec<(String, String, String)> {
+    const FORMATS: &[(&str, &str)] = &[("epub", "epub"), ("pdf", "typst"), ("docx", "docx")];
+    let Some(downloads) = book.get("downloads").and_then(|d| d.as_array()) else {
+        return Vec::new();
+    };
+    let stem = book_output_stem(project_dir, Some(book));
+    downloads
+        .iter()
+        .filter_map(|d| d.as_plain_text())
+        .filter_map(|name| {
+            let (ext, format) = FORMATS.iter().find(|(ext, _)| *ext == name.as_str())?;
+            Some((name.clone(), format.to_string(), format!("{stem}.{ext}")))
+        })
+        .collect()
+}
+
 /// Sidebar tool entries for `book.downloads` — one entry per
 /// downloadable single-file format (`pdf`, `epub`, `docx`); several
 /// fold into one "Download" menu. Port of Q1's
@@ -1002,6 +1022,31 @@ mod tests {
             tools[0].get("href").unwrap().as_plain_text().as_deref(),
             Some("/the-book.epub")
         );
+    }
+
+    #[test]
+    fn download_files_name_the_linked_file_and_the_format_that_makes_it() {
+        let dir = Path::new("/proj/the-book");
+        let book = map(vec![
+            ("title", s("My Book")),
+            ("downloads", arr(vec![s("epub"), s("pdf"), s("mobi")])),
+        ]);
+        assert_eq!(
+            download_files(&book, dir),
+            vec![
+                (
+                    "epub".to_string(),
+                    "epub".to_string(),
+                    "My-Book.epub".to_string()
+                ),
+                (
+                    "pdf".to_string(),
+                    "typst".to_string(),
+                    "My-Book.pdf".to_string()
+                ),
+            ]
+        );
+        assert!(download_files(&map(vec![]), dir).is_empty());
     }
 
     #[test]

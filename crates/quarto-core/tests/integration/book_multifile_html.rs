@@ -831,6 +831,65 @@ fn book_pages_get_no_appendix_processing() {
     assert!(!ch1.contains("quarto-appendix"), "{ch1}");
 }
 
+/// `Q-5-62`: a book that offers a download warns when the linked file is
+/// not in the output directory, and names the command that writes it.
+/// Once the file is there, the warning is gone.
+#[test]
+fn missing_book_download_warns_with_the_command_to_render_it() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        r#"project:
+  type: book
+
+book:
+  title: "Download Book"
+  downloads: [epub]
+  chapters:
+    - index.qmd
+"#,
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "# Preface {.unnumbered}\n\nHello.\n",
+    );
+    let warnings = |project_dir: &Path| -> Vec<String> {
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let mut project = ProjectContext::discover(project_dir, runtime.as_ref()).unwrap();
+        let project_type = project_type_for(&project);
+        let format = Format::from_format_string("html").unwrap();
+        let options = RenderToFileOptions::default();
+        let mut pipeline = ProjectPipeline::new(
+            &mut project,
+            project_type,
+            format,
+            "html",
+            &options,
+            runtime,
+        );
+        let summary = pollster::block_on(pipeline.run_with_book_support()).unwrap();
+        summary
+            .project_diagnostics
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("Q-5-62"))
+            .map(|d| format!("{d:?}"))
+            .collect()
+    };
+
+    let first = warnings(&project_dir);
+    assert_eq!(first.len(), 1, "{first:?}");
+    assert!(first[0].contains("Download-Book.epub"), "{first:?}");
+    assert!(first[0].contains("q2 render --to epub"), "{first:?}");
+
+    std::fs::write(
+        project_dir.join("_book").join("Download-Book.epub"),
+        b"epub",
+    )
+    .unwrap();
+    assert_eq!(warnings(&project_dir), Vec::<String>::new());
+}
+
 /// Sections of an unnumbered chapter (a preface, say) carry no number.
 /// Quarto 1 turns section numbering off for such a chapter; without that
 /// the sections count from an unset chapter slot and read "0.1", "0.2".
