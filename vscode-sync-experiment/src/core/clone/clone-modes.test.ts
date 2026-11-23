@@ -295,6 +295,40 @@ describe('the late reload (spec 12)', () => {
   });
 });
 
+describe('a commit whose new blob already has a canonical doc', () => {
+  it('joins that doc instead of moving its own, non-canonical doc forward', async () => {
+    const e = await env({ 'a.qmd': 'A\n' });
+    const mine = docIdOf(e, 'a.qmd')!;
+    await editDisk(e, 'a.qmd', 'A committed\n');
+    await waitFor(() => e.sync.docText('a.qmd') === 'A committed\n', 'edit reaching the doc');
+    commitAll(e.clone, 'c');
+    // The hub owner committed the same content first: its doc is registered on the new blob with the lowest generation.
+    const hubs = await e.other.register('a.qmd', blobOf(e, 'a.qmd'), 'A committed\n', -1);
+    await waitFor(() => e.sync.registryView().entries.some((x) => x.doc === hubs), 'registration');
+    await e.settle(() => e.sync.registryView().entries.some((x) => x.doc === mine && x.blob === blobOf(e, 'a.qmd')) || docIdOf(e, 'a.qmd') === hubs);
+    await waitFor(() => docIdOf(e, 'a.qmd') === hubs, 'the clone joining the canonical doc');
+  });
+});
+
+describe('remote edits that arrive while the gate is closed', () => {
+  it('reach an open buffer once the gate reopens, with no further edit needed', async () => {
+    const e = await env({ 'a.qmd': 'A\n' });
+    const a = abs(e, 'a.qmd');
+    const doc = docIdOf(e, 'a.qmd')!;
+    e.host.buffers.open(a, 'A\n');
+    await waitFor(() => e.host.buffers.bindings.has(a), 'the binding');
+    await fs.writeFile(path.join(e.clone, '.git', 'index.lock'), ''); // git is working (a pull)
+    await e.clock.advance(300);
+    expect(e.sync.cloneState()!.gateClosed).toBe(true);
+    await e.other.edit(doc, 'A live\n'); // the hub owner types meanwhile; the binding drops it
+    await sleep(300);
+    expect(e.host.buffers.getText(a)).toBe('A\n');
+    await fs.rm(path.join(e.clone, '.git', 'index.lock'));
+    await e.settle(() => e.sync.cloneState()!.gateClosed === false);
+    await waitFor(() => e.host.buffers.getText(a) === 'A live\n', 'the buffer catching up after the gate reopened');
+  });
+});
+
 describe('the moved message and the event log (specs 14, events)', () => {
   it('moved goes out on the old doc before the old Binding is disposed', async () => {
     const e = await env({ 'a.qmd': 'A\n' }, sideBranch);

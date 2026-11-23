@@ -568,3 +568,42 @@ launcher does not close it) is a second thing to rule out before reading such fa
 - Not covered: `hub-vscode-clone` (the clone attaches by project id over the hub websocket; whether it can attach through
   the proxy's `/ws` is untested), NAT traversal and relay behavior (one laptop), and Myra's VS Code Join Session, which
   still pastes the hub's loopback URL.
+
+### Clone peer does not rejoin after `git pull` (2026-11-23)
+
+Symptom: in `hub-vscode-clone`, after Myra commits and pushes and Maurice runs `git pull -q`, Myra's new paragraph never
+appears in Maurice's editor. A new `myra-edits` step covers it, and the demo now has a shared bare remote
+(`<root>/origin.git`) so the pull is real.
+
+There were two independent causes. Both were reproduced and fixed with a test that failed first.
+
+1. **Remote edits dropped while the gate is closed, never replayed (G1, G3).** `TextBinding.applyRemote` returns early
+   while `suspended()` is true (the clone gate is closed), so a doc change that arrives during git's quiet window never
+   reaches an open buffer. Nothing re-ran `applyRemote` when the gate reopened. The editor-only gate already calls
+   `reconcile` on reopen; the clone gate did not. A pull with no branch switches reproduced it (and it did not
+   reproduce without the pull: Maurice saw Myra live). Fix: `CloneGate` takes `onReopen`, fired once per closed episode
+   from its timers, and `ProjectSync` reconciles every bound buffer. Test: "remote edits that arrive while the gate is
+   closed ... reach an open buffer once the gate reopens" (failed on timeout before the fix).
+2. **Commit verdict moved Maurice's own, non-canonical doc forward (G7, G8, G9).** After the branch round trip,
+   Myra's commit had removed the registry entry for the old blob, so Maurice's checkout of main created his own doc
+   (arrival step 1, `switched ... create-from-disk`). On the pull his disk matched his doc, so `classify` returned
+   `commit` and `decide` called `moveForward` on his doc, registering it on the new blob. The hub's doc was already
+   registered there with a lower generation, so it stayed canonical and Maurice stayed on a different doc: no join, no
+   notice, no log line beyond `moved-forward`. Fix: on a `commit` verdict, move forward only when no other live doc is
+   canonical on the new blob; otherwise run arrival, which joins it (step 3, contents equal). Test: "a commit whose new
+   blob already has a canonical doc joins that doc ..." (failed on timeout before the fix).
+
+Hypotheses ruled out: (a) the reflog watch does see the fast-forward (the log shows `clone gate went pending` and a
+decision); (b) a dirty buffer does not block arrival (cause 1 is the buffer-side drop, not a dirty-buffer hold); (d) the
+pointer is not involved, since the clone follows by blob.
+
+Trap: the demo runs the bundled extension, so `npm run build -w quarto-hub-vscode` is needed after editing
+`src/` before a demo run, or the run silently tests the old code.
+
+Gates: `npm run test -w quarto-hub-vscode` 406 passed before the second fix; `src/core/clone` 55 passed after it; typecheck
+clean; `hub-vscode-clone` in `--fast` passes all eight steps with 0 invariant lines; `npm run test:demo` 19 of 20, the
+known E1 failure (`hub-vscode-host`, `maurice-retypes`). Not run: a headed (paced) live run, and the full unit suite
+after the second fix.
+
+Not investigated: the vanishing newline at a hard wrap in Maurice's typing ("the periodogram of / fusion times"),
+seed 1, clone runs only. Keep it separate from this fix.

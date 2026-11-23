@@ -64,6 +64,8 @@ export interface CloneHost {
   writeBytes(rel: string, bytes: Uint8Array): Promise<void>;
   /** Startup reconcile for one file: merge offline disk edits into the attached doc, as in a mirror. */
   mergeDiskIntoDoc(rel: string): Promise<void>;
+  /** Bring every open buffer up to its doc: edits that arrived while the gate was closed were dropped. */
+  reconcileOpenBuffers(): void;
   /** Follow the owner's pointer for the untracked files (G14) after the tracked ones are attached. */
   followPointer(untracked: (rel: string) => boolean): Promise<void>;
   loadDoc(docId: string, signal: AbortSignal): Promise<DocHandle<FileDoc>>;
@@ -249,6 +251,7 @@ export class CloneSync {
       diskDiffersFromSynced: () => this.snapshotAtTrigger(),
       isOwnWrite: (p) => this.ownWrites.has(p),
       onDecision: (a) => this.decide(a),
+      onReopen: () => this.h.reconcileOpenBuffers(),
     });
     await this.gate.start();
   }
@@ -369,7 +372,12 @@ export class CloneSync {
         try {
           const handle = this.h.handleOf(rel);
           const oldBlob = oldBlobs[rel];
-          if (verdict === 'commit' && handle && !this.detached.has(rel) && oldBlob !== undefined) {
+          // A doc another peer already made canonical on the new blob wins (G7: lowest generation). Moving our own doc
+          // forward onto the same blob would leave us attached to a non-canonical doc, cut off from the live edits; the
+          // arrival rules join the canonical doc instead (step 3 when the contents match).
+          const canonNew = canonical(this.o.registry.view(), rel, tree[rel]!);
+          const otherCanonical = !!canonNew && !!handle && canonNew.doc !== handle.documentId;
+          if (verdict === 'commit' && handle && !this.detached.has(rel) && oldBlob !== undefined && !otherCanonical) {
             this.o.registry.moveForward({ path: rel, oldBlob, newBlob: tree[rel]!, doc: handle.documentId });
             await this.h.logEvent('moved-forward', rel, { to: handle.documentId });
           } else {

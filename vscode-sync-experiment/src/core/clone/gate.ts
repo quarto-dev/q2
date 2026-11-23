@@ -16,6 +16,11 @@ export interface CloneGateOptions {
   isOwnWrite(path: string): boolean;
   /** Runs once per decision, while the gate stays closed. */
   onDecision(action: DecisionAction): Promise<void>;
+  /**
+   * Runs when the gate goes from closed to open. Remote edits that arrived while it was closed were dropped by the
+   * bindings (they must not write into a buffer git is rewriting), so the host brings the open buffers up to their docs.
+   */
+  onReopen?(): void;
 }
 
 export class CloneGate {
@@ -23,6 +28,8 @@ export class CloneGate {
   private tickTimer: unknown = null;
   private watchTimer: unknown = null;
   private deciding = false;
+  /** Set whenever any path saw the gate closed; the timers clear it and fire `onReopen`. */
+  private sawClosed = false;
   private disposed = false;
   /** False until the controller has its baseline: before that the gate has nothing to compare with and must stay open. */
   private ready = false;
@@ -53,7 +60,23 @@ export class CloneGate {
     if (this.disposed || !this.ready) return false;
     if (this.deciding) return true;
     this.lastState = this.controller.check();
+    if (this.lastState.mode === 'closed') this.sawClosed = true;
     return this.lastState.mode === 'closed';
+  }
+
+  /** Timer-side check: fires `onReopen` once per closed episode, after the gate is open and no decision is running. */
+  private observeReopen(): void {
+    if (this.lastState.mode === 'closed' || this.deciding) {
+      if (this.lastState.mode === 'closed') this.sawClosed = true;
+      return;
+    }
+    if (!this.sawClosed) return;
+    this.sawClosed = false;
+    try {
+      this.o.onReopen?.();
+    } catch (err) {
+      this.o.log(`clone gate reopen hook failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   /** The gate is `off` (git unavailable or unborn): ordinary sync applies. */
@@ -88,6 +111,7 @@ export class CloneGate {
       const r = await this.controller.tick();
       next = r.nextTickMs;
       this.lastState = this.controller.check();
+      if (r.actions.length > 0) this.sawClosed = true;
       for (const action of r.actions) {
         this.deciding = true;
         try {
@@ -96,6 +120,7 @@ export class CloneGate {
           this.deciding = false;
         }
       }
+      this.observeReopen();
     } catch (err) {
       this.o.log(`clone gate tick failed: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -108,6 +133,7 @@ export class CloneGate {
     this.watchTimer = this.o.clock.setTimeout(() => {
       if (!this.disposed) {
         if (!this.deciding) this.lastState = this.controller.check();
+        this.observeReopen();
         this.scheduleWatch();
       }
     }, NUMBERS.controllerTickPendingMs);

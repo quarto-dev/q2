@@ -259,6 +259,7 @@ export class ProjectSync {
         await fs.writeFile(abs, bytes);
       },
       mergeDiskIntoDoc: (rel: string) => this.mergeDiskIntoDoc(rel),
+      reconcileOpenBuffers: () => this.bound.forEach((b) => b.reconcile?.()),
       followPointer: async (untracked: (rel: string) => boolean) => {
         for (const [rel, docId] of Object.entries(this.index.doc()?.files ?? {})) {
           if (!untracked(rel) || this.handles.has(rel) || (await this.safePath(rel)) === null) continue;
