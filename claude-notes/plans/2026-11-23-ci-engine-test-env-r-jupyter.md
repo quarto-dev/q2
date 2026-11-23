@@ -431,6 +431,41 @@ The preview-level `lazy_execution_boots_inert_and_executes_on_first_view` test
 is outside this quarto-core-only local selection; it remains for the Windows
 dispatch under bd-ymd9up1v.
 
+## CI implementation (2026-11-23, awaiting dispatch)
+
+`.github/workflows/test-suite.yml` now contains the Phase 2 and Phase 3
+provisioning and both smoke renders, but no hosted runner has executed it.
+The CI-dependent checklist items therefore remain unchecked.
+
+The rig install commands follow the [official rig installation
+guide](https://rig.r-lib.org/install.html): versioned Linux and macOS tarballs
+unpacked into a runner-temporary prefix, and Chocolatey on Windows.
+`gh release view v0.11.1 --repo r-lib/rig --json tagName,assets` verified the
+tag and exact asset names; `choco search rig --exact --all-versions
+--limit-output` verified that Chocolatey has 0.11.1. The shared setup reads
+the first `r_version` from `rproj.lock`, selects rig user mode on the
+disposable runner, installs that R, and syncs `--locked --group fixtures`
+until the planned timing measurement decides otherwise. The `.rvenv/` cache
+has no fallback key and includes the OS, lock hash, and `main-fixtures`
+groups. The absolute `.rvenv/bin` directory goes on `$GITHUB_PATH`.
+
+The Jupyter step keeps setup-uv 0.13.7, adds `python-version: 3.12` and
+`activate-environment: true`, syncs the root lock, registers the sys-prefix
+kernel, and exports the absolute `.venv/share/jupyter` as `JUPYTER_PATH`.
+The Windows exclusions and POSIX-only venv paths are gone.
+
+Both smoke steps run through `target/ci/q2` after the test build, including
+after a red test result, and grep the rendered HTML for the computed values
+and the expected environment path. The new cache step uses
+`actions/cache@v6`; its v6.1.0 `action.yml` declares Node 24.
+
+Validation on 2026-11-23: `actionlint
+.github/workflows/test-suite.yml` reported only the pre-existing
+`actions/checkout@v4` Node 20 deprecation in the WASM job. Re-running with
+`-ignore 'runtime "node20" is deprecated'` exited 0. `git diff --check`
+passed. Hosted provisioning, smoke renders, timings, and test outcomes are
+not yet verified.
+
 ## Checklist
 
 ### Phase 1: R project and local setup
