@@ -2564,6 +2564,9 @@ pub fn build_transform_pipeline(
     // in the future; today they're independent.
     // See `claude-notes/plans/2026-04-27-websites-phase-7.md`
     // §Decision 3.
+    // A book chapter page is titled with its numbered chapter title
+    // (bd-jib92bnc); set before the generic prefix, which then leaves it.
+    pipeline.push(Box::new(crate::transforms::BookPageMetaTransform::new()));
     // Decks put the site title first (`Site – Deck`), as Quarto 1 does.
     pipeline.push(Box::new(if is_revealjs {
         WebsiteTitlePrefixTransform::site_first()
@@ -3251,6 +3254,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "sectionize",
     "html-columns",
     "title-banner",
+    "book-page-meta",
     "website-title-prefix",
     "website-favicon",
     "website-bootstrap-icons",
@@ -3415,6 +3419,7 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     ("example-embed-render", Bucket::B1),
     // --- B2: format-family scaffolding ------------------------------------
     ("title-banner", Bucket::B2),
+    ("book-page-meta", Bucket::B2),
     ("website-title-prefix", Bucket::B2),
     ("website-favicon", Bucket::B2),
     ("website-bootstrap-icons", Bucket::B2),
@@ -7276,6 +7281,7 @@ mod tests {
                 "authors-normalize",
                 "title-banner",
                 "code-block-generate",
+                "book-page-meta",
                 "website-title-prefix",
                 "website-favicon",
                 "website-bootstrap-icons",
@@ -7382,6 +7388,7 @@ mod tests {
                 "authors-normalize",
                 "title-banner",
                 "code-block-generate",
+                "book-page-meta",
                 "website-title-prefix",
                 "website-favicon",
                 "website-bootstrap-icons",
@@ -7772,6 +7779,7 @@ mod tests {
                 "authors-normalize",
                 "title-banner",
                 "code-block-generate",
+                "book-page-meta",
                 "website-title-prefix",
                 "website-favicon",
                 "website-bootstrap-icons",

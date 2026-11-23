@@ -375,6 +375,73 @@ fn cross_chapter_references_do_not_warn_unresolved() {
     assert!(warnings[0].contains("@fig-nope"), "{warnings:?}");
 }
 
+/// A chapter page's `<title>` is its numbered chapter title and the book
+/// title, as in Quarto 1; the home page keeps the book title alone. Every
+/// page carries `book.description` as its meta description.
+#[test]
+fn chapter_pages_are_titled_with_their_numbered_chapter_title() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        r#"project:
+  type: book
+
+book:
+  title: "Title Book"
+  description: "A book about titles."
+  chapters:
+    - index.qmd
+    - one.qmd
+    - two.qmd
+    - refs.qmd
+  appendices:
+    - extra.qmd
+"#,
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "# Preface {.unnumbered}\n\nHello.\n",
+    );
+    write(&project_dir.join("one.qmd"), "# First *Chapter*\n\nText.\n");
+    write(
+        &project_dir.join("two.qmd"),
+        "---\ntitle: \"Second Chapter\"\n---\n\nText.\n",
+    );
+    write(
+        &project_dir.join("refs.qmd"),
+        "# References {.unnumbered}\n\nNone.\n",
+    );
+    write(
+        &project_dir.join("extra.qmd"),
+        "# Extra Material\n\nText.\n",
+    );
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+
+    let title_of = |stem: &str| {
+        let html = read_output(&outputs, stem);
+        let start = html.find("<title>").expect("page has a <title>") + "<title>".len();
+        let end = html[start..].find("</title>").unwrap() + start;
+        html[start..end].replace("&nbsp;", "\u{a0}")
+    };
+    assert_eq!(title_of("index"), "Title Book");
+    assert_eq!(title_of("one"), "1\u{a0} First Chapter – Title Book");
+    assert_eq!(title_of("two"), "2\u{a0} Second Chapter – Title Book");
+    assert_eq!(title_of("refs"), "References – Title Book");
+    assert_eq!(
+        title_of("extra"),
+        "Appendix A — Extra Material – Title Book"
+    );
+
+    for stem in ["index", "one", "extra"] {
+        let html = read_output(&outputs, stem);
+        assert!(
+            html.contains(r#"<meta name="description" content="A book about titles.">"#),
+            "{stem} must carry the book description"
+        );
+    }
+}
+
 /// Sections of an unnumbered chapter (a preface, say) carry no number.
 /// Quarto 1 turns section numbering off for such a chapter; without that
 /// the sections count from an unset chapter slot and read "0.1", "0.2".
