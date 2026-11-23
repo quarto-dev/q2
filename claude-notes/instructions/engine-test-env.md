@@ -132,7 +132,7 @@ unset QUARTO_R
 **Command Prompt:**
 
 ```bat
-set PATH=%CD%\.rvenv\bin;%PATH%
+set "PATH=%CD%\.rvenv\bin;%PATH%"
 set QUARTO_R=
 ```
 
@@ -297,7 +297,7 @@ export JUPYTER_PATH="$PWD/.venv/share/jupyter"
 **Command Prompt:**
 
 ```bat
-set JUPYTER_PATH=%CD%\.venv\share\jupyter
+set "JUPYTER_PATH=%CD%\.venv\share\jupyter"
 ```
 
 `jupyter kernelspec list` should name the `.venv` copy of `python3`. A user

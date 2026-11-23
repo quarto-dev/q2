@@ -241,15 +241,19 @@ jobs:
         run: |
           rig --version
           # CI runners are disposable; user mode needs no elevated installer.
-          rig system user-mode
+          # `rig system user-mode` would also reinstall and remove the runner
+          # image's own R, so only the mode is set.
+          rig config set mode=user
           R_VERSION=$(awk -F '"' '/^r_version = / { print $2; exit }' rproj.lock)
           test -n "$R_VERSION" || { echo "r_version not found in rproj.lock" >&2; exit 1; }
           rig add "$R_VERSION"
 
       # No restore-keys: a main-only or differently locked library must never
-      # be restored for the main + fixtures sync below.
-      - name: Cache locked R project library
-        uses: actions/cache@v6
+      # be restored for the main + fixtures sync below. Restore and save are
+      # split so a red test step later in the job still saves the library.
+      - name: Restore locked R project library
+        id: rig-cache
+        uses: actions/cache/restore@v6
         with:
           path: .rvenv/
           key: rig-project-${{ runner.os }}-main-fixtures-${{ hashFiles('rproj.lock') }}
@@ -263,6 +267,13 @@ jobs:
           echo "$GITHUB_WORKSPACE/.rvenv/bin" >> "$GITHUB_PATH"
           export PATH="$GITHUB_WORKSPACE/.rvenv/bin:$PATH"
           Rscript -e 'cat(R.version.string, "\n"); cat(.libPaths(), sep = "\n")'
+
+      - name: Save locked R project library
+        if: steps.rig-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .rvenv/
+          key: ${{ steps.rig-cache.outputs.cache-primary-key }}
 
       # Node 24 + `npm ci`: `q2 call build-ts-extension` (used by the engine
       # tests to rebuild the hermetic fixture bundles) runs its embedded rollup
