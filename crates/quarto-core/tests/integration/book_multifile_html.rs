@@ -308,6 +308,38 @@ book:
     );
 }
 
+/// Sections of an unnumbered chapter (a preface, say) carry no number.
+/// Quarto 1 turns section numbering off for such a chapter; without that
+/// the sections count from an unset chapter slot and read "0.1", "0.2".
+/// A numbered chapter in the same book still numbers its sections.
+#[test]
+fn sections_of_an_unnumbered_chapter_are_not_numbered() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minibook(&project_dir);
+    write(
+        &project_dir.join("index.qmd"),
+        "# Welcome {.unnumbered}\n\nWelcome.\n\n## Preface section\n\nText.\n\n### Deeper\n\nText.\n",
+    );
+    write(
+        &project_dir.join("ch1.qmd"),
+        "# Chapter One\n\nText.\n\n## First section\n\nText.\n",
+    );
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+    let index = read_output(&outputs, "index");
+    let ch1 = read_output(&outputs, "ch1");
+
+    assert!(index.contains("Preface section"), "{index}");
+    assert!(
+        !index.contains("header-section-number"),
+        "an unnumbered chapter's sections must carry no number: {index}"
+    );
+    assert!(
+        ch1.contains("header-section-number\">1.1<"),
+        "a numbered chapter still numbers its sections: {ch1}"
+    );
+}
+
 /// P4 checklist: a same-chapter `@ref` resolves to a working link with
 /// the correct (chapter-scoped) number.
 #[test]

@@ -136,6 +136,7 @@ impl AstTransform for CrossrefIndexTransform {
             section_ids: Vec::new(),
             number_sections,
             number_depth,
+            book: ctx.project.project_kind() == crate::project::ProjectKind::Book,
         };
         walker.visit_blocks(&mut ast.blocks);
         let diagnostics = walker.diagnostics;
@@ -182,6 +183,10 @@ struct Walker<'a> {
     /// `number-depth` document metadata (default 6) — a header deeper than
     /// this never gets the visible `number` kv, even with `number-sections`.
     number_depth: u32,
+    /// Whether the document belongs to a book project. In a book a
+    /// section that sits under no numbered chapter heading (the sections
+    /// of an `.unnumbered` preface) shows no number.
+    book: bool,
 }
 
 impl<'a> Walker<'a> {
@@ -350,7 +355,16 @@ impl<'a> Walker<'a> {
         // of whether it's also an `@sec-` target. HTML-only: non-HTML
         // writers (Typst, pandoc-hybrid docx/pptx/etc.) do their own native
         // heading numbering and never consume this kv.
-        if self.html && self.number_sections && (header.level as u32) <= self.number_depth {
+        // In a book, a section path whose chapter slot is still 0 belongs
+        // to an unnumbered chapter (no seed, and no numbered level-1
+        // heading above it). Q1 turns `number-sections` off for such a
+        // chapter, so its sections show no number rather than "0.1".
+        let in_unnumbered_chapter = self.book && self.index.sections.first() == Some(&0);
+        if self.html
+            && self.number_sections
+            && (header.level as u32) <= self.number_depth
+            && !in_unnumbered_chapter
+        {
             header.attr.2.insert(
                 "number".to_string(),
                 format_section_number(&self.index.sections, self.index.max_heading, self.appendix),
