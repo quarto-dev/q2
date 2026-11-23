@@ -164,14 +164,162 @@ user `python3` kernelspec present: the kernel's `sys.executable` is inside
   `[tool.uv] package = false`), with `.venv` at the root. CI and local setup
   both run `uv sync`.
 
+## Phase 1 verification (2026-11-23, Windows)
+
+### Project creation and sync
+
+Ran with rig 0.11.1 and R 4.6.2 in PowerShell 7.6.10:
+
+```powershell
+rig proj init
+rig proj add knitr rmarkdown jsonlite
+rig proj lock
+rig proj sync --locked --group fixtures
+```
+
+`rig proj add` has a `--dev` shortcut but no arbitrary `--group` option in
+this version, so the nine fixture packages were declared directly under
+`[dependency-groups.fixtures]` before `rig proj lock`. The generated project
+name was changed from the worktree directory name to `q2`. The main add
+installed 25 packages; adding the fixtures group installed the remaining 73.
+Commit `30b73f99b` contains `rproj.toml`, `rproj.lock`, the root ignore rules,
+and this plan's status change. It does not contain `.Renviron` or
+`.rvenvlib/`.
+
+After that commit, two consecutive runs of
+
+```powershell
+rig proj sync --locked --group fixtures
+```
+
+both reported `rproj.lock is up to date`, `0 of 98 packages to install`, and
+`Everything is up to date`. A following `git diff --exit-code` produced no
+output: in particular, sync left the committed rig marker block in the root
+`.gitignore` unchanged.
+
+For the ordinary-R check, `.Renviron` was moved aside and restored in a
+`finally` block, then this command was run at the repo root:
+
+```powershell
+Rscript -e 'cat(R.version.string, "\n"); cat(.libPaths(), sep = "\n"); cat("knitr available: ", requireNamespace("knitr", quietly = TRUE), "\n", sep = "")'
+```
+
+The executable was `C:\Program Files\R\bin\Rscript.exe`; output included:
+
+```text
+R version 4.6.2 (2026-10-29 ucrt)
+C:/Users/chris/AppData/Local/R/win-library/4.6
+C:/Program Files/R/R-4.6.2/library
+knitr available: TRUE
+```
+
+With no root `.Renviron`, plain R therefore still sees the contributor's
+user library.
+
+### Smoke renders
+
+The same document was placed in separate `with-shim` and `without-shim`
+temporary directories:
+
+````qmd
+---
+title: "R engine smoke"
+format: html
+engine: knitr
+---
+
+Inline result: `r 6 * 7`.
+
+```{r}
+cat(R.version.string, "\n")
+cat(.libPaths(), sep = "\n")
+```
+````
+
+For the shim run, `.rvenv\bin` was prepended to PATH and `QUARTO_R` was
+removed before rendering:
+
+```powershell
+$shim = (Resolve-Path .rvenv\bin).Path
+$env:PATH = "$shim;$env:PATH"
+Remove-Item Env:QUARTO_R -ErrorAction SilentlyContinue
+q2 render .tmp-phase1-r-smoke/with-shim/smoke.qmd
+```
+
+A fresh PowerShell without that PATH change ran:
+
+```powershell
+Remove-Item Env:QUARTO_R -ErrorAction SilentlyContinue
+q2 render .tmp-phase1-r-smoke/without-shim/smoke.qmd
+```
+
+`Get-Command Rscript` resolved to `.rvenv\bin\Rscript.exe` in the first run
+and `C:\Program Files\R\bin\Rscript.exe` in the second. Inspection of both
+generated HTML files found `<p>Inline result: 42.</p>` and
+`R version 4.6.2 (2026-10-29 ucrt)`. The library output was:
+
+```text
+# with the shim
+C:/Users/chris/orca/workspaces/windows-ci-r-and-jupyter/.rvenv/lib
+C:/Users/chris/AppData/Roaming/rig/data/r/4.6.2/library
+
+# without the shim
+C:/Users/chris/AppData/Local/R/win-library/4.6
+C:/Program Files/R/R-4.6.2/library
+```
+
+### Knitr tests and baseline
+
+The requested command was run with the shim PATH and `QUARTO_R` unset:
+
+```powershell
+cargo nextest run -p quarto-core -E 'test(knitr)'
+```
+
+Nextest stopped on the first failure, an LF-versus-CRLF golden comparison,
+after 22 tests. To avoid confusing fail-fast truncation with the full R
+result, both environments were then run to completion:
+
+```powershell
+cargo nextest run -p quarto-core -E 'test(knitr)' --no-fail-fast
+```
+
+The shim run finished in 941.958 seconds: **543 run, 538 passed, 5 failed**.
+The fresh-shell, non-shim baseline finished in 1001.169 seconds: **543 run,
+538 passed, 5 failed**. No Rust source changed between the runs. Real R
+execution is established by the smoke render and by R-dependent behavior,
+not by the totals: for example, the two `knitr_corpus_control` tests each ran
+for more than 833 seconds in the shim run.
+
+| Shim failure | Baseline | Diagnosis | Strand |
+|---|---|---|---|
+| `engine::content_processors::spin::tests::golden_knitr_delim` | Same failure | Windows CRLF: otherwise identical LF and CRLF golden strings | bd-qmp87pxy |
+| `engine::knitr::capture_tests::capture_include_graphics_is_an_image_paths_piece` | Passes | R dependency gap: `[None]` versus `[Some(200.0)]`; the locked library lacks `png` | bd-b0o2lxnv |
+| `positron_source::the_r_fixture_converts_through_the_knitr_owner` | Same failure | Windows CRLF: two cached cells paired instead of three; temporarily converting only `r.qmd` to LF made the exact test pass | bd-08jz7o8j |
+| `presenter_pinning::ipynb_goldens_through_the_knitr_entry_path` | Same failure | Windows CRLF golden difference | bd-qmp87pxy |
+| `presenter_pinning::shadow_goldens_through_the_knitr_entry_path` | Same failure | Windows CRLF golden difference | bd-qmp87pxy |
+
+The image-width cause was checked directly with HTML output and `dpi = 96`:
+`knitr:::raster_dpi_width()` returned `NULL` in the locked library, which has
+no `png`, and `200` in the user library, which has `png` 0.1.9. The approved
+package list was not changed during this phase; the missing dependency is
+recorded in bd-b0o2lxnv.
+
+The baseline had one additional, different failure in place of the shim's
+image-width failure:
+`knitr_replay_equals_live::a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live`.
+The user library's knitr 1.52.3 rejects `#|` options for its SQL chunk;
+locked knitr 1.52 accepts them and the test passes. This was already filed
+as bd-lnu81d4a.
+
 ## Checklist
 
 ### Phase 1: R project and local setup
 
-- [ ] Create the rig project at the repo root (`main` + `fixtures` groups), commit only `rproj.toml` + `rproj.lock`, and ignore `/.rvenv/`, `/.rvenvlib/`, `/.Renviron`.
-- [ ] Check that `rig proj sync` leaves the tracked root `.gitignore` unchanged once rig's block is committed.
-- [ ] Check that the root files do not disturb anything else that starts R in the checkout (a plain R session at the root without `.Renviron` should be unaffected).
-- [ ] Locally (Windows): `rig proj sync`, put `.rvenv/bin` on PATH, and render the knitr smoke document (Phase 2 acceptance) with and without the shim, against a clean baseline. The output must hold the computed values and the shim's `.libPaths()`. Then run `cargo nextest run -p quarto-core -E 'test(knitr)'` to see which tests now fail for real; pass/skip counts alone prove nothing.
+- [x] Create the rig project at the repo root (`main` + `fixtures` groups), commit only `rproj.toml` + `rproj.lock`, and ignore `/.rvenv/`, `/.rvenvlib/`, `/.Renviron`.
+- [x] Check that `rig proj sync` leaves the tracked root `.gitignore` unchanged once rig's block is committed.
+- [x] Check that the root files do not disturb anything else that starts R in the checkout (a plain R session at the root without `.Renviron` should be unaffected).
+- [x] Locally (Windows): `rig proj sync`, put `.rvenv/bin` on PATH, and render the knitr smoke document (Phase 2 acceptance) with and without the shim, against a clean baseline. The output must hold the computed values and the shim's `.libPaths()`. Then run `cargo nextest run -p quarto-core -E 'test(knitr)'` to see which tests now fail for real; pass/skip counts alone prove nothing.
 
 ### Phase 2: CI R step (all legs)
 
