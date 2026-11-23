@@ -3427,7 +3427,30 @@ pub fn write_single_inline<T: std::io::Write>(
     inline: &crate::pandoc::Inline,
     buf: &mut T,
 ) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
+    write_single_inline_with(inline, buf, QmdWriterContext::new())
+}
+
+/// Like [`write_single_inline`], for an inline that begins a line (the first
+/// of a paragraph's): text that would read there as a list marker is escaped,
+/// as [`write_paragraph`] escapes it. `next_is_boundary` says whether a word
+/// boundary (a space, a break, the end of the line) follows the inline, which
+/// tells `1. ` from `1.5`.
+pub fn write_single_inline_at_line_start<T: std::io::Write>(
+    inline: &crate::pandoc::Inline,
+    next_is_boundary: bool,
+    buf: &mut T,
+) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
     let mut ctx = QmdWriterContext::new();
+    ctx.at_line_start = true;
+    ctx.next_is_boundary = next_is_boundary;
+    write_single_inline_with(inline, buf, ctx)
+}
+
+fn write_single_inline_with<T: std::io::Write>(
+    inline: &crate::pandoc::Inline,
+    buf: &mut T,
+    mut ctx: QmdWriterContext,
+) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
     if let Err(e) = write_inline(inline, buf, &mut ctx) {
         return Err(vec![
             quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")

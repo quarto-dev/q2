@@ -774,12 +774,17 @@ fn assemble_inline_splice(
     // Assemble the new inline content. `None` means some kept inline (or
     // container boundary) has no usable preimage in the target file — the
     // whole block falls back to re-serialization.
+    // A paragraph's inlines begin a line, in a list item or block quote too
+    // (as `write_paragraph` has it), so a new first inline must not read there
+    // as a list marker. A header's follow its `#`s.
+    let starts_line = matches!(orig_block, Block::Paragraph(_) | Block::Plain(_));
     let Some(inline_content) = assemble_inline_content(
         original_qmd,
         orig_inlines,
         new_inlines,
         plan,
         target_file_id,
+        starts_line,
     )?
     else {
         return Ok(None);
@@ -807,6 +812,7 @@ fn assemble_inline_content(
     new_inlines: &[Inline],
     plan: &InlineReconciliationPlan,
     target_file_id: FileId,
+    starts_line: bool,
 ) -> Result<Option<String>, Vec<quarto_error_reporting::DiagnosticMessage>> {
     let mut result = String::new();
 
@@ -843,6 +849,17 @@ fn assemble_inline_content(
                     return Ok(None);
                 };
                 result.push_str(text);
+            }
+            InlineAlignment::UseAfter(after_idx) if starts_line && result_idx == 0 => {
+                let next_is_boundary = new_inlines.get(after_idx + 1).is_none_or(|next| {
+                    matches!(
+                        next,
+                        Inline::Space(_) | Inline::SoftBreak(_) | Inline::LineBreak(_)
+                    )
+                });
+                let text =
+                    write_line_start_inline_to_string(&new_inlines[*after_idx], next_is_boundary)?;
+                result.push_str(&text);
             }
             InlineAlignment::UseAfter(after_idx) => {
                 let text = write_inline_to_string(&new_inlines[*after_idx])?;
@@ -945,6 +962,8 @@ fn assemble_recursed_container(
         new_children,
         plan,
         target_file_id,
+        // Inside a container's opening delimiter, not at a line's start.
+        false,
     )?
     else {
         return Ok(None);
@@ -1067,6 +1086,21 @@ pub fn write_inline_to_string(
 ) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
     let mut buf = Vec::new();
     qmd::write_single_inline(inline, &mut buf)?;
+    inline_string(buf)
+}
+
+/// Like [`write_inline_to_string`], for an inline that begins a line (see
+/// [`qmd::write_single_inline_at_line_start`]).
+pub fn write_line_start_inline_to_string(
+    inline: &Inline,
+    next_is_boundary: bool,
+) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let mut buf = Vec::new();
+    qmd::write_single_inline_at_line_start(inline, next_is_boundary, &mut buf)?;
+    inline_string(buf)
+}
+
+fn inline_string(buf: Vec<u8>) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
     let result = String::from_utf8(buf).map_err(|e| {
         vec![
             quarto_error_reporting::DiagnosticMessageBuilder::error("UTF-8 error during write")

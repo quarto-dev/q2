@@ -431,3 +431,85 @@ fn splice_idempotent_blockquote_multiline() {
     let result = writers::incremental::incremental_write(original_qmd, &ast, &ast, &plan).unwrap();
     assert_eq!(result, original_qmd);
 }
+
+// =============================================================================
+// Tests: New inlines that begin a line
+// =============================================================================
+
+/// The new AST of `original_qmd` whose first block's inlines are `words`,
+/// apart by spaces, all new.
+fn with_words(
+    original_qmd: &str,
+    block_inlines: fn(&mut Block) -> &mut Vec<Inline>,
+    words: &[&str],
+) -> Pandoc {
+    let mut new_ast = parse_qmd(original_qmd);
+    let inlines = block_inlines(&mut new_ast.blocks[0]);
+    inlines.clear();
+    for (i, word) in words.iter().enumerate() {
+        if i > 0 {
+            inlines.push(Inline::Space(pampa::pandoc::Space {
+                source_info: SourceInfo::for_test(),
+            }));
+        }
+        inlines.push(Inline::Str(pampa::pandoc::Str {
+            text: word.to_string(),
+            source_info: SourceInfo::for_test(),
+        }));
+    }
+    new_ast
+}
+
+fn bullet_item_inlines_mut(block: &mut Block) -> &mut Vec<Inline> {
+    match block {
+        Block::BulletList(bl) => block_inlines_mut(&mut bl.content[0][0]),
+        other => panic!(
+            "Expected BulletList, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    }
+}
+
+fn incremental(original_qmd: &str, new_ast: &Pandoc) -> String {
+    let original_ast = parse_qmd(original_qmd);
+    let plan = compute_reconciliation(&original_ast, new_ast);
+    writers::incremental::incremental_write(original_qmd, &original_ast, new_ast, &plan).unwrap()
+}
+
+#[test]
+fn splice_new_list_number_at_paragraph_start_is_escaped() {
+    let original_qmd = "End.\n";
+    let new_ast = with_words(original_qmd, block_inlines_mut, &["2.", "End."]);
+    assert_incremental_write_correct(original_qmd, &new_ast);
+    assert_eq!(incremental(original_qmd, &new_ast), "2\\. End.\n");
+}
+
+#[test]
+fn splice_new_bullet_at_paragraph_start_is_escaped() {
+    let original_qmd = "End.\n";
+    let new_ast = with_words(original_qmd, block_inlines_mut, &["-", "End."]);
+    assert_incremental_write_correct(original_qmd, &new_ast);
+}
+
+#[test]
+fn splice_new_list_number_at_list_item_start_is_escaped() {
+    let original_qmd = "* End.\n";
+    let new_ast = with_words(original_qmd, bullet_item_inlines_mut, &["1.", "End."]);
+    assert_incremental_write_correct(original_qmd, &new_ast);
+}
+
+#[test]
+fn splice_new_list_number_mid_paragraph_is_not_escaped() {
+    let original_qmd = "Item End.\n";
+    let new_ast = with_words(original_qmd, block_inlines_mut, &["Item", "2.", "End."]);
+    assert_incremental_write_correct(original_qmd, &new_ast);
+    assert_eq!(incremental(original_qmd, &new_ast), "Item 2. End.\n");
+}
+
+#[test]
+fn splice_new_number_in_a_heading_is_not_escaped() {
+    let original_qmd = "## End\n";
+    let new_ast = with_words(original_qmd, block_inlines_mut, &["2.", "End"]);
+    assert_incremental_write_correct(original_qmd, &new_ast);
+    assert_eq!(incremental(original_qmd, &new_ast), "## 2. End\n");
+}
