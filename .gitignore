@@ -130,6 +130,9 @@ ts-packages/quarto-hub-mcp/.qmd-parser-unavailable
 # and summary.json ARE committed per the plan's "commit the transcripts").
 ts-packages/quarto-hub-mcp/eval/results/*/raw/
 
+# Local uv environment for the Jupyter engine tests.
+/.venv/
+
 # Local rig project bootstrap. Do not commit .Renviron or .rvenvlib: without
 # a synced project library they hide a contributor's usual R package library.
 /.rvenvlib/

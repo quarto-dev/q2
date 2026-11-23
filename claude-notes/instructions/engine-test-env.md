@@ -1,11 +1,9 @@
 # Engine test environments: R and Jupyter
 
 This note describes the local runtimes for tests that execute document
-engines. The R setup below was verified on Windows 11 on 2026-11-23. The
-Python/Jupyter section is only an outline until
-Phase 3 is verified. The locked CI provisioning has not been added yet; the
-existing test-suite step still installs Jupyter and registers a Python
-kernel on Linux and macOS, and nothing installs the R packages.
+engines. The R and Python/Jupyter setups below were verified on Windows 11
+on 2026-11-23. The dated commands, output, and test failures are in
+`claude-notes/plans/2026-11-23-ci-engine-test-env-r-jupyter.md`.
 
 Commands in this note quote arguments with single quotes. Run them from
 PowerShell or a POSIX shell: Command Prompt does not group single-quoted
@@ -209,22 +207,128 @@ chunk `#|` refusal (bd-lnu81d4a). The Windows verification run, with its
 commands and output, is in
 `claude-notes/plans/2026-11-23-ci-engine-test-env-r-jupyter.md`.
 
-## Python / Jupyter: outline, not yet verified
+## Python / Jupyter
 
-Phase 3 will fill in and verify this section. Its planned recipe is:
+### Which tests need Jupyter
 
-- Create a root non-package `pyproject.toml` and `uv.lock`, pinned to Python
-  3.12, then use `uv sync --locked`.
-- Activate `.venv` with the shell-specific form: `source .venv/bin/activate`
-  on POSIX, `.venv\Scripts\Activate.ps1` in PowerShell, or
-  `.venv\Scripts\activate.bat` in Command Prompt.
-- Register the kernel inside the venv with
-  `python -m ipykernel install --sys-prefix --name python3`.
-- Set `JUPYTER_PATH` to the absolute `.venv/share/jupyter` path so launch by
-  name cannot select a competing user kernelspec (bd-6ecz7jt7).
-- Accept provisioning only after a render computes a Python value and shows
-  `sys.executable` inside `.venv`, with a competing user `python3` kernelspec
-  present and unchanged.
+Jupyter-gated tests return normally when the `jupyter` runtime or a Python
+kernelspec is missing, so a green summary can mean that coverage was skipped.
+The selection used for the Windows verification includes the modules with
+those gates and the mixed-engine modules that also exercise Jupyter:
 
-These files and CI steps do not exist on the branch yet; this outline is not
-a runnable setup guide.
+```sh
+cargo nextest run -p quarto-core --no-fail-fast -E 'test(jupyter) | test(engine_visibility) | test(engine_error_policy) | test(engine_output_parity) | test(capture_splice_engines) | test(nested_cell_mask_render)'
+```
+
+Use the smoke render below to prove that a real Python kernel executed.
+Passing totals alone do not establish that.
+
+### The committed uv project
+
+The root `pyproject.toml` and `uv.lock` define the Python interpreter and
+packages for the engine tests. Read them for the current requirements rather
+than copying a package list into a second setup. This is a non-package uv
+project: sync creates the machine-specific root `.venv/`, which is ignored.
+
+From the repository root, install exactly the locked environment:
+
+```sh
+uv sync --locked
+```
+
+`--locked` fails if the manifest and lock disagree. Use `uv lock` only when
+intentionally changing the committed requirements.
+
+### Activate and register the kernel
+
+Activation puts the environment's `jupyter` and `python` on PATH and sets
+`VIRTUAL_ENV`, which the engine uses when selecting a kernel. Choose the form
+for your shell.
+
+**PowerShell:**
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+**POSIX shells:**
+
+```sh
+source .venv/bin/activate
+```
+
+**Command Prompt:**
+
+```bat
+.venv\Scripts\activate.bat
+```
+
+Then register `python3` inside the environment, not in the user Jupyter
+directory:
+
+```sh
+python -m ipykernel install --sys-prefix --name python3
+```
+
+Do not substitute `--user`: that can replace a contributor's own `python3`
+kernelspec, and the venv-first selection rule cannot identify a kernelspec
+stored outside the environment.
+
+Finally, point `JUPYTER_PATH` at the environment's absolute Jupyter data
+directory. Quarto re-resolves the selected kernel by name at launch
+(bd-6ecz7jt7); runtimelib searches this directory before the user kernelspecs.
+It treats `JUPYTER_PATH` as one path, not a separator-split list.
+
+**PowerShell:**
+
+```powershell
+$env:JUPYTER_PATH = (Resolve-Path .venv\share\jupyter).Path
+```
+
+**POSIX shells:**
+
+```sh
+export JUPYTER_PATH="$PWD/.venv/share/jupyter"
+```
+
+**Command Prompt:**
+
+```bat
+set JUPYTER_PATH=%CD%\.venv\share\jupyter
+```
+
+`jupyter kernelspec list` should name the `.venv` copy of `python3`. A user
+copy with the same name may disappear from this listing because the
+environment copy takes precedence; the setup does not modify the user copy.
+
+### Acceptance: execute a smoke document
+
+Create this document in a temporary directory:
+
+````qmd
+---
+title: "Python engine smoke"
+format: html
+jupyter: python3
+---
+
+```{python}
+import sys
+print(f"Computed result: {6 * 7}")
+print(f"Python executable: {sys.executable}")
+```
+````
+
+Render and inspect the HTML with the activated environment and `JUPYTER_PATH`
+set:
+
+```sh
+q2 render smoke.qmd
+```
+
+The output must contain `Computed result: 42` and a `Python executable:` path
+inside the checkout's `.venv`. Run this check while a competing user
+`python3` kernelspec exists, and compare `jupyter kernelspec list` in a fresh
+shell afterwards: the user kernelspec must still be present and unchanged.
+The Windows verification output is in the plan linked at the top of this
+note; current failures are tracked as strands rather than copied here.

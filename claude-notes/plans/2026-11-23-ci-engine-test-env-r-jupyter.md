@@ -334,6 +334,103 @@ The SQL test now executes and fails under locked knitr 1.52 too:
 same failure as knitr 1.52.3 (bd-lnu81d4a). The plotly fixtures were not
 rerun; the corpus control tests take over 833 seconds each.
 
+## Phase 3 local verification (2026-11-23, Windows)
+
+### uv project and PyPI isolation
+
+Created the root non-package `pyproject.toml` from the dependency list in the
+existing workflow, generated `uv.lock` with uv 0.13.9, and ran:
+
+```powershell
+uv sync --locked
+.venv\Scripts\python.exe --version
+.venv\Scripts\python.exe -m ipykernel install --sys-prefix --name python3
+python3 -I -m unittest discover -s packaging/pypi/tests
+```
+
+The sync selected CPython 3.12.13, resolved 55 packages, and created the root
+`.venv`. The kernel installer wrote only
+`.venv\share\jupyter\kernels\python3`. The existing PyPI packaging suite
+still passed: 26 tests run, 25 passed and one skipped (its usual skip), with
+exit status 0. The root `/.venv/` is now ignored; `packaging/pypi/` keeps its
+own build-system-only `pyproject.toml`.
+
+Before registration, `jupyter kernelspec list` included a competing user
+kernel:
+
+```text
+Available kernels:
+  ark           C:\Users\chris\AppData\Roaming\jupyter\kernels\ark
+  ggsql         C:\Users\chris\AppData\Roaming\jupyter\kernels\ggsql
+  ir            C:\Users\chris\AppData\Roaming\jupyter\kernels\ir
+  julia-1.11    C:\Users\chris\AppData\Roaming\jupyter\kernels\julia-1.11
+  julia-1.12    C:\Users\chris\AppData\Roaming\jupyter\kernels\julia-1.12
+  python3       C:\Users\chris\AppData\Roaming\jupyter\kernels\python3
+```
+
+Its `kernel.json` selected the user Python 3.14 installation and had SHA-256
+`D97B535C8627F666DFC9EC012A874AA0463D92DAB9B92C45DEF698F8E2965614`. The
+hash and argv were identical immediately after `--sys-prefix` registration.
+
+### Python smoke render
+
+Used the one-cell document in `engine-test-env.md` and ran:
+
+```powershell
+$venv = (Resolve-Path .venv).Path
+$env:VIRTUAL_ENV = $venv
+$env:PATH = "$venv\Scripts;$env:PATH"
+$env:JUPYTER_PATH = "$venv\share\jupyter"
+jupyter kernelspec list
+q2 render .tmp-phase3-jupyter/smoke.qmd
+```
+
+The kernelspec listing selected
+`.venv\share\jupyter\kernels\python3`. Inspection of the generated HTML
+found this actual cell output:
+
+```text
+Computed result: 42
+Python executable: C:\Users\chris\orca\workspaces\windows-ci-r-and-jupyter\.venv\Scripts\python.exe
+```
+
+A fresh shell afterwards still listed the user kernel at
+`C:\Users\chris\AppData\Roaming\jupyter\kernels\python3`, with the same
+hash and argv. A psutil check for processes with an `ipykernel_launcher`
+argument returned `[]` after the render and again after the test runs.
+
+### Jupyter-gated tests
+
+Grepped the quarto-core runtime and kernelspec gates, then ran their modules
+and the mixed-engine modules with the venv and rig shims on PATH:
+
+```powershell
+cargo nextest run -p quarto-core --no-fail-fast -E 'test(jupyter) | test(engine_visibility) | test(engine_error_policy) | test(engine_output_parity) | test(capture_splice_engines) | test(nested_cell_mask_render)'
+```
+
+The run finished in 213.542 seconds: **365 run, 359 passed, 6 failed**.
+The failures were real executions, not missing-runtime skips.
+
+| Failure | Classification | Strand |
+|---|---|---|
+| `engine::jupyter::fake_kernel::tests::test_fake_kernel_losing_a_port_reports_a_port_conflict` | Product bug: `JupyterError::is_port_conflict` matches English Winsock prose but not this machine's French error; isolated rerun failed with the stable `(os error 10048)` marker | bd-leshm0xt |
+| `engine::jupyter::presenter_goldens::presenter_goldens` | Windows CRLF golden comparisons; passed after temporary LF conversion | bd-umkxc8xb |
+| `jupyter_markdown_goldens::stored_records_present_to_the_goldens` | Windows CRLF golden/source comparisons | bd-umkxc8xb |
+| `record_preview_splice::record_splice_matches_legacy_splice_on_the_jupyter_fixtures` | Windows CRLF golden comparison; passed after temporary LF conversion | bd-umkxc8xb |
+| `jupyter_markdown_goldens::legacy_capture_payload_is_byte_identical_after_flip` | Windows CRLF golden/source comparisons; passed twice isolated after temporary LF conversion | bd-umkxc8xb |
+| `jupyter_markdown_goldens::jupyter_markdown_matches_goldens` | Windows CRLF golden/source comparisons | bd-umkxc8xb |
+
+`xxd` confirmed CRLF bytes in the checked-out goldens. Diagnostic conversions
+were limited to the fixture `.md`, `.json`, and `.qmd` files and were restored
+with `git checkout` after each run; no fixture changes remain. One intermediate
+parallel LF diagnostic also showed an extra empty output for `twenty-cells`,
+but the isolated LF legacy-capture test then passed twice, so that transient
+does not change the classification of the original six failures.
+
+The preview-level `lazy_execution_boots_inert_and_executes_on_first_view` test
+is outside this quarto-core-only local selection; it remains for the Windows
+dispatch under bd-ymd9up1v.
+
 ## Checklist
 
 ### Phase 1: R project and local setup
@@ -355,7 +452,7 @@ rerun; the corpus control tests take over 833 seconds each.
 
 ### Phase 3: Jupyter on Windows (bd-yhl7tb3g)
 
-- [ ] Move the package list into a root `pyproject.toml` + `uv.lock` (non-package project); check it does not collide with `packaging/pypi/`.
+- [x] Move the package list into a root `pyproject.toml` + `uv.lock` (non-package project); check it does not collide with `packaging/pypi/`.
 - [ ] CI: setup-uv with `activate-environment`, `uv sync --locked`, `python -m ipykernel install --sys-prefix --name python3`, `JUPYTER_PATH` set to the absolute `.venv/share/jupyter`; drop the Windows conditions.
 - [ ] Validate on all three runners (the recipe changes Linux and macOS too): the PR's own CI covers those two; dispatch Windows with the jupyter tests plus `test(lazy_execution_boots_inert_and_executes_on_first_view)` (preview_static_e2e). Provisioning is accepted when the smoke render below passes on every runner. Test outcomes are recorded, not required green: a `lazy_execution` failure goes on bd-ymd9up1v, and this phase does not try to detect an orphaned kernel (bd-iy2zbos7 owns that).
 - [ ] Acceptance: render a one-cell Python smoke document on each runner and check the output holds the computed value and a `sys.executable` inside `.venv`.
