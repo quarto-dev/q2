@@ -42,9 +42,20 @@ export const noticeLocator = (page: Page): Locator => page.getByTestId('swap-not
 export const pausedIndicator = (page: Page): Locator =>
   page.locator('[data-testid="paused-banner"], .paused-for-git-banner');
 
-/** The text Monaco shows now, with its non-breaking spaces normalized. */
+/**
+ * The text Monaco shows now, with its non-breaking spaces normalized. Monaco recycles its line elements, so DOM order is
+ * not reading order after an edit; the lines are put in order by their `top` offset.
+ */
 export async function shownText(page: Page): Promise<string> {
-  return (await editorText(page).innerText()).replace(/ /g, ' ');
+  const lines = await editorText(page)
+    .locator('.view-line')
+    .evaluateAll((els) =>
+      els
+        .map((e) => ({ top: parseFloat((e as HTMLElement).style.top || '0'), text: e.textContent ?? '' }))
+        .sort((a, b) => a.top - b.top)
+        .map((l) => l.text),
+    );
+  return lines.map((l) => l.replace(/\u00a0/g, ' ')).join('\n');
 }
 
 /** The rendered preview inside the viewer's iframe(s): its `body` text, or '' while nothing is mounted. */
