@@ -72,6 +72,7 @@ fn main() {
     };
     // Usually missing: only `cargo xtask build-hub-client-embed` builds it.
     quarto_build_support::watch_dir(&editor_dist);
+    emit_editor_embed_status(&workspace_root, &editor_dist);
 
     // WASM dedupe (plan 2026-10-13): strip the Vite-hashed render WASM
     // from the viewer archive — quarto-wasm-embed carries it instead,
@@ -377,4 +378,47 @@ fn write_if_changed(path: &Path, contents: &str) {
 
 fn emit_warning(msg: &str) {
     println!("cargo:warning={}", msg);
+}
+
+/// Compare the editor bundle's build stamp with its sources as they are
+/// now, and publish the verdict as `QUARTO_EDITOR_EMBED_STATUS` for
+/// `quarto_preview::editor_embed_status`. The sources are watched so a
+/// source edit reruns this script (and the verdict updates) on the next
+/// `cargo build` instead of the bundle silently going stale.
+fn emit_editor_embed_status(workspace_root: &Path, editor_dist: &Path) {
+    use quarto_build_support::embed_stamp::{
+        Freshness, STAMP_FILENAME, check, editor_bundle_inputs, fingerprint,
+    };
+
+    // Watch the tracked source trees (not `ts-packages/` wholesale: its
+    // per-package `dist/` and `node_modules/` churn would rerun this
+    // script, and recompress the editor archive, for no reason).
+    quarto_build_support::watch_dir(&workspace_root.join("hub-client").join("src"));
+    quarto_build_support::watch_file(&workspace_root.join("package-lock.json"));
+    if let Ok(entries) = std::fs::read_dir(workspace_root.join("ts-packages")) {
+        for entry in entries.flatten() {
+            let src = entry.path().join("src");
+            if src.is_dir() {
+                quarto_build_support::watch_dir(&src);
+            }
+        }
+    }
+
+    let status = if !editor_dist.join("index.html").is_file() {
+        "placeholder"
+    } else {
+        let stamp = std::fs::read_to_string(editor_dist.join(STAMP_FILENAME)).ok();
+        match fingerprint(workspace_root, &editor_bundle_inputs(workspace_root)) {
+            Ok(now) => match check(stamp.as_deref(), &now) {
+                Freshness::Fresh => "fresh",
+                Freshness::Stale => "stale",
+                Freshness::NoStamp => "unstamped",
+                Freshness::Unreadable => "unreadable",
+            },
+            // Cannot fingerprint (e.g. a crate built outside the
+            // workspace): say nothing rather than guess.
+            Err(_) => "placeholder",
+        }
+    };
+    println!("cargo:rustc-env=QUARTO_EDITOR_EMBED_STATUS={status}");
 }

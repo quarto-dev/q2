@@ -24,6 +24,8 @@
 //! Build scripts that compress an embedded archive should use
 //! [`embed_zstd_level`].
 
+pub mod embed_stamp;
+
 use std::path::{Component, Path, PathBuf};
 
 /// Watched in place of a path that cannot be watched: the calling
