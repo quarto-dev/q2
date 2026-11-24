@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-11-24
+
+- [`d1176312a`](https://github.com/quarto-dev/q2/commits/d1176312a): A preview link can name the person with `?as=Name` (and `?color=`), so cursors show that name instead of a random one
+
 ### 2026-11-19
 
 - [`1d0b1e1a5`](https://github.com/quarto-dev/q2/commits/1d0b1e1a5): A file the project owner replaces shows a notice and freezes while it swaps, and a banner appears while the owner is mid-operation
