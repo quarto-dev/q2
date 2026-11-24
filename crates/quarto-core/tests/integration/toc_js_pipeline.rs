@@ -234,7 +234,8 @@ fn toc_component_binds_the_nav_and_omits_the_script() {
     );
     assert!(
         index.contains(
-            "<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\" data-quarto-component=\"quarto-toc\">"
+            "<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\" data-quarto-component=\"quarto-toc\" \
+             aria-labelledby=\"toc-title\">"
         ),
         "nav must carry the host attribute; got:\n{index}"
     );

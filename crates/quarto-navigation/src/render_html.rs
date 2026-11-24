@@ -80,6 +80,16 @@ pub fn navbar_to_html(
     if let Some(t) = theme_attr {
         html.push_str(&format!(" data-bs-theme=\"{}\"", t));
     }
+    // Landmark name (Q1 `nav-before-body.ejs:22`; bd-erecx4j8).
+    html.push_str(&format!(
+        " aria-label=\"{}\"",
+        escape_attr(
+            navbar
+                .landmark_label
+                .as_deref()
+                .unwrap_or(DEFAULT_NAVIGATION_SITE_LABEL)
+        )
+    ));
     if !inline_style.is_empty() {
         html.push_str(&format!(" style=\"{}\"", escape_attr(inline_style.trim())));
     }
@@ -344,7 +354,7 @@ fn render_announcement_content(cv: &ConfigValue) -> String {
 /// (bd-breadcrumbs-missing-1vpuqh34):
 ///
 /// ```html
-/// <nav class="quarto-page-breadcrumbs …" aria-label="breadcrumb">
+/// <nav class="quarto-page-breadcrumbs …" aria-label="Breadcrumbs">
 ///   <ol class="breadcrumb">
 ///     <li class="breadcrumb-item"><a href="…">Text</a></li>
 ///     …
@@ -359,15 +369,16 @@ fn render_announcement_content(cv: &ConfigValue) -> String {
 /// q2 crumbs have no icon field yet); crumbs without an href render
 /// as unlinked text. Pure and resolver-free like its siblings —
 /// callers resolve crumb hrefs before rendering.
-pub fn breadcrumbs_to_html(crumbs: &[Crumb], extra_classes: &[&str]) -> String {
+pub fn breadcrumbs_to_html(crumbs: &[Crumb], extra_classes: &[&str], label: &str) -> String {
     let mut classes = String::from("quarto-page-breadcrumbs");
     for cls in extra_classes {
         classes.push(' ');
         classes.push_str(cls);
     }
     let mut html = format!(
-        "<nav class=\"{}\" aria-label=\"breadcrumb\"><ol class=\"breadcrumb\">",
-        classes
+        "<nav class=\"{}\" aria-label=\"{}\"><ol class=\"breadcrumb\">",
+        classes,
+        escape_attr(label)
     );
     for crumb in crumbs {
         let Some(text_cv) = &crumb.text else {
@@ -431,6 +442,7 @@ pub fn secondary_nav_to_html(
     content: SecondaryNavContent<'_>,
     toggle_label: &str,
     search_label: Option<&str>,
+    landmark_label: &str,
 ) -> String {
     let label = escape_attr(toggle_label);
     // Shared by the button and the click-anywhere link: both open the
@@ -446,7 +458,11 @@ pub fn secondary_nav_to_html(
     let button_aria =
         format!("aria-controls=\"quarto-sidebar\" aria-expanded=\"false\" aria-label=\"{label}\"");
 
-    let mut html = String::from("<nav class=\"quarto-secondary-nav\">\n");
+    // Landmark name (Q1 `nav-before-body.ejs:64`; bd-erecx4j8).
+    let mut html = format!(
+        "<nav class=\"quarto-secondary-nav\" aria-label=\"{}\">\n",
+        escape_attr(landmark_label)
+    );
     html.push_str("  <div class=\"container-fluid d-flex\">\n");
     html.push_str(&format!(
         "    <button type=\"button\" class=\"quarto-btn-toggle btn\" role=\"button\" \
@@ -521,6 +537,7 @@ pub fn sidebar_to_html(sidebar: &Sidebar, home_url: &str) -> String {
             has_navbar: false,
             search: None,
             toggle_section_label: DEFAULT_TOGGLE_SECTION_LABEL,
+            landmark_labels: &LandmarkLabels::default(),
         },
     )
 }
@@ -558,7 +575,14 @@ pub struct SidebarRenderOptions<'a> {
     /// (Q1 `sidebaritem.ejs`, bd-3bg8h1rx). Callers without a language
     /// table pass [`DEFAULT_TOGGLE_SECTION_LABEL`].
     pub toggle_section_label: &'a str,
+    /// Localized landmark names. The sidebar is named
+    /// [`LandmarkLabels::sidebar`] of `has_navbar` (bd-erecx4j8).
+    pub landmark_labels: &'a LandmarkLabels,
 }
+
+/// English `navigation-site-label` term, the fallback for
+/// [`Navbar::landmark_label`].
+pub const DEFAULT_NAVIGATION_SITE_LABEL: &str = "Site";
 
 /// English `toggle-dark-mode` term (`resources/language/_language.yml`),
 /// the fallback for [`Navbar::dark_toggle_label`].
@@ -567,6 +591,59 @@ pub const DEFAULT_TOGGLE_DARK_MODE_LABEL: &str = "Toggle dark mode";
 /// English `toggle-section` term (`resources/language/_language.yml`),
 /// the fallback for [`SidebarRenderOptions::toggle_section_label`].
 pub const DEFAULT_TOGGLE_SECTION_LABEL: &str = "Toggle section";
+
+/// Accessible names for a page's `<nav>` landmarks: Quarto 1's
+/// `navigation-*-label` language terms (quarto-cli #14813,
+/// bd-erecx4j8, GH #1297).
+///
+/// A page carries several navigation landmarks: the navbar, the
+/// narrow-viewport toolbar, the breadcrumbs, the sidebar and the
+/// prev/next strip. Without names, a screen reader announces each one
+/// as just "navigation", and axe's `landmark-unique` rule fails. Each
+/// emitter takes its own label; quarto-core resolves the whole set
+/// from the document's language table (`language::landmark_labels`).
+/// [`Default`] is the English catalog (`resources/language/_language.yml`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LandmarkLabels {
+    /// `navigation-site-label`: the navbar, or the sidebar of a page
+    /// without a navbar.
+    pub site: String,
+    /// `navigation-section-label`: the sidebar of a page that also
+    /// has a navbar.
+    pub section: String,
+    /// `navigation-toolbar-label`: `nav.quarto-secondary-nav`.
+    pub toolbar: String,
+    /// `navigation-page-label`: `nav.page-navigation`.
+    pub page: String,
+    /// `navigation-breadcrumbs-label`: `nav.quarto-page-breadcrumbs`.
+    pub breadcrumbs: String,
+}
+
+impl LandmarkLabels {
+    /// The sidebar's label. With a navbar, the navbar is the site's
+    /// navigation and the sidebar navigates one section of it; without
+    /// one, the sidebar is the site navigation. Quarto 1 `sidebar.ejs:1`:
+    /// `navbar ? navigation-section-label : navigation-site-label`.
+    pub fn sidebar(&self, has_navbar: bool) -> &str {
+        if has_navbar {
+            &self.section
+        } else {
+            &self.site
+        }
+    }
+}
+
+impl Default for LandmarkLabels {
+    fn default() -> Self {
+        Self {
+            site: DEFAULT_NAVIGATION_SITE_LABEL.to_string(),
+            section: "Section".to_string(),
+            toolbar: "Toolbar".to_string(),
+            page: "Page".to_string(),
+            breadcrumbs: "Breadcrumbs".to_string(),
+        }
+    }
+}
 
 /// How the sidebar's search box renders (Quarto 1 `sidebar.ejs:68-75`
 /// and `navtools.ejs:54-56`).
@@ -603,11 +680,17 @@ pub fn sidebar_to_html_with_options(sidebar: &Sidebar, opts: &SidebarRenderOptio
     // The two must stay together; `test_sidebar_stays_visible_at_lg_
     // despite_collapse_class` in quarto-sass guards the pairing,
     // because no markup assertion can see it.
+    //
+    // Named, not roled: the sidebar is site navigation, not a table of
+    // contents, so it carries no `doc-toc` role (that belongs to
+    // `nav#TOC` alone, bd-eczdzfqo). Its name depends on the navbar,
+    // as in Q1 `sidebar.ejs:1` (bd-erecx4j8).
     html.push_str(&format!(
         "<nav id=\"quarto-sidebar\" class=\"sidebar collapse collapse-horizontal \
          quarto-sidebar-collapse-item sidebar-navigation {} overflow-auto\" \
-         role=\"doc-toc\">\n",
-        style_class
+         aria-label=\"{}\">\n",
+        style_class,
+        escape_attr(opts.landmark_labels.sidebar(opts.has_navbar))
     ));
 
     // Title header — emitted only when the title resolved to a concrete
@@ -727,9 +810,13 @@ pub fn sidebar_to_html_with_options(sidebar: &Sidebar, opts: &SidebarRenderOptio
 ///
 /// `aria-label` defaults to the item's plain-text `text`; falls back
 /// to the `href` if the text is missing or empty.
-pub fn page_navigation_to_html(page_nav: &PageNavigation) -> String {
+pub fn page_navigation_to_html(page_nav: &PageNavigation, label: &str) -> String {
     let mut html = String::new();
-    html.push_str("<nav class=\"page-navigation\">\n");
+    // Landmark name (Q1 `nav-after-body-postamble.ejs:4`; bd-erecx4j8).
+    html.push_str(&format!(
+        "<nav class=\"page-navigation\" aria-label=\"{}\">\n",
+        escape_attr(label)
+    ));
     render_page_nav_side(&mut html, "previous", page_nav.prev.as_ref());
     render_page_nav_side(&mut html, "next", page_nav.next.as_ref());
     html.push_str("</nav>\n");
@@ -3257,6 +3344,7 @@ mod tests {
                 has_navbar: false,
                 search: None,
                 toggle_section_label,
+                landmark_labels: &LandmarkLabels::default(),
             },
         )
     }
@@ -3523,6 +3611,7 @@ mod tests {
                 has_navbar: true,
                 search: None,
                 toggle_section_label: DEFAULT_TOGGLE_SECTION_LABEL,
+                landmark_labels: &LandmarkLabels::default(),
             },
         );
         assert!(
@@ -3561,6 +3650,7 @@ mod tests {
                 has_navbar: false,
                 search: None,
                 toggle_section_label: DEFAULT_TOGGLE_SECTION_LABEL,
+                landmark_labels: &LandmarkLabels::default(),
             },
         );
         assert!(
@@ -3701,8 +3791,8 @@ mod tests {
             prev: Some(item("a.html", "A")),
             next: Some(item("c.html", "C")),
         };
-        let html = page_navigation_to_html(&pn);
-        assert!(html.contains("<nav class=\"page-navigation\">"));
+        let html = page_navigation_to_html(&pn, "Page");
+        assert!(html.contains("<nav class=\"page-navigation\" aria-label=\"Page\">"));
         assert!(html.contains("<div class=\"nav-page nav-page-previous\">"));
         assert!(html.contains("<div class=\"nav-page nav-page-next\">"));
         let anchor_count = html.matches("class=\"pagination-link\"").count();
@@ -3723,7 +3813,7 @@ mod tests {
             prev: None,
             next: Some(item("c.html", "C")),
         };
-        let html = page_navigation_to_html(&pn);
+        let html = page_navigation_to_html(&pn, "Page");
         // The wrapper is present (CSS layout depends on the symmetry).
         assert!(html.contains("<div class=\"nav-page nav-page-previous\">"));
         // But there's no anchor inside it — only one `<a>` total.
@@ -3739,7 +3829,7 @@ mod tests {
             prev: None,
             next: Some(item("about.html", "About")),
         };
-        let html = page_navigation_to_html(&pn);
+        let html = page_navigation_to_html(&pn, "Page");
         assert!(
             html.contains("aria-label=\"About\""),
             "expected aria-label='About'; HTML:\n{}",
@@ -3755,7 +3845,7 @@ mod tests {
             prev: None,
             next: Some(item("foo&bar.html", "A & <B>")),
         };
-        let html = page_navigation_to_html(&pn);
+        let html = page_navigation_to_html(&pn, "Page");
         // Href is attribute-escaped.
         assert!(html.contains("href=\"foo&amp;bar.html\""));
         // aria-label likewise.
@@ -3778,7 +3868,7 @@ mod tests {
                 ..NavigationItem::default()
             }),
         };
-        let html = page_navigation_to_html(&pn);
+        let html = page_navigation_to_html(&pn, "Page");
         assert!(
             html.contains("<span class=\"nav-page-text\">a.qmd</span>"),
             "expected fallback to href; HTML:\n{}",
@@ -3793,7 +3883,7 @@ mod tests {
             prev: Some(item("a.html", "A")),
             next: Some(item("c.html", "C")),
         };
-        let html = page_navigation_to_html(&pn);
+        let html = page_navigation_to_html(&pn, "Page");
         assert!(html.contains("<i class=\"bi bi-arrow-left-short\"></i>"));
         assert!(html.contains("<i class=\"bi bi-arrow-right-short\"></i>"));
         // Order: left-arrow appears in the previous block, right-arrow in next.
@@ -3826,11 +3916,12 @@ mod tests {
         let html = breadcrumbs_to_html(
             &crumbs,
             &["quarto-title-breadcrumbs", "d-none", "d-lg-block"],
+            "Breadcrumbs",
         );
         assert_eq!(
             html,
             "<nav class=\"quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block\" \
-             aria-label=\"breadcrumb\"><ol class=\"breadcrumb\">\
+             aria-label=\"Breadcrumbs\"><ol class=\"breadcrumb\">\
              <li class=\"breadcrumb-item\"><a href=\"../intro.html\">Guide</a></li>\
              <li class=\"breadcrumb-item\"><a href=\"deep.html\">Deep</a></li>\
              </ol></nav>"
@@ -3851,7 +3942,7 @@ mod tests {
                 href: Some("skipped.html".to_string()),
             },
         ];
-        let html = breadcrumbs_to_html(&crumbs, &[]);
+        let html = breadcrumbs_to_html(&crumbs, &[], "Breadcrumbs");
         assert!(
             html.contains("<li class=\"breadcrumb-item\">No Link</li>"),
             "unlinked crumb renders as bare text; got: {}",
@@ -3868,7 +3959,7 @@ mod tests {
             text: Some(s("A & B")),
             href: Some("x.html?a=1&b=2".to_string()),
         }];
-        let html = breadcrumbs_to_html(&crumbs, &[]);
+        let html = breadcrumbs_to_html(&crumbs, &[], "Breadcrumbs");
         assert!(html.contains("A &amp; B"), "text escaped; got {}", html);
         assert!(
             html.contains("x.html?a=1&amp;b=2"),
@@ -3976,10 +4067,11 @@ mod secondary_nav_tests {
             SecondaryNavContent::Breadcrumbs("<nav class=\"quarto-page-breadcrumbs\"></nav>"),
             "Toggle sidebar navigation",
             None,
+            "Toolbar",
         );
 
         assert!(
-            html.starts_with("<nav class=\"quarto-secondary-nav\">"),
+            html.starts_with("<nav class=\"quarto-secondary-nav\" aria-label=\"Toolbar\">"),
             "container must be nav.quarto-secondary-nav; got: {html}"
         );
         assert!(
@@ -4011,6 +4103,7 @@ mod secondary_nav_tests {
             SecondaryNavContent::Breadcrumbs("<nav></nav>"),
             "Basculer \"la barre\"",
             None,
+            "Toolbar",
         );
         assert!(
             html.contains("aria-label=\"Basculer &quot;la barre&quot;\""),
@@ -4034,15 +4127,16 @@ mod secondary_nav_tests {
                 href: Some("guide/deep.html".to_string()),
             },
         ];
-        let breadcrumbs = breadcrumbs_to_html(&crumbs, &[]);
+        let breadcrumbs = breadcrumbs_to_html(&crumbs, &[], "Breadcrumbs");
         let html = secondary_nav_to_html(
             SecondaryNavContent::Breadcrumbs(&breadcrumbs),
             "Toggle sidebar navigation",
             None,
+            "Toolbar",
         );
 
         assert!(
-            html.contains("<nav class=\"quarto-page-breadcrumbs\" aria-label=\"breadcrumb\">"),
+            html.contains("<nav class=\"quarto-page-breadcrumbs\" aria-label=\"Breadcrumbs\">"),
             "mobile instance takes no extra classes; got: {html}"
         );
         assert!(
@@ -4069,7 +4163,7 @@ mod secondary_nav_tests {
             SecondaryNavContent::Breadcrumbs("<nav></nav>"),
             SecondaryNavContent::CollapsedTitle(&title),
         ] {
-            let html = secondary_nav_to_html(content, "Toggle sidebar navigation", None);
+            let html = secondary_nav_to_html(content, "Toggle sidebar navigation", None, "Toolbar");
             assert!(
                 !html.contains("role=\"navigation\""),
                 "flex-grow link must not be a navigation landmark; got: {html}"
@@ -4103,6 +4197,7 @@ mod secondary_nav_tests {
             SecondaryNavContent::CollapsedTitle(&title),
             "Toggle sidebar navigation",
             None,
+            "Toolbar",
         );
 
         assert!(
@@ -4134,6 +4229,7 @@ mod secondary_nav_tests {
             SecondaryNavContent::CollapsedTitle(&title),
             "Toggle sidebar navigation",
             None,
+            "Toolbar",
         );
         assert!(
             html.contains("<h1 class=\"quarto-secondary-nav-title\"><strong>Bold</strong></h1>"),
@@ -4148,6 +4244,7 @@ mod secondary_nav_tests {
             SecondaryNavContent::Breadcrumbs("<nav></nav>"),
             "Toggle sidebar navigation",
             None,
+            "Toolbar",
         );
         assert!(!html.contains("quarto-search-button"), "got: {html}");
         assert!(!html.contains("quartoOpenSearch"), "got: {html}");
@@ -4161,6 +4258,7 @@ mod secondary_nav_tests {
             SecondaryNavContent::Breadcrumbs("<nav></nav>"),
             "Toggle sidebar navigation",
             Some("Search"),
+            "Toolbar",
         );
         assert!(
             html.contains(
@@ -4187,6 +4285,7 @@ mod secondary_nav_tests {
             SecondaryNavContent::Breadcrumbs("<nav></nav>"),
             "Toggle sidebar navigation",
             None,
+            "Toolbar",
         );
         assert_eq!(
             breadcrumbs.matches(HEADROOM_ONCLICK).count(),
@@ -4199,6 +4298,7 @@ mod secondary_nav_tests {
             SecondaryNavContent::CollapsedTitle(&title),
             "Toggle sidebar navigation",
             None,
+            "Toolbar",
         );
         assert_eq!(
             collapsed.matches(HEADROOM_ONCLICK).count(),
@@ -4390,5 +4490,162 @@ mod announcement_tests {
         assert!(
             html.contains("<div class=\"quarto-announcement-content\"><p>One</p><p>Two</p></div>")
         );
+    }
+}
+
+/// Every `<nav>` landmark carries a distinct, localized accessible
+/// name, and only the in-page TOC is a `doc-toc` (bd-erecx4j8,
+/// bd-eczdzfqo, GH #1297). Expected markup is Quarto 1's
+/// (`nav-before-body.ejs`, `sidebar.ejs`, `nav-after-body-postamble.ejs`,
+/// `website-navigation.ts` `makeBreadCrumbs`).
+#[cfg(test)]
+mod landmark_tests {
+    use super::*;
+    use crate::page_nav::PageNavigation;
+
+    fn s(x: &str) -> ConfigValue {
+        ConfigValue::new_string(x, SourceInfo::for_test())
+    }
+
+    /// The opening `<nav …>` tag of `html`.
+    fn nav_open_tag(html: &str) -> &str {
+        let start = html.find("<nav").expect("a <nav> element");
+        let end = start + html[start..].find('>').expect("tag end");
+        &html[start..=end]
+    }
+
+    fn french() -> LandmarkLabels {
+        LandmarkLabels {
+            site: "Site web".to_string(),
+            section: "Section".to_string(),
+            toolbar: "Barre d'outils".to_string(),
+            page: "Page".to_string(),
+            breadcrumbs: "Fil d'Ariane".to_string(),
+        }
+    }
+
+    #[test]
+    fn default_labels_are_the_english_catalog() {
+        let l = LandmarkLabels::default();
+        assert_eq!(
+            (
+                l.site.as_str(),
+                l.section.as_str(),
+                l.toolbar.as_str(),
+                l.page.as_str(),
+                l.breadcrumbs.as_str()
+            ),
+            ("Site", "Section", "Toolbar", "Page", "Breadcrumbs")
+        );
+    }
+
+    #[test]
+    fn navbar_is_named_site_by_default() {
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("My Site")),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "./");
+        assert!(
+            nav_open_tag(&html).contains(" aria-label=\"Site\""),
+            "got: {}",
+            nav_open_tag(&html)
+        );
+    }
+
+    #[test]
+    fn navbar_landmark_label_is_localized_and_escaped() {
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("My Site")),
+            landmark_label: Some("Site \"web\"".to_string()),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "./");
+        assert!(
+            nav_open_tag(&html).contains(" aria-label=\"Site &quot;web&quot;\""),
+            "got: {}",
+            nav_open_tag(&html)
+        );
+    }
+
+    #[test]
+    fn secondary_nav_is_named_toolbar() {
+        let html = secondary_nav_to_html(
+            SecondaryNavContent::Breadcrumbs("<nav></nav>"),
+            "Toggle sidebar navigation",
+            None,
+            "Barre d'outils",
+        );
+        assert_eq!(
+            nav_open_tag(&html),
+            "<nav class=\"quarto-secondary-nav\" aria-label=\"Barre d&#x27;outils\">"
+        );
+    }
+
+    #[test]
+    fn breadcrumbs_are_named_breadcrumbs() {
+        let html = breadcrumbs_to_html(&[], &[], &french().breadcrumbs);
+        assert_eq!(
+            nav_open_tag(&html),
+            "<nav class=\"quarto-page-breadcrumbs\" aria-label=\"Fil d&#x27;Ariane\">"
+        );
+    }
+
+    #[test]
+    fn page_navigation_is_named_page() {
+        let html = page_navigation_to_html(&PageNavigation::default(), "Seite \"x\"");
+        assert_eq!(
+            nav_open_tag(&html),
+            "<nav class=\"page-navigation\" aria-label=\"Seite &quot;x&quot;\">"
+        );
+    }
+
+    fn sidebar_html(has_navbar: bool, labels: &LandmarkLabels) -> String {
+        sidebar_to_html_with_options(
+            &Sidebar::with_defaults(),
+            &SidebarRenderOptions {
+                home_url: "./",
+                appended_html: None,
+                has_navbar,
+                search: None,
+                toggle_section_label: DEFAULT_TOGGLE_SECTION_LABEL,
+                landmark_labels: labels,
+            },
+        )
+    }
+
+    /// The sidebar is the site navigation when there is no navbar, and
+    /// one section of the site when there is (Q1 `sidebar.ejs:1`).
+    #[test]
+    fn sidebar_label_follows_navbar_presence() {
+        let labels = LandmarkLabels::default();
+        let with = sidebar_html(true, &labels);
+        let without = sidebar_html(false, &labels);
+        assert!(
+            nav_open_tag(&with).contains(" aria-label=\"Section\""),
+            "with navbar: {}",
+            nav_open_tag(&with)
+        );
+        assert!(
+            nav_open_tag(&without).contains(" aria-label=\"Site\""),
+            "without navbar: {}",
+            nav_open_tag(&without)
+        );
+        let fr = french();
+        assert!(nav_open_tag(&sidebar_html(false, &fr)).contains(" aria-label=\"Site web\""));
+    }
+
+    /// The sidebar is site navigation, not a table of contents. Only
+    /// `nav#TOC` may carry `role="doc-toc"` (bd-eczdzfqo).
+    #[test]
+    fn sidebar_is_not_a_doc_toc() {
+        for has_navbar in [true, false] {
+            let html = sidebar_html(has_navbar, &LandmarkLabels::default());
+            assert!(
+                !nav_open_tag(&html).contains("role="),
+                "sidebar must carry no ARIA role; got: {}",
+                nav_open_tag(&html)
+            );
+        }
     }
 }

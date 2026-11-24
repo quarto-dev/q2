@@ -324,12 +324,10 @@ function injectPreviewStyles(doc: Document): void {
   style.textContent = `
     /* Hub-client preview overrides */
     /* Hide the page-level TOC — it doesn't work well in narrow
-       iframe containers. Quarto's website sidebar shares the
-       \`role="doc-toc"\` ARIA role (it's the document's
-       table-of-contents navigation), so we exclude
-       \`.sidebar-navigation\` to avoid collateral-killing the
-       sidebar (bd-f5yi). */
-    nav[role="doc-toc"]:not(.sidebar-navigation) {
+       iframe containers. Only nav#TOC carries \`role="doc-toc"\`;
+       the website sidebar used to share it (bd-f5yi), which is why
+       this selector is scoped to the id (bd-eczdzfqo). */
+    nav#TOC[role="doc-toc"] {
       display: none !important;
     }
 

@@ -1,0 +1,19 @@
+== repro-site/_site/guide/one.html
+tag  id              class                                     role     aria-label   aria-labelledby
+nav  -               navbar navbar-expand-lg                   -        -            -
+nav  -               quarto-secondary-nav                      -        -            -
+nav  -               quarto-page-breadcrumbs                   -        breadcrumb   -
+nav  quarto-sidebar  sidebar collapse collapse-horizontal qua  doc-toc  -            -
+nav  TOC             toc-active                                doc-toc  -            -
+nav  -               quarto-page-breadcrumbs quarto-title-bre  -        breadcrumb   -
+nav  -               page-navigation                           -        -            -
+   role=doc-toc elements: 2
+== exp-sidebar-only/_site/guide/one.html
+tag  id              class                                     role     aria-label   aria-labelledby
+nav  -               quarto-secondary-nav                      -        -            -
+nav  -               quarto-page-breadcrumbs                   -        breadcrumb   -
+nav  quarto-sidebar  sidebar collapse collapse-horizontal qua  doc-toc  -            -
+nav  TOC             toc-active                                doc-toc  -            -
+nav  -               quarto-page-breadcrumbs quarto-title-bre  -        breadcrumb   -
+nav  -               page-navigation                           -        -            -
+   role=doc-toc elements: 2

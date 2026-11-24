@@ -478,6 +478,8 @@ describe('PreviewDocument chrome injection (Phase F.2)', () => {
         const h2 = tocNav!.querySelector('h2#toc-title');
         expect(h2).not.toBeNull();
         expect(h2!.textContent).toBe('Contents');
+        // Named by its heading, like q2 render's toc-block (GH #1297).
+        expect(tocNav!.getAttribute('aria-labelledby')).toBe('toc-title');
         // The injected <ul> is in the dangerouslySetInnerHTML wrapper div.
         expect(tocNav!.querySelector('li[data-test="toc-li"]')).not.toBeNull();
     });
@@ -491,6 +493,8 @@ describe('PreviewDocument chrome injection (Phase F.2)', () => {
         const tocNav = container.querySelector('#quarto-margin-sidebar nav#TOC');
         expect(tocNav).not.toBeNull();
         expect(tocNav!.querySelector('h2#toc-title')).toBeNull();
+        // No heading, so no dangling aria-labelledby reference.
+        expect(tocNav!.hasAttribute('aria-labelledby')).toBe(false);
     });
 
     it('TOC: toc-title markup renders as HTML, not escaped text', () => {

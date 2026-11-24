@@ -825,7 +825,11 @@ pub const TITLE_META_AUTHOR_PARTIAL: &str = r##"$if(it.url)$<a href="$it.url$">$
 /// `data-quarto-component` on the nav, so the bound-components runtime
 /// mounts the author's TOC component over it; the preview's `TocSlot`
 /// emits the same attribute.
-pub const TOC_BLOCK_PARTIAL: &str = r#"<nav id="TOC" role="doc-toc" class="toc-active"$if(rendered.navigation.toc-component)$ data-quarto-component="$rendered.navigation.toc-component$"$endif$>
+///
+/// When the title heading is emitted, the nav is named by it
+/// (`aria-labelledby="toc-title"`, as in Q1's `toc.html`; GH #1297), so
+/// screen readers announce the TOC landmark as e.g. "On this page".
+pub const TOC_BLOCK_PARTIAL: &str = r#"<nav id="TOC" role="doc-toc" class="toc-active"$if(rendered.navigation.toc-component)$ data-quarto-component="$rendered.navigation.toc-component$"$endif$$if(rendered.navigation.toc-title)$ aria-labelledby="toc-title"$endif$>
 $if(rendered.navigation.toc-title)$
 <h2 id="toc-title">$rendered.navigation.toc-title$</h2>
 $endif$
@@ -4306,6 +4310,31 @@ mod tests {
         assert!(
             nav_open < actions && actions < nav_close,
             "the actions block must sit inside nav#TOC"
+        );
+    }
+
+    /// `nav#TOC` is named by its heading when the heading is emitted
+    /// (Q1 `toc.html`; GH #1297), and carries no dangling reference
+    /// when it is not.
+    #[test]
+    fn toc_block_is_labelled_by_its_title() {
+        let mut meta = meta_with_navigation(Some("<ul><li>x</li></ul>"), None);
+        let untitled = render_full("<p>body</p>", &meta);
+        assert!(
+            untitled.contains("<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\">"),
+            "no title, no aria-labelledby; got: {untitled}"
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "toc-title"],
+            ConfigValue::new_string("On this page", dummy_source_info()),
+        );
+        let titled = render_full("<p>body</p>", &meta);
+        assert!(
+            titled.contains(
+                "<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\" \
+                 aria-labelledby=\"toc-title\">\n<h2 id=\"toc-title\">On this page</h2>"
+            ),
+            "got: {titled}"
         );
     }
 

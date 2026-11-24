@@ -1,0 +1,20 @@
+project:
+  type: website
+
+lang: fr
+
+website:
+  title: "Landmarks"
+  sidebar:
+    contents:
+      - index.qmd
+      - section: "Guide"
+        contents:
+          - guide/one.qmd
+          - guide/two.qmd
+  page-navigation: true
+
+format:
+  html:
+    toc: true
+quarto-required: "^2"

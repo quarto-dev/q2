@@ -283,17 +283,15 @@ main.page-columns > header > h1.title {
 
   // Hide the table of contents on narrow screens.
   //
-  // Scoped to `#TOC` deliberately. `role="doc-toc"` alone is NOT a
-  // safe hook: q2 also puts that role on `nav#quarto-sidebar` (a
-  // divergence from Q1, tracked in bd-eczdzfqo). While the sidebar was
-  // simply hidden below `lg` that overlap was invisible; once
-  // bd-26bf3j1y made it a collapse drawer it became a real bug — the
-  // toggle latched `.show` and the glass pane dimmed, but the drawer
-  // stayed `display: none`, because `.show` only defeats Bootstrap's
-  // own `.collapse:not(.show)` rule, not an unrelated one.
+  // Scoped to `#TOC` deliberately. q2 used to put `role="doc-toc"` on
+  // `nav#quarto-sidebar` too (a divergence from Q1, removed by
+  // bd-eczdzfqo). While that overlap existed, an unscoped rule hid the
+  // sidebar's collapse drawer below `lg`: the toggle latched `.show`
+  // and the glass pane dimmed, but the drawer stayed `display: none`,
+  // because `.show` only defeats Bootstrap's own
+  // `.collapse:not(.show)` rule, not an unrelated one (bd-26bf3j1y).
   // `test_narrow_viewport_hiding_does_not_catch_the_sidebar` guards
-  // this. If bd-eczdzfqo removes the role from the sidebar, the
-  // `#TOC` qualifier can stay — it is correct either way.
+  // this. Keep the `#TOC` qualifier anyway: it says what is hidden.
   nav#TOC[role="doc-toc"] {
     display: none;
   }
