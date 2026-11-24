@@ -32,6 +32,14 @@ export const EDITS = {
   copyLine: 'remains poorly characterized',
   copyLead: 'Growth at the hyphal tip',
   copyNeedle: 'Growth at the hyphal tip remains poorly characterized',
+  /** Maurice's reply to the copy edit in the vscode-share story, typed in the browser. */
+  tipReply:
+    'Turgor lagging the humidity schedule predicts a phase offset between the humidity series and the extension rate, which a cross-correlation would estimate directly.',
+  tipReplyNeedle: 'a cross-correlation would estimate directly',
+  /** Myra's answer, typed in her VS Code window: the two have converged when each reaches the other. */
+  tipAnswer:
+    'Cross-correlation over the first cycle alone would have too few points, so we shall estimate the lag from the full series and report its confidence interval.',
+  tipAnswerNeedle: 'report its confidence interval',
 } as const;
 
 export const GITIGNORE = '.venv/\n__pycache__/\n.quarto/\n*_files/\n_site/\n';

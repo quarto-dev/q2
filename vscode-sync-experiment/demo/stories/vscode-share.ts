@@ -164,6 +164,29 @@ export function vscodeShareStory(d: Demo): Step[] {
         await until('the commit exists', () => d.git('log', '-1', '--format=%s').trim() === 'Copy edit: vary the openings');
       },
     },
+    {
+      id: 'maurice-replies',
+      caption: 'Back on main, Maurice answers her copy edit in the browser, and it appears in her editor.',
+      action: async () => {
+        await d.typeUnder('guest', 'Introduction', EDITS.tipReply);
+      },
+      check: async () => {
+        await shows(d, 'guest', EDITS.tipReplyNeedle);
+        await shows(d, 'host', EDITS.tipReplyNeedle);
+      },
+    },
+    {
+      id: 'myra-replies',
+      caption: 'Myra answers in VS Code, and it reaches Maurice. Each has now seen the other type after the branch round trip: they have converged.',
+      action: async () => {
+        await d.typeUnder('host', 'Introduction', EDITS.tipAnswer);
+      },
+      check: async () => {
+        await shows(d, 'host', EDITS.tipAnswerNeedle);
+        await shows(d, 'guest', EDITS.tipAnswerNeedle);
+        // Both directions in the one file: Maurice's reply is still there beside it.
+        await shows(d, 'guest', EDITS.tipReplyNeedle);
+      },
+    },
   ];
 }
-
