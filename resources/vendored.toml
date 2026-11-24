@@ -576,6 +576,21 @@ last_reviewed = "2026-10-21"
 notes = "Byte-identical to Quarto 1's copy."
 
 [[asset]]
+id = "tabby"
+title = "Tabby (Quarto 1's patched copy)"
+paths = ["resources/js/tabby/tabby.js"]
+policy = "track"
+group = "quarto-cli"
+version = "1ad9b3dbcf609351f58c9c7e672232d91a087f2e"
+version_sources = [{ kind = "file-contains", file = "resources/js/README.md" }]
+upstream = { kind = "git", repo = "https://github.com/quarto-dev/quarto-cli", track = "tags", tag_prefix = "v", paths = ["src/resources/formats/html/tabby/js/tabby.js"] }
+guards = ["quarto-core test(tabset) + test(tabby)"]
+procedure = "resources/js/README.md"
+license = "MIT"
+last_reviewed = "2026-11-24"
+notes = "Tabs for `.panel-tabset` in reveal.js decks. Follows quarto-cli, not the upstream cferdinandi/tabby: Quarto 1 patches its copy (reveal.js focus order and key handling), and the deck relies on those patches."
+
+[[asset]]
 id = "anchorjs"
 title = "AnchorJS"
 paths = ["resources/js/anchor"]
@@ -1133,6 +1148,7 @@ title = "Repo-owned JS (Quarto 1 ports that have diverged)"
 paths = [
   "resources/js/README.md",
   "resources/js/clipboard/code-copy-init.js",
+  "resources/js/tabby/tabby-init.js",
   "resources/js/quarto-components",
   "resources/js/quarto-nav",
   "resources/js/quarto-toc",

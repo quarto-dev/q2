@@ -2,7 +2,8 @@
  * panel_tabset_resolve.rs
  * Copyright (c) 2026 Posit, PBC
  *
- * Transform that resolves Tabset CustomNodes to Bootstrap tab markup.
+ * Transform that resolves Tabset CustomNodes to tab markup: Bootstrap's
+ * for HTML pages, Tabby's for reveal.js decks.
  */
 
 //! Panel-tabset resolution transform.
@@ -43,6 +44,34 @@
 //!
 //! The tabset counter is document-scoped and starts at 1, matching Q1's
 //! `tabsetidx` — re-renders of the same document produce identical ids.
+//!
+//! ## reveal.js decks
+//!
+//! A deck has no Bootstrap, so Q1 renders its tabsets for the Tabby
+//! library (`tabbyTabs()` in `panel-tabset.lua`), and so does this
+//! transform (bd-y5j0m776):
+//!
+//! ```text
+//! Div (original attr: .panel-tabset)
+//!   Plain
+//!     RawInline(html, "<ul id=\"tabset-N\" class=\"panel-tabset-tabby\">")
+//!     per tab:
+//!       RawInline(html, "<li>")
+//!       RawInline(html, "<a [data-tabby-default ]href=\"#tabset-N-M\">")
+//!       [title inlines…]
+//!       RawInline(html, "</a></li>")
+//!     RawInline(html, "</ul>")
+//!   Div ("", ["tab-content"], {})
+//!     per tab:
+//!       Div ("tabset-N-M", [], {})
+//!         [content blocks…]
+//! ```
+//!
+//! Tabby adds the roles, `aria-selected` and the `hidden` attribute of the
+//! unselected panes when it starts, so until then (or with no JavaScript)
+//! every pane shows. The deck gets `tabby.js` and `tabby-init.js` only when
+//! it has a tabset; the rules that style the tabs are in
+//! `resources/scss/revealjs/quarto-revealjs.scss`.
 
 use quarto_pandoc_types::attr::{Attr, AttrSourceInfo};
 use quarto_pandoc_types::block::{Block, Div, Plain};
@@ -52,10 +81,33 @@ use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
+use crate::artifact::{Artifact, ArtifactScope};
+use crate::format::{PipelineProfile, is_revealjs_target};
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 
-/// Transform that resolves Tabset CustomNodes to Bootstrap tab markup.
+/// The vendored Tabby and Quarto's init script for it. Provenance:
+/// `resources/js/README.md` § `tabby/`.
+const TABBY_JS: &[u8] = include_bytes!("../../../../resources/js/tabby/tabby.js");
+const TABBY_INIT_JS: &[u8] = include_bytes!("../../../../resources/js/tabby/tabby-init.js");
+
+/// Artifact keys. The `js:revealjs:` prefix is what the deck scaffold
+/// collects (`ApplyTemplateStage`, reveal branch). Scripts load in sorted-key
+/// order, which puts both after `js:revealjs:reveal` and the library before
+/// its init.
+const TABBY_JS_KEY: &str = "js:revealjs:tabby";
+const TABBY_INIT_JS_KEY: &str = "js:revealjs:tabby-init";
+
+/// Which tab markup a format gets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TabsetStyle {
+    /// Bootstrap `nav-tabs`, switched by `bootstrap.bundle.min.js`.
+    Bootstrap,
+    /// Tabby markup for reveal.js decks, switched by `tabby.js`.
+    Tabby,
+}
+
+/// Transform that resolves Tabset CustomNodes to tab markup.
 pub struct PanelTabsetResolveTransform;
 
 impl PanelTabsetResolveTransform {
@@ -81,20 +133,45 @@ impl AstTransform for PanelTabsetResolveTransform {
         TransformPhase::Normalization
     }
 
-    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
         // Document-scoped tabset counter, 1-based like Q1's `tabsetidx`.
         // No format gate needed: Tabset CustomNodes only exist when the
         // (gated) parse half ran.
+        let style = if is_revealjs_target(&ctx.format.target_format) {
+            TabsetStyle::Tabby
+        } else {
+            TabsetStyle::Bootstrap
+        };
         let mut counter = 1u32;
-        resolve_blocks(&mut ast.blocks, &mut counter);
+        resolve_blocks(&mut ast.blocks, &mut counter, style);
+
+        // Tabby travels with the tabsets: a deck without one loads nothing.
+        // Render only, like the other deck scripts; the preview has no
+        // `ApplyTemplateStage` to turn artifacts into tags.
+        if style == TabsetStyle::Tabby
+            && counter > 1
+            && ctx.pipeline_profile == PipelineProfile::RevealjsRender
+        {
+            for (key, bytes, leaf) in [
+                (TABBY_JS_KEY, TABBY_JS, "tabby.js"),
+                (TABBY_INIT_JS_KEY, TABBY_INIT_JS, "tabby-init.js"),
+            ] {
+                ctx.artifacts.store(
+                    key,
+                    Artifact::from_bytes(bytes.to_vec(), "text/javascript")
+                        .with_path(format!("revealjs/{leaf}"))
+                        .with_scope(ArtifactScope::Project),
+                );
+            }
+        }
         Ok(())
     }
 }
 
 /// Resolve Tabset CustomNodes in a vector of blocks.
-fn resolve_blocks(blocks: &mut Vec<Block>, counter: &mut u32) {
+fn resolve_blocks(blocks: &mut Vec<Block>, counter: &mut u32, style: TabsetStyle) {
     for block in blocks.iter_mut() {
-        resolve_block(block, counter);
+        resolve_block(block, counter, style);
     }
 }
 
@@ -103,65 +180,65 @@ fn resolve_blocks(blocks: &mut Vec<Block>, counter: &mut u32) {
 /// The walk is **pre-order for the replacement**: a tabset's own id is
 /// assigned before its nested tabsets', so document order matches Q1's
 /// numbering.
-fn resolve_block(block: &mut Block, counter: &mut u32) {
+fn resolve_block(block: &mut Block, counter: &mut u32, style: TabsetStyle) {
     match block {
         Block::BlockQuote(bq) => {
-            resolve_blocks(&mut bq.content, counter);
+            resolve_blocks(&mut bq.content, counter, style);
         }
         Block::OrderedList(ol) => {
             for item in &mut ol.content {
-                resolve_blocks(item, counter);
+                resolve_blocks(item, counter, style);
             }
         }
         Block::BulletList(bl) => {
             for item in &mut bl.content {
-                resolve_blocks(item, counter);
+                resolve_blocks(item, counter, style);
             }
         }
         Block::DefinitionList(dl) => {
             for (_term, defs) in &mut dl.content {
                 for def in defs {
-                    resolve_blocks(def, counter);
+                    resolve_blocks(def, counter, style);
                 }
             }
         }
         Block::Figure(fig) => {
-            resolve_blocks(&mut fig.content, counter);
+            resolve_blocks(&mut fig.content, counter, style);
         }
         Block::Div(div) => {
-            resolve_blocks(&mut div.content, counter);
+            resolve_blocks(&mut div.content, counter, style);
         }
         Block::Table(table) => {
             for body in &mut table.bodies {
                 for row in &mut body.body {
                     for cell in &mut row.cells {
-                        resolve_blocks(&mut cell.content, counter);
+                        resolve_blocks(&mut cell.content, counter, style);
                     }
                 }
             }
             for row in &mut table.head.rows {
                 for cell in &mut row.cells {
-                    resolve_blocks(&mut cell.content, counter);
+                    resolve_blocks(&mut cell.content, counter, style);
                 }
             }
             for row in &mut table.foot.rows {
                 for cell in &mut row.cells {
-                    resolve_blocks(&mut cell.content, counter);
+                    resolve_blocks(&mut cell.content, counter, style);
                 }
             }
         }
         Block::Custom(custom) => {
             if custom.type_name == "Tabset" {
-                let mut resolved_div = resolve_tabset(custom, counter);
+                let mut resolved_div = resolve_tabset(custom, counter, style);
                 // Nested tabsets inside the panes resolve after the
                 // parent claimed its id (document-order numbering).
-                resolve_blocks(&mut resolved_div.content, counter);
+                resolve_blocks(&mut resolved_div.content, counter, style);
                 *block = Block::Div(Box::new(resolved_div));
             } else {
                 for (_name, slot) in &mut custom.slots {
                     match slot {
-                        Slot::Block(b) => resolve_block(b, counter),
-                        Slot::Blocks(bs) => resolve_blocks(bs, counter),
+                        Slot::Block(b) => resolve_block(b, counter, style),
+                        Slot::Blocks(bs) => resolve_blocks(bs, counter, style),
                         _ => {}
                     }
                 }
@@ -185,9 +262,9 @@ fn raw_html(text: String) -> Inline {
     }))
 }
 
-/// Resolve one Tabset CustomNode to the Bootstrap Div structure,
+/// Resolve one Tabset CustomNode to the Div structure of `style`,
 /// consuming one value from the document tabset `counter`.
-fn resolve_tabset(custom: &mut CustomNode, counter: &mut u32) -> Div {
+fn resolve_tabset(custom: &mut CustomNode, counter: &mut u32, style: TabsetStyle) -> Div {
     let tabset_index = *counter;
     *counter += 1;
     let tabsetid = format!("tabset-{tabset_index}");
@@ -208,21 +285,37 @@ fn resolve_tabset(custom: &mut CustomNode, counter: &mut u32) -> Div {
     // ── Navigation <ul>, built from RawInlines with the title inlines
     // spliced in (Q1 `render_tabset`, verbatim attribute shape). ──
     let mut nav: Vec<Inline> = Vec::new();
-    nav.push(raw_html(
-        "<ul class=\"nav nav-tabs\" role=\"tablist\">".to_string(),
-    ));
+    nav.push(raw_html(match style {
+        TabsetStyle::Bootstrap => "<ul class=\"nav nav-tabs\" role=\"tablist\">".to_string(),
+        TabsetStyle::Tabby => format!("<ul id=\"{tabsetid}\" class=\"panel-tabset-tabby\">"),
+    }));
     for i in 0..tab_count {
         let tabid = format!("{}-{}", tabsetid, i + 1);
-        let active_class = if is_active(i) { " active" } else { "" };
-        let selected = if is_active(i) { "true" } else { "false" };
-        nav.push(raw_html(
-            "<li class=\"nav-item\" role=\"presentation\">".to_string(),
-        ));
-        nav.push(raw_html(format!(
-            "<a class=\"nav-link{active_class}\" id=\"{tabid}-tab\" \
-             data-bs-toggle=\"tab\" data-bs-target=\"#{tabid}\" role=\"tab\" \
-             aria-controls=\"{tabid}\" aria-selected=\"{selected}\" href=\"\">"
-        )));
+        match style {
+            TabsetStyle::Bootstrap => {
+                let active_class = if is_active(i) { " active" } else { "" };
+                let selected = if is_active(i) { "true" } else { "false" };
+                nav.push(raw_html(
+                    "<li class=\"nav-item\" role=\"presentation\">".to_string(),
+                ));
+                nav.push(raw_html(format!(
+                    "<a class=\"nav-link{active_class}\" id=\"{tabid}-tab\" \
+                     data-bs-toggle=\"tab\" data-bs-target=\"#{tabid}\" role=\"tab\" \
+                     aria-controls=\"{tabid}\" aria-selected=\"{selected}\" href=\"\">"
+                )));
+            }
+            TabsetStyle::Tabby => {
+                // Q1 `tabbyTabs()`: the default tab carries
+                // `data-tabby-default`, and the link's hash names its pane.
+                let default = if is_active(i) {
+                    "data-tabby-default "
+                } else {
+                    ""
+                };
+                nav.push(raw_html("<li>".to_string()));
+                nav.push(raw_html(format!("<a {default}href=\"#{tabid}\">")));
+            }
+        }
         if let Some(Slot::Inlines(title)) = custom.slots.remove(&format!("title-{i}")) {
             nav.extend(title);
         }
@@ -234,13 +327,17 @@ fn resolve_tabset(custom: &mut CustomNode, counter: &mut u32) -> Div {
     let mut panes: Vec<Block> = Vec::new();
     for i in 0..tab_count {
         let tabid = format!("{}-{}", tabsetid, i + 1);
-        let mut classes = vec!["tab-pane".to_string()];
-        if is_active(i) {
-            classes.push("active".to_string());
-        }
+        let mut classes = Vec::new();
         let mut attrs = hashlink::LinkedHashMap::new();
-        attrs.insert("role".to_string(), "tabpanel".to_string());
-        attrs.insert("aria-labelledby".to_string(), format!("{tabid}-tab"));
+        // Tabby sets the pane's role and labelling itself when it starts.
+        if style == TabsetStyle::Bootstrap {
+            classes.push("tab-pane".to_string());
+            if is_active(i) {
+                classes.push("active".to_string());
+            }
+            attrs.insert("role".to_string(), "tabpanel".to_string());
+            attrs.insert("aria-labelledby".to_string(), format!("{tabid}-tab"));
+        }
         let pane_attr: Attr = (tabid, classes, attrs).into();
         let content = match custom.slots.remove(&format!("content-{i}")) {
             Some(Slot::Blocks(blocks)) => blocks,
@@ -348,7 +445,7 @@ mod tests {
     fn resolves_to_nav_and_panes() {
         let mut blocks = vec![Block::Custom(Box::new(make_tabset(&["Alpha", "Beta"], 0)))];
         let mut counter = 1u32;
-        resolve_blocks(&mut blocks, &mut counter);
+        resolve_blocks(&mut blocks, &mut counter, TabsetStyle::Bootstrap);
 
         let Block::Div(outer) = &blocks[0] else {
             panic!("expected resolved Div");
@@ -395,7 +492,7 @@ mod tests {
     fn active_index_places_active_on_selected_tab_only() {
         let mut blocks = vec![Block::Custom(Box::new(make_tabset(&["A", "B"], 1)))];
         let mut counter = 1u32;
-        resolve_blocks(&mut blocks, &mut counter);
+        resolve_blocks(&mut blocks, &mut counter, TabsetStyle::Bootstrap);
 
         let Block::Div(outer) = &blocks[0] else {
             panic!("expected Div");
@@ -419,7 +516,7 @@ mod tests {
             Block::Custom(Box::new(make_tabset(&["B"], 0))),
         ];
         let mut counter = 1u32;
-        resolve_blocks(&mut blocks, &mut counter);
+        resolve_blocks(&mut blocks, &mut counter, TabsetStyle::Bootstrap);
 
         let ids: Vec<String> = blocks
             .iter()
@@ -450,7 +547,7 @@ mod tests {
 
         let mut blocks = vec![Block::Custom(Box::new(outer))];
         let mut counter = 1u32;
-        resolve_blocks(&mut blocks, &mut counter);
+        resolve_blocks(&mut blocks, &mut counter, TabsetStyle::Bootstrap);
 
         let Block::Div(outer_div) = &blocks[0] else {
             panic!("outer Div");
@@ -473,5 +570,42 @@ mod tests {
             panic!("inner pane");
         };
         assert_eq!(inner_pane.attr.0, "tabset-2-1");
+    }
+
+    #[test]
+    fn tabby_style_writes_the_reveal_markup() {
+        let mut blocks = vec![Block::Custom(Box::new(make_tabset(&["Alpha", "Beta"], 1)))];
+        let mut counter = 1u32;
+        resolve_blocks(&mut blocks, &mut counter, TabsetStyle::Tabby);
+
+        let Block::Div(outer) = &blocks[0] else {
+            panic!("expected resolved Div");
+        };
+        assert!(outer.attr.1.contains(&"panel-tabset".to_string()));
+        let Block::Plain(nav) = &outer.content[0] else {
+            panic!("expected nav Plain");
+        };
+        assert_eq!(
+            raw_text(&nav.content),
+            "<ul id=\"tabset-1\" class=\"panel-tabset-tabby\">\
+             <li><a href=\"#tabset-1-1\">Alpha</a></li>\
+             <li><a data-tabby-default href=\"#tabset-1-2\">Beta</a></li></ul>"
+        );
+
+        let Block::Div(tab_content) = &outer.content[1] else {
+            panic!("expected tab-content Div");
+        };
+        assert_eq!(tab_content.attr.1, vec!["tab-content".to_string()]);
+        for (i, pane) in tab_content.content.iter().enumerate() {
+            let Block::Div(pane) = pane else {
+                panic!("expected pane Div");
+            };
+            assert_eq!(pane.attr.0, format!("tabset-1-{}", i + 1));
+            assert!(
+                pane.attr.1.is_empty() && pane.attr.2.is_empty(),
+                "Tabby sets the pane's role and state itself; got {:?}",
+                pane.attr
+            );
+        }
     }
 }

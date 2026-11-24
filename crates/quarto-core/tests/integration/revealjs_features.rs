@@ -988,3 +988,150 @@ fn number_sections_skip_the_title_slide_heading() {
         "slide numbers start at 1.1"
     );
 }
+
+// ── tabsets (bd-y5j0m776) ────────────────────────────────────────────────
+
+const TABSET_DECK: &str = "---\nformat: revealjs\n---\n\n## Slide\n\n\
+::: {.panel-tabset}\n## TabA\n\nTAB-A-BODY\n\n## TabB\n\nTAB-B-BODY\n:::\n";
+
+/// Render a deck and return its HTML with the text of every file it links
+/// whose URL contains `needle` (a stylesheet `href` or a script `src`).
+fn render_revealjs_with_linked(contents: &str, needle: &str) -> (String, Vec<String>) {
+    let temp = tempfile::TempDir::new().unwrap();
+    let qmd_path = temp.path().join("talk.qmd");
+    write_file(&qmd_path, contents);
+    let options = RenderToFileOptions {
+        quiet: true,
+        ..Default::default()
+    };
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result =
+        render_to_file(&qmd_path, "revealjs", &options, runtime).expect("revealjs render failed");
+    let html = read(&result.output_path);
+    let dir = result.output_path.parent().expect("output dir");
+    let mut linked = Vec::new();
+    for attr in ["href=\"", "src=\""] {
+        let mut rest = html.as_str();
+        while let Some(start) = rest.find(attr) {
+            let after = &rest[start + attr.len()..];
+            let end = after.find('"').expect("closing quote");
+            let url = &after[..end];
+            if url.contains(needle) {
+                linked.push(read(&dir.join(url)));
+            }
+            rest = &after[end..];
+        }
+    }
+    (html, linked)
+}
+
+/// The `<script src>` URLs of a deck, in document order.
+fn script_srcs(html: &str) -> Vec<String> {
+    let needle = "<script src=\"";
+    let mut rest = html;
+    let mut out = Vec::new();
+    while let Some(start) = rest.find(needle) {
+        let after = &rest[start + needle.len()..];
+        let end = after.find('"').expect("closing quote");
+        out.push(after[..end].to_string());
+        rest = &after[end..];
+    }
+    out
+}
+
+/// Quarto 1 renders a deck's tabset as Tabby markup (`tabbyTabs()` in
+/// `panel-tabset.lua`): a list of links, then the panes. q2 left the tab
+/// titles as headings, one pane under the other.
+#[test]
+fn tabset_becomes_tabby_markup() {
+    let html = render_revealjs(TABSET_DECK);
+    let body = compact(&body_markup(&html));
+    assert!(
+        body.contains(
+            "<divclass=\"panel-tabset\"><ulid=\"tabset-1\"class=\"panel-tabset-tabby\">\
+             <li><adata-tabby-defaulthref=\"#tabset-1-1\">TabA</a></li>\
+             <li><ahref=\"#tabset-1-2\">TabB</a></li></ul>"
+        ),
+        "tab list; body:\n{body}"
+    );
+    assert!(
+        body.contains(
+            "<divclass=\"tab-content\"><divid=\"tabset-1-1\"><p>TAB-A-BODY</p></div>\
+             <divid=\"tabset-1-2\"><p>TAB-B-BODY</p></div></div>"
+        ),
+        "panes; body:\n{body}"
+    );
+    assert!(
+        !body.contains(">TabA</h2>") && !body.contains("nav-tabs"),
+        "tab headings are consumed and no Bootstrap markup is written; body:\n{body}"
+    );
+}
+
+/// An `.active` heading picks the default tab, and a nested tabset takes the
+/// next id, as in the HTML format.
+#[test]
+fn tabset_active_tab_and_nesting() {
+    let html = render_revealjs(
+        "---\nformat: revealjs\n---\n\n## Slide\n\n\
+         ::: {.panel-tabset}\n### One\n\n::: {.panel-tabset}\n#### Inner\n\nI.\n:::\n\n\
+         ### Two {.active}\n\nT.\n:::\n",
+    );
+    let body = compact(&body_markup(&html));
+    assert!(
+        body.contains("<li><ahref=\"#tabset-1-1\">One</a></li>")
+            && body.contains("<li><adata-tabby-defaulthref=\"#tabset-1-2\">Two</a></li>"),
+        "the `.active` tab is the default; body:\n{body}"
+    );
+    assert!(
+        body.contains("<divid=\"tabset-1-1\"><divclass=\"panel-tabset\"><ulid=\"tabset-2\""),
+        "the nested tabset is tabset-2, inside the first pane; body:\n{body}"
+    );
+}
+
+/// Tabby and its init script load after reveal.js, and only in a deck that
+/// has a tabset.
+#[test]
+fn tabby_ships_only_with_a_tabset() {
+    let (html, tabby) = render_revealjs_with_linked(TABSET_DECK, "tabby");
+    let srcs = script_srcs(&html);
+    let pos = |leaf: &str| {
+        srcs.iter()
+            .position(|s| s.ends_with(leaf))
+            .unwrap_or_else(|| panic!("the deck must load {leaf}; scripts: {srcs:?}"))
+    };
+    assert!(pos("reveal.js") < pos("tabby.js"));
+    assert!(pos("tabby.js") < pos("tabby-init.js"));
+    assert_eq!(tabby.len(), 2, "both files are written beside the deck");
+    assert!(tabby[0].contains("root.Tabby = factory(root)"));
+    assert!(tabby[1].contains("new window.Tabby("));
+
+    let plain = render_revealjs("---\nformat: revealjs\n---\n\n## S\n\nBody.\n");
+    assert!(
+        !plain.contains("tabby"),
+        "a deck with no tabset loads no Tabby"
+    );
+}
+
+/// The Tabby rules of Quarto 1's `_quarto-rules-tabby.scss` and the reveal
+/// tab padding of its `quarto.scss` compile into the deck theme.
+#[test]
+fn tabset_rules_ship_with_the_theme() {
+    let (_, themes) = render_revealjs_with_linked(TABSET_DECK, "theme-");
+    assert_eq!(themes.len(), 1, "one theme stylesheet");
+    let css = compact(&themes[0]);
+    for rule in [
+        ".panel-tabset[role=tablist]{border-bottom:1pxsolid#bbb;list-style:none;margin:0;padding:0;width:100%",
+        ".panel-tabset[role=tab][aria-selected=true]{background-color:rgba(0,0,0,0);border:1pxsolid#bbb;border-bottom-color:#fff",
+        ".reveal.panel-tabset[role=tab]{padding:.25em.7em",
+    ] {
+        assert!(css.contains(rule), "missing `{rule}` in the theme");
+    }
+}
+
+/// The HTML format keeps its Bootstrap tabs and loads no Tabby.
+#[test]
+fn html_tabset_is_still_bootstrap() {
+    let html = render_as(&TABSET_DECK.replace("revealjs", "html"), "html");
+    assert!(html.contains("class=\"nav nav-tabs\""));
+    assert!(!html.contains("panel-tabset-tabby") && !html.contains("tabby"));
+}

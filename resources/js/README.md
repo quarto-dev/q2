@@ -50,6 +50,35 @@ overrides), is not vendored: its rules are ported into
 `resources/scss/bootstrap/_bootstrap-rules.scss` so they compile against the
 page's theme. Render-only: the hub-client preview does not load GLightbox.
 
+## `tabby/`
+
+Tabby — the tabs of a `.panel-tabset` in a reveal.js deck, which has no
+Bootstrap to switch them (bd-y5j0m776).
+
+- **`tabby.js`** — Tabby, MIT, © Chris Ferdinandi, as patched by Quarto 1.
+  Byte-identical to `src/resources/formats/html/tabby/js/tabby.js` in
+  quarto-cli at commit `1ad9b3dbcf609351f58c9c7e672232d91a087f2e` (upstream:
+  <https://github.com/cferdinandi/tabby>). Size: 17,582 bytes. Not minified,
+  as in Quarto 1.
+- **`tabby-init.js`** — repo-owned. Starts one Tabby per tabset and keeps a
+  click on a tab from reaching reveal.js. Ported from Quarto 1's
+  `quarto-html-after-body.ejs` and its reveal support plugin.
+
+Shipped by `PanelTabsetResolveTransform`
+(`crates/quarto-core/src/transforms/panel_tabset_resolve.rs`) as the
+`js:revealjs:tabby` and `js:revealjs:tabby-init` artifacts, only for a deck
+that has a tabset. The rules that style the tabs are in
+`resources/scss/revealjs/quarto-revealjs.scss`. Render-only: `q2 preview`
+shows a tabset as stacked headings in every format (bd-47afd5ro).
+
+### Version contract
+
+Follow quarto-cli, not upstream Tabby. Quarto 1 has patched its copy for
+reveal.js: tabs stay in the Tab order, arrow keys are left to slide
+navigation, and Shift+Tab walks a tabset backwards. To refresh, re-copy the
+file from quarto-cli and update the commit above and `version` in
+`resources/vendored.toml`.
+
 ## `bootstrap/`
 
 Bootstrap 5 JS runtime, used when a Bootstrap-backed theme is active.

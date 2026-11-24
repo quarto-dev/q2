@@ -142,6 +142,9 @@ $link-weight: $font-weight-base !default;
 $link-color-bg: transparent !default;
 $link-decoration: inherit !default;
 
+// --- tabsets ----------------------------------------------------------------
+$tabset-border-color: $code-block-border-color !default;
+
 // --- tables / callouts -------------------------------------------------------
 $table-border-color: $code-block-border-color !default;
 $callout-border-width: 0.3rem !default;
@@ -750,6 +753,91 @@ kbd {
   --r-block-code-font: #{$font-family-monospace-block};
   --r-inline-code-font-size: #{$revealjs-code-inline-font-size};
   --r-block-code-font-size: #{$revealjs-code-block-font-size};
+}
+
+// --- tabsets ----------------------------------------------------------------
+// Tabs for `.panel-tabset` (bd-y5j0m776). A deck has no Bootstrap, so its
+// tabsets are Tabby markup (`PanelTabsetResolveTransform`), and tabby.js adds
+// the `role` and `aria-selected` attributes these rules select on. Ported
+// from Quarto 1 `formats/html/_quarto-rules-tabby.scss`, which the reveal
+// format compiles into its theme, plus the tab padding of its
+// `formats/revealjs/quarto.scss`.
+.panel-tabset [role="tablist"] {
+  border-bottom: 1px solid $tabset-border-color;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.panel-tabset [role="tablist"] * {
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
+}
+
+@media (min-width: 30em) {
+  .panel-tabset [role="tablist"] li {
+    display: inline-block;
+  }
+}
+
+.panel-tabset [role="tab"] {
+  border: 1px solid transparent;
+  border-top-color: $tabset-border-color;
+  display: block;
+  padding: 0.5em 1em;
+  text-decoration: none;
+}
+
+@media (min-width: 30em) {
+  .panel-tabset [role="tab"] {
+    border-top-color: transparent;
+    display: inline-block;
+    margin-bottom: -1px;
+  }
+}
+
+.panel-tabset [role="tab"][aria-selected="true"] {
+  background-color: $tabset-border-color;
+}
+
+@media (min-width: 30em) {
+  .panel-tabset [role="tab"][aria-selected="true"] {
+    background-color: transparent;
+    border: 1px solid $tabset-border-color;
+    border-bottom-color: $body-bg;
+  }
+}
+
+@media (min-width: 30em) {
+  .panel-tabset [role="tab"]:hover:not([aria-selected="true"]) {
+    border: 1px solid $tabset-border-color;
+  }
+}
+
+.reveal .panel-tabset [role="tab"] {
+  padding: 0.25em 0.7em;
+}
+
+// Quarto 1's slide list spacing (`formats/revealjs/styles.html`:
+// `.reveal .slide ul { margin-bottom: 0.5em }`, `li { margin-top: 0.4em }`
+// and the `ul[role="tablist"] li { margin-bottom: 0 }` exception) as it lands
+// on a tab list. Those list rules are not ported for slides in general, so
+// only their effect on the tab bar is written here. It puts the tabs and the
+// pane below them where Quarto 1 does.
+.reveal .slides section ul[role="tablist"] {
+  margin-bottom: 0.5em;
+}
+
+.reveal .slides section ul[role="tablist"] li {
+  margin-top: 0.4em;
+  margin-bottom: 0;
+}
+
+// `.reveal .slide ul li > *:last-child { margin-block-end: 0 }` in the same
+// file cancels the tab's `margin-bottom: -1px`.
+.reveal .slides section ul[role="tablist"] li > [role="tab"] {
+  margin-bottom: 0;
 }
 
 // --- link styling (cross-format / brand vocabulary) -------------------------

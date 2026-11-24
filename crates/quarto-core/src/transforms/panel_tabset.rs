@@ -57,11 +57,12 @@
 //! ## Scope (design decision 2, plan
 //! `claude-notes/plans/2026-08-17-tabset-panel-tabset.md`)
 //!
-//! Bootstrap HTML, or a Pandoc-writer output format: the transform
-//! self-gates to HTML-based formats *or* `PipelineProfile::Pandoc(_)`
-//! (docx, pptx, …), excluding reveal and minimal HTML from either case.
-//! Everywhere else the Div passes through untouched (stacked headings, as
-//! today).
+//! Bootstrap HTML, reveal.js, or a Pandoc-writer output format: the
+//! transform self-gates to HTML-based formats *or*
+//! `PipelineProfile::Pandoc(_)` (docx, pptx, …), excluding minimal HTML
+//! from either case. Everywhere else the Div passes through untouched
+//! (stacked headings, as today). A reveal.js deck converts too
+//! (bd-y5j0m776); its resolve half writes Tabby markup, not Bootstrap's.
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::block::{Block, Div};
@@ -105,19 +106,19 @@ impl AstTransform for PanelTabsetTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        // Bootstrap-HTML or Pandoc-writer scope: HTML-based formats and
-        // Pandoc-writer output formats (docx, pptx, … — PipelineProfile::
-        // Pandoc(_)) both convert the div to a Tabset CustomNode. Reveal
-        // has its own (future) tabset story (bd-y5j0m776) and minimal HTML
-        // ships no Bootstrap CSS/JS for the nav-tabs markup to work with,
-        // so both stay excluded regardless of format/profile.
+        // HTML-based or Pandoc-writer scope: HTML-based formats (reveal.js
+        // decks included, bd-y5j0m776) and Pandoc-writer output formats
+        // (docx, pptx, … — PipelineProfile::Pandoc(_)) all convert the div
+        // to a Tabset CustomNode. Minimal HTML ships no Bootstrap CSS/JS for
+        // the nav-tabs markup to work with, so it stays excluded. That
+        // exclusion does not apply to a deck, which never uses Bootstrap.
+        let reveal = is_revealjs_target(&ctx.format.target_format);
         if (!ctx.format.identifier.is_html_based()
             && !matches!(
                 ctx.pipeline_profile,
                 crate::format::PipelineProfile::Pandoc(_)
             ))
-            || is_revealjs_target(&ctx.format.target_format)
-            || is_minimal_html(&ast.meta)
+            || (!reveal && is_minimal_html(&ast.meta))
         {
             return Ok(());
         }
@@ -556,8 +557,10 @@ mod tests {
         );
     }
 
+    /// A reveal.js deck converts like any HTML format (bd-y5j0m776). The
+    /// resolve half picks the Tabby markup for it.
     #[tokio::test]
-    async fn revealjs_format_is_passthrough() {
+    async fn revealjs_format_converts() {
         let (ast, warnings) = run_transform(
             vec![tabset_div(vec![header(2, "Tab", &[]), para("content")])],
             Format::from_format_string("revealjs").expect("revealjs format"),
@@ -565,8 +568,9 @@ mod tests {
         .await;
 
         assert!(
-            matches!(&ast.blocks[0], Block::Div(_)),
-            "reveal keeps the passthrough div (bd-y5j0m776 owns reveal tabsets)"
+            matches!(&ast.blocks[0], Block::Custom(c) if c.type_name == "Tabset"),
+            "a deck's tabset becomes a Tabset node; got {:?}",
+            ast.blocks[0]
         );
         assert!(warnings.is_empty());
     }
