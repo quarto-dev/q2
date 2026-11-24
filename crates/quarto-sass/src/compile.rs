@@ -2262,4 +2262,81 @@ mod tests {
             "the escape hatch applies to reveal decks too"
         );
     }
+
+    /// The `--mermaid-*` custom property block that the mermaid `themeCSS`
+    /// reads (bd-sehm2rha, GH #1296), as `name -> value`.
+    fn mermaid_vars(css: &str) -> std::collections::BTreeMap<String, String> {
+        let (_, decls) = rules(css)
+            .into_iter()
+            .find(|(sel, decls)| sel.trim() == ":where(:root)" && decls.contains("--mermaid-"))
+            .expect("no `:where(:root)` block with `--mermaid-*` properties");
+        decls
+            .split(';')
+            .filter_map(|d| d.split_once(':'))
+            .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+            .filter(|(k, _)| k.starts_with("--mermaid-"))
+            .collect()
+    }
+
+    /// Every property the mermaid `themeCSS` reads is defined, including
+    /// `--mermaid-font-weight`, which Quarto 1 read but never emitted.
+    const MERMAID_PROPERTIES: &[&str] = &[
+        "--mermaid-bg-color",
+        "--mermaid-edge-color",
+        "--mermaid-node-fg-color",
+        "--mermaid-fg-color",
+        "--mermaid-fg-color--lighter",
+        "--mermaid-fg-color--lightest",
+        "--mermaid-font-family",
+        "--mermaid-font-weight",
+        "--mermaid-label-bg-color",
+        "--mermaid-label-fg-color",
+        "--mermaid-node-bg-color",
+    ];
+
+    /// Bootstrap: the `$mermaid-*` defaults derive from the theme, and a
+    /// user `$mermaid-*` value reaches the compiled custom property.
+    #[test]
+    fn test_mermaid_custom_properties_follow_theme_variables() {
+        let runtime = NativeRuntime::new();
+        let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
+        let css = compile_default_css(&runtime, true).unwrap();
+        let vars = mermaid_vars(&css);
+        for prop in MERMAID_PROPERTIES {
+            assert!(vars.contains_key(*prop), "{prop} missing: {vars:?}");
+        }
+        assert_eq!(vars["--mermaid-font-weight"], "400");
+
+        let user = crate::SassLayer {
+            defaults: "$mermaid-fg-color: #ff00ff;\n$body-color: #123456;".to_string(),
+            ..Default::default()
+        };
+        let css = compile_with_doc_vars(&ThemeConfig::default_bootstrap(), &context, &user)
+            .unwrap()
+            .css;
+        let vars = mermaid_vars(&css);
+        assert_eq!(vars["--mermaid-fg-color"], "#f0f");
+        // Not set by the user, so derived from `$body-color` (Q1 semantics).
+        assert_eq!(vars["--mermaid-node-fg-color"], "#123456");
+    }
+
+    /// revealjs gets the same block (Q1's reveal format includes
+    /// `_quarto-rules.scss` too); diagrams in decks render with the same
+    /// `themeCSS`.
+    #[test]
+    fn test_reveal_mermaid_custom_properties_follow_theme_variables() {
+        let runtime = NativeRuntime::new();
+        let css = compile_reveal_theme_css(&runtime, true, &[], &[]).unwrap();
+        let vars = mermaid_vars(&css);
+        for prop in MERMAID_PROPERTIES {
+            assert!(vars.contains_key(*prop), "{prop} missing: {vars:?}");
+        }
+
+        let layer = crate::SassLayer {
+            defaults: "$mermaid-edge-color: #00ff00;".to_string(),
+            ..Default::default()
+        };
+        let css = compile_reveal_theme_css(&runtime, true, &[layer], &[]).unwrap();
+        assert_eq!(mermaid_vars(&css)["--mermaid-edge-color"], "lime");
+    }
 }

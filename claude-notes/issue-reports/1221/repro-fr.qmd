@@ -1,0 +1,7 @@
+---
+title: Français
+lang: fr
+bibliography: refs.bib
+---
+
+Voir @knuth1984.

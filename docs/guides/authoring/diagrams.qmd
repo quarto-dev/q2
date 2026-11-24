@@ -204,6 +204,56 @@ The option works on every diagram, whether or not it has a caption or a
 label. A captioned diagram without `fig-align` is centered, like any
 other figure; an uncaptioned one sits at the start of the line.
 
+## Colors and themes
+
+Mermaid diagrams take their colors and font from the document theme. A
+diagram in a page with a dark theme is drawn in that theme's dark colors,
+and when a page offers both a light and a dark theme, toggling between
+them recolors the diagrams on the page.
+
+To use one of Mermaid's own themes instead, set `mermaid: theme:` to
+`default`, `dark`, `forest`, or `neutral`. A Mermaid theme replaces the
+document's colors entirely and stays the same in light and dark mode.
+
+```yaml
+format:
+  html:
+    mermaid:
+      theme: forest
+```
+
+To adjust individual colors, set the `$mermaid-*` variables in a theme's
+`scss:defaults` section. Each one defaults to a value derived from the
+theme:
+
+```scss
+$mermaid-bg-color: $body-bg;
+$mermaid-edge-color: $secondary;
+$mermaid-node-fg-color: $body-color;
+$mermaid-fg-color: $body-color;
+$mermaid-fg-color--lighter: lighten($body-color, 10%);
+$mermaid-fg-color--lightest: lighten($body-color, 20%);
+$mermaid-font-family: $font-family-sans-serif;
+$mermaid-font-weight: $font-weight-base;
+$mermaid-label-bg-color: $body-bg;
+$mermaid-label-fg-color: $primary;
+$mermaid-node-bg-color: rgba($primary, 0.1);
+```
+
+A light and a dark theme each carry their own values, so set the
+variables in both files when the page has both. Every variable is also
+published as a CSS custom property of the same name (`--mermaid-fg-color`
+and so on), which a stylesheet can override directly:
+
+```css
+:root {
+  --mermaid-node-bg-color: #375a7f;
+}
+```
+
+`q2 preview` does not apply these colors yet: diagrams in the preview use
+Mermaid's default theme. The rendered page uses the document's.
+
 ## Diagram options
 
 Diagram blocks accept `label`, `fig-cap`, `fig-scap`, `fig-alt`,
@@ -354,5 +404,3 @@ The following Quarto 1 diagram features are not yet available:
 - Showing the source beside the diagram (`echo: true`)
 - Sizing options (`fig-width`, `fig-height`, `fig-responsive`)
 - Pre-rendered PNG/SVG output for print formats (`mermaid-format`)
-- Theming (Mermaid currently renders with its default theme regardless
-  of the document theme)

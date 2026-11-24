@@ -22,8 +22,14 @@ _quarto:
             "<pre class=\"mermaid\">",
             "<script src=\"[^\"]*mermaid\\.min\\.js\"></script>",
             "mermaid\\.run\\(\\{ querySelector: 'pre\\.mermaid' \\}\\)",
+            "mermaid\\.initialize\\(\\{ startOnLoad: false, themeCSS: \"",
           ]
         - ["cdn\\.jsdelivr\\.net"]
+      # bd-sehm2rha: the reveal theme defines the --mermaid-* properties
+      # the themeCSS reads (Q1 includes _quarto-rules.scss in reveal too).
+      ensureCssRegexMatches:
+        - ["--mermaid-fg-color:"]
+        - []
 ---
 
 ## A slide

@@ -219,6 +219,7 @@ impl AstTransform for SidebarRenderTransform {
         let search_label = crate::project::search::ui::search_label(&ast.meta);
         let search = sidebar_search_option(&ast.meta, sidebar.search, &search_label);
         let toggle_section_label = toggle_section_label(&ast.meta);
+        let landmark_labels = crate::language::landmark_labels(&ast.meta);
         let html = sidebar_to_html_with_options(
             &sidebar,
             &SidebarRenderOptions {
@@ -227,6 +228,7 @@ impl AstTransform for SidebarRenderTransform {
                 has_navbar,
                 search,
                 toggle_section_label: &toggle_section_label,
+                landmark_labels: &landmark_labels,
             },
         );
 
@@ -265,11 +267,15 @@ fn toc_block_html(meta: &ConfigValue) -> Option<String> {
             component.replace('&', "&amp;").replace('"', "&quot;")
         ));
     }
-    html.push_str(">\n");
-    if let Some(title) = meta
+    let title = meta
         .get_path(&["rendered", "navigation", "toc-title"])
-        .and_then(|v| v.as_plain_text())
-    {
+        .and_then(|v| v.as_plain_text());
+    // Named by its heading, when there is one (GH #1297).
+    if title.is_some() {
+        html.push_str(" aria-labelledby=\"toc-title\"");
+    }
+    html.push_str(">\n");
+    if let Some(title) = title {
         html.push_str(&format!("<h2 id=\"toc-title\">{title}</h2>\n"));
     }
     html.push_str(&toc);
@@ -326,6 +332,7 @@ fn synthesize_toc_sidebar(ast: &mut Pandoc, ctx: &mut RenderContext, toc_block: 
     let search_label = crate::project::search::ui::search_label(&ast.meta);
     let search = sidebar_search_option(&ast.meta, sidebar.search, &search_label);
     let toggle_section_label = toggle_section_label(&ast.meta);
+    let landmark_labels = crate::language::landmark_labels(&ast.meta);
     let html = sidebar_to_html_with_options(
         &sidebar,
         &SidebarRenderOptions {
@@ -334,6 +341,7 @@ fn synthesize_toc_sidebar(ast: &mut Pandoc, ctx: &mut RenderContext, toc_block: 
             has_navbar,
             search,
             toggle_section_label: &toggle_section_label,
+            landmark_labels: &landmark_labels,
         },
     );
     ast.meta.insert_path(
@@ -454,6 +462,25 @@ mod tests {
         assert!(
             html.find("ACTIONS").unwrap() < html.find("</nav>").unwrap(),
             "actions must precede the closing nav tag"
+        );
+    }
+
+    /// Same `aria-labelledby` rule as the template's `toc-block`
+    /// partial (GH #1297): present only when the `<h2>` is emitted.
+    #[test]
+    fn toc_block_html_twin_is_labelled_by_its_title() {
+        let mut meta = config_map(vec![]);
+        meta.insert_path(&["rendered", "navigation", "toc"], s("<ul><li>x</li></ul>"));
+        let untitled = toc_block_html(&meta).unwrap();
+        assert!(!untitled.contains("aria-labelledby"), "got: {untitled}");
+        meta.insert_path(&["rendered", "navigation", "toc-title"], s("On this page"));
+        let titled = toc_block_html(&meta).unwrap();
+        assert!(
+            titled.starts_with(
+                "<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\" \
+                 aria-labelledby=\"toc-title\">\n<h2 id=\"toc-title\">On this page</h2>"
+            ),
+            "got: {titled}"
         );
     }
 

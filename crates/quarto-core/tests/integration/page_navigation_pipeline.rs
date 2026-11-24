@@ -111,8 +111,8 @@ fn find_html<'a>(outputs: &'a [(String, String)], stem: &str) -> &'a str {
 /// and `</nav>` for assertions about its internal structure.
 fn page_nav_block(html: &str) -> &str {
     let start = html
-        .find("<nav class=\"page-navigation\">")
-        .unwrap_or_else(|| panic!("no <nav class=\"page-navigation\"> in:\n{}", html));
+        .find("<nav class=\"page-navigation\"")
+        .unwrap_or_else(|| panic!("no <nav class=\"page-navigation\" in:\n{}", html));
     let after_start = &html[start..];
     let end = after_start
         .find("</nav>")
@@ -226,13 +226,13 @@ fn pipeline_page_nav_disabled_at_doc_level() {
     let about_html = find_html(&outputs, "about");
     let docs_html = find_html(&outputs, "docs");
 
-    assert!(index_html.contains("<nav class=\"page-navigation\">"));
+    assert!(index_html.contains("<nav class=\"page-navigation\""));
     assert!(
-        !about_html.contains("<nav class=\"page-navigation\">"),
+        !about_html.contains("<nav class=\"page-navigation\""),
         "about.html should not have page-nav (page-navigation: false); got:\n{}",
         &about_html[..about_html.len().min(1500)]
     );
-    assert!(docs_html.contains("<nav class=\"page-navigation\">"));
+    assert!(docs_html.contains("<nav class=\"page-navigation\""));
 }
 
 // === Test 41 ==============================================================
@@ -264,7 +264,7 @@ fn pipeline_page_nav_disabled_at_project_level() {
 
     for (stem, html) in &outputs {
         assert!(
-            !html.contains("<nav class=\"page-navigation\">"),
+            !html.contains("<nav class=\"page-navigation\""),
             "{}.html should not have page-nav; project-level disable failed",
             stem
         );
@@ -295,12 +295,12 @@ fn pipeline_page_nav_honors_separator_boundary() {
     // side; with no neighbor on the other side either, the strip is
     // skipped entirely.
     assert!(
-        !a_html.contains("<nav class=\"page-navigation\">"),
+        !a_html.contains("<nav class=\"page-navigation\""),
         "a.html: separator-as-next + no prev → no page-nav; got:\n{}",
         &a_html[..a_html.len().min(1500)]
     );
     assert!(
-        !b_html.contains("<nav class=\"page-navigation\">"),
+        !b_html.contains("<nav class=\"page-navigation\""),
         "b.html: separator-as-prev + no next → no page-nav; got:\n{}",
         &b_html[..b_html.len().min(1500)]
     );
@@ -376,7 +376,7 @@ fn pipeline_single_doc_no_page_nav() {
 
     let doc_html = find_html(&outputs, "doc");
     assert!(
-        !doc_html.contains("<nav class=\"page-navigation\">"),
+        !doc_html.contains("<nav class=\"page-navigation\""),
         "no sidebar → no page-nav (default-on requires a sidebar); got:\n{}",
         &doc_html[..doc_html.len().min(1500)]
     );
@@ -412,7 +412,7 @@ fn pipeline_page_nav_default_off_for_websites() {
 
     for (stem, html) in &outputs {
         assert!(
-            !html.contains("<nav class=\"page-navigation\">"),
+            !html.contains("<nav class=\"page-navigation\""),
             "{}.html should not have a page-nav strip when page-navigation is unset (Q1 default for websites is off)",
             stem
         );
@@ -446,7 +446,7 @@ fn pipeline_page_nav_top_level_true_enables() {
 
     let about_html = find_html(&outputs, "about");
     assert!(
-        about_html.contains("<nav class=\"page-navigation\">"),
+        about_html.contains("<nav class=\"page-navigation\""),
         "about.html must have a page-nav strip when top-level `page-navigation: true` is set",
     );
     let about_pn = page_nav_block(about_html);
@@ -482,7 +482,7 @@ fn pipeline_page_nav_website_scope_true_enables() {
 
     let about_html = find_html(&outputs, "about");
     assert!(
-        about_html.contains("<nav class=\"page-navigation\">"),
+        about_html.contains("<nav class=\"page-navigation\""),
         "about.html must have a page-nav strip when `website.page-navigation: true` is set",
     );
 }
@@ -516,15 +516,15 @@ fn pipeline_page_nav_doc_overrides_project_default_off() {
     let docs_html = find_html(&outputs, "docs");
 
     assert!(
-        !index_html.contains("<nav class=\"page-navigation\">"),
+        !index_html.contains("<nav class=\"page-navigation\""),
         "index.html: no doc-level override + project default off → no strip",
     );
     assert!(
-        about_html.contains("<nav class=\"page-navigation\">"),
+        about_html.contains("<nav class=\"page-navigation\""),
         "about.html: doc-level `page-navigation: true` should override project default off",
     );
     assert!(
-        !docs_html.contains("<nav class=\"page-navigation\">"),
+        !docs_html.contains("<nav class=\"page-navigation\""),
         "docs.html: no doc-level override + project default off → no strip",
     );
 }

@@ -115,6 +115,7 @@ impl AstTransform for SecondaryNavRenderTransform {
         let toggle_label = LanguageTerms::from_meta(&ast.meta)
             .and_then(|terms| terms.get("toggle-sidebar").map(str::to_string))
             .unwrap_or_else(|| DEFAULT_TOGGLE_LABEL.to_string());
+        let landmarks = crate::language::landmark_labels(&ast.meta);
 
         let show_breadcrumbs = resolve_website_bool(&ast.meta, "bread-crumbs", true);
 
@@ -148,11 +149,12 @@ impl AstTransform for SecondaryNavRenderTransform {
             }
             // No extra classes, and no trail-length gate — see the
             // comparison table in the module docs.
-            let breadcrumbs = breadcrumbs_to_html(&crumbs, &[]);
+            let breadcrumbs = breadcrumbs_to_html(&crumbs, &[], &landmarks.breadcrumbs);
             secondary_nav_to_html(
                 SecondaryNavContent::Breadcrumbs(&breadcrumbs),
                 &toggle_label,
                 search_label.as_deref(),
+                &landmarks.toolbar,
             )
         } else {
             // Q1 collapses the page title into the bar instead, and
@@ -165,6 +167,7 @@ impl AstTransform for SecondaryNavRenderTransform {
                 SecondaryNavContent::CollapsedTitle(title),
                 &toggle_label,
                 search_label.as_deref(),
+                &landmarks.toolbar,
             );
             ast.meta.insert_path(
                 &["rendered", "navigation", "secondary-nav-collapsed-title"],

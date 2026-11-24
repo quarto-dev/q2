@@ -185,6 +185,12 @@ pub struct Navbar {
     /// and `aria-label` (bd-kwgtllvn). Set by the generate transform
     /// alongside `dark_mode_toggle`; the renderer falls back to English.
     pub dark_toggle_label: Option<String>,
+    /// Localized `navigation-site-label`: the navbar landmark's
+    /// `aria-label` (bd-erecx4j8, GH #1297). Set by quarto-core's
+    /// `NavbarRenderTransform` just before rendering, so it is not
+    /// part of the metadata round-trip; the renderer falls back to
+    /// English.
+    pub landmark_label: Option<String>,
 }
 
 impl Navbar {
@@ -208,6 +214,7 @@ impl Navbar {
             right: Vec::new(),
             dark_mode_toggle: false,
             dark_toggle_label: None,
+            landmark_label: None,
         }
     }
 

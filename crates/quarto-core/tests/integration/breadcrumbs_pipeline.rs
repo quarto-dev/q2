@@ -141,7 +141,7 @@ fn breadcrumbs_render_on_deep_page_with_resolved_hrefs() {
         html
     );
     assert!(
-        html.contains("aria-label=\"breadcrumb\""),
+        html.contains("aria-label=\"Breadcrumbs\""),
         "breadcrumb nav needs the aria label"
     );
     // Section crumb "Guide" borrows guide/intro.qmd → ../intro.html

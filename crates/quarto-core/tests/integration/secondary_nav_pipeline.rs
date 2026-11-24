@@ -138,7 +138,7 @@ fn nested_fixture(project_dir: &std::path::Path, quarto_yml_extra: &str) {
 /// assertions and better failure messages.
 fn secondary_nav(html: &str) -> &str {
     let start = html
-        .find("<nav class=\"quarto-secondary-nav\">")
+        .find("<nav class=\"quarto-secondary-nav\" aria-label=\"Toolbar\">")
         .unwrap_or_else(|| panic!("no nav.quarto-secondary-nav in output:\n{html}"));
     let end = html[start..]
         .find("</nav>\n</header>")
@@ -161,7 +161,7 @@ fn secondary_nav_renders_with_toggle_wired_to_the_sidebar() {
         .find("<header id=\"quarto-header\"")
         .expect("#quarto-header present");
     let bar = html
-        .find("<nav class=\"quarto-secondary-nav\">")
+        .find("<nav class=\"quarto-secondary-nav\" aria-label=\"Toolbar\">")
         .expect("secondary nav present");
     let header_close = html[header..]
         .find("</header>")
@@ -220,7 +220,7 @@ fn secondary_nav_breadcrumbs_render_for_single_crumb_trail() {
 
     let bar_html = secondary_nav(html);
     assert!(
-        bar_html.contains("<nav class=\"quarto-page-breadcrumbs\" aria-label=\"breadcrumb\">"),
+        bar_html.contains("<nav class=\"quarto-page-breadcrumbs\" aria-label=\"Breadcrumbs\">"),
         "single-crumb page still gets the mobile trail; got: {bar_html}"
     );
     assert!(
@@ -243,13 +243,13 @@ fn secondary_nav_and_title_block_instances_are_distinct() {
     let html = find_html(&outputs, "guide/advanced/deep.html");
 
     assert!(
-        html.contains("<nav class=\"quarto-page-breadcrumbs\" aria-label=\"breadcrumb\">"),
+        html.contains("<nav class=\"quarto-page-breadcrumbs\" aria-label=\"Breadcrumbs\">"),
         "mobile instance (bare classes) missing"
     );
     assert!(
         html.contains(
             "<nav class=\"quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block\" \
-             aria-label=\"breadcrumb\">"
+             aria-label=\"Breadcrumbs\">"
         ),
         "title-block instance (extra classes) missing"
     );

@@ -15,7 +15,7 @@
 //!
 //! - Div blocks with class `appendix` (user-defined appendix sections)
 //! - Footnotes section (from FootnotesTransform, id="footnotes")
-//! - Bibliography (from CiteprocTransform when implemented, id="refs")
+//! - Bibliography (Div with id="refs" from the citeproc filter; see below)
 //! - License/copyright/citation metadata
 //!
 //! ## Output
@@ -42,6 +42,32 @@
 //!
 //! - `reference-location`: If `margin`, footnotes are NOT moved into appendix
 //! - `citation-location`: If `margin`, bibliography is NOT moved into appendix
+//!   (Quarto 1's `hasMarginCites`; `reference-location` does not affect it)
+//! - `reference-section-title`: overrides the bibliography heading (otherwise
+//!   the localized `section-title-references` term, then "References")
+//!
+//! ## Bibliography placement and the citeproc filter (GH #1221)
+//!
+//! For a non-book HTML document the citeproc filter runs in
+//! `UserFiltersStage::post`, *after* this transform: it is placed after the
+//! `quarto` sentinel, as Quarto 1 runs citeproc after crossref. So when this
+//! transform runs, the `#refs` div usually does not exist yet. Quarto 1 never
+//! had the problem, because its appendix is built by an HTML postprocessor
+//! that runs after Pandoc.
+//!
+//! [`place_bibliography`] therefore runs twice:
+//!
+//! - here, for a `#refs` div that already exists (citeproc in the pre bucket,
+//!   or a top-level `::: {#refs}` placeholder written by the author), and
+//! - from [`AppendixBibliographyStage`] right after the post user filters,
+//!   for the div citeproc appended there. That pass slots the section into
+//!   the existing `#quarto-appendix` before the footnotes, or creates the
+//!   container.
+//!
+//! Each pass only looks at top-level blocks, so a bibliography already
+//! wrapped into the appendix is not moved twice.
+//!
+//! [`AppendixBibliographyStage`]: crate::stage::stages::AppendixBibliographyStage
 
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::Blocks;
@@ -87,6 +113,12 @@ impl AppendixStructureTransform {
                 }
             })
             .unwrap_or_default()
+    }
+
+    /// Whether citations render in the margin (`citation-location: margin`),
+    /// in which case the bibliography stays where citeproc put it.
+    fn has_margin_citations(meta: &ConfigValue) -> bool {
+        crate::filter_resolve::margin_citations(meta)
     }
 
     /// Get the reference-location configuration.
@@ -158,9 +190,11 @@ impl AstTransform for AppendixStructureTransform {
         let user_appendices = extract_appendix_divs(&mut ast.blocks);
         appendix_sections.extend(user_appendices);
 
-        // 2. Collect bibliography (if not margin mode)
-        // For now, look for Div with id="refs" - CiteprocTransform will create this later
-        if reference_location != ReferenceLocation::Margin
+        // 2. Collect bibliography (unless citations go in the margin). This
+        //    only finds a `#refs` div that already exists; the one the
+        //    post-bucket citeproc filter creates later is placed by
+        //    `place_bibliography` (see the module docs).
+        if !Self::has_margin_citations(&ast.meta)
             && let Some(bibliography) = extract_bibliography(&mut ast.blocks)
         {
             appendix_sections.push(wrap_bibliography(bibliography, &ast.meta));
@@ -201,6 +235,69 @@ impl AstTransform for AppendixStructureTransform {
         Ok(())
     }
 }
+
+/// Move a top-level bibliography (`#refs`) into the document's appendix.
+///
+/// The late pass of bibliography placement (GH #1221; see the module docs):
+/// [`AppendixBibliographyStage`] calls it after the post user filters, where
+/// the citeproc filter has appended `#refs` at the end of the document, which
+/// is after any `#quarto-appendix` this transform built.
+///
+/// The same gates as [`AppendixStructureTransform`] apply: nothing happens
+/// for `appendix-style: none`/`false`, for books, or for
+/// `citation-location: margin`. The wrapped section goes into an existing
+/// top-level `#quarto-appendix` after the user appendix sections and before
+/// the footnotes and the metadata sections, which is the order the transform
+/// itself uses. Without a container, one is created at the end of the
+/// document.
+///
+/// Returns whether a bibliography was moved.
+///
+/// [`AppendixBibliographyStage`]: crate::stage::stages::AppendixBibliographyStage
+pub fn place_bibliography(ast: &mut Pandoc) -> bool {
+    let appendix_style = AppendixStructureTransform::get_appendix_style(&ast.meta);
+    if !appendix_style.is_enabled()
+        || AppendixStructureTransform::is_book_format(&ast.meta)
+        || AppendixStructureTransform::has_margin_citations(&ast.meta)
+    {
+        return false;
+    }
+    let Some(bibliography) = extract_bibliography(&mut ast.blocks) else {
+        return false;
+    };
+    let section = wrap_bibliography(bibliography, &ast.meta);
+
+    let container = ast.blocks.iter_mut().find_map(|block| match block {
+        Block::Div(div) if div.attr.0 == "quarto-appendix" => Some(div),
+        _ => None,
+    });
+    match container {
+        Some(container) => {
+            let pos = container
+                .content
+                .iter()
+                .position(|b| {
+                    matches!(b, Block::Div(div) if SECTIONS_AFTER_BIBLIOGRAPHY.contains(&div.attr.0.as_str()))
+                })
+                .unwrap_or(container.content.len());
+            container.content.insert(pos, section);
+        }
+        None => ast.blocks.push(create_appendix_container(
+            vec![section],
+            appendix_style.as_str(),
+        )),
+    }
+    true
+}
+
+/// Ids of the appendix sections that follow the bibliography, in the order
+/// [`AppendixStructureTransform`] emits them.
+const SECTIONS_AFTER_BIBLIOGRAPHY: &[&str] = &[
+    "footnotes",
+    "quarto-reuse",
+    "quarto-copyright",
+    "quarto-citation",
+];
 
 /// Extract Div blocks with class "appendix" from the document.
 fn extract_appendix_divs(blocks: &mut Vec<Block>) -> Blocks {
@@ -262,9 +359,10 @@ fn extract_footnotes(blocks: &mut Vec<Block>) -> Option<Block> {
 /// when the stage has not run — the case in stage-less unit tests — which is
 /// what the literal tail is for.
 ///
-/// There is deliberately **no** per-document override tier here: unlike
-/// `toc-title`, Quarto 1 exposes no `footnotes-title`-style option for these
-/// sections, so metadata is not consulted beyond the language table.
+/// There is **no** per-document override tier here: Quarto 1 exposes no
+/// `footnotes-title`-style option for most of these sections. The
+/// bibliography is the exception: `reference-section-title` overrides its
+/// title, which [`bibliography_title`] handles before falling back here.
 ///
 /// [`LanguageResolveStage`]: crate::stage::stages::language_resolve
 fn appendix_title(meta: &ConfigValue, term_key: &str, english: &str) -> String {
@@ -313,6 +411,11 @@ fn title_inlines(title: &str, source_info: &SourceInfo) -> Vec<Inline> {
 /// runs later and skips headings that already carry the class (pushing onto
 /// a `Vec<String>` is not idempotent the way Quarto 1's `classList.add` is).
 fn appendix_heading(meta: &ConfigValue, term_key: &str, english: &str) -> Block {
+    appendix_heading_titled(&appendix_title(meta, term_key, english))
+}
+
+/// [`appendix_heading`] with the title already resolved.
+fn appendix_heading_titled(title: &str) -> Block {
     let source_info = SourceInfo::generated(By::appendix());
     Block::Header(Box::new(Header {
         level: 2,
@@ -325,7 +428,7 @@ fn appendix_heading(meta: &ConfigValue, term_key: &str, english: &str) -> Block 
             LinkedHashMap::new(),
         )
             .into(),
-        content: title_inlines(&appendix_title(meta, term_key, english), &source_info),
+        content: title_inlines(title, &source_info),
         source_info,
         attr_source: AttrSourceInfo::empty(),
     }))
@@ -364,12 +467,28 @@ fn wrap_footnotes(footnotes: Block, meta: &ConfigValue) -> Block {
     Block::Div(div)
 }
 
+/// The bibliography heading: `reference-section-title` when set, otherwise
+/// the localized `section-title-references` term, otherwise "References".
+///
+/// In Quarto 1, Pandoc's citeproc inserts a `reference-section-title` heading
+/// before the refs, and the appendix postprocessor reuses that heading's text
+/// in place of the translated one. Reading the option here has the same
+/// result. Like the postprocessor (`innerText`), only the plain text of the
+/// title is kept.
+fn bibliography_title(meta: &ConfigValue) -> String {
+    meta.get("reference-section-title")
+        .and_then(|v| v.as_plain_text())
+        .map(|title| title.trim().to_string())
+        .filter(|title| !title.is_empty())
+        .unwrap_or_else(|| appendix_title(meta, "section-title-references", "References"))
+}
+
 /// Wrap bibliography in a section with appropriate attributes.
 fn wrap_bibliography(bibliography: Block, meta: &ConfigValue) -> Block {
     let source_info = SourceInfo::generated(By::appendix());
 
     // Create header for the bibliography section
-    let header = appendix_heading(meta, "section-title-references", "References");
+    let header = appendix_heading_titled(&bibliography_title(meta));
 
     Block::Div(Box::new(Div {
         attr: (
@@ -1319,6 +1438,185 @@ mod tests {
                 "Derechos de autor", // section-title-copyright
                 "Cómo citar",        // section-title-citation
             ]
+        );
+    }
+
+    // ─── Late bibliography placement (GH #1221) ─────────────────────────
+
+    fn string_meta(entries: &[(&str, &str)]) -> ConfigValue {
+        make_meta(
+            entries
+                .iter()
+                .map(|(k, v)| {
+                    meta_entry(
+                        k,
+                        ConfigValue::new_string(v.to_string(), dummy_source_info()),
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    fn section_ids(sections: &[Block]) -> Vec<&str> {
+        sections
+            .iter()
+            .map(|b| match b {
+                Block::Div(div) => div.attr.0.as_str(),
+                _ => "<not a div>",
+            })
+            .collect()
+    }
+
+    fn main_paragraph() -> Block {
+        Block::Paragraph(Paragraph {
+            content: vec![make_str("Main content")],
+            source_info: dummy_source_info(),
+        })
+    }
+
+    /// Citeproc appends `#refs` after the appendix the transform built: the
+    /// late pass moves it into that appendix, before the footnotes.
+    #[tokio::test]
+    async fn test_place_bibliography_inserts_before_footnotes() {
+        let mut ast = Pandoc {
+            meta: string_meta(&[("license", "CC BY")]),
+            blocks: vec![
+                main_paragraph(),
+                make_appendix_div("appendix-a", "User appendix"),
+                make_footnotes_section(),
+            ],
+        };
+        run_transform(&mut ast).await;
+        ast.blocks.push(make_bibliography());
+
+        assert!(place_bibliography(&mut ast));
+        assert_eq!(ast.blocks.len(), 2, "the bare #refs must be gone");
+        assert_eq!(
+            section_ids(appendix_sections(&ast)),
+            vec![
+                "appendix-a",
+                "quarto-bibliography",
+                "footnotes",
+                "quarto-reuse"
+            ]
+        );
+        assert_eq!(
+            heading_text(section_heading(&appendix_sections(&ast)[1])),
+            "References"
+        );
+    }
+
+    /// Without an appendix, the late pass creates one.
+    #[tokio::test]
+    async fn test_place_bibliography_creates_container() {
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![main_paragraph(), make_bibliography()],
+        };
+        assert!(place_bibliography(&mut ast));
+        assert_eq!(ast.blocks.len(), 2);
+        assert_eq!(
+            section_ids(appendix_sections(&ast)),
+            vec!["quarto-bibliography"]
+        );
+        let Block::Div(container) = &ast.blocks[1] else {
+            unreachable!()
+        };
+        assert_eq!(container.attr.1, vec!["default".to_string()]);
+    }
+
+    /// A bibliography the transform already placed is nested in the
+    /// appendix, so the late pass leaves it alone.
+    #[tokio::test]
+    async fn test_place_bibliography_is_idempotent() {
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![main_paragraph(), make_bibliography()],
+        };
+        run_transform(&mut ast).await;
+        let before = ast.blocks.clone();
+        assert!(!place_bibliography(&mut ast));
+        assert_eq!(ast.blocks, before);
+    }
+
+    /// The late pass honors the same gates as the transform.
+    #[tokio::test]
+    async fn test_place_bibliography_respects_gates() {
+        for (key, value) in [("appendix-style", "none"), ("citation-location", "margin")] {
+            let mut ast = Pandoc {
+                meta: string_meta(&[(key, value)]),
+                blocks: vec![main_paragraph(), make_bibliography()],
+            };
+            assert!(!place_bibliography(&mut ast), "{key}: {value}");
+            assert_eq!(ast.blocks.len(), 2, "{key}: {value}");
+            let Block::Div(div) = &ast.blocks[1] else {
+                unreachable!()
+            };
+            assert_eq!(div.attr.0, "refs", "{key}: {value}");
+        }
+
+        let mut ast = Pandoc {
+            meta: make_meta(vec![meta_entry(
+                "book",
+                ConfigValue::new_bool(true, dummy_source_info()),
+            )]),
+            blocks: vec![main_paragraph(), make_bibliography()],
+        };
+        assert!(!place_bibliography(&mut ast));
+    }
+
+    /// `reference-location: margin` keeps footnotes out of the appendix but
+    /// not the bibliography; that is `citation-location`'s job.
+    #[tokio::test]
+    async fn test_margin_footnotes_still_move_bibliography() {
+        let mut ast = Pandoc {
+            meta: string_meta(&[("reference-location", "margin")]),
+            blocks: vec![
+                main_paragraph(),
+                make_bibliography(),
+                make_footnotes_section(),
+            ],
+        };
+        run_transform(&mut ast).await;
+        assert_eq!(
+            section_ids(appendix_sections(&ast)),
+            vec!["quarto-bibliography"]
+        );
+    }
+
+    /// `reference-section-title` beats the localized term.
+    #[tokio::test]
+    async fn test_reference_section_title_overrides_heading() {
+        let mut meta_entries = match &make_meta_with_lang("es").value {
+            ConfigValueKind::Map(entries) => entries.clone(),
+            _ => unreachable!("make_meta_with_lang builds a map"),
+        };
+        meta_entries.push(meta_entry(
+            "reference-section-title",
+            ConfigValue::new_string("Obras citadas".to_string(), dummy_source_info()),
+        ));
+        let mut ast = Pandoc {
+            meta: make_meta(meta_entries),
+            blocks: vec![make_bibliography()],
+        };
+        run_transform(&mut ast).await;
+        assert_eq!(
+            heading_text(section_heading(&appendix_sections(&ast)[0])),
+            "Obras citadas"
+        );
+    }
+
+    /// An empty `reference-section-title` falls through to the term.
+    #[tokio::test]
+    async fn test_empty_reference_section_title_falls_back() {
+        let mut ast = Pandoc {
+            meta: string_meta(&[("reference-section-title", "  ")]),
+            blocks: vec![make_bibliography()],
+        };
+        run_transform(&mut ast).await;
+        assert_eq!(
+            heading_text(section_heading(&appendix_sections(&ast)[0])),
+            "References"
         );
     }
 }
