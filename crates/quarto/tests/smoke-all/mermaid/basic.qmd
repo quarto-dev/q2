@@ -9,6 +9,9 @@ title: "Mermaid Basic"
 # the script src must be a relative path and jsDelivr must appear
 # nowhere in the output. The negative pattern is the load-bearing one —
 # it is what keeps a rendered site working offline.
+#
+# bd-sehm2rha (GH #1296): the init passes Quarto's themeCSS, written in
+# var(--mermaid-*), and the theme stylesheet defines those properties.
 _quarto:
   tests:
     html:
@@ -22,10 +25,14 @@ _quarto:
             "flowchart LR",
             "a --&gt; b",
             "<script src=\"[^\"]*mermaid\\.min\\.js\"></script>",
-            "mermaid\\.initialize\\(\\{ startOnLoad: false \\}\\)",
+            "mermaid\\.initialize\\(\\{ startOnLoad: false, themeCSS: \"",
+            "var\\(--mermaid-fg-color\\)",
             "mermaid\\.run\\(\\{ querySelector: 'pre\\.mermaid' \\}\\)",
           ]
         - ["a --> b", "cdn\\.jsdelivr\\.net", "https?://"]
+      ensureCssRegexMatches:
+        - ["--mermaid-fg-color:", "--mermaid-font-weight:"]
+        - []
 ---
 
 Before the diagram.

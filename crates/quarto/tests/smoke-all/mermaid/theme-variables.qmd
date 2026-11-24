@@ -1,0 +1,26 @@
+---
+title: "Mermaid theme variables"
+# bd-sehm2rha (GH #1296): `$mermaid-*` SCSS variables reach the compiled
+# `--mermaid-*` custom properties, separately for the light and dark
+# stylesheets, so toggling the color scheme recolors diagrams.
+format:
+  html:
+    theme:
+      light: [cosmo, theme-variables-light.scss]
+      dark: [darkly, theme-variables-dark.scss]
+_quarto:
+  tests:
+    html:
+      noErrorsOrWarnings: true
+      ensureFileRegexMatches:
+        - ["mermaid\\.initialize\\(\\{ startOnLoad: false, themeCSS: \""]
+        - []
+      ensureCssRegexMatches:
+        - ["--mermaid-fg-color:\\s*#123456", "--mermaid-fg-color:\\s*#abcdef"]
+        - []
+---
+
+```mermaid
+sequenceDiagram
+  Alice->>Bob: Hello
+```

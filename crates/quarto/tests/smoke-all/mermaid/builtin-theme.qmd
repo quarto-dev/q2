@@ -1,0 +1,22 @@
+---
+title: "Mermaid built-in theme"
+# bd-sehm2rha (GH #1296): `mermaid: theme:` selects one of mermaid's own
+# themes and drops Quarto's themeCSS, as Quarto 1 does. Q1 documents the
+# option under `format: html:`.
+format:
+  html:
+    mermaid:
+      theme: forest
+_quarto:
+  tests:
+    html:
+      noErrorsOrWarnings: true
+      ensureFileRegexMatches:
+        - ["mermaid\\.initialize\\(\\{ startOnLoad: false, theme: \"forest\" \\}\\)"]
+        - ["themeCSS"]
+---
+
+```mermaid
+flowchart LR
+  a --> b
+```
