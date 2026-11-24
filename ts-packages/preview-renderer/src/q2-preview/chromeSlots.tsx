@@ -206,6 +206,9 @@ export const TocSlot = memo(
                 role="doc-toc"
                 className="toc-active"
                 data-quarto-component={componentName || undefined}
+                // Named by its heading when there is one, like q2
+                // render's toc-block partial (GH #1297).
+                aria-labelledby={titleHtml ? 'toc-title' : undefined}
             >
                 {titleHtml && (
                     <h2

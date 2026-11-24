@@ -1,0 +1,33 @@
+---
+title: Guide one
+_quarto:
+  # Breadcrumbs, the active sidebar entry and page navigation all need
+  # the project index, which a per-file smoke render lacks.
+  render-project: true
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        # GH #1297 (bd-erecx4j8, bd-eczdzfqo): every nav landmark has a
+        # distinct accessible name, matching Quarto 1 (quarto-cli #14813),
+        # and only the in-page TOC is a doc-toc. With a navbar, the
+        # navbar is "Site" and the sidebar is "Section".
+        - - 'nav.navbar[aria-label="Site"]'
+          - 'nav.quarto-secondary-nav[aria-label="Toolbar"]'
+          - 'nav.quarto-page-breadcrumbs[aria-label="Breadcrumbs"]'
+          - 'nav#quarto-sidebar[aria-label="Section"]'
+          - 'nav#TOC[role="doc-toc"][aria-labelledby="toc-title"]'
+          - 'h2#toc-title'
+          - 'nav.page-navigation[aria-label="Page"]'
+        - - 'nav:not([aria-label]):not([aria-labelledby])'
+          - '#quarto-sidebar[role]'
+          - '[role="doc-toc"]:not(#TOC)'
+---
+
+## Heading A
+
+Text.
+
+## Heading B
+
+More text.

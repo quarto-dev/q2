@@ -1,0 +1,32 @@
+---
+title: Guide one
+_quarto:
+  # Breadcrumbs, the active sidebar entry and page navigation all need
+  # the project index, which a per-file smoke render lacks.
+  render-project: true
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        # GH #1297 (bd-erecx4j8): the landmark names come from the
+        # language table (`_language-fr.yml`). Without a navbar, the
+        # sidebar is the site navigation, so it is named "Site web"
+        # rather than "Section" (Quarto 1 `sidebar.ejs:1`).
+        - - 'nav.quarto-secondary-nav[aria-label="Barre d''outils"]'
+          - 'nav.quarto-page-breadcrumbs[aria-label="Fil d''Ariane"]'
+          - 'nav#quarto-sidebar[aria-label="Site web"]'
+          - 'nav#TOC[role="doc-toc"][aria-labelledby="toc-title"]'
+          - 'nav.page-navigation[aria-label="Page"]'
+        - - 'nav.navbar'
+          - 'nav:not([aria-label]):not([aria-labelledby])'
+          - '#quarto-sidebar[role]'
+          - '[role="doc-toc"]:not(#TOC)'
+---
+
+## Heading A
+
+Text.
+
+## Heading B
+
+More text.

@@ -126,6 +126,7 @@ impl AstTransform for BreadcrumbsRenderTransform {
         let html = breadcrumbs_to_html(
             &crumbs,
             &["quarto-title-breadcrumbs", "d-none", "d-lg-block"],
+            &crate::language::landmark_labels(&ast.meta).breadcrumbs,
         );
         ast.meta.insert_path(
             &["rendered", "navigation", "breadcrumbs"],

@@ -147,6 +147,7 @@ impl AstTransform for NavbarRenderTransform {
             .resource_resolver
             .as_ref()
             .map_or_else(|| "./".to_string(), |r| r.page_url_for_site_root_dir());
+        navbar.landmark_label = Some(crate::language::landmark_labels(&ast.meta).site);
         let html = navbar_to_html(&navbar, fallback.as_ref(), &home_url);
 
         ast.meta.insert_path(

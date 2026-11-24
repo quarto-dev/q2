@@ -109,7 +109,8 @@ impl AstTransform for PageNavRenderTransform {
         }
         ctx.diagnostics = local_diags;
 
-        let html = page_navigation_to_html(&page_nav);
+        let html =
+            page_navigation_to_html(&page_nav, &crate::language::landmark_labels(&ast.meta).page);
         ast.meta.insert_path(
             &["rendered", "navigation", "page_navigation"],
             ConfigValue::new_string(&html, SourceInfo::generated(By::programmatic_config())),
@@ -380,7 +381,7 @@ mod tests {
             .unwrap()
             .as_plain_text()
             .unwrap();
-        assert!(html.contains("<nav class=\"page-navigation\">"));
+        assert!(html.contains("<nav class=\"page-navigation\""));
         assert!(html.contains("nav-page-previous"));
         assert!(html.contains("nav-page-next"));
         // Hrefs got rewritten on the way out.

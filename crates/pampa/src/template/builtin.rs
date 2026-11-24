@@ -108,6 +108,35 @@ mod tests {
         );
     }
 
+    /// `nav#TOC` is named by its title heading when there is one, as in
+    /// Pandoc's and Quarto 1's `toc.html` (GH #1297).
+    #[test]
+    fn test_html_template_toc_is_labelled_by_its_title() {
+        use quarto_doctemplate::{TemplateContext, TemplateValue};
+        let template = html_bundle().compile("html.html").unwrap();
+        let mut ctx = TemplateContext::new();
+        ctx.insert("toc", TemplateValue::Bool(true));
+        ctx.insert(
+            "table-of-contents",
+            TemplateValue::String("<ul></ul>".to_string()),
+        );
+        ctx.insert("idprefix", TemplateValue::String("p-".to_string()));
+        let untitled = template.render(&ctx).unwrap();
+        assert!(
+            untitled.contains("<nav id=\"p-TOC\" role=\"doc-toc\">"),
+            "got: {untitled}"
+        );
+        ctx.insert("toc-title", TemplateValue::String("Contents".to_string()));
+        let titled = template.render(&ctx).unwrap();
+        assert!(
+            titled.contains(
+                "<nav id=\"p-TOC\" role=\"doc-toc\" aria-labelledby=\"p-toc-title\">\n\
+                 <h2 id=\"p-toc-title\">Contents</h2>"
+            ),
+            "got: {titled}"
+        );
+    }
+
     #[test]
     fn test_plain_template_compiles() {
         let bundle = plain_bundle();

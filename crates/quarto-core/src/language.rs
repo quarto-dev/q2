@@ -237,6 +237,29 @@ pub fn toggle_dark_mode_label(meta: &ConfigValue) -> String {
         .unwrap_or_else(|| "Toggle dark mode".to_string())
 }
 
+/// The localized names of the page's `<nav>` landmarks: the
+/// `navigation-*-label` terms (bd-erecx4j8, GH #1297). Each term
+/// falls back to English on its own when the language table is
+/// missing or lacks it.
+pub fn landmark_labels(meta: &ConfigValue) -> quarto_navigation::render_html::LandmarkLabels {
+    let mut labels = quarto_navigation::render_html::LandmarkLabels::default();
+    let Some(terms) = LanguageTerms::from_meta(meta) else {
+        return labels;
+    };
+    for (key, slot) in [
+        ("navigation-site-label", &mut labels.site),
+        ("navigation-section-label", &mut labels.section),
+        ("navigation-toolbar-label", &mut labels.toolbar),
+        ("navigation-page-label", &mut labels.page),
+        ("navigation-breadcrumbs-label", &mut labels.breadcrumbs),
+    ] {
+        if let Some(term) = terms.get(key) {
+            *slot = term.to_owned();
+        }
+    }
+    labels
+}
+
 /// The BCP 47 subtag prefix chain for a tag, most general first:
 /// `"pt-BR"` → `["pt", "pt-BR"]`. (Exposed for the stage's sibling-file
 /// probing; resolution itself uses it internally.)
@@ -576,4 +599,43 @@ fn term_layer_from_config(
         );
     }
     Ok(layer)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn s(x: &str) -> ConfigValue {
+        ConfigValue::new_string(x, SourceInfo::for_test())
+    }
+
+    #[test]
+    fn landmark_labels_default_to_english_without_a_table() {
+        let meta = ConfigValue::new_map(vec![], SourceInfo::for_test());
+        assert_eq!(
+            landmark_labels(&meta),
+            quarto_navigation::render_html::LandmarkLabels::default()
+        );
+    }
+
+    /// Each term comes from the language table, and a term the table
+    /// lacks falls back to English on its own.
+    #[test]
+    fn landmark_labels_read_the_language_table() {
+        let mut meta = ConfigValue::new_map(vec![], SourceInfo::for_test());
+        for (key, value) in [
+            ("navigation-site-label", "Site web"),
+            ("navigation-section-label", "Rubrique"),
+            ("navigation-toolbar-label", "Barre d'outils"),
+            ("navigation-page-label", "Pagination"),
+        ] {
+            meta.insert_path(&["quarto", "language", key], s(value));
+        }
+        let labels = landmark_labels(&meta);
+        assert_eq!(labels.site, "Site web");
+        assert_eq!(labels.section, "Rubrique");
+        assert_eq!(labels.toolbar, "Barre d'outils");
+        assert_eq!(labels.page, "Pagination");
+        assert_eq!(labels.breadcrumbs, "Breadcrumbs");
+    }
 }

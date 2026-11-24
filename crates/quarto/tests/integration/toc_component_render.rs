@@ -87,7 +87,9 @@ fn default_page_ships_the_script_and_the_component_page_does_not() {
     );
     assert!(plain.contains("<ul data-toc-expanded=\"2\">"), "{plain}");
     assert!(
-        plain.contains("<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\">"),
+        plain.contains(
+            "<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\" aria-labelledby=\"toc-title\">"
+        ),
         "plain.html's nav carries no host attribute:\n{plain}"
     );
     assert!(
@@ -102,7 +104,8 @@ fn default_page_ships_the_script_and_the_component_page_does_not() {
     );
     assert!(
         index.contains(
-            "<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\" data-quarto-component=\"quarto-toc\">"
+            "<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\" data-quarto-component=\"quarto-toc\" \
+             aria-labelledby=\"toc-title\">"
         ),
         "index.html's nav is the component host:\n{index}"
     );
