@@ -1,0 +1,112 @@
+Run test suite (ubuntu-latest)	Build WASM module	﻿2026-10-27T15:57:20.5389816Z ##[group]Run cd hub-client
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.5390187Z ^[[36;1mcd hub-client^[[0m
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.5390494Z ^[[36;1mnpm run build:all^[[0m
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.5457780Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.5458275Z env:
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.5458559Z   PANDOC_VERSION: 3.12.1
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.5458923Z   TYPST_VERSION: 0.15.1
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.5459296Z   CARGO_HOME: /home/runner/.cargo
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.5459710Z   CARGO_INCREMENTAL: 0
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.5460067Z   CARGO_TERM_COLOR: always
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.5460431Z ##[endgroup]
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.6959670Z 
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.6960362Z > hub-client@0.0.0 build:all
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.6961936Z > npm run fetch:pandoc && npm run build:wasm && npm run build:sandboxed && npm run build && npm run check:sw-precache
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.6962746Z 
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.8448762Z 
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.8449529Z > hub-client@0.0.0 fetch:pandoc
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.8450500Z > node ../scripts/fetch-pandoc-wasm.mjs --require
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:20.8451785Z 
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:29.3121980Z pandoc.wasm ok: .cache/pandoc-wasm/pandoc.wasm, hub-client/public/pandoc/pandoc.wasm.gz
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:31.7888844Z typst assets ok: hub-client/public/typst/typst.wasm.gz, hub-client/public/typst/fonts.bin.gz, .cache/typst-assets/fonts.bin
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:32.0894535Z pdf.js viewer ok: hub-client/public/pdfjs, q2-preview-spa/public/pdfjs
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:32.2511354Z 
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:32.2511999Z > hub-client@0.0.0 build:wasm
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:32.2512512Z > node scripts/build-wasm.js
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:32.2512767Z 
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:32.2874349Z Building wasm-quarto-hub-client...
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:32.2874751Z 
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:32.2876781Z Cleaning existing pkg/ directory...
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:32.2883171Z Step 1/3: cargo build --target wasm32-unknown-unknown --release
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:32.2884422Z   $ cargo build --target wasm32-unknown-unknown --release
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:32.3929164Z ^[[1m^[[92m    Updating^[[0m crates.io index
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:32.3994253Z ^[[1m^[[92m    Updating^[[0m git repository `https://github.com/quarto-dev/typst-gather`
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.3770058Z ^[[1m^[[91merror^[[0m: failed to select a version for the requirement `quarto-error-reporting = "^0.4.1"`
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.3771915Z candidate versions found which didn't match: 0.4.0, 0.3.2, 0.3.1, ...
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.3773002Z location searched: crates.io index
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.3774163Z required by package `pampa v0.0.0 (/home/runner/work/q2/q2/crates/pampa)`
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.3775771Z     ... which satisfies path dependency `pampa` (locked to 0.0.0) of package `wasm-quarto-hub-client v0.1.0 (/home/runner/work/q2/q2/crates/wasm-quarto-hub-client)`
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.3849872Z 
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.3850361Z Build failed: cargo exited with code 101
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.3915804Z npm error Lifecycle script `build:wasm` failed with error:
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.3917085Z npm error code 1
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.3918371Z npm error path /home/runner/work/q2/q2/hub-client
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.3919532Z npm error workspace hub-client@0.0.0
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.3920718Z npm error location /home/runner/work/q2/q2/hub-client
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.3922067Z npm error command failed
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.3923999Z npm error command sh -c node scripts/build-wasm.js
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.4016943Z npm error Lifecycle script `build:all` failed with error:
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.4018042Z npm error code 1
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.4019200Z npm error path /home/runner/work/q2/q2/hub-client
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.4020169Z npm error workspace hub-client@0.0.0
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.4021281Z npm error location /home/runner/work/q2/q2/hub-client
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.4022591Z npm error command failed
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.4026839Z npm error command sh -c npm run fetch:pandoc && npm run build:wasm && npm run build:sandboxed && npm run build && npm run check:sw-precache
+Run test suite (ubuntu-latest)	Build WASM module	2026-10-27T15:57:33.4095709Z ##[error]Process completed with exit code 1.
+Run test suite (macos-latest)	Build WASM module	﻿2026-10-27T16:02:52.8607820Z ##[group]Run cd hub-client
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:52.8608570Z ^[[36;1mcd hub-client^[[0m
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:52.8608920Z ^[[36;1mnpm run build:all^[[0m
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:52.8749780Z shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:52.8750470Z env:
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:52.8805630Z   PANDOC_VERSION: 3.12.1
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:52.8806750Z   TYPST_VERSION: 0.15.1
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:52.8808090Z   HOMEBREW_NO_INSTALL_FROM_API: 
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:52.8811520Z   HOMEBREW_GITHUB_API_TOKEN: ***
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:52.8811920Z   HOMEBREW_UPDATE_TO_TAG: 1
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:52.8812430Z   CARGO_HOME: /Users/runner/.cargo
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:52.8812810Z   CARGO_INCREMENTAL: 0
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:52.8813180Z   CARGO_TERM_COLOR: always
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:52.8813540Z ##[endgroup]
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:53.3076860Z 
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:53.3077930Z > hub-client@0.0.0 build:all
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:53.3078780Z > npm run fetch:pandoc && npm run build:wasm && npm run build:sandboxed && npm run build && npm run check:sw-precache
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:53.3079340Z 
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:53.5126450Z 
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:53.5228070Z > hub-client@0.0.0 fetch:pandoc
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:53.5330720Z > node ../scripts/fetch-pandoc-wasm.mjs --require
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:02:53.5436170Z 
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:01.9324150Z pandoc.wasm ok: .cache/pandoc-wasm/pandoc.wasm, hub-client/public/pandoc/pandoc.wasm.gz
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:04.3417340Z typst assets ok: hub-client/public/typst/typst.wasm.gz, hub-client/public/typst/fonts.bin.gz, .cache/typst-assets/fonts.bin
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:04.9538410Z pdf.js viewer ok: hub-client/public/pdfjs, q2-preview-spa/public/pdfjs
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:05.2325140Z 
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:05.2426600Z > hub-client@0.0.0 build:wasm
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:05.2513390Z > node scripts/build-wasm.js
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:05.2514710Z 
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:05.3350330Z Building wasm-quarto-hub-client...
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:05.3352010Z 
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:05.3364980Z Step 1/3: cargo build --target wasm32-unknown-unknown --release
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:05.3368540Z   $ cargo build --target wasm32-unknown-unknown --release
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:05.6468040Z ^[[1m^[[92m    Updating^[[0m crates.io index
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:05.6758890Z ^[[1m^[[92m    Updating^[[0m git repository `https://github.com/quarto-dev/typst-gather`
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4015540Z ^[[1m^[[91merror^[[0m: failed to select a version for the requirement `quarto-error-reporting = "^0.4.1"`
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4025030Z candidate versions found which didn't match: 0.4.0, 0.3.2, 0.3.1, ...
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4025530Z location searched: crates.io index
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4026100Z required by package `pampa v0.0.0 (/Users/runner/work/q2/q2/crates/pampa)`
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4027080Z     ... which satisfies path dependency `pampa` (locked to 0.0.0) of package `wasm-quarto-hub-client v0.1.0 (/Users/runner/work/q2/q2/crates/wasm-quarto-hub-client)`
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4073700Z 
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4074480Z Build failed: cargo exited with code 101
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4123480Z npm error Lifecycle script `build:wasm` failed with error:
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4124410Z npm error code 1
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4124920Z npm error path /Users/runner/work/q2/q2/hub-client
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4128890Z npm error workspace hub-client@0.0.0
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4129390Z npm error location /Users/runner/work/q2/q2/hub-client
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4129790Z npm error command failed
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4130280Z npm error command sh -c node scripts/build-wasm.js
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4235230Z npm error Lifecycle script `build:all` failed with error:
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4237280Z npm error code 1
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4239470Z npm error path /Users/runner/work/q2/q2/hub-client
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4240140Z npm error workspace hub-client@0.0.0
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4240770Z npm error location /Users/runner/work/q2/q2/hub-client
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4241330Z npm error command failed
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4242200Z npm error command sh -c npm run fetch:pandoc && npm run build:wasm && npm run build:sandboxed && npm run build && npm run check:sw-precache
+Run test suite (macos-latest)	Build WASM module	2026-10-27T16:03:06.4289350Z ##[error]Process completed with exit code 1.
