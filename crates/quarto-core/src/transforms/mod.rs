@@ -58,7 +58,7 @@ mod about_page_diagnostics;
 mod anchor_sections;
 mod announcement_generate;
 mod announcement_render;
-mod appendix;
+pub(crate) mod appendix;
 mod attribution_generate;
 mod attribution_render;
 mod attribution_viewer;

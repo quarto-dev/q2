@@ -156,3 +156,25 @@ target/debug/q2 render <each fixture>.qmd   # in a scratch copy, see Reproductio
 - GH #1026: citeproc enabled by default from `bibliography:` (`apply_citeproc_default`)
 - GH #1225: footnote citations with citeproc in the pre bucket
 - `crates/quarto-core/src/transforms/appendix.rs` module docs
+
+## Fix (same branch)
+
+Approach (A), implemented on `issue-1221`:
+
+- `transforms/appendix.rs`: new `place_bibliography` moves a top-level
+  `#refs` into `#quarto-appendix`. It inserts the section before the
+  footnotes and metadata sections, or creates the container if there is none.
+  It uses the transform's gates. The bibliography heading reads
+  `reference-section-title` first (`bibliography_title`). The bibliography gate
+  is now `citation-location: margin`, as in Q1's `hasMarginCites`, instead of
+  `reference-location`.
+- `stage/stages/appendix_bibliography.rs`: `AppendixBibliographyStage` calls
+  it right after `UserFiltersStage::post`. It runs in HTML and q2-preview and
+  is excluded from the Pandoc-writer formats (`PANDOC_STAGE_EXCLUDED`).
+- Q1 doesn't move a `#refs` the author placed under their own heading,
+  because the div is nested in that heading's section. The fix keeps that
+  behavior, and `html_citations::author_placed_refs_under_heading_stay_in_place`
+  pins it.
+- Tests: `tests/integration/html_citations.rs` covers the three issue pages,
+  footnote ordering, the margin gates and `appendix-style: none`. Unit tests
+  for `place_bibliography` are in `appendix.rs`.
