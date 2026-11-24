@@ -607,3 +607,13 @@ after the second fix.
 
 Not investigated: the vanishing newline at a hard wrap in Maurice's typing ("the periodogram of / fusion times"),
 seed 1, clone runs only. Keep it separate from this fix.
+
+### Converged steps and the wrap bug (2026-11-24)
+
+"Converged" means both peers are on the canonical doc for the path and blob, and an edit typed by either one reaches the other. The status route and the two editor kinds expose no common doc-id readout, so the stories prove convergence by text in both directions in one file.
+
+- `hub-vscode-clone` ends with `myra-edits` (Myra to Maurice) and a new `maurice-replies` (Maurice to Myra).
+- `hub-browser` and `hub-vscode-host` end with `maurice-retypes` (Maurice to Myra) and a new `myra-replies` (Myra to Maurice).
+- `vscode-share` still ends on a commit; its converged step is pending.
+
+Known intermittent defect, not fixed here: when Maurice's typing crosses a hard wrap, the space at the wrap can vanish (`at the drivingfrequency` in the hub's file). It appeared in one `--fast` run of `hub-vscode-clone` that ran in parallel with another demo, and the `maurice-types` needle then timed out. A solo rerun passed.

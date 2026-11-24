@@ -114,5 +114,19 @@ export function hubCloneStory(d: Demo): Step[] {
         await shows(d, 'host', EDITS.myraNeedle);
       },
     },
+    {
+      id: 'maurice-replies',
+      caption: 'Maurice answers from his clone. Her words reached him, and now his reach her: they have converged.',
+      action: async () => {
+        await d.typeUnder('guest', 'Introduction', EDITS.mauriceReply);
+      },
+      check: async () => {
+        await until("the hub wrote Maurice's reply", () => diskFlat(d, PY_PAPER).includes(EDITS.mauriceReplyNeedle));
+        await shows(d, 'host', EDITS.mauriceReplyNeedle);
+        await shows(d, 'guest', EDITS.mauriceReplyNeedle);
+        // Both directions in the one file: Myra's reply is still there beside it.
+        await shows(d, 'guest', EDITS.myraNeedle);
+      },
+    },
   ];
 }

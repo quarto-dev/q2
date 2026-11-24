@@ -17,6 +17,14 @@ export const EDITS = {
   /** Myra's reply, typed under the Introduction at the end of the clone story to show the two are connected again. */
   myra: 'The humidity chamber runs on a 24-hour schedule, so the periodogram should peak near one cycle per day; a peak elsewhere would be worth a second look.',
   myraNeedle: 'peak near one cycle per day',
+  /** Maurice's answer to Myra's reply, typed in his clone: the two have converged when it reaches her. */
+  mauriceReply:
+    'Power at two cycles per day would not be a defect: it would suggest that fusion responds separately to the wetting and drying limbs of the cycle.',
+  mauriceReplyNeedle: 'wetting and drying limbs of the cycle',
+  /** Myra's answer to Maurice's retyped question about pooling, at the end of the hub story. */
+  myraReply:
+    'Pooling is defensible only if the colonies share a phase, so we shall test for phase coherence across colonies before combining the series.',
+  myraReplyNeedle: 'test for phase coherence across colonies',
   /** The same, for the tip extension paper in the vscode-share story. */
   tip: 'Tip extension depends on turgor, and turgor follows the humidity schedule with a lag, so we expect the dry and cycling regimes to differ most at the start of each cycle.',
   tipNeedle: 'dry and cycling regimes to differ most',

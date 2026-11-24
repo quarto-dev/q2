@@ -175,6 +175,20 @@ export function hubStory(d: Demo): Step[] {
         expect(diskFlat(d, PY_PAPER)).not.toContain(EDITS.ideaNeedle);
       },
     },
+    {
+      id: 'myra-replies',
+      caption: 'Myra answers his question. Each has now seen the other type after the rebase: they have converged.',
+      action: async () => {
+        await d.typeUnder('host', 'Introduction', EDITS.myraReply);
+      },
+      check: async () => {
+        await until("the hub wrote Myra's reply", () => diskFlat(d, PY_PAPER).includes(EDITS.myraReplyNeedle));
+        await shows(d, 'host', EDITS.myraReplyNeedle);
+        await shows(d, guest, EDITS.myraReplyNeedle);
+        // Both directions in the one file: Maurice's retyped question is still there beside it.
+        await shows(d, guest, EDITS.ideaAgainNeedle);
+      },
+    },
   ];
 }
 
