@@ -50,10 +50,22 @@
 //!
 //! ## Scope
 //!
-//! HTML-based formats only, and not the q2-preview React renderer: the
-//! definition list is written as split raw HTML around the item content,
-//! which that renderer cannot enclose. There the markers stay visible, as
-//! they were before this pass existed.
+//! HTML-based formats only.
+//!
+//! ## The q2-preview React renderer
+//!
+//! The native shape of the list is split raw HTML (`<dl>`, `<dt>…<dd>`,
+//! `</dd>`, `</dl>` as separate `RawBlock`s around the item content). The
+//! React renderer wraps every `RawBlock` in its own element, so it cannot
+//! enclose content that way. For the preview profiles the list is built
+//! from `Div`s instead, which `Div.tsx` renders as the same `dl`/`dt`/`dd`:
+//!
+//! - `Div.code-annotation-container-grid` → `<dl>`;
+//! - `Div.code-annotation-item[data-target-cell][data-target-annotation]`
+//!   → `<dt>N</dt><dd>…</dd>`.
+//!
+//! The preview has no popover library, so `hover` and `select` render there
+//! as `below`: inert markers and a visible list.
 
 use std::collections::BTreeMap;
 
@@ -202,6 +214,8 @@ fn resolve_annotations(cb: &mut CodeBlock) -> Annotations {
 /// Per-document state for the pass.
 struct Pass {
     mode: AnnotationMode,
+    /// Build the list from `Div`s for the React renderer (module docs).
+    preview: bool,
     /// Q1's `idCounter`: advances for every candidate block without an
     /// id, annotated or not, so ids match Q1's.
     id_counter: usize,
@@ -396,6 +410,9 @@ impl Pass {
         items: Vec<Blocks>,
         source_info: &SourceInfo,
     ) -> Blocks {
+        if self.preview {
+            return self.definition_list_divs(pending, start, items, source_info);
+        }
         let raw = |text: String| {
             Block::RawBlock(Box::new(RawBlock {
                 format: "html".to_string(),
@@ -457,6 +474,74 @@ impl Pass {
     }
 }
 
+impl Pass {
+    /// The `Div` form of [`Pass::definition_list`], for the React renderer.
+    fn definition_list_divs(
+        &self,
+        pending: &Pending,
+        start: usize,
+        items: Vec<Blocks>,
+        source_info: &SourceInfo,
+    ) -> Blocks {
+        let div = |classes: &[&str], kvs: Vec<(&str, String)>, content: Blocks| {
+            let mut map = hashlink::LinkedHashMap::new();
+            for (k, v) in kvs {
+                map.insert(k.to_string(), v);
+            }
+            Block::Div(Box::new(Div {
+                attr: (
+                    String::new(),
+                    classes.iter().map(|c| c.to_string()).collect(),
+                    map,
+                )
+                    .into(),
+                content,
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty(),
+            }))
+        };
+        let mut rows: Blocks = Vec::new();
+        for (i, item) in items.into_iter().enumerate() {
+            let number = (start + i) as u32;
+            let Some(lines) = pending.annotations.get(&number) else {
+                continue;
+            };
+            let lines = lines
+                .iter()
+                .map(usize::to_string)
+                .collect::<Vec<_>>()
+                .join(",");
+            let content: Inlines = match item.into_iter().next() {
+                Some(Block::Plain(p)) => p.content,
+                Some(Block::Paragraph(p)) => p.content,
+                _ => Vec::new(),
+            };
+            let mut kvs = hashlink::LinkedHashMap::new();
+            kvs.insert("data-code-cell".to_string(), pending.cell_id.clone());
+            kvs.insert("data-code-lines".to_string(), lines);
+            kvs.insert("data-code-annotation".to_string(), number.to_string());
+            let span = Inline::Span(Box::new(Span {
+                attr: (String::new(), Vec::new(), kvs).into(),
+                content,
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty(),
+            }));
+            rows.push(div(
+                &["code-annotation-item"],
+                vec![
+                    ("data-target-cell", pending.cell_id.clone()),
+                    ("data-target-annotation", number.to_string()),
+                ],
+                vec![Block::Plain(Plain {
+                    content: vec![span],
+                    source_info: source_info.clone(),
+                })],
+            ));
+        }
+        vec![div(&["code-annotation-container-grid"], vec![], rows)]
+    }
+}
+
 fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -467,12 +552,25 @@ fn html_escape(s: &str) -> String {
 /// Run the annotation pass over a document's blocks. Returns `true`
 /// when at least one block was annotated in an interactive mode, so the
 /// caller knows the page needs the annotation script.
-pub(crate) fn apply_code_annotations(blocks: &mut Blocks, mode: AnnotationMode) -> bool {
+///
+/// `preview` selects the `Div` form of the list and turns the interactive
+/// modes into `below` (module docs).
+pub(crate) fn apply_code_annotations(
+    blocks: &mut Blocks,
+    mode: AnnotationMode,
+    preview: bool,
+) -> bool {
     if mode == AnnotationMode::Off {
         return false;
     }
+    let mode = if preview && mode.is_interactive() {
+        AnnotationMode::Below
+    } else {
+        mode
+    };
     let mut pass = Pass {
         mode,
+        preview,
         id_counter: 1,
     };
     pass.process_blocks(blocks);
@@ -604,7 +702,7 @@ mod tests {
             ),
             ol(1, &["First.", "Second."]),
         ];
-        let needs_script = apply_code_annotations(&mut blocks, AnnotationMode::Below);
+        let needs_script = apply_code_annotations(&mut blocks, AnnotationMode::Below, false);
         assert!(!needs_script);
 
         let cb = as_code(&blocks[0]);
@@ -648,7 +746,11 @@ mod tests {
     #[test]
     fn hover_marks_the_block_interactive_and_hides_the_list() {
         let mut blocks = vec![code("a = 1  # <1>", &["python"]), ol(1, &["First."])];
-        assert!(apply_code_annotations(&mut blocks, AnnotationMode::Hover));
+        assert!(apply_code_annotations(
+            &mut blocks,
+            AnnotationMode::Hover,
+            false
+        ));
         assert_eq!(
             as_code(&blocks[0])
                 .attr
@@ -664,13 +766,51 @@ mod tests {
     }
 
     #[test]
+    fn preview_builds_the_list_from_divs_and_keeps_markers_inert() {
+        let mut blocks = vec![
+            code("a = 1  # <1>\nb = 2  # <2>", &["python"]),
+            ol(1, &["First.", "Second."]),
+        ];
+        // `hover` in the preview behaves as `below`.
+        let needs_script = apply_code_annotations(&mut blocks, AnnotationMode::Hover, true);
+        assert!(!needs_script);
+        assert!(as_code(&blocks[0]).attr.2.get(INTERACTIVE_ATTR).is_none());
+
+        assert_eq!(blocks.len(), 2, "one container Div, no raw HTML");
+        let Block::Div(container) = &blocks[1] else {
+            panic!("expected the container Div; got {:?}", blocks[1]);
+        };
+        assert_eq!(
+            container.attr.1,
+            vec!["code-annotation-container-grid".to_string()]
+        );
+        assert_eq!(container.content.len(), 2);
+        let Block::Div(item) = &container.content[1] else {
+            panic!("expected an item Div");
+        };
+        assert_eq!(item.attr.1, vec!["code-annotation-item".to_string()]);
+        assert_eq!(
+            item.attr
+                .2
+                .get("data-target-annotation")
+                .map(String::as_str),
+            Some("2")
+        );
+        assert_eq!(
+            item.attr.2.get("data-target-cell").map(String::as_str),
+            Some("annotated-cell-1")
+        );
+        assert!(matches!(item.content[0], Block::Plain(_)));
+    }
+
+    #[test]
     fn none_strips_markers_and_drops_the_list() {
         let mut blocks = vec![
             code("a = 1  # <1>", &["python"]),
             ol(1, &["First."]),
             para("after"),
         ];
-        apply_code_annotations(&mut blocks, AnnotationMode::None);
+        apply_code_annotations(&mut blocks, AnnotationMode::None, false);
         assert_eq!(blocks.len(), 2);
         let cb = as_code(&blocks[0]);
         assert_eq!(cb.text, "a = 1");
@@ -683,7 +823,7 @@ mod tests {
     fn off_changes_nothing() {
         let mut blocks = vec![code("a = 1  # <1>", &["python"]), ol(1, &["First."])];
         let before = blocks.clone();
-        apply_code_annotations(&mut blocks, AnnotationMode::Off);
+        apply_code_annotations(&mut blocks, AnnotationMode::Off, false);
         assert_eq!(blocks, before);
     }
 
@@ -694,7 +834,7 @@ mod tests {
             para("between"),
             ol(1, &["First."]),
         ];
-        apply_code_annotations(&mut blocks, AnnotationMode::Below);
+        apply_code_annotations(&mut blocks, AnnotationMode::Below, false);
         assert_eq!(blocks.len(), 3);
         assert!(matches!(blocks[2], Block::OrderedList(_)));
         // The markers are still stripped and the anchors still placed.
@@ -710,7 +850,7 @@ mod tests {
             code("a = 1  # <1>", &["python"]),
             ol(1, &["First."]),
         ];
-        apply_code_annotations(&mut blocks, AnnotationMode::Below);
+        apply_code_annotations(&mut blocks, AnnotationMode::Below, false);
         assert!(as_code(&blocks[0]).attr.0.is_empty());
         assert_eq!(as_code(&blocks[1]).attr.0, "annotated-cell-2");
     }
@@ -725,7 +865,7 @@ mod tests {
             ],
         );
         let mut blocks = vec![cell, ol(1, &["Assign."])];
-        apply_code_annotations(&mut blocks, AnnotationMode::Below);
+        apply_code_annotations(&mut blocks, AnnotationMode::Below, false);
 
         assert_eq!(blocks.len(), 1, "the list moves into the cell");
         let Block::Div(cell) = &blocks[0] else {
@@ -752,7 +892,7 @@ mod tests {
             cb.attr.2.insert("startFrom".to_string(), "10".to_string());
         }
         let mut blocks = vec![block, ol(1, &["A.", "B."])];
-        apply_code_annotations(&mut blocks, AnnotationMode::Below);
+        apply_code_annotations(&mut blocks, AnnotationMode::Below, false);
         assert_eq!(
             as_code(&blocks[0])
                 .attr
@@ -771,7 +911,7 @@ mod tests {
             code("SELECT 1;  -- <1>", &["sql"]),
             ol(1, &["One."]),
         ];
-        apply_code_annotations(&mut blocks, AnnotationMode::Below);
+        apply_code_annotations(&mut blocks, AnnotationMode::Below, false);
         assert_eq!(as_code(&blocks[0]).text, "const x = 1;");
         let sql = blocks
             .iter()

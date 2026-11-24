@@ -48,9 +48,11 @@
 //!    filename bar while the fold is closed.
 //!
 //!    The q2-preview React renderer wraps each `RawBlock` in its own
-//!    `<div>`, so the open/close pair cannot enclose the code there;
-//!    the fold layer is skipped for `PipelineProfile::HtmlPreview`
-//!    until the preview gets a fold component.
+//!    `<div>`, so the open/close pair cannot enclose the code there.
+//!    For the preview profiles the fold is one wrapper instead,
+//!    `Div.code-fold[data-code-summary]` (plus `data-code-fold-open`
+//!    for `show`), which `Div.tsx` renders as the same
+//!    `<details class="code-fold"><summary>…</summary>…</details>`.
 //!
 //! Hover-vs-always visibility is controlled by the SCSS variable
 //! `$code-copy-selector` ported in Commit 3, not by the markup — both
@@ -65,7 +67,6 @@ use quarto_pandoc_types::block::{Block, Blocks, Div, RawBlock};
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
-use crate::format::PipelineProfile;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::code_block_generate::{
@@ -106,10 +107,13 @@ impl AstTransform for CodeBlockRenderTransform {
             return Ok(());
         }
 
-        // See module docs: split raw HTML cannot enclose content in the
-        // React preview, so the fold layer is native-render only.
-        let emit_fold = ctx.pipeline_profile != PipelineProfile::HtmlPreview;
-        wrap_decorated_blocks(&mut ast.blocks, &ctx.code_block_decorations, emit_fold);
+        // See module docs: the React preview gets the fold as a Div.
+        let fold = if ctx.pipeline_profile.is_preview() {
+            FoldShape::PreviewDiv
+        } else {
+            FoldShape::RawSiblings
+        };
+        wrap_decorated_blocks(&mut ast.blocks, &ctx.code_block_decorations, fold);
         Ok(())
     }
 }
@@ -124,7 +128,7 @@ impl AstTransform for CodeBlockRenderTransform {
 fn wrap_decorated_blocks(
     blocks: &mut Blocks,
     decorations: &std::collections::HashMap<CodeBlockDecorationKey, CodeBlockDecoration>,
-    emit_fold: bool,
+    fold_shape: FoldShape,
 ) {
     let mut i = 0;
     while i < blocks.len() {
@@ -138,30 +142,39 @@ fn wrap_decorated_blocks(
                     wrap_in_place(&mut blocks[i], decoration);
                     // Layer 3 (Phase 3): fold. The open and close tags
                     // become siblings of the wrapped block.
-                    if emit_fold && decoration.fold.is_on() {
-                        blocks.insert(i + 1, make_fold_close(source_info.clone()));
-                        blocks.insert(i, make_fold_open(decoration, source_info));
-                        i += 2;
+                    if decoration.fold.is_on() {
+                        match fold_shape {
+                            FoldShape::RawSiblings => {
+                                blocks.insert(i + 1, make_fold_close(source_info.clone()));
+                                blocks.insert(i, make_fold_open(decoration, source_info));
+                                i += 2;
+                            }
+                            FoldShape::PreviewDiv => {
+                                wrap_with_fold_div(&mut blocks[i], decoration, source_info);
+                            }
+                        }
                     }
                 }
             }
-            Block::BlockQuote(bq) => wrap_decorated_blocks(&mut bq.content, decorations, emit_fold),
-            Block::Div(div) => wrap_decorated_blocks(&mut div.content, decorations, emit_fold),
-            Block::Figure(fig) => wrap_decorated_blocks(&mut fig.content, decorations, emit_fold),
+            Block::BlockQuote(bq) => {
+                wrap_decorated_blocks(&mut bq.content, decorations, fold_shape)
+            }
+            Block::Div(div) => wrap_decorated_blocks(&mut div.content, decorations, fold_shape),
+            Block::Figure(fig) => wrap_decorated_blocks(&mut fig.content, decorations, fold_shape),
             Block::OrderedList(list) => {
                 for item in list.content.iter_mut() {
-                    wrap_decorated_blocks(item, decorations, emit_fold);
+                    wrap_decorated_blocks(item, decorations, fold_shape);
                 }
             }
             Block::BulletList(list) => {
                 for item in list.content.iter_mut() {
-                    wrap_decorated_blocks(item, decorations, emit_fold);
+                    wrap_decorated_blocks(item, decorations, fold_shape);
                 }
             }
             Block::DefinitionList(dl) => {
                 for (_term, defs) in dl.content.iter_mut() {
                     for def in defs.iter_mut() {
-                        wrap_decorated_blocks(def, decorations, emit_fold);
+                        wrap_decorated_blocks(def, decorations, fold_shape);
                     }
                 }
             }
@@ -169,6 +182,52 @@ fn wrap_decorated_blocks(
         }
         i += 1;
     }
+}
+
+/// How the fold reaches the output; see the module docs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FoldShape {
+    /// `<details>` and `</details>` as sibling `RawBlock`s (native HTML).
+    RawSiblings,
+    /// One `Div.code-fold` wrapper (q2-preview React renderer).
+    PreviewDiv,
+}
+
+/// Wrap `block` in the preview form of the fold: a `Div.code-fold` whose
+/// `data-code-summary` holds the summary text. `Div.tsx` renders it as
+/// `<details>`.
+fn wrap_with_fold_div(
+    block: &mut Block,
+    decoration: &CodeBlockDecoration,
+    source_info: quarto_source_map::SourceInfo,
+) {
+    let placeholder = Block::RawBlock(Box::new(RawBlock {
+        format: "html".to_string(),
+        text: String::new(),
+        source_info: source_info.clone(),
+    }));
+    let inner = std::mem::replace(block, placeholder);
+    let mut classes = vec!["code-fold".to_string()];
+    if decoration.fold_hidden {
+        classes.push("hidden".to_string());
+    }
+    let mut kvs = hashlink::LinkedHashMap::new();
+    kvs.insert(
+        "data-code-summary".to_string(),
+        decoration
+            .summary
+            .clone()
+            .unwrap_or_else(|| DEFAULT_CODE_SUMMARY.to_string()),
+    );
+    if decoration.fold == FoldMode::Show {
+        kvs.insert("data-code-fold-open".to_string(), "true".to_string());
+    }
+    *block = Block::Div(Box::new(Div {
+        attr: (String::new(), classes, kvs).into(),
+        content: vec![inner],
+        source_info,
+        attr_source: AttrSourceInfo::empty(),
+    }));
 }
 
 /// Build the `<details class="code-fold"><summary>…</summary>` opener.
@@ -362,7 +421,7 @@ fn html_escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::format::Format;
+    use crate::format::{Format, PipelineProfile};
     use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
     use crate::render::BinaryDependencies;
     use quarto_pandoc_types::block::CodeBlock;
@@ -610,20 +669,41 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn render_skips_fold_layer_in_preview() {
-        // The React preview cannot enclose content between two
-        // RawBlocks, so no stray empty <details> may be emitted.
-        let children = render_cell(
-            meta_code_copy_false(),
-            vec![make_cell_code("x <- 1", vec![("code-fold", "true")])],
-            Some(PipelineProfile::HtmlPreview),
-        )
-        .await;
-        assert_eq!(children.len(), 1, "got {:?}", children);
-        let Block::CodeBlock(cb) = &children[0] else {
-            panic!("expected the bare CodeBlock; got {:?}", children[0]);
-        };
-        assert!(cb.attr.2.get("code-fold").is_none());
+    async fn render_folds_with_one_div_in_preview() {
+        // The React preview cannot enclose content between two RawBlocks,
+        // so the fold is a single Div it renders as <details>.
+        for profile in [
+            PipelineProfile::HtmlPreview,
+            PipelineProfile::RevealjsPreview,
+            PipelineProfile::DashboardPreview,
+        ] {
+            let children = render_cell(
+                meta_code_copy_false(),
+                vec![make_cell_code(
+                    "x <- 1",
+                    vec![("code-fold", "show"), ("code-summary", "Peek")],
+                )],
+                Some(profile),
+            )
+            .await;
+            assert_eq!(children.len(), 1, "got {:?}", children);
+            let Block::Div(fold) = &children[0] else {
+                panic!("expected the fold Div; got {:?}", children[0]);
+            };
+            assert_eq!(fold.attr.1, vec!["code-fold".to_string()]);
+            assert_eq!(
+                fold.attr.2.get("data-code-summary").map(String::as_str),
+                Some("Peek")
+            );
+            assert_eq!(
+                fold.attr.2.get("data-code-fold-open").map(String::as_str),
+                Some("true")
+            );
+            let Block::CodeBlock(cb) = &fold.content[0] else {
+                panic!("expected the CodeBlock inside the fold");
+            };
+            assert!(cb.attr.2.get("code-fold").is_none());
+        }
     }
 
     /// End-to-end shape test: run Generate then Render on a single

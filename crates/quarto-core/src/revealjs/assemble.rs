@@ -485,6 +485,11 @@ pub fn render_revealjs_document(
         .unwrap_or_default();
     let after_body_block = includes_block(meta, "after-body");
 
+    // The init call keeps the literal shape `Reveal.initialize({{…}})`:
+    // Quarto Hub's printable-deck export rewrites it by string
+    // (`revealPrintMode.ts`). The line-highlight plugin is therefore
+    // registered beforehand; reveal queues `registerPlugin` calls made
+    // before `initialize`.
     format!(
         r#"<!DOCTYPE html>
 <html lang="{lang}"{dir_attr}>
@@ -502,9 +507,8 @@ pub fn render_revealjs_document(
 </div>
 {scripts}
 <script>
-const quartoRevealConfig = {config};
-quartoRevealConfig.plugins = [window.QuartoLineHighlight].filter(Boolean);
-Reveal.initialize(quartoRevealConfig);
+if (window.QuartoLineHighlight) Reveal.registerPlugin(window.QuartoLineHighlight);
+Reveal.initialize({config});
 </script>{after_body_block}
 </body>
 </html>

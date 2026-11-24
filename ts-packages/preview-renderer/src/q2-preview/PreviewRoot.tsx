@@ -32,6 +32,7 @@ import { RevealDeck } from './RevealDeck';
 import { DashboardDocument } from './custom/dashboard/DashboardDocument';
 import { installLinkHandlers } from '../utils/iframeLinkHandlers';
 import { installCodeCopy } from '../utils/codeCopy';
+import { installCodeAnnotations } from '../utils/codeAnnotations';
 import { buildNestingCommitDestination, buildNestingSurfaces, parentSurface, childSurfaceToward, childSurfaceTowardLine, topBlockR0, depthOfSurface, relocateSurface, surfaceAtLine } from './nestingNav';
 import type { NestingSurface } from './nestingNav';
 import type { CaretHint } from './caretGeometry';
@@ -1401,6 +1402,14 @@ export function PreviewRoot(props: PreviewRootProps) {
         const host = previewHostRef.current;
         if (!host) return;
         return installCodeCopy(host);
+    }, []);
+
+    // Code annotations: one delegated listener for the numbers in the list
+    // and the markers in the code (see utils/codeAnnotations.ts).
+    useEffect(() => {
+        const host = previewHostRef.current;
+        if (!host) return;
+        return installCodeAnnotations(host);
     }, []);
 
     // Phase F.1 (bd-kw93.14): scroll to the cross-page anchor after React commits the new AST.

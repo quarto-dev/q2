@@ -200,6 +200,18 @@ continuity; do not implement in the current iteration.*
   highlighting of the source in the modal, the toggle for cells hidden
   with the `hidden` class, localized labels.
 
+- [x] **Quarto Hub / q2 preview.** *(Done 2026-11-24.)* Folding, line
+  numbers and code annotations in the React renderer. The fold and the
+  annotation list reach the preview as `Div`s (`Div.code-fold`,
+  `Div.code-annotation-container-grid`, `Div.code-annotation-item`)
+  because that renderer cannot enclose content between two `RawBlock`s;
+  `Div.tsx` renders them as `details` and `dl`. `CodeBlock.tsx` emits
+  the per-line spans, anchors and gutter. `utils/codeAnnotations.ts`
+  is the delegated click handler for the highlight band. The notes
+  above that say the preview is not covered predate this. Still open
+  in the preview: `hover` / `select` popovers (shown as `below`),
+  `code-tools`, and reveal line highlighting.
+
 - [ ] **Phase 5 — Code preview iframe.** *(Deferred.)* In Q1 the
   attribute is `code-preview="examples/foo.qmd"` and a TS
   post-DOM pass auto-rewrites `.qmd` → `.html` before inserting

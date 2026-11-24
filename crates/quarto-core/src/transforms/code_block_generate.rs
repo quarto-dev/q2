@@ -359,15 +359,24 @@ impl AstTransform for CodeBlockGenerateTransform {
         let fold_enabled = ctx.format.identifier.is_html_based();
         // Phase 6: code annotations. Runs first so an annotated block has
         // its `annotated-cell-N` id before line numbering looks for one.
-        // Not in the q2-preview React renderer; see `code_annotations`.
-        if fold_enabled && ctx.pipeline_profile != crate::format::PipelineProfile::HtmlPreview {
+        if fold_enabled {
             let mode = super::code_annotations::AnnotationMode::from_meta(&ast.meta);
-            super::code_annotations::apply_code_annotations(&mut ast.blocks, mode);
+            super::code_annotations::apply_code_annotations(
+                &mut ast.blocks,
+                mode,
+                ctx.pipeline_profile.is_preview(),
+            );
         }
 
         // Phase 4: line numbers. HTML-based formats only; elsewhere the
         // attribute stays on the block for Pandoc's own filters.
-        let is_revealjs = ctx.format.identifier == crate::format::FormatIdentifier::Revealjs;
+        // By profile, not format identifier: the deck preview (`q2-slides`)
+        // has the `html` identifier.
+        let is_revealjs = matches!(
+            ctx.pipeline_profile,
+            crate::format::PipelineProfile::RevealjsRender
+                | crate::format::PipelineProfile::RevealjsPreview
+        );
         let doc_default_line_numbers =
             ast.meta
                 .get("code-line-numbers")
