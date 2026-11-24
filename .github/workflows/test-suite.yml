@@ -166,6 +166,15 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install tree-sitter-cli
 
+      - name: Set up tree-sitter CLI (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          curl -fsSL -o ts.gz https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-windows-x64.gz
+          mkdir -p "$RUNNER_TEMP/tree-sitter"
+          gunzip -c ts.gz > "$RUNNER_TEMP/tree-sitter/tree-sitter.exe"
+          echo "$RUNNER_TEMP/tree-sitter" >> "$GITHUB_PATH"
+
       # The installer test suite (crates/quarto/tests/integration/
       # bootstrap_sh.rs) REQUIRES minisign — signature verification is
       # part of the release-artifact contract and absence fails loudly
@@ -260,9 +269,7 @@ jobs:
         env:
           RUSTFLAGS: "-D warnings"
 
-      # No tree-sitter CLI is set up on Windows; the grammar is platform-independent.
       - name: Test block tree-sitter grammar
-        if: runner.os != 'Windows'
         shell: bash
         run: |
           cd crates/tree-sitter-qmd/tree-sitter-markdown
