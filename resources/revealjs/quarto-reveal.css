@@ -113,3 +113,113 @@
 .reveal pre.numberSource code > span > a:first-child::before {
   color: #aaaaaa;
 }
+
+/* Code annotations. Ported from Quarto 1's reveal theme
+   (`quarto-rules` + `revealjs/quarto.scss`), with a fallback for
+   `--quarto-hl-co-color`, which q2's highlight themes do not define yet. */
+.reveal .code-annotation-container-hidden {
+  display: none;
+}
+dl.code-annotation-container-grid {
+  display: grid;
+  grid-template-columns: min-content auto;
+}
+dl.code-annotation-container-grid dt {
+  grid-column: 1;
+}
+dl.code-annotation-container-grid dd {
+  grid-column: 2;
+}
+pre.sourceCode.code-annotation-code {
+  padding-right: 0;
+}
+pre.code-annotated > code.sourceCode {
+  position: relative;
+}
+pre.code-annotated > code.sourceCode > span {
+  display: inline-block;
+  line-height: 1.25;
+}
+code.sourceCode .code-annotation-anchor {
+  z-index: 100;
+  position: relative;
+  float: right;
+  background-color: rgba(0, 0, 0, 0);
+}
+.reveal code.sourceCode button.code-annotation-anchor,
+.reveal code.sourceCode .code-annotation-anchor {
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  color: var(--quarto-hl-co-color, #5e5e5e);
+  border: solid var(--quarto-hl-co-color, #5e5e5e) 1px;
+  border-radius: 50%;
+  font-size: 0.7em;
+  line-height: 1.2em;
+  margin-top: 2px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.reveal code.sourceCode button.code-annotation-anchor {
+  cursor: pointer;
+}
+.reveal code.sourceCode a.code-annotation-anchor {
+  text-align: center;
+  vertical-align: middle;
+  text-decoration: none;
+  cursor: default;
+  height: 1.2em;
+  width: 1.2em;
+}
+.reveal code.sourceCode.fragment a.code-annotation-anchor {
+  left: auto;
+}
+.reveal #code-annotation-line-highlight-gutter {
+  width: 100%;
+  border-top: solid var(--quarto-hl-co-color, #5e5e5e) 1px;
+  border-bottom: solid var(--quarto-hl-co-color, #5e5e5e) 1px;
+  z-index: 2;
+}
+.reveal #code-annotation-line-highlight {
+  margin-left: -8em;
+  width: calc(100% + 4em);
+  border-top: solid var(--quarto-hl-co-color, #5e5e5e) 1px;
+  border-bottom: solid var(--quarto-hl-co-color, #5e5e5e) 1px;
+  z-index: 2;
+  margin-bottom: -2px;
+}
+.reveal code.sourceCode .code-annotation-anchor.code-annotation-active {
+  background-color: var(--quarto-hl-normal-color, #aaaaaa);
+  border: solid var(--quarto-hl-normal-color, #aaaaaa) 1px;
+  color: #fff;
+  font-weight: bolder;
+}
+.reveal pre.code-annotation-code {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+/* Quarto 1 also sets `padding-left: 0` here, because its decks number an
+   annotated block's lines; q2 does not, so the code keeps its padding. */
+.reveal pre.code-annotation-code code {
+  z-index: 3;
+}
+.reveal dl.code-annotation-container-grid {
+  margin-left: 0.1em;
+}
+.reveal dl.code-annotation-container-grid dt {
+  margin-top: 0.65rem;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  border: solid #222 1px;
+  border-radius: 50%;
+  height: 1.3em;
+  width: 1.3em;
+  line-height: 1.3em;
+  font-size: 0.5em;
+  text-align: center;
+  vertical-align: middle;
+  text-decoration: none;
+}
+.reveal dl.code-annotation-container-grid dt[data-target-cell] {
+  cursor: pointer;
+}
+.reveal dl.code-annotation-container-grid dd {
+  margin-left: 0.25em;
+}

@@ -69,6 +69,7 @@ mod breadcrumbs_render;
 mod callout;
 mod callout_resolve;
 mod categories_sidebar;
+mod code_annotations;
 mod code_block_generate;
 mod code_block_render;
 mod components_resolve;

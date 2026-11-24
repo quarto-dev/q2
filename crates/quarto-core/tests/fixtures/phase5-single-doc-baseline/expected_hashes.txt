@@ -538,6 +538,11 @@ doc.html cb911871a3a0f9328ae6a32df4e2d72da647ff8696169aec56c01d66984cd8ef
 # `:where(:root){--mermaid-*: ...}` rule. Verified the only delta: deleting
 # that rule from the new stylesheet hashes back to the previous value
 # (9daec3e3...). doc.html hash unchanged: the fixture has no diagram.
+# Re-captured 2026-11-24 (code annotations, bd-1tl09 phase 6): doc.html
+# changed because the page now links `code-annotations.js` (one more
+# `<script>` tag; the script ships unless `code-annotations` is `false` or
+# `none`). doc_files/styles.css changed again for the annotation rules
+# (list grid, marker float, popover, per-line spans of annotated blocks).
 # Re-captured 2026-11-24 (code-block features, bd-1tl09 phases 3-4):
 # doc_files/styles.css changed because `highlight.scss` gained the
 # `.code-overflow-wrap` / `.code-overflow-scroll` rules and Pandoc's

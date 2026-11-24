@@ -37,6 +37,8 @@ const QUARTO_REVEAL_CSS: &str = include_str!("../../../../resources/revealjs/qua
 /// stepped `"|1|2-3"`), vendored unchanged; see `resources/revealjs/README.md`.
 const LINE_HIGHLIGHT_JS: &str =
     include_str!("../../../../resources/revealjs/plugins/line-highlight/line-highlight.js");
+const CODE_ANNOTATIONS_JS: &str =
+    include_str!("../../../../resources/js/code-annotations/code-annotations.js");
 const LINE_HIGHLIGHT_CSS: &str =
     include_str!("../../../../resources/revealjs/plugins/line-highlight/line-highlight.css");
 
@@ -154,6 +156,16 @@ pub fn reveal_assets(compiled_theme_css: Option<&str>) -> Vec<RevealAsset> {
             key_suffix: "line-highlight".to_string(),
             filename: "line-highlight.js".to_string(),
             content: Cow::Borrowed(LINE_HIGHLIGHT_JS),
+            content_type: "application/javascript",
+            kind: RevealAssetKind::Js,
+        },
+        // Code annotation runtime (click a number to highlight its
+        // lines). Self-contained; without Bootstrap it shows `hover` /
+        // `select` annotations as a list under the code.
+        RevealAsset {
+            key_suffix: "code-annotations".to_string(),
+            filename: "code-annotations.js".to_string(),
+            content: Cow::Borrowed(CODE_ANNOTATIONS_JS),
             content_type: "application/javascript",
             kind: RevealAssetKind::Js,
         },
@@ -857,6 +869,7 @@ mod tests {
             js,
             vec![
                 "js:revealjs:clipboard",
+                "js:revealjs:code-annotations",
                 "js:revealjs:code-copy-init",
                 "js:revealjs:line-highlight",
                 "js:revealjs:reveal",

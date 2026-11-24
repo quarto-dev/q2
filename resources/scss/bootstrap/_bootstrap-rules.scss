@@ -3143,6 +3143,63 @@ textarea {
   right: 0;
 }
 
+// from _quarto-rules.scss:665-683. The list is hidden in `hover` and
+// `select` modes, where each annotation shows in a popover instead.
+.code-annotation-tip-content {
+  word-wrap: break-word;
+}
+
+.code-annotation-container-hidden {
+  display: none !important;
+}
+
+// The popover that shows an annotation in `hover` and `select` modes.
+// Quarto 1 uses a tippy.js tooltip here; these sizes follow it.
+.code-annotation-popover {
+  max-width: 300px;
+  .popover-body {
+    padding: 5px 9px;
+    font-size: 0.875rem;
+  }
+}
+
+dl.code-annotation-container-grid {
+  display: grid;
+  grid-template-columns: min-content auto;
+  dt {
+    grid-column: 1;
+  }
+  dd {
+    grid-column: 2;
+  }
+}
+
+// from _quarto-rules.scss:684-693: the markers float to the right edge
+// of the code block, over the gutter.
+pre.sourceCode.code-annotation-code {
+  padding-right: 0;
+}
+
+code.sourceCode .code-annotation-anchor {
+  z-index: 100;
+  position: relative;
+  float: right;
+  background-color: transparent;
+}
+
+// q2 writes per-line spans only where a block needs them. These two are
+// Pandoc's baseline rules for them (see highlight.scss for the numbered
+// case); an annotated block needs them so each line is a box the
+// highlight band can measure.
+pre.code-annotated > code.sourceCode {
+  position: relative;
+}
+
+pre.code-annotated > code.sourceCode > span {
+  display: inline-block;
+  line-height: 1.25;
+}
+
 dl.code-annotation-container-grid {
   dt {
     margin-right: 1em;
@@ -3216,8 +3273,11 @@ code.sourceCode .code-annotation-anchor.code-annotation-active {
 
 code.sourceCode .code-annotation-anchor {
   font-family: $font-family-code;
-  color: var(--quarto-hl-co-color);
-  border: solid var(--quarto-hl-co-color) 1px;
+  // q2's highlight themes do not define `--quarto-hl-co-color` (the
+  // comment colour) yet; without the fallback the border declaration is
+  // invalid and the marker loses its circle.
+  color: var(--quarto-hl-co-color, #5e5e5e);
+  border: solid var(--quarto-hl-co-color, #5e5e5e) 1px;
   border-radius: 50%;
   height: 18px;
   width: 18px;

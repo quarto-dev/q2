@@ -357,6 +357,14 @@ impl AstTransform for CodeBlockGenerateTransform {
         // class instead, which the ported `.code-overflow-*` rules style.
         let doc_overflow_class = resolve_default_overflow_class(&ast.meta);
         let fold_enabled = ctx.format.identifier.is_html_based();
+        // Phase 6: code annotations. Runs first so an annotated block has
+        // its `annotated-cell-N` id before line numbering looks for one.
+        // Not in the q2-preview React renderer; see `code_annotations`.
+        if fold_enabled && ctx.pipeline_profile != crate::format::PipelineProfile::HtmlPreview {
+            let mode = super::code_annotations::AnnotationMode::from_meta(&ast.meta);
+            super::code_annotations::apply_code_annotations(&mut ast.blocks, mode);
+        }
+
         // Phase 4: line numbers. HTML-based formats only; elsewhere the
         // attribute stays on the block for Pandoc's own filters.
         let is_revealjs = ctx.format.identifier == crate::format::FormatIdentifier::Revealjs;

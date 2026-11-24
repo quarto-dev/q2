@@ -1057,3 +1057,15 @@ dict(
   color: inherit;
   font-family: var(--bs-body-font-family);
 }
+
+// A code block in a fill layout. bslib's fill classes let the copy scaffold
+// shrink below the height of the code inside it, and the code then spilled
+// over whatever followed in the card (an annotation list, the cell output).
+// Quarto 1 clips the block instead, because there `div.sourceCode` carries the
+// fill classes too. Keeping the block at its natural height shows all of the
+// code; a card that is too short scrolls. Only where something follows the
+// block: a card holding a lone code block has nothing to overlap, and there
+// the fill behaviour is what keeps the card from scrolling.
+.quarto-dashboard .code-copy-outer-scaffold.html-fill-item:not(:last-child) {
+  flex: 0 0 auto;
+}

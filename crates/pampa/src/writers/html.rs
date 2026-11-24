@@ -610,9 +610,30 @@ fn write_highlighted_codeblock<W: Write>(
         _ => (None, &classes[..]),
     };
 
+    // Code annotations: the annotation pass leaves the anchor positions
+    // in an attribute (`line=annotation,…`); see
+    // `quarto-core/src/transforms/code_annotations.rs`.
+    let anchors: Vec<(usize, &str)> = kvs
+        .get(ANNOTATION_ANCHORS_ATTR)
+        .map(|v| {
+            v.split(',')
+                .filter_map(|pair| {
+                    let (line, number) = pair.split_once('=')?;
+                    Some((line.trim().parse().ok()?, number.trim()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let annotated = !anchors.is_empty();
+    let interactive = kvs.contains_key(ANNOTATION_INTERACTIVE_ATTR);
+
     // <div class="sourceCode [extras]" id="..."> ...
     write!(ctx, "<div class=\"sourceCode")?;
     for c in extras {
+        // Written on the `<pre>` below, where Quarto 1's CSS expects it.
+        if c == ANNOTATION_CODE_CLASS {
+            continue;
+        }
         write!(ctx, " {}", escape_html(c))?;
     }
     write!(ctx, "\"")?;
@@ -640,9 +661,18 @@ fn write_highlighted_codeblock<W: Write>(
     if let Some(lang) = language {
         write!(ctx, " {}", escape_html(lang))?;
     }
+    if annotated {
+        // `code-annotated` is what Quarto 1's DOM pass adds once the
+        // gutter is in place.
+        write!(ctx, " {ANNOTATION_CODE_CLASS} code-annotated")?;
+    }
     write!(ctx, "\"")?;
     for (k, v) in kvs {
-        if k == quarto_highlight_encoding::SPANS_ATTR_KEY || is_line_highlight_attr(k) {
+        if k == quarto_highlight_encoding::SPANS_ATTR_KEY
+            || is_line_highlight_attr(k)
+            || k == ANNOTATION_ANCHORS_ATTR
+            || k == ANNOTATION_INTERACTIVE_ATTR
+        {
             continue;
         }
         if should_prefix_attribute(k) {
@@ -676,11 +706,20 @@ fn write_highlighted_codeblock<W: Write>(
     }
     write!(ctx, ">")?;
 
-    let lines = numbered.then_some(NumberedLines {
+    let lines = (numbered || annotated).then_some(NumberedLines {
         block_id: id,
         start: start_from,
+        anchors: &anchors,
+        interactive,
     });
     write_highlighted_body(&codeblock.text, spans.unwrap_or(&[]), lines, ctx)?;
+    if annotated {
+        // The gutter the anchors sit in; Quarto 1 appends both to `<code>`.
+        write!(
+            ctx,
+            "<div class=\"code-annotation-gutter-bg\"></div><div class=\"code-annotation-gutter\"></div>"
+        )?;
+    }
 
     writeln!(ctx, "</code></pre></div>")?;
     Ok(())
@@ -694,6 +733,13 @@ fn read_hl_spans(attr: &Attr) -> Option<Vec<quarto_highlight_encoding::Highlight
     let spans = quarto_highlight_encoding::decode(raw).ok()?;
     if spans.is_empty() { None } else { Some(spans) }
 }
+
+/// Attributes and class of the code annotation pass
+/// (`quarto-core/src/transforms/code_annotations.rs`). The two attributes
+/// are instructions to this writer and are not written out.
+const ANNOTATION_ANCHORS_ATTR: &str = "code-annotation-anchors";
+const ANNOTATION_INTERACTIVE_ATTR: &str = "code-annotation-interactive";
+const ANNOTATION_CODE_CLASS: &str = "code-annotation-code";
 
 /// Attributes the Reveal line-highlight plugin looks up on
 /// `div.sourceCode` (as `data-…`).
@@ -714,6 +760,11 @@ struct NumberedLines<'a> {
     block_id: &'a str,
     /// Number of the first line (Pandoc's `startFrom`, default 1).
     start: usize,
+    /// Code annotation anchors as `(line, annotation number)`.
+    anchors: &'a [(usize, &'a str)],
+    /// Anchors are `<button>`s (`code-annotations: hover | select`)
+    /// rather than inert `<a>`s.
+    interactive: bool,
 }
 
 /// Emit the body of a code container — the part that lives between the
@@ -780,11 +831,34 @@ fn write_highlighted_body<W: Write>(
         line_no: usize,
         ctx: &mut HtmlWriterContext<'_, W>,
     ) -> std::io::Result<()> {
-        if lines.block_id.is_empty() {
-            write!(ctx, "<span><a></a>")
+        let cell = escape_html(lines.block_id);
+        // The annotation anchor comes before the line it marks, as a
+        // sibling of the line span (Quarto 1's `processLineAnnotation`).
+        let anchor = lines.anchors.iter().find(|(line, _)| *line == line_no);
+        if let Some((_, number)) = anchor {
+            let number = escape_html(number);
+            if lines.interactive {
+                write!(
+                    ctx,
+                    "<button class=\"code-annotation-anchor\" data-target-cell=\"{cell}\" data-target-annotation=\"{number}\">{number}</button>"
+                )?;
+            } else {
+                write!(
+                    ctx,
+                    "<a class=\"code-annotation-anchor\" data-target-cell=\"{cell}\" data-target-annotation=\"{number}\" onclick=\"event.preventDefault();\" href=\"\">{number}</a>"
+                )?;
+            }
+        }
+        let target = if anchor.is_some() {
+            " class=\"code-annotation-target\""
         } else {
-            let id = format!("{}-{}", escape_html(lines.block_id), line_no);
-            write!(ctx, "<span id=\"{id}\"><a href=\"#{id}\"></a>")
+            ""
+        };
+        if lines.block_id.is_empty() {
+            write!(ctx, "<span{target}><a></a>")
+        } else {
+            let id = format!("{cell}-{line_no}");
+            write!(ctx, "<span id=\"{id}\"{target}><a href=\"#{id}\"></a>")
         }
     }
 
@@ -1697,7 +1771,8 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             // A numbered block always takes the `div.sourceCode` path,
             // which writes the per-line markup, even with no language.
             let numbered = codeblock.attr.1.iter().any(|c| is_number_lines_class(c));
-            if source_code || numbered {
+            let annotated = codeblock.attr.2.contains_key(ANNOTATION_ANCHORS_ATTR);
+            if source_code || numbered || annotated {
                 write_highlighted_codeblock(codeblock, block, spans.as_deref(), ctx)?;
             } else {
                 write!(ctx, "<pre")?;
@@ -2917,6 +2992,53 @@ mod tests {
         );
         assert!(
             html.contains("<pre class=\"sourceCode numberSource python\">"),
+            "got:\n{html}"
+        );
+    }
+
+    #[test]
+    fn annotated_codeblock_emits_anchors_targets_and_gutter() {
+        let html = render_block_to_html(numbered_codeblock(
+            "annotated-cell-1",
+            &["python", "code-annotation-code"],
+            "a = 1\nb = 2",
+            &[("data-hl-spans", "[]"), ("code-annotation-anchors", "2=1")],
+        ));
+        assert_eq!(
+            html.trim_end(),
+            "<div class=\"sourceCode\" id=\"annotated-cell-1\">\
+             <pre class=\"sourceCode python code-annotation-code code-annotated\">\
+             <code class=\"sourceCode python\">\
+             <span id=\"annotated-cell-1-1\"><a href=\"#annotated-cell-1-1\"></a>a = 1</span>\n\
+             <a class=\"code-annotation-anchor\" data-target-cell=\"annotated-cell-1\" \
+             data-target-annotation=\"1\" onclick=\"event.preventDefault();\" href=\"\">1</a>\
+             <span id=\"annotated-cell-1-2\" class=\"code-annotation-target\">\
+             <a href=\"#annotated-cell-1-2\"></a>b = 2</span>\
+             <div class=\"code-annotation-gutter-bg\"></div><div class=\"code-annotation-gutter\"></div>\
+             </code></pre></div>"
+        );
+    }
+
+    #[test]
+    fn interactive_annotation_anchor_is_a_button() {
+        let html = render_block_to_html(numbered_codeblock(
+            "annotated-cell-1",
+            &["python", "code-annotation-code"],
+            "a = 1",
+            &[
+                ("data-hl-spans", "[]"),
+                ("code-annotation-anchors", "1=1"),
+                ("code-annotation-interactive", "true"),
+            ],
+        ));
+        assert!(
+            html.contains(
+                "<button class=\"code-annotation-anchor\" data-target-cell=\"annotated-cell-1\" data-target-annotation=\"1\">1</button>"
+            ),
+            "got:\n{html}"
+        );
+        assert!(
+            !html.contains("code-annotation-interactive"),
             "got:\n{html}"
         );
     }

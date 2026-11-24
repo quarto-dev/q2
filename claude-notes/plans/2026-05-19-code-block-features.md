@@ -176,6 +176,20 @@ continuity; do not implement in the current iteration.*
   gutter; ensure our highlighter matches. (May require coordinating
   with `quarto-highlight` crate.)
 
+- [x] **Phase 6 — Code annotations.** *(Done 2026-11-24, ahead of
+  Phase 5.)* `code-annotations: below | hover | select | none | false`
+  for HTML, RevealJS and Dashboard. The pass lives in
+  `crates/quarto-core/src/transforms/code_annotations.rs` and is called
+  from `CodeBlockGenerateTransform`; it ports Q1's
+  `quarto-pre/code-annotation.lua` and the DOM step
+  `processCodeAnnotations` (`format-html.ts`). Anchor positions travel
+  to the HTML writer in two consumed `CodeBlock` attributes. Runtime:
+  `resources/js/code-annotations/code-annotations.js`, which uses
+  Bootstrap's Popover where Q1 uses tippy.js. Not done: the q2-preview
+  React renderer (markers stay visible there), the warning Q1 prints
+  for a list item with no marker, and numbered lines on annotated
+  blocks in decks.
+
 - [ ] **Phase 5 — Code preview iframe.** *(Deferred.)* In Q1 the
   attribute is `code-preview="examples/foo.qmd"` and a TS
   post-DOM pass auto-rewrites `.qmd` → `.html` before inserting
