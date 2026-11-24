@@ -109,6 +109,7 @@ vi.mock('./services/debugApi', () => ({ installDebugApi: vi.fn(() => undefined) 
 vi.mock('./services/userSettings', () => ({
   getUserIdentity: () => mocks.getUserIdentity(),
   updateUserName: (name: string) => mocks.updateUserName(name),
+  applyIdentityParam: async () => null,
   authorIdFromUserId: (userId: string) => `author-${userId}`,
 }));
 

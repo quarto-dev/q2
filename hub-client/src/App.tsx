@@ -56,7 +56,7 @@ import type { ProjectFile } from '@quarto/preview-runtime';
 import * as projectStorage from './services/projectStorage';
 import { seedExampleProjects } from './services/seedExamples';
 import { installDebugApi } from './services/debugApi';
-import { getUserIdentity, updateUserName, authorIdFromUserId } from './services/userSettings';
+import { applyIdentityParam, getUserIdentity, updateUserName, authorIdFromUserId } from './services/userSettings';
 import { useRouting } from './hooks/useRouting';
 import { useCollectionSets } from './hooks/useCollectionSets';
 import { useAutoEstablishRoot } from './hooks/useAutoEstablishRoot';
@@ -380,7 +380,8 @@ function App() {
   // names to the OIDC display name on first login. Without auth, load immediately.
   useEffect(() => {
     if (AUTH_ENABLED && authLoading) return;
-    getUserIdentity().then(async (settings) => {
+    // `?as=<name>` names the person in an ephemeral preview session; it must land before presence reads the identity.
+    applyIdentityParam(window.location.search).then(() => getUserIdentity()).then(async (settings) => {
       setLocalAuthorId(authorIdFromUserId(settings.userId));
       if (auth?.name && settings.createdAt === settings.updatedAt) {
         const updated = await updateUserName(auth.name);

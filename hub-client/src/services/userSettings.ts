@@ -15,6 +15,7 @@ import {
   isValidUserName,
   MAX_USER_NAME_LENGTH,
 } from './storage';
+import { isEphemeralStorage } from './ephemeralStorage';
 
 /**
  * Derive a stable Automerge author id from the local user id.
@@ -121,6 +122,35 @@ export async function updateUserColor(color: string): Promise<UserSettings> {
 
   await db.put(STORES.USER_SETTINGS, updated);
   return updated;
+}
+
+/**
+ * The identity a page URL asks for: `?as=<name>` and an optional `?color=#RRGGBB`.
+ *
+ * Without a valid `color` the color is derived from the name, so the same name always gets the same cursor color.
+ * Returns null when there is no usable name.
+ */
+export function identityFromSearch(search: string): { name: string; color: string } | null {
+  const params = new URLSearchParams(search);
+  const name = (params.get('as') ?? '').trim();
+  if (!isValidUserName(name)) return null;
+  const color = params.get('color') ?? '';
+  return { name, color: isValidHexColor(color) ? color : generateColorFromId(name) };
+}
+
+/**
+ * Take the identity from the page URL (`?as=Maurice`), but only in the ephemeral `q2 preview` build.
+ *
+ * Every preview session starts with a random anonymous name. A link, or a scripted demo, can name the person instead.
+ * A persistent hub-client profile is never renamed by a link: outside the ephemeral build this does nothing.
+ * Call it before presence starts, since presence reads the name and color back from storage.
+ */
+export async function applyIdentityParam(search: string): Promise<UserSettings | null> {
+  if (!isEphemeralStorage()) return null;
+  const wanted = identityFromSearch(search);
+  if (!wanted) return null;
+  await updateUserName(wanted.name);
+  return updateUserColor(wanted.color);
 }
 
 /**
