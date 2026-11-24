@@ -1,0 +1,201 @@
+/*
+ * q2-debug document styling (dom/document.ts, dom/render.ts).
+ *
+ * Every element here is created by the renderer, so there are no inline
+ * styles and no fallbacks for foreign markup. Backgrounds are solid (the
+ * hub-client theming rule).
+ */
+
+.pandoc-content-debug {
+    padding: 20px;
+    font-size: 16px;
+}
+
+/* Focusable so the caret receives keys; the caret itself is the focus indicator. */
+.pandoc-content-debug:focus {
+    outline: none;
+}
+
+.pandoc-content-debug .node.block {
+    border: 1px solid #666;
+    padding: 4px;
+    margin: 4px 0;
+    background-color: #f5f5f5;
+    position: relative;
+}
+
+.pandoc-content-debug .node.inline {
+    border: 1px solid #999;
+    padding: 2px;
+    margin: 1px;
+    background-color: #e8e8e8;
+    display: inline-block;
+}
+
+.pandoc-content-debug .node.run {
+    white-space: pre-wrap;
+}
+
+/* An empty inline list's stop (document.ts `emptyRun`): keep a line box so
+   the caret can stop there and the host can be clicked. Styled like the
+   "(empty)" slot marker, not like a text run. */
+.pandoc-content-debug .node.run.empty {
+    border-style: dashed;
+    background-color: #f5f5f5;
+}
+
+.pandoc-content-debug .node.run.empty .label {
+    font-weight: normal;
+    font-size: 11px;
+    color: #999;
+}
+
+.pandoc-content-debug .node.run.empty .run-text {
+    display: inline-block;
+    min-width: 1ch;
+    min-height: 1em;
+    vertical-align: bottom;
+}
+
+.pandoc-content-debug .slot-label {
+    font-size: 11px;
+    color: #666;
+}
+
+.pandoc-content-debug .slot:empty::after {
+    content: '(empty)';
+    font-size: 11px;
+    color: #999;
+}
+
+/*
+ * Change highlights, painted from the edit script (document.ts). Each is a
+ * constant colour for one second: a single held keyframe with step timing,
+ * whose end fires `animationend` and removes the class. A box can carry
+ * more than one class; later rules win: inserted > changed > removed.
+ */
+
+@keyframes q2-hold-inserted {
+
+    from,
+    to {
+        background-color: #8ee6a0;
+        box-shadow: 0 0 0 2px #2fb344;
+    }
+}
+
+@keyframes q2-hold-changed {
+
+    from,
+    to {
+        background-color: #ffe08a;
+        box-shadow: 0 0 0 2px #e0a800;
+    }
+}
+
+@keyframes q2-hold-removed {
+
+    from,
+    to {
+        box-shadow: 0 0 0 3px #e03131;
+    }
+}
+
+.pandoc-content-debug .q2-flash-removed {
+    animation: q2-hold-removed 1s step-end;
+}
+
+.pandoc-content-debug .q2-flash-changed {
+    animation: q2-hold-changed 1s step-end;
+}
+
+.pandoc-content-debug .q2-flash-inserted {
+    animation: q2-hold-inserted 1s step-end;
+}
+
+/*
+ * Deleted-node ghosts and character-level changes inside a text run are
+ * coloured from document.ts with the Web Animations API (a CSS animation
+ * would restart if the element were moved in the DOM); these rules only
+ * give them their resting look.
+ */
+
+.pandoc-content-debug .q2-del {
+    background-color: #f6dada;
+    text-decoration: line-through;
+    color: #8b1a1a;
+}
+
+/*
+ * AST caret (dom/caret.ts): our own element positioned over a text host;
+ * the document is never editable.
+ */
+
+.pandoc-content-debug {
+    position: relative;
+    user-select: none;
+}
+
+.pandoc-content-debug .q2-caret {
+    position: absolute;
+    width: 2px;
+    pointer-events: none;
+}
+
+/* Only the bar blinks; the flag stays put. */
+.pandoc-content-debug .q2-caret-bar {
+    width: 2px;
+    height: 100%;
+    background-color: #1a73e8;
+}
+
+.pandoc-content-debug .q2-caret.hidden {
+    display: none;
+}
+
+@keyframes q2-caret-blink {
+
+    from,
+    to {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0;
+    }
+}
+
+/*
+ * Selection hulls (caret.ts `paintSelection`). The layer sits over the text;
+ * multiply blending makes a *solid* light tint read as a highlight with the
+ * text showing through, so no translucent colours are involved.
+ */
+.pandoc-content-debug .q2-selection {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+    overflow: visible;
+}
+
+.pandoc-content-debug [data-q2-text] {
+    cursor: text;
+}
+
+/* Name flag on the caret, like a collaborator cursor. Same colour as the caret. */
+.pandoc-content-debug .q2-caret-flag {
+    position: absolute;
+    left: 0;
+    bottom: 100%;
+    padding: 1px 5px;
+    font: 11px/1.4 system-ui, sans-serif;
+    color: #fff;
+    background-color: #1a73e8;
+    border-radius: 3px 3px 3px 0;
+    white-space: nowrap;
+}
+
+.pandoc-content-debug .q2-caret-flag.hidden {
+    display: none;
+}

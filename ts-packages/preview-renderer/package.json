@@ -21,6 +21,11 @@
       "source": "./src/framework/index.ts",
       "import": "./dist/framework/index.js"
     },
+    "./astdiff": {
+      "types": "./src/astdiff/index.ts",
+      "source": "./src/astdiff/index.ts",
+      "import": "./dist/astdiff/index.js"
+    },
     "./q2-preview": {
       "types": "./src/q2-preview/index.ts",
       "source": "./src/q2-preview/index.ts",

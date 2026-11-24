@@ -1,89 +1,104 @@
 /**
  * Entry point for the q2-debug renderer iframe.
  *
- * Loaded by `/q2-debug.html` and handles the postMessage protocol with
- * the parent (Q2DebugIframe). Mounts the framework's <Ast> with
- * q2-debug's registry as the format-side defaults, layered with any
- * user-TSX overrides loaded via LOAD_CUSTOM_COMPONENTS.
+ * Loaded by `/q2-debug.html`; speaks the postMessage protocol with the
+ * parent (`Q2DebugIframe`). The document is rendered without React: the
+ * fresh parse is diffed against the AST already on screen, the edit script
+ * is applied to that AST in place, and the DOM is patched to match —
+ * see `dom/document.ts`. Untouched nodes keep both their AST objects and
+ * their DOM, and every highlight is derived from the script. An AST caret
+ * (`dom/caret.ts`) rides on that stability: click text to place it on a
+ * node, use the arrow keys to move it, and watch it stay put across edits.
+ * Typing and Backspace edit the AST through the caret; the edited AST is
+ * posted back as `SET_AST`, and the parent writes it to the QMD.
+ *
+ * Round trip of an edit: the caret applies it to the document at once,
+ * then the parent writes the QMD, re-renders, and sends the fresh parse
+ * back. That parse reconciles to no change (or just the parser's
+ * normalisation). What must not happen is a render of an *older* state
+ * arriving after a newer keystroke: it would undo the keystroke on
+ * screen until its own render arrived. So each edit carries a sequence
+ * number, the parent acknowledges it on the render that reflects it, and
+ * while an edit is unacknowledged other updates are held (the latest one
+ * is kept and applied if no acknowledgement comes within `HOLD_MS`, e.g.
+ * because a collaborator's change replaced ours before the render).
  */
 
-import { createRoot } from 'react-dom/client';
-import React from 'react';
-import { Deck, Slide } from '@revealjs/react';
-// Reveal CSS comes from the VENDORED copy — the same files `q2 render`
-// embeds and `q2-preview/RevealDeck.tsx` imports — not from npm
-// `reveal.js/*.css`, so the debug surface can't drift from render's
-// deck styling (bd-4b7f1hr7; same convergence as bd-ibqkf9ry). The
-// vendored↔npm byte-identity test in `revealjs/assemble.rs` keeps
-// these in sync with the pinned npm package.
-// bd-dg8x84bu: scoped reset, never the global Meyer reset — this debug iframe
-// renders arbitrary content via <Ast> (not only decks), so a global reset would
-// zero font-style on <em>/<i> here too. reset-scoped.css confines it to .reveal.
-import '../../../../../resources/revealjs/reset-scoped.css';
-import '../../../../../resources/revealjs/reveal.css';
-import '../../../../../resources/revealjs/theme/white.css';
-import '../../../../../resources/revealjs/quarto-reveal.css';
-import katex from 'katex';
-import 'katex/dist/katex.min.css';
-
-import {
-    Ast,
-    Node,
-    renderChildren,
-    renderNode,
-    inlinesToPlainText,
-    blocksToPlainText,
-} from '@quarto/preview-renderer/framework';
-import type { FormatRegistry } from '@quarto/preview-renderer/framework';
-import {
-    Block,
-    Inline,
-    Para, Plain, Header, CodeBlock, BulletList, OrderedList,
-    BlockQuote, Div, HorizontalRule, RawBlock, Figure,
-    Str, Space, SoftBreak, LineBreak,
-    Emph, Strong, Code, Link, Image, Span, Quoted,
-    blockStyle, inlineStyle,
-    q2DebugRegistry,
-} from '.';
-import { buildCustomRegistry, type ComponentExports } from '@quarto/preview-renderer/utils/customRegistry';
+import './dom/debug.css';
+import type { PandocAST } from '@quarto/preview-renderer/framework';
+import { describeOp, type Op } from '@quarto/preview-renderer/astdiff';
 import {
     makeIframeMessageDispatcher,
     type IframeMessage,
 } from '../iframeMessageDispatch';
-
-// Set the renderer-surface global at module top so importing this
-// module is sufficient to populate `window.__REACT_AST_DEBUG_RENDERER__`
-// — the framework-primitive parity test (Plan 2A item 14) relies on
-// being able to read both globals via plain module imports without
-// firing `LOAD_CUSTOM_COMPONENTS` setup messages. `React`, `katex`,
-// and `RevealReact` stay lazy in `loadCustomComponents` since they're
-// tied to dynamic user-TSX imports (the right time to set them).
-(window as any).__REACT_AST_DEBUG_RENDERER__ = {
-    renderChildren, renderNode, Node,
-    inlinesToPlainText, blocksToPlainText,
-    Block, Inline,
-    Para, Plain, Header, CodeBlock, BulletList, OrderedList,
-    BlockQuote, Div, HorizontalRule, RawBlock, Figure,
-    Str, Space, SoftBreak, LineBreak,
-    Emph, Strong, Code, Link, Image, Span, Quoted,
-    q2DebugRegistry, blockStyle, inlineStyle,
-};
-
-let root: ReturnType<typeof createRoot> | null = null;
-let customRegistry: Record<string, React.ComponentType<any>> = {};
+import { DebugDocument } from './dom/document';
+import { AstCaret } from './dom/caret';
 
 interface UpdateAstPayload {
   astJson: string;
   currentFilePath: string;
+  /** The current user, for the caret's flag. */
+  user?: { name: string; color: string } | null;
+  /** The `editSeq` of the caret edit this render reflects, if any. */
+  editAck?: number | null;
 }
 
-// Shared dispatcher gates UPDATE_AST on the in-flight
-// LOAD_CUSTOM_COMPONENTS promise so two UPDATE_ASTs queued during
-// component load run in arrival order. See
-// `../iframeMessageDispatch.ts` for the rationale (the previous
-// setInterval-polling pattern was phase-racy).
+/** How long to hold updates waiting for an edit's acknowledgement. */
+const HOLD_MS = 2000;
+
+/** Last edit script applied, exposed for debugging / e2e inspection. */
+declare global {
+  interface Window {
+    __Q2_DEBUG_AST_OPS__?: Op[];
+  }
+}
+
+let doc: DebugDocument | null = null;
+let caret: AstCaret | null = null;
+let currentPath: string | null = null;
+/** Sequence number of the last edit sent, and the last one acknowledged. */
+let sentSeq = 0;
+let ackedSeq = 0;
+/** The latest update held back while an edit is unacknowledged. */
+let held: UpdateAstPayload | null = null;
+let holdTimer: ReturnType<typeof setTimeout> | null = null;
+
+function sendEdit(ast: PandocAST): void {
+  sentSeq++;
+  window.parent.postMessage({ type: 'SET_AST', ast, editSeq: sentSeq }, '*');
+  if (holdTimer !== null) clearTimeout(holdTimer);
+  holdTimer = setTimeout(() => {
+    holdTimer = null;
+    ackedSeq = sentSeq;
+    if (held) applyUpdate(held);
+    held = null;
+  }, HOLD_MS);
+}
+
+function updateAst(payload: UpdateAstPayload): void {
+  if (sentSeq > ackedSeq && payload.editAck !== sentSeq) {
+    held = payload;
+    return;
+  }
+  if (payload.editAck === sentSeq) {
+    ackedSeq = sentSeq;
+    held = null;
+    if (holdTimer !== null) { clearTimeout(holdTimer); holdTimer = null; }
+  }
+  applyUpdate(payload);
+}
+
+// Shared dispatcher gates UPDATE_AST on the in-flight LOAD_CUSTOM_COMPONENTS
+// promise so messages run in arrival order (see ../iframeMessageDispatch.ts).
 const dispatch = makeIframeMessageDispatcher({
-  loadCustomComponents,
+  loadCustomComponents: async (componentsCode) => {
+    // User render components are React components; this renderer has no
+    // React. Accepted and ignored so the parent's protocol is unchanged.
+    const names = Object.keys(componentsCode);
+    if (names.length > 0) {
+      console.warn('[q2-debug] custom render components are not supported by the DOM renderer; ignoring', names);
+    }
+  },
   updateAst: (payload) => updateAst(payload as UpdateAstPayload),
 });
 
@@ -92,88 +107,46 @@ window.addEventListener('message', (event) => {
   dispatch(event.data as IframeMessage);
 });
 
-/**
- * Load custom components from transpiled JS code using dynamic imports.
- */
-async function loadCustomComponents(componentsCode: Record<string, string>) {
-  // Make React, RevealReact, and katex available as globals for user
-  // TSX modules. The renderer-surface global is set at module top
-  // (see above); these three remain lazy because they're tied to
-  // dynamic user-TSX imports — `loadCustomComponents` is the right
-  // moment to materialize them.
-  (window as any).React = React;
-  (window as any).RevealReact = { Deck, Slide };
-  (window as any).katex = katex;
-
-  const loadedModules: ComponentExports[] = [];
-  for (const [componentName, code] of Object.entries(componentsCode)) {
-    try {
-      const blob = new Blob([code], { type: 'application/javascript' });
-      const url = URL.createObjectURL(blob);
-      try {
-        const module = await import(/* @vite-ignore */ url);
-        loadedModules.push(module as ComponentExports);
-        console.log(`[Q2DebugIframe] Loaded custom component: ${componentName}`);
-      } finally {
-        URL.revokeObjectURL(url);
-      }
-    } catch (err) {
-      console.error(`[Q2DebugIframe] Failed to load custom component ${componentName}:`, err);
-    }
-  }
-
-  customRegistry = buildCustomRegistry(loadedModules);
-}
-
-function updateAst(payload: UpdateAstPayload) {
-  const {
-    astJson,
-    currentFilePath,
-  } = payload;
-
-  // Merge q2-debug defaults with any user-TSX overrides. The cast asserts
-  // the merged result satisfies the FormatRegistry contract; the override
-  // side is babel-transpiled user code and runtime-trusted.
-  const mergedRegistry: FormatRegistry = {
-    ...q2DebugRegistry,
-    ...customRegistry,
-  } as FormatRegistry;
-
+function applyUpdate(payload: UpdateAstPayload) {
+  const { astJson, currentFilePath, user } = payload;
   const rootElement = document.getElementById('root');
   if (!rootElement) {
     console.error('Root element not found');
     return;
   }
-
   try {
-    // Create root only once
-    if (!root) {
-      root = createRoot(rootElement);
+    let fresh: PandocAST;
+    try {
+      fresh = JSON.parse(astJson) as PandocAST;
+    } catch (err) {
+      throw new Error(`Failed to parse AST: ${err instanceof Error ? err.message : String(err)}`);
     }
-
-    // Render the Ast component
-    root.render(
-      <Ast
-        astJson={astJson}
-        currentFilePath={currentFilePath}
-        onNavigateToDocument={(path, anchor) => {
-          window.parent.postMessage({
-            type: 'NAVIGATE_TO_DOCUMENT',
-            path,
-            anchor
-          }, '*');
-        }}
-        setAst={(newAst) => {
-          window.parent.postMessage({
-            type: 'SET_AST',
-            ast: newAst
-          }, '*');
-        }}
-        registry={mergedRegistry}
-      />
-    );
+    if (!doc) {
+      const container = document.createElement('div');
+      container.className = 'pandoc-content-debug';
+      rootElement.replaceChildren(container);
+      doc = new DebugDocument(container);
+      // Click to place, arrows to move; attached to an AST node + offset,
+      // and migrated through edits by the applier's report (dom/caret.ts).
+      caret = new AstCaret(doc);
+      caret.onEdit = sendEdit;
+      (window as unknown as { __Q2_DEBUG_CARET__?: AstCaret }).__Q2_DEBUG_CARET__ = caret;
+    }
+    if (currentPath !== currentFilePath) {
+      // A diff against a different document would be large and meaningless.
+      doc.reset();
+      currentPath = currentFilePath;
+    }
+    caret?.setUser(user ?? null);
+    const result = doc.update(fresh);
+    window.__Q2_DEBUG_AST_OPS__ = result.ops;
+    if (result.reused) {
+      console.debug(`[q2-debug] applied ${result.ops.length} AST op(s)`, result.ops.map(describeOp));
+    }
   } catch (err) {
     console.error('Failed to render AST:', err);
+    doc = null;
+    caret = null;
     rootElement.innerHTML = `
       <div style="padding: 20px; color: red;">
         <strong>Render Error:</strong>
