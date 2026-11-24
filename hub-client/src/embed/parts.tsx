@@ -22,6 +22,7 @@ import {
   diffToEditorChanges,
   getFileContent,
 } from '@quarto/preview-runtime';
+import type { RenderComment } from '@quarto/preview-renderer/types/diagnostic';
 import { isBinaryExtension } from '@quarto/preview-renderer/types/project';
 import DocumentEditor, { type DocumentEditorProps } from '../components/DocumentEditor';
 import FileSidebarToolbar, { type FileSidebarToolbarProps } from '../components/FileSidebarToolbar';
@@ -118,6 +119,15 @@ export type CommentsMode = 'expand' | 'show' | 'hide';
 export interface ProjectPreviewProps {
   /** How editorial comments show in the preview. Default: `show`. */
   commentsMode?: CommentsMode;
+  /**
+   * Replace how the preview renders nodes: name → TSX source of a module
+   * whose exports override preview registry entries (`Block`, `Inline`,
+   * `Para`, …), with the built-ins on `window.__Q2_PREVIEW_RENDERER__`.
+   * Pass a stable object; a new identity reloads the components.
+   */
+  renderComponents?: Record<string, string>;
+  /** The open file's editorial comments, on every render. Pass a stable function. */
+  onCommentsChange?: (comments: RenderComment[]) => void;
   /** Color the text by who wrote it. Default: false. */
   authors?: boolean;
 }
@@ -130,7 +140,7 @@ export interface ProjectPreviewProps {
  * reads the persisted `previewEditing` preference itself, so a host
  * switches it with `usePreference('previewEditing')`.
  */
-export function ProjectPreview({ commentsMode = 'show', authors = false }: ProjectPreviewProps) {
+export function ProjectPreview({ commentsMode = 'show', authors = false, renderComponents, onCommentsChange }: ProjectPreviewProps) {
   const { project, currentFile, files, fileContents, identities, captures, content, editor, openFile, internals } =
     useProject();
   const editorHasFocusRef = useRef(false);
@@ -172,6 +182,8 @@ export function ProjectPreview({ commentsMode = 'show', authors = false }: Proje
       captures={captures}
       attributionOn={authors}
       commentsMode={commentsMode}
+      renderComponents={renderComponents}
+      onCommentsChange={onCommentsChange}
     />
   );
 }

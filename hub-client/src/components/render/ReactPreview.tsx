@@ -152,6 +152,8 @@ interface PreviewProps {
    * Absent ⇒ 'show'.
    */
   commentsMode?: 'expand' | 'show' | 'hide';
+  /** Host render components; see `ReactRendererProps.renderComponents`. */
+  renderComponents?: Record<string, string>;
   /**
    * Reports whether `useAttribution` is mid-build. The Attribution
    * pill animates its border while true so a long run-list build on
@@ -507,6 +509,7 @@ export default function ReactPreview({
   attributionHeads,
   attributionBranchId,
   commentsMode,
+  renderComponents,
   onAttributionGeneratingChange,
 }: PreviewProps) {
   // Preview state machine for error handling
@@ -968,6 +971,7 @@ export default function ReactPreview({
             untransformedAstJson={rendered.untransformedAstJson}
             currentActor={getAuthorId()}
             commentsMode={commentsMode}
+            renderComponents={renderComponents}
             unlockNestingCursor={unlockNestingCursor}
             richText={richText}
             editingDisabled={!previewEditing}

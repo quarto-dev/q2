@@ -114,6 +114,13 @@ interface ReactRendererProps {
    */
   commentsMode?: 'expand' | 'show' | 'hide';
   /**
+   * Host render components: name → TSX source of a module whose exports
+   * replace preview registry entries (same contract as a document's
+   * `render-components:` files, which layer on top). Keep the object's
+   * identity stable; a new one reloads the components.
+   */
+  renderComponents?: Record<string, string>;
+  /**
    * P3.2: nesting-cursor mode for nested blocks. Forwarded to
    * `Q2PreviewIframe` only (q2-debug/slides don't support it).
    */
@@ -175,6 +182,7 @@ function ReactRenderer({
   untransformedAstJson,
   currentActor,
   commentsMode,
+  renderComponents,
   unlockNestingCursor,
   richText,
   editingDisabled,
@@ -235,13 +243,16 @@ function ReactRenderer({
 
   // Transpile components - only when component paths list changes (not when their contents change)
   const customComponentsCode = useMemo(() => {
+    const componentsCode: Record<string, string> = {};
+    for (const [name, tsxCode] of Object.entries(renderComponents ?? {})) {
+      componentsCode[name] = transpileTSX(tsxCode);
+    }
     if (!componentPathsKey) {
-      return {};
+      return componentsCode;
     }
 
     const componentPaths = JSON.parse(componentPathsKey) as string[];
 
-    const componentsCode: Record<string, string> = {};
     for (const path of componentPaths) {
       // render-components entries can be either project-root-absolute
       // (leading slash) or relative to the current document's directory.
@@ -263,7 +274,7 @@ function ReactRenderer({
     }
 
     return componentsCode;
-  }, [componentPathsKey, currentFilePath]);
+  }, [componentPathsKey, currentFilePath, renderComponents]);
 
   // Plan 2A item 12: format-dispatch split. q2-debug (raw AST view)
   // and q2-preview (post-pipeline AST for the live preview) now run

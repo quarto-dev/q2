@@ -102,11 +102,11 @@
   content: '›';
 }
 
-.cn-side details[open] > summary::before {
+.cn-side details[open]>summary::before {
   content: '⌄';
 }
 
-.cn-side summary > * {
+.cn-side summary>* {
   margin-left: auto;
 }
 
@@ -134,17 +134,34 @@
   font-size: 9px;
 }
 
-/* The two sides share the slack equally, which centers the layout
-   buttons between them. */
-.cn-bar > :is(.cn-file, .cn-actions, small) {
+.cn-bar > small {
   flex: 1;
 }
 
+/* The top bar: two equal columns around the layout buttons, which keeps
+   them at the bar's center whatever the sides hold. `minmax(0, …)` lets a
+   side go narrower than its content; flex sides would not, and a narrow
+   window then pushed the buttons off center. */
+div.cn-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.cn-lead,
 .cn-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 12px;
+}
+
+/* Too narrow for its content, the left side clips and the right side wraps. */
+.cn-lead {
+  overflow: hidden;
+}
+
+.cn-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 /* The split, with a strip of the card showing to the right of the preview. */
@@ -160,4 +177,31 @@
    name a Monaco class. */
 .cn-card .monaco-editor .margin {
   background: var(--cn-card-bg);
+}
+
+/* Comments, taken out of the preview and listed beside it. */
+.cn-gutter {
+  flex: none;
+  width: 200px;
+  overflow-y: auto;
+  padding: 0 8px;
+}
+
+/* One note per block; its comments stack inside it. */
+.cn-thread {
+  margin-top: 8px;
+  border-left: 3px solid #e0a800;
+  background: #fff8e1;
+}
+
+.cn-page .cn-gutter button {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  font-size: 13px;
+  text-align: left;
+}
+
+.cn-page .cn-gutter button+button {
+  border-top: 1px solid #f0e2b0;
 }
