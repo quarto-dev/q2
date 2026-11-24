@@ -16,7 +16,7 @@
  * Everything project-level (file tree, preview, dialogs, drop uploads,
  * replay scrubbing) lives in `Editor.tsx`, which drives this component
  * through props, the `onMount` callback and the imperative handle. The
- * demo at `#/component-playground/monaco` renders it alone.
+ * Monaco demo in `q2-demos/component-playground` renders it alone.
  */
 
 import {

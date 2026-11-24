@@ -23,6 +23,7 @@ export {
   type CommentsMode,
   type ProjectPreviewProps,
 } from './parts';
+export type { RenderComment } from '@quarto/preview-renderer/types/diagnostic';
 export { useFileActions, type FileActions } from './useFileActions';
 export {
   useProjectConnection,

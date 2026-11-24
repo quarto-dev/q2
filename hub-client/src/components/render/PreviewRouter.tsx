@@ -73,6 +73,8 @@ interface PreviewRouterProps {
    * `Preview` branch has no comment chrome).
    */
   commentsMode?: 'expand' | 'show' | 'hide';
+  /** Host render components; see `ReactRendererProps.renderComponents`. ReactPreview only. */
+  renderComponents?: Record<string, string>;
   /**
    * Reports the active page's outstanding editorial comments up to
    * `Editor.tsx` for the comments-toggle badge (bd-0rsk07il, GH
@@ -185,7 +187,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
   // Render the appropriate preview component with shared WASM error banner.
   // `identities` and `attributionOn` are for ReactPreview only — Preview
   // doesn't know about either.
-  const { onRegisterScrollToLine, onRegisterSetScrollRatio, onRegisterReplayScroll, onFormatChange, onPreviewModeChange: _onPreviewModeChange, onContentRewrite, fileContents, identities, captures, attributionOn, attributionHeads, attributionBranchId, commentsMode, onCommentsChange, onAttributionGeneratingChange, ...commonProps } = props;
+  const { onRegisterScrollToLine, onRegisterSetScrollRatio, onRegisterReplayScroll, onFormatChange, onPreviewModeChange: _onPreviewModeChange, onContentRewrite, fileContents, identities, captures, attributionOn, attributionHeads, attributionBranchId, commentsMode, renderComponents, onCommentsChange, onAttributionGeneratingChange, ...commonProps } = props;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -201,7 +203,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
         ) : previewMode.mode === 'neither' ? (
           <NeitherView formatKey={previewMode.formatKey} />
         ) : reactFormat ? (
-          <ReactPreview {...commonProps} onContentRewrite={onContentRewrite} fileContents={fileContents} format={reactFormat} identities={identities} captures={captures} attributionOn={attributionOn} attributionHeads={attributionHeads} attributionBranchId={attributionBranchId} commentsMode={commentsMode} onCommentsChange={onCommentsChange} onAttributionGeneratingChange={onAttributionGeneratingChange} onRegisterReplayScroll={onRegisterReplayScroll} />
+          <ReactPreview {...commonProps} onContentRewrite={onContentRewrite} fileContents={fileContents} format={reactFormat} identities={identities} captures={captures} attributionOn={attributionOn} attributionHeads={attributionHeads} attributionBranchId={attributionBranchId} commentsMode={commentsMode} renderComponents={renderComponents} onCommentsChange={onCommentsChange} onAttributionGeneratingChange={onAttributionGeneratingChange} onRegisterReplayScroll={onRegisterReplayScroll} />
         ) : (
           // Phase 9 Decision 6: pass `fileContents` so any sibling
           // edit (including `_quarto.yml`) triggers a re-render via
