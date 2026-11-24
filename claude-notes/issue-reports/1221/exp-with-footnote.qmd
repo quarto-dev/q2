@@ -1,0 +1,8 @@
+---
+title: Footnote too
+bibliography: refs.bib
+---
+
+See @knuth1984.[^1]
+
+[^1]: A note.

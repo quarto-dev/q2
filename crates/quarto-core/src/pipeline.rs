@@ -72,11 +72,11 @@ use crate::stage::stages::{
     UnexecutedCellCountStage,
 };
 use crate::stage::{
-    ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, AuthoredMetadataStage,
-    CompileThemeCssStage, DocumentProfileStage, EngineExecutionStage, EquationNumberStage,
-    IncludeExpansionStage, IncludeInlineFoldStage, IncludeResolveStage, LanguageResolveStage,
-    LinkResolutionStage, ListingItemInfoStage, LoadedSource, MathJsStage, MathMlStage,
-    MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData, PipelineStage,
+    AppendixBibliographyStage, ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage,
+    AuthoredMetadataStage, CompileThemeCssStage, DocumentProfileStage, EngineExecutionStage,
+    EquationNumberStage, IncludeExpansionStage, IncludeInlineFoldStage, IncludeResolveStage,
+    LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage, LoadedSource, MathJsStage,
+    MathMlStage, MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData, PipelineStage,
     PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage, SourceConversionStage,
     StageContext, UnwrapProfileStage, UserFiltersStage,
 };
@@ -296,6 +296,8 @@ pub struct PreviewAstOutput {
 /// 12. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
 /// 13. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
 /// 14. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
+///     (followed by `AppendixBibliographyStage`, which moves citeproc's
+///     `#refs` into the appendix, GH #1221)
 /// 15. `CodeHighlightStage` - Annotate CodeBlock/Code with `data-hl-spans`
 /// 16. `RenderHtmlBodyStage` - Render AST to HTML body
 /// 17. `ApplyTemplateStage` - Apply HTML template
@@ -507,6 +509,11 @@ pub fn build_html_pipeline_stages_with_options(
     stages.push(Box::new(UserFiltersStage::pre()));
     stages.push(Box::new(AstTransformsStage::new()));
     stages.push(Box::new(UserFiltersStage::post()));
+    // GH #1221: the citeproc filter runs in the post bucket for a non-book
+    // HTML document, after `appendix-structure`, so the `#refs` div it
+    // appends is moved into `#quarto-appendix` here. Excluded from the
+    // Pandoc-writer formats (`PANDOC_STAGE_EXCLUDED`).
+    stages.push(Box::new(AppendixBibliographyStage::new()));
     // GH #1257: fold the final values of the inline include keys
     // (`header-includes` / `include-before` / `include-after`) into
     // `rendered.includes.*`, so what a filter wrote reaches the template
@@ -698,6 +705,10 @@ pub fn build_q2_preview_pipeline_stages(captures: CapturePayload) -> Vec<Box<dyn
 /// (typo / rename guard) — same rationale as [`Q2_PREVIEW_STAGE_EXCLUDED`]'s
 /// validator.
 const PANDOC_STAGE_EXCLUDED: &[&str] = &[
+    // Places the bibliography in the HTML `#quarto-appendix` (GH #1221).
+    // Pandoc-writer formats keep their current placement; Typst's is
+    // GH #1105.
+    "appendix-bibliography",
     "compile-theme-css",
     // Website search captures rendered HTML bodies; a Pandoc-writer
     // format has none (bd-eip0naf4).
@@ -4198,8 +4209,9 @@ mod tests {
         // the user pre-filters (bd-lmd-exploration-jqv2nbl4), plus
         // ListingResolveStage before lmd-execute (bd-2oqen84t), plus SearchCaptureStage (bd-eip0naf4), plus DashboardJsStage
         // (bd-dashboard-format-k21hd4vy), plus AuthoredMetadataStage after
-        // the merge (bd-xzsnuoqq): 33.
-        assert_eq!(stages.len(), 34);
+        // the merge (bd-xzsnuoqq), plus AppendixBibliographyStage after the
+        // post filters (GH #1221): 35.
+        assert_eq!(stages.len(), 35);
         // Pre-parse file-claim/convert (Task 10).
         assert_eq!(stages[0].name(), "source-conversion");
         assert_eq!(stages[1].name(), "parse-document");
@@ -4261,29 +4273,32 @@ mod tests {
         assert_eq!(stages[22].name(), "user-filters-pre");
         assert_eq!(stages[23].name(), "ast-transforms");
         assert_eq!(stages[24].name(), "user-filters-post");
+        // GH #1221: moves the `#refs` div the post-bucket citeproc filter
+        // appended into `#quarto-appendix`.
+        assert_eq!(stages[25].name(), "appendix-bibliography");
         // GH #1257: folds the inline include keys a filter may have written.
-        assert_eq!(stages[25].name(), "include-inline-fold");
+        assert_eq!(stages[26].name(), "include-inline-fold");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[26].name(), "resource-report");
+        assert_eq!(stages[27].name(), "resource-report");
         // Equation-number encoding (bd-vlhi2zkj) must follow
         // user-filters-post: a Lua post filter may rewrite or delete the
         // reserved `quarto-eq-number` attribute the stage consumes.
-        assert_eq!(stages[27].name(), "equation-number");
+        assert_eq!(stages[28].name(), "equation-number");
         // Native MathML (bd-3evfzwal) follows equation-number (the TeX it
         // converts carries no `\tag`) and precedes math-js (which loads
         // MathJax only for what this stage left as TeX).
-        assert_eq!(stages[28].name(), "math-ml");
-        assert_eq!(stages[29].name(), "code-highlight");
+        assert_eq!(stages[29].name(), "math-ml");
+        assert_eq!(stages[30].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, the `\tag{N}` equation-number encoding) is visible.
-        assert_eq!(stages[30].name(), "math-js");
-        assert_eq!(stages[31].name(), "render-html-body");
+        assert_eq!(stages[31].name(), "math-js");
+        assert_eq!(stages[32].name(), "render-html-body");
         // Website search capture (bd-eip0naf4): records the rendered
         // body before the template wraps it.
-        assert_eq!(stages[32].name(), "search-capture");
-        assert_eq!(stages[33].name(), "apply-template");
+        assert_eq!(stages[33].name(), "search-capture");
+        assert_eq!(stages[34].name(), "apply-template");
     }
 
     #[test]
@@ -4295,8 +4310,8 @@ mod tests {
         // LmdExecuteStage, plus ListingResolveStage (bd-2oqen84t), plus
         // SearchCaptureStage (bd-eip0naf4), plus DashboardJsStage
         // (bd-dashboard-format-k21hd4vy), plus AuthoredMetadataStage
-        // (bd-xzsnuoqq) → 33 stages.
-        assert_eq!(pipeline.len(), 34);
+        // (bd-xzsnuoqq), plus AppendixBibliographyStage (GH #1221) → 35 stages.
+        assert_eq!(pipeline.len(), 35);
     }
 
     #[test]
@@ -6430,6 +6445,7 @@ mod tests {
             vec![
                 "ast-transforms",
                 "user-filters-post",
+                "appendix-bibliography",
                 "include-inline-fold",
                 "resource-report",
                 "equation-number",

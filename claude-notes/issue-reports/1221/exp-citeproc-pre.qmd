@@ -1,0 +1,7 @@
+---
+title: Pre bucket
+bibliography: refs.bib
+filters: [citeproc, quarto]
+---
+
+See @knuth1984.

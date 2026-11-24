@@ -1,4 +1,5 @@
-//! Citation resolution in single-document HTML renders (GH #1026).
+//! Citation resolution in single-document HTML renders (GH #1026), and
+//! bibliography placement in the appendix (GH #1221).
 //!
 //! Quarto 1 runs citeproc whenever a document names a bibliography
 //! (`citeMethod()` in `src/command/render/filters.ts`). Q2 used to run it
@@ -131,4 +132,120 @@ fn minimal_html_does_not_link_citations_by_default() {
     let html = render_html("theme: none\n", "See [@doe2020].");
     assert!(!html.contains(r##"href="#ref-doe2020""##), "{html}");
     assert!(html.contains("(Doe 2020)"), "{html}");
+}
+
+// ─── Bibliography placement in the appendix (GH #1221) ─────────────────
+//
+// Quarto 1 moves the bibliography into `#quarto-appendix`, in a
+// `#quarto-bibliography` section under a localized "References" heading (or
+// `reference-section-title`). Q2's citeproc runs after `appendix-structure`
+// for HTML, so `AppendixBibliographyStage` places it.
+
+/// Byte offset of `needle` in `html`, panicking with the document if absent.
+fn offset(html: &str, needle: &str) -> usize {
+    html.find(needle)
+        .unwrap_or_else(|| panic!("`{needle}` not found in:\n{html}"))
+}
+
+/// Assert that each needle occurs in `html`, in the given order.
+fn assert_in_order(html: &str, needles: &[&str]) {
+    let offsets: Vec<usize> = needles.iter().map(|n| offset(html, n)).collect();
+    assert!(
+        offsets.windows(2).all(|w| w[0] < w[1]),
+        "expected {needles:?} in order, found offsets {offsets:?}:\n{html}"
+    );
+}
+
+/// The appendix's bibliography heading: `#quarto-bibliography`, then an
+/// `<h2 class="anchored quarto-appendix-heading" …>` holding `title`, then
+/// `#refs`, all inside `#quarto-appendix`.
+fn assert_bibliography_in_appendix(html: &str, title: &str) {
+    assert_in_order(
+        html,
+        &[
+            r#"id="quarto-appendix""#,
+            r#"id="quarto-bibliography""#,
+            r#"class="anchored quarto-appendix-heading""#,
+            &format!(">{title}</h2>"),
+            r#"id="refs""#,
+            r#"id="ref-doe2020""#,
+        ],
+    );
+}
+
+/// The issue's English page: the bibliography is in the appendix under
+/// "References", not a bare `#refs` after the body.
+#[test]
+fn bibliography_is_placed_in_appendix_with_references_heading() {
+    let html = render_html("", "See [@doe2020].");
+    assert_bibliography_in_appendix(&html, "References");
+    assert_eq!(html.matches(r#"id="refs""#).count(), 1, "{html}");
+}
+
+/// The heading follows the document's `lang`.
+#[test]
+fn bibliography_heading_is_localized() {
+    let html = render_html("lang: fr\n", "Voir [@doe2020].");
+    assert_bibliography_in_appendix(&html, "Les références");
+}
+
+/// `reference-section-title` overrides the heading.
+#[test]
+fn reference_section_title_overrides_bibliography_heading() {
+    let html = render_html("reference-section-title: Sources\n", "See [@doe2020].");
+    assert_bibliography_in_appendix(&html, "Sources");
+    assert!(!html.contains(">References</h2>"), "{html}");
+}
+
+/// With footnotes, the bibliography goes in the same appendix, before the
+/// footnotes, as in Quarto 1. It used to land after the appendix.
+#[test]
+fn bibliography_precedes_footnotes_in_appendix() {
+    let html = render_html("", "See [@doe2020].[^1]\n\n[^1]: A note.");
+    assert_eq!(html.matches(r#"id="quarto-appendix""#).count(), 1, "{html}");
+    assert_in_order(
+        &html,
+        &[
+            r#"id="quarto-appendix""#,
+            r#"id="quarto-bibliography""#,
+            r#"id="refs""#,
+            r#"id="footnotes""#,
+        ],
+    );
+}
+
+/// `citation-location: margin` keeps the bibliography out of the appendix
+/// (Quarto 1's `hasMarginCites`).
+#[test]
+fn margin_citations_keep_bibliography_out_of_appendix() {
+    let html = render_html("citation-location: margin\n", "See [@doe2020].");
+    assert!(!html.contains(r#"id="quarto-bibliography""#), "{html}");
+}
+
+/// `reference-location: margin` moves footnotes to the margin, not the
+/// bibliography: it still goes in the appendix.
+#[test]
+fn margin_footnotes_still_place_bibliography_in_appendix() {
+    let html = render_html("reference-location: margin\n", "See [@doe2020].");
+    assert_bibliography_in_appendix(&html, "References");
+}
+
+/// `appendix-style: none` turns appendix processing off entirely.
+#[test]
+fn appendix_style_none_leaves_bibliography_in_place() {
+    let html = render_html("appendix-style: none\n", "See [@doe2020].");
+    assert!(!html.contains(r#"id="quarto-appendix""#), "{html}");
+    assert!(html.contains(r#"id="refs""#), "{html}");
+}
+
+/// A `#refs` div the author placed under their own heading stays there,
+/// as in Quarto 1 (its `positioned-refs` trait): no appendix copy.
+#[test]
+fn author_placed_refs_under_heading_stay_in_place() {
+    let html = render_html(
+        "",
+        "See [@doe2020].\n\n## Works cited\n\n::: {#refs}\n:::\n\n## After\n\nMore text.",
+    );
+    assert!(!html.contains(r#"id="quarto-bibliography""#), "{html}");
+    assert_in_order(&html, &[">Works cited</h2>", r#"id="refs""#, ">After</h2>"]);
 }
