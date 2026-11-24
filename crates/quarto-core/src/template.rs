@@ -603,12 +603,17 @@ $if(by-author)$<div class="navbar-author">$for(by-author)$$it.name.literal$$sep$
 /// variable (same "Abstract" default, and the `abstract-title`
 /// override keeps working — deviation documented here).
 ///
+/// With `code-tools`, the title is wrapped in
+/// `div.quarto-title-block > div` together with the button and menu from
+/// `rendered.code-tools` (written by `transforms/code_tools.rs`), the
+/// structure Q1's `codetools.ts` builds in its DOM pass.
+///
 /// A document can replace this partial by listing a file named
 /// `title-block.html` under `template-partials` (Q1 compatibility).
 pub const TITLE_BLOCK_PARTIAL: &str = r#"$if(rendered.has-title-block)$
 $if(rendered.title-block-none)$
 <header id="title-block-header">
-$if(title)$<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>
+$if(title)$$if(rendered.code-tools)$<div class="quarto-title-block"><div><h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>$rendered.code-tools$</div></div>$else$<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>$endif$
 $endif$
 $if(subtitle)$
 <p class="subtitle">$subtitle$</p>
@@ -634,7 +639,7 @@ $if(rendered.navigation.breadcrumbs)$
 $rendered.navigation.breadcrumbs$
 $endif$
 $if(title)$
-<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>
+$if(rendered.code-tools)$<div class="quarto-title-block"><div><h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>$rendered.code-tools$</div></div>$else$<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>$endif$
 $endif$
 $if(subtitle)$
 <p class="subtitle lead">$subtitle$</p>
@@ -666,7 +671,7 @@ $rendered.navigation.breadcrumbs$
 $endif$
 <div class="quarto-title">
 $if(title)$
-<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>
+$if(rendered.code-tools)$<div class="quarto-title-block"><div><h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>$rendered.code-tools$</div></div>$else$<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>$endif$
 $endif$
 $if(subtitle)$
 <p class="subtitle lead">$subtitle$</p>

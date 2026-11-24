@@ -507,6 +507,11 @@ impl AstTransform for CodeBlockGenerateTransform {
 
             ctx.code_block_decorations.insert(key, decoration);
         });
+
+        // `code-tools`: the title-block button. It offers Show/Hide All
+        // Code only when some cell folds, which is known here.
+        let has_folded_cell = ctx.code_block_decorations.values().any(|d| d.fold.is_on());
+        super::code_tools::apply_code_tools(ast, ctx, has_folded_cell);
         Ok(())
     }
 }

@@ -543,6 +543,11 @@ doc.html cb911871a3a0f9328ae6a32df4e2d72da647ff8696169aec56c01d66984cd8ef
 # `<script>` tag; the script ships unless `code-annotations` is `false` or
 # `none`). doc_files/styles.css changed again for the annotation rules
 # (list grid, marker float, popover, per-line spans of annotated blocks).
+
+# Re-captured 2026-11-24 (code-tools): doc_files/styles.css changed for the
+# four `#title-block-header .quarto-title-block > div` rules that lay the
+# code-tools button out beside the title. doc.html unchanged: the fixture
+# does not set `code-tools`.
 # Re-captured 2026-11-24 (code-block features, bd-1tl09 phases 3-4):
 # doc_files/styles.css changed because `highlight.scss` gained the
 # `.code-overflow-wrap` / `.code-overflow-scroll` rules and Pandoc's

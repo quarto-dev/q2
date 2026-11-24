@@ -72,6 +72,7 @@ mod categories_sidebar;
 mod code_annotations;
 mod code_block_generate;
 mod code_block_render;
+mod code_tools;
 mod components_resolve;
 mod conditional_content;
 mod config;

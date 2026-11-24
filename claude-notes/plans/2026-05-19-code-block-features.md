@@ -190,6 +190,16 @@ continuity; do not implement in the current iteration.*
   for a list item with no marker, and numbered lines on annotated
   blocks in decks.
 
+- [x] **Code tools.** *(Done 2026-11-24; not a numbered phase of the
+  original plan.)* `code-tools: true | { source, toggle, caption }`
+  for `format: html`: the title-block button, its Show All Code / Hide
+  All Code / View Source menu and the source modal.
+  `crates/quarto-core/src/transforms/code_tools.rs`, called from
+  `CodeBlockGenerateTransform`; the title-block partial places
+  `rendered.code-tools` beside the `<h1>`. Not done: markdown
+  highlighting of the source in the modal, the toggle for cells hidden
+  with the `hidden` class, localized labels.
+
 - [ ] **Phase 5 — Code preview iframe.** *(Deferred.)* In Q1 the
   attribute is `code-preview="examples/foo.qmd"` and a TS
   post-DOM pass auto-rewrites `.qmd` → `.html` before inserting
