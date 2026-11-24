@@ -1,0 +1,7 @@
+---
+title: Titled
+bibliography: refs.bib
+reference-section-title: Sources
+---
+
+See @knuth1984.
