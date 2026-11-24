@@ -267,6 +267,7 @@ jobs:
           echo "$GITHUB_WORKSPACE/.rvenv/bin" >> "$GITHUB_PATH"
           export PATH="$GITHUB_WORKSPACE/.rvenv/bin:$PATH"
           Rscript -e 'cat(R.version.string, "\n"); cat(.libPaths(), sep = "\n")'
+          (cd "$RUNNER_TEMP" && bash "$GITHUB_WORKSPACE/.github/scripts/r-probe.sh" sync-tmp)
 
       - name: Save locked R project library
         if: steps.rig-cache.outputs.cache-hit != 'true'
@@ -365,6 +366,13 @@ jobs:
           jupyter --version
           jupyter kernelspec list
 
+      - name: R probe (temporary, bd-9kbjjeb6)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          (cd "$GITHUB_WORKSPACE/crates/quarto-core" && bash "$GITHUB_WORKSPACE/.github/scripts/r-probe.sh" pretest-crate)
+          (cd "$RUNNER_TEMP" && bash "$GITHUB_WORKSPACE/.github/scripts/r-probe.sh" pretest-tmp)
+
       # `ci` profile + `--tests` makes a separate `cargo build` redundant.
       # `--tests` (not `--all-targets`) excludes benches — `quarto-yaml` declares
       # `harness = false` benches that nextest can't enumerate as tests.
@@ -391,6 +399,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/engine-smoke"
+          (cd "$RUNNER_TEMP/engine-smoke" && bash "$GITHUB_WORKSPACE/.github/scripts/r-probe.sh" smoke)
           cat > "$RUNNER_TEMP/engine-smoke/knitr.qmd" <<'EOF'
           ---
           title: "R engine smoke"
