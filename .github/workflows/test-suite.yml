@@ -212,6 +212,7 @@ jobs:
       # `VAR=value cmd` form several scripts use. Run them under Git Bash.
       - name: Use bash for npm scripts (Windows)
         if: runner.os == 'Windows'
+        shell: bash
         run: echo 'npm_config_script_shell=C:\Program Files\Git\bin\bash.exe' >> "$GITHUB_ENV"
 
       - name: Install npm dependencies
