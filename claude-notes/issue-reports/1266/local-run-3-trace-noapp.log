@@ -1,0 +1,1887 @@
+
+Running 4 tests using 1 worker
+
+[1/4] [webkit] › e2e/pandoc-warm.harness.spec.ts:88:3 › warm hooks (smoke) › a warm run is byte-equal to a fresh run of the same document, and says it was warm
+[webkit] › e2e/pandoc-warm.harness.spec.ts:88:3 › warm hooks (smoke) › a warm run is byte-equal to a fresh run of the same document, and says it was warm
+2026-11-24T14:57:05.956Z [run-trace] #1 fresh typst callouts-typst/callouts.qmd +1ms build-request
+
+2026-11-24T14:57:05.997Z [run-trace] #1 fresh typst callouts-typst/callouts.qmd +41ms run (loader renders=0)
+
+2026-11-24T14:57:05.999Z [run-trace] #1 fresh typst callouts-typst/callouts.qmd +43ms stage loading
+
+2026-11-24T14:57:06.303Z [run-trace] #1 fresh typst callouts-typst/callouts.qmd +347ms stage starting
+
+2026-11-24T14:57:06.321Z [run-trace] #1 fresh typst callouts-typst/callouts.qmd +366ms stage mounting
+
+2026-11-24T14:57:06.358Z [run-trace] #1 fresh typst callouts-typst/callouts.qmd +401ms stage running
+
+2026-11-24T14:57:06.675Z [run-trace] #1 fresh typst callouts-typst/callouts.qmd +719ms ok 678ms
+
+2026-11-24T14:57:06.676Z [run-trace] #2 warm typst callouts-typst/callouts.qmd +0ms build-request
+
+2026-11-24T14:57:06.687Z [run-trace] #2 warm typst callouts-typst/callouts.qmd +10ms run (loader renders=1)
+
+2026-11-24T14:57:06.687Z [run-trace] #2 warm typst callouts-typst/callouts.qmd +11ms stage loading
+
+2026-11-24T14:57:06.724Z [run-trace] #2 warm typst callouts-typst/callouts.qmd +47ms stage starting
+
+2026-11-24T14:57:06.725Z [run-trace] #2 warm typst callouts-typst/callouts.qmd +49ms stage mounting
+
+2026-11-24T14:57:06.727Z [run-trace] #2 warm typst callouts-typst/callouts.qmd +50ms stage running
+
+2026-11-24T14:57:06.911Z [run-trace] #2 warm typst callouts-typst/callouts.qmd +234ms ok 224ms
+
+2026-11-24T14:57:06.912Z [run-trace] #3 warm typst callouts-typst/callouts.qmd +0ms build-request
+
+2026-11-24T14:57:06.920Z [run-trace] #3 warm typst callouts-typst/callouts.qmd +8ms run (loader renders=2)
+
+2026-11-24T14:57:06.920Z [run-trace] #3 warm typst callouts-typst/callouts.qmd +8ms stage loading
+
+2026-11-24T14:57:06.920Z [run-trace] #3 warm typst callouts-typst/callouts.qmd +8ms stage starting
+
+2026-11-24T14:57:06.921Z [run-trace] #3 warm typst callouts-typst/callouts.qmd +10ms stage mounting
+
+2026-11-24T14:57:06.922Z [run-trace] #3 warm typst callouts-typst/callouts.qmd +11ms stage running
+
+2026-11-24T14:57:07.056Z [run-trace] #3 warm typst callouts-typst/callouts.qmd +144ms ok 136ms
+
+[2/4] [webkit] › e2e/pandoc-warm.harness.spec.ts:107:3 › warm hooks (smoke) › a sequence runs in one round trip and keeps the order it was given
+[webkit] › e2e/pandoc-warm.harness.spec.ts:107:3 › warm hooks (smoke) › a sequence runs in one round trip and keeps the order it was given
+2026-11-24T14:57:08.859Z [run-trace] #1 warm typst callouts-typst/callouts.qmd +0ms build-request
+
+2026-11-24T14:57:08.902Z [run-trace] #1 warm typst callouts-typst/callouts.qmd +42ms run (loader renders=0)
+
+2026-11-24T14:57:08.904Z [run-trace] #1 warm typst callouts-typst/callouts.qmd +43ms stage loading
+
+2026-11-24T14:57:09.282Z [run-trace] #1 warm typst callouts-typst/callouts.qmd +423ms stage starting
+
+2026-11-24T14:57:09.285Z [run-trace] #1 warm typst callouts-typst/callouts.qmd +426ms stage mounting
+
+2026-11-24T14:57:09.286Z [run-trace] #1 warm typst callouts-typst/callouts.qmd +427ms stage running
+
+2026-11-24T14:57:09.608Z [run-trace] #1 warm typst callouts-typst/callouts.qmd +749ms ok 707ms
+
+2026-11-24T14:57:09.609Z [run-trace] #2 warm typst citations-typst/citations.qmd +0ms build-request
+
+2026-11-24T14:57:09.618Z [run-trace] #2 warm typst citations-typst/citations.qmd +9ms run (loader renders=1)
+
+2026-11-24T14:57:09.618Z [run-trace] #2 warm typst citations-typst/citations.qmd +10ms stage loading
+
+2026-11-24T14:57:09.618Z [run-trace] #2 warm typst citations-typst/citations.qmd +10ms stage starting
+
+2026-11-24T14:57:09.619Z [run-trace] #2 warm typst citations-typst/citations.qmd +11ms stage mounting
+
+2026-11-24T14:57:09.620Z [run-trace] #2 warm typst citations-typst/citations.qmd +12ms stage running
+
+2026-11-24T14:57:09.703Z [run-trace] #2 warm typst citations-typst/citations.qmd +95ms ok 85ms
+
+2026-11-24T14:57:09.703Z [run-trace] #3 warm typst callouts-typst/callouts.qmd +0ms build-request
+
+2026-11-24T14:57:09.715Z [run-trace] #3 warm typst callouts-typst/callouts.qmd +12ms run (loader renders=2)
+
+2026-11-24T14:57:09.716Z [run-trace] #3 warm typst callouts-typst/callouts.qmd +12ms stage loading
+
+2026-11-24T14:57:09.716Z [run-trace] #3 warm typst callouts-typst/callouts.qmd +12ms stage starting
+
+2026-11-24T14:57:09.717Z [run-trace] #3 warm typst callouts-typst/callouts.qmd +13ms stage mounting
+
+2026-11-24T14:57:09.717Z [run-trace] #3 warm typst callouts-typst/callouts.qmd +14ms stage running
+
+2026-11-24T14:57:09.846Z [run-trace] #3 warm typst callouts-typst/callouts.qmd +143ms ok 131ms
+
+[3/4] [webkit] › e2e/pandoc-warm.harness.spec.ts:118:3 › warm hooks (smoke) › the typing hook drives the real pane and logs frames, starts and edits on one clock
+[4/4] [webkit] › e2e/pandoc-warm.harness.spec.ts:173:3 › warm path: correctness matrix › A,B,A byte equality over a shuffled sequence of the typst recordings and the argv matrix, with no fallbacks
+[webkit] › e2e/pandoc-warm.harness.spec.ts:173:3 › warm path: correctness matrix › A,B,A byte equality over a shuffled sequence of the typst recordings and the argv matrix, with no fallbacks
+2026-11-24T14:57:14.519Z [run-trace] #1 fresh typst callouts-typst/callouts.qmd +0ms build-request
+
+2026-11-24T14:57:14.556Z [run-trace] #1 fresh typst callouts-typst/callouts.qmd +37ms run (loader renders=0)
+
+2026-11-24T14:57:14.558Z [run-trace] #1 fresh typst callouts-typst/callouts.qmd +39ms stage loading
+
+2026-11-24T14:57:14.836Z [run-trace] #1 fresh typst callouts-typst/callouts.qmd +317ms stage starting
+
+2026-11-24T14:57:14.847Z [run-trace] #1 fresh typst callouts-typst/callouts.qmd +328ms stage mounting
+
+2026-11-24T14:57:14.883Z [run-trace] #1 fresh typst callouts-typst/callouts.qmd +364ms stage running
+
+2026-11-24T14:57:15.248Z [run-trace] #1 fresh typst callouts-typst/callouts.qmd +729ms ok 692ms
+
+2026-11-24T14:57:15.248Z [run-trace] #2 fresh typst citations-typst/citations.qmd +0ms build-request
+
+2026-11-24T14:57:15.257Z [run-trace] #2 fresh typst citations-typst/citations.qmd +9ms run (loader renders=1)
+
+2026-11-24T14:57:15.258Z [run-trace] #2 fresh typst citations-typst/citations.qmd +10ms stage loading
+
+2026-11-24T14:57:15.258Z [run-trace] #2 fresh typst citations-typst/citations.qmd +10ms stage starting
+
+2026-11-24T14:57:15.264Z [run-trace] #2 fresh typst citations-typst/citations.qmd +16ms stage mounting
+
+2026-11-24T14:57:15.288Z [run-trace] #2 fresh typst citations-typst/citations.qmd +40ms stage running
+
+2026-11-24T14:57:15.430Z [run-trace] #2 fresh typst citations-typst/citations.qmd +182ms ok 172ms
+
+2026-11-24T14:57:15.430Z [run-trace] #3 fresh typst crossrefs-typst/all-docx.qmd +0ms build-request
+
+2026-11-24T14:57:15.439Z [run-trace] #3 fresh typst crossrefs-typst/all-docx.qmd +9ms run (loader renders=2)
+
+2026-11-24T14:57:15.439Z [run-trace] #3 fresh typst crossrefs-typst/all-docx.qmd +9ms stage loading
+
+2026-11-24T14:57:15.439Z [run-trace] #3 fresh typst crossrefs-typst/all-docx.qmd +9ms stage starting
+
+2026-11-24T14:57:15.446Z [run-trace] #3 fresh typst crossrefs-typst/all-docx.qmd +16ms stage mounting
+
+2026-11-24T14:57:15.473Z [run-trace] #3 fresh typst crossrefs-typst/all-docx.qmd +43ms stage running
+
+2026-11-24T14:57:15.633Z [run-trace] #3 fresh typst crossrefs-typst/all-docx.qmd +203ms ok 194ms
+
+2026-11-24T14:57:15.633Z [run-trace] #4 fresh typst images-typst/images.qmd +0ms build-request
+
+2026-11-24T14:57:15.639Z [run-trace] #4 fresh typst images-typst/images.qmd +6ms run (loader renders=3)
+
+2026-11-24T14:57:15.639Z [run-trace] #4 fresh typst images-typst/images.qmd +6ms stage loading
+
+2026-11-24T14:57:15.639Z [run-trace] #4 fresh typst images-typst/images.qmd +6ms stage starting
+
+2026-11-24T14:57:15.645Z [run-trace] #4 fresh typst images-typst/images.qmd +12ms stage mounting
+
+2026-11-24T14:57:15.670Z [run-trace] #4 fresh typst images-typst/images.qmd +37ms stage running
+
+2026-11-24T14:57:15.781Z [run-trace] #4 fresh typst images-typst/images.qmd +147ms ok 141ms
+
+2026-11-24T14:57:15.781Z [run-trace] #5 fresh typst shortcodes-typst/shortcodes.qmd +0ms build-request
+
+2026-11-24T14:57:15.790Z [run-trace] #5 fresh typst shortcodes-typst/shortcodes.qmd +9ms run (loader renders=4)
+
+2026-11-24T14:57:15.790Z [run-trace] #5 fresh typst shortcodes-typst/shortcodes.qmd +9ms stage loading
+
+2026-11-24T14:57:15.790Z [run-trace] #5 fresh typst shortcodes-typst/shortcodes.qmd +9ms stage starting
+
+2026-11-24T14:57:15.797Z [run-trace] #5 fresh typst shortcodes-typst/shortcodes.qmd +15ms stage mounting
+
+2026-11-24T14:57:15.826Z [run-trace] #5 fresh typst shortcodes-typst/shortcodes.qmd +45ms stage running
+
+2026-11-24T14:57:15.952Z [run-trace] #5 fresh typst shortcodes-typst/shortcodes.qmd +170ms ok 161ms
+
+2026-11-24T14:57:15.952Z [run-trace] #6 fresh typst tables-typst/tables.qmd +0ms build-request
+
+2026-11-24T14:57:15.957Z [run-trace] #6 fresh typst tables-typst/tables.qmd +5ms run (loader renders=5)
+
+2026-11-24T14:57:15.957Z [run-trace] #6 fresh typst tables-typst/tables.qmd +5ms stage loading
+
+2026-11-24T14:57:15.957Z [run-trace] #6 fresh typst tables-typst/tables.qmd +5ms stage starting
+
+2026-11-24T14:57:15.963Z [run-trace] #6 fresh typst tables-typst/tables.qmd +11ms stage mounting
+
+2026-11-24T14:57:15.988Z [run-trace] #6 fresh typst tables-typst/tables.qmd +36ms stage running
+
+2026-11-24T14:57:16.112Z [run-trace] #6 fresh typst tables-typst/tables.qmd +160ms ok 155ms
+
+2026-11-24T14:57:16.112Z [run-trace] #7 fresh typst matrix-citeproc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:16.117Z [run-trace] #7 fresh typst matrix-citeproc/doc.qmd +5ms run (loader renders=6)
+
+2026-11-24T14:57:16.117Z [run-trace] #7 fresh typst matrix-citeproc/doc.qmd +5ms stage loading
+
+2026-11-24T14:57:16.117Z [run-trace] #7 fresh typst matrix-citeproc/doc.qmd +5ms stage starting
+
+2026-11-24T14:57:16.124Z [run-trace] #7 fresh typst matrix-citeproc/doc.qmd +12ms stage mounting
+
+2026-11-24T14:57:16.152Z [run-trace] #7 fresh typst matrix-citeproc/doc.qmd +40ms stage running
+
+2026-11-24T14:57:16.249Z [run-trace] #7 fresh typst matrix-citeproc/doc.qmd +137ms ok 132ms
+
+2026-11-24T14:57:16.249Z [run-trace] #8 fresh typst matrix-dark-brand/doc.qmd +0ms build-request
+
+2026-11-24T14:57:16.261Z [run-trace] #8 fresh typst matrix-dark-brand/doc.qmd +12ms run (loader renders=7)
+
+2026-11-24T14:57:16.261Z [run-trace] #8 fresh typst matrix-dark-brand/doc.qmd +12ms stage loading
+
+2026-11-24T14:57:16.261Z [run-trace] #8 fresh typst matrix-dark-brand/doc.qmd +12ms stage starting
+
+2026-11-24T14:57:16.268Z [run-trace] #8 fresh typst matrix-dark-brand/doc.qmd +19ms stage mounting
+
+2026-11-24T14:57:16.295Z [run-trace] #8 fresh typst matrix-dark-brand/doc.qmd +46ms stage running
+
+2026-11-24T14:57:16.427Z [run-trace] #8 fresh typst matrix-dark-brand/doc.qmd +178ms ok 166ms
+
+2026-11-24T14:57:16.427Z [run-trace] #9 fresh typst matrix-highlight-idiomatic/doc.qmd +0ms build-request
+
+2026-11-24T14:57:16.432Z [run-trace] #9 fresh typst matrix-highlight-idiomatic/doc.qmd +5ms run (loader renders=8)
+
+2026-11-24T14:57:16.432Z [run-trace] #9 fresh typst matrix-highlight-idiomatic/doc.qmd +5ms stage loading
+
+2026-11-24T14:57:16.432Z [run-trace] #9 fresh typst matrix-highlight-idiomatic/doc.qmd +5ms stage starting
+
+2026-11-24T14:57:16.439Z [run-trace] #9 fresh typst matrix-highlight-idiomatic/doc.qmd +12ms stage mounting
+
+2026-11-24T14:57:16.470Z [run-trace] #9 fresh typst matrix-highlight-idiomatic/doc.qmd +43ms stage running
+
+2026-11-24T14:57:16.556Z [run-trace] #9 fresh typst matrix-highlight-idiomatic/doc.qmd +128ms ok 123ms
+
+2026-11-24T14:57:16.556Z [run-trace] #10 fresh typst matrix-highlight-none/doc.qmd +0ms build-request
+
+2026-11-24T14:57:16.565Z [run-trace] #10 fresh typst matrix-highlight-none/doc.qmd +9ms run (loader renders=9)
+
+2026-11-24T14:57:16.565Z [run-trace] #10 fresh typst matrix-highlight-none/doc.qmd +9ms stage loading
+
+2026-11-24T14:57:16.565Z [run-trace] #10 fresh typst matrix-highlight-none/doc.qmd +9ms stage starting
+
+2026-11-24T14:57:16.572Z [run-trace] #10 fresh typst matrix-highlight-none/doc.qmd +16ms stage mounting
+
+2026-11-24T14:57:16.603Z [run-trace] #10 fresh typst matrix-highlight-none/doc.qmd +47ms stage running
+
+2026-11-24T14:57:16.815Z [run-trace] #10 fresh typst matrix-highlight-none/doc.qmd +259ms ok 250ms
+
+2026-11-24T14:57:16.815Z [run-trace] #11 fresh typst matrix-highlight-palette/doc.qmd +0ms build-request
+
+2026-11-24T14:57:16.819Z [run-trace] #11 fresh typst matrix-highlight-palette/doc.qmd +4ms run (loader renders=10)
+
+2026-11-24T14:57:16.819Z [run-trace] #11 fresh typst matrix-highlight-palette/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:16.819Z [run-trace] #11 fresh typst matrix-highlight-palette/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:16.826Z [run-trace] #11 fresh typst matrix-highlight-palette/doc.qmd +11ms stage mounting
+
+2026-11-24T14:57:16.855Z [run-trace] #11 fresh typst matrix-highlight-palette/doc.qmd +40ms stage running
+
+2026-11-24T14:57:16.972Z [run-trace] #11 fresh typst matrix-highlight-palette/doc.qmd +156ms ok 152ms
+
+2026-11-24T14:57:16.972Z [run-trace] #12 fresh typst matrix-highlight-theme-file/doc.qmd +0ms build-request
+
+2026-11-24T14:57:16.975Z [run-trace] #12 fresh typst matrix-highlight-theme-file/doc.qmd +3ms run (loader renders=11)
+
+2026-11-24T14:57:16.975Z [run-trace] #12 fresh typst matrix-highlight-theme-file/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:16.975Z [run-trace] #12 fresh typst matrix-highlight-theme-file/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:16.982Z [run-trace] #12 fresh typst matrix-highlight-theme-file/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:17.011Z [run-trace] #12 fresh typst matrix-highlight-theme-file/doc.qmd +39ms stage running
+
+2026-11-24T14:57:17.111Z [run-trace] #12 fresh typst matrix-highlight-theme-file/doc.qmd +138ms ok 135ms
+
+2026-11-24T14:57:17.111Z [run-trace] #13 fresh typst matrix-no-h1-auto-shift/doc.qmd +0ms build-request
+
+2026-11-24T14:57:17.114Z [run-trace] #13 fresh typst matrix-no-h1-auto-shift/doc.qmd +3ms run (loader renders=12)
+
+2026-11-24T14:57:17.114Z [run-trace] #13 fresh typst matrix-no-h1-auto-shift/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:17.114Z [run-trace] #13 fresh typst matrix-no-h1-auto-shift/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:17.121Z [run-trace] #13 fresh typst matrix-no-h1-auto-shift/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:17.145Z [run-trace] #13 fresh typst matrix-no-h1-auto-shift/doc.qmd +34ms stage running
+
+2026-11-24T14:57:17.263Z [run-trace] #13 fresh typst matrix-no-h1-auto-shift/doc.qmd +152ms ok 149ms
+
+2026-11-24T14:57:17.263Z [run-trace] #14 fresh typst matrix-plain/doc.qmd +0ms build-request
+
+2026-11-24T14:57:17.266Z [run-trace] #14 fresh typst matrix-plain/doc.qmd +3ms run (loader renders=13)
+
+2026-11-24T14:57:17.266Z [run-trace] #14 fresh typst matrix-plain/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:17.266Z [run-trace] #14 fresh typst matrix-plain/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:17.273Z [run-trace] #14 fresh typst matrix-plain/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:17.302Z [run-trace] #14 fresh typst matrix-plain/doc.qmd +39ms stage running
+
+2026-11-24T14:57:17.421Z [run-trace] #14 fresh typst matrix-plain/doc.qmd +158ms ok 155ms
+
+2026-11-24T14:57:17.421Z [run-trace] #15 fresh typst matrix-reference-doc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:17.425Z [run-trace] #15 fresh typst matrix-reference-doc/doc.qmd +3ms run (loader renders=14)
+
+2026-11-24T14:57:17.425Z [run-trace] #15 fresh typst matrix-reference-doc/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:17.425Z [run-trace] #15 fresh typst matrix-reference-doc/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:17.431Z [run-trace] #15 fresh typst matrix-reference-doc/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:17.463Z [run-trace] #15 fresh typst matrix-reference-doc/doc.qmd +42ms stage running
+
+2026-11-24T14:57:17.577Z [run-trace] #15 fresh typst matrix-reference-doc/doc.qmd +156ms ok 153ms
+
+2026-11-24T14:57:17.577Z [run-trace] #16 fresh typst matrix-shift-from-metadata/doc.qmd +0ms build-request
+
+2026-11-24T14:57:17.580Z [run-trace] #16 fresh typst matrix-shift-from-metadata/doc.qmd +3ms run (loader renders=15)
+
+2026-11-24T14:57:17.580Z [run-trace] #16 fresh typst matrix-shift-from-metadata/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:17.581Z [run-trace] #16 fresh typst matrix-shift-from-metadata/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:17.587Z [run-trace] #16 fresh typst matrix-shift-from-metadata/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:17.620Z [run-trace] #16 fresh typst matrix-shift-from-metadata/doc.qmd +42ms stage running
+
+2026-11-24T14:57:17.731Z [run-trace] #16 fresh typst matrix-shift-from-metadata/doc.qmd +154ms ok 151ms
+
+2026-11-24T14:57:17.732Z [run-trace] #17 fresh typst matrix-toc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:17.735Z [run-trace] #17 fresh typst matrix-toc/doc.qmd +3ms run (loader renders=16)
+
+2026-11-24T14:57:17.736Z [run-trace] #17 fresh typst matrix-toc/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:17.736Z [run-trace] #17 fresh typst matrix-toc/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:17.742Z [run-trace] #17 fresh typst matrix-toc/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:17.772Z [run-trace] #17 fresh typst matrix-toc/doc.qmd +40ms stage running
+
+2026-11-24T14:57:17.896Z [run-trace] #17 fresh typst matrix-toc/doc.qmd +164ms ok 161ms
+
+2026-11-24T14:57:17.896Z [run-trace] #18 fresh typst matrix-toc-depth/doc.qmd +0ms build-request
+
+2026-11-24T14:57:17.899Z [run-trace] #18 fresh typst matrix-toc-depth/doc.qmd +3ms run (loader renders=17)
+
+2026-11-24T14:57:17.899Z [run-trace] #18 fresh typst matrix-toc-depth/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:17.899Z [run-trace] #18 fresh typst matrix-toc-depth/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:17.906Z [run-trace] #18 fresh typst matrix-toc-depth/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:17.931Z [run-trace] #18 fresh typst matrix-toc-depth/doc.qmd +35ms stage running
+
+2026-11-24T14:57:18.035Z [run-trace] #18 fresh typst matrix-toc-depth/doc.qmd +139ms ok 136ms
+
+2026-11-24T14:57:18.035Z [run-trace] #19 fresh typst matrix-toc-depth-only/doc.qmd +0ms build-request
+
+2026-11-24T14:57:18.038Z [run-trace] #19 fresh typst matrix-toc-depth-only/doc.qmd +4ms run (loader renders=18)
+
+2026-11-24T14:57:18.039Z [run-trace] #19 fresh typst matrix-toc-depth-only/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:18.039Z [run-trace] #19 fresh typst matrix-toc-depth-only/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:18.045Z [run-trace] #19 fresh typst matrix-toc-depth-only/doc.qmd +11ms stage mounting
+
+2026-11-24T14:57:18.071Z [run-trace] #19 fresh typst matrix-toc-depth-only/doc.qmd +36ms stage running
+
+2026-11-24T14:57:18.190Z [run-trace] #19 fresh typst matrix-toc-depth-only/doc.qmd +155ms ok 151ms
+
+2026-11-24T14:57:18.191Z [run-trace] #20 fresh typst matrix-top-level-division/doc.qmd +0ms build-request
+
+2026-11-24T14:57:18.194Z [run-trace] #20 fresh typst matrix-top-level-division/doc.qmd +4ms run (loader renders=19)
+
+2026-11-24T14:57:18.194Z [run-trace] #20 fresh typst matrix-top-level-division/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:18.194Z [run-trace] #20 fresh typst matrix-top-level-division/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:18.201Z [run-trace] #20 fresh typst matrix-top-level-division/doc.qmd +11ms stage mounting
+
+2026-11-24T14:57:18.229Z [run-trace] #20 fresh typst matrix-top-level-division/doc.qmd +39ms stage running
+
+2026-11-24T14:57:18.335Z [run-trace] #20 fresh typst matrix-top-level-division/doc.qmd +145ms ok 141ms
+
+2026-11-24T14:57:18.344Z [run-trace] #21 warm typst matrix-citeproc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:18.348Z [run-trace] #21 warm typst matrix-citeproc/doc.qmd +4ms run (loader renders=20)
+
+2026-11-24T14:57:18.348Z [run-trace] #21 warm typst matrix-citeproc/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:18.379Z [run-trace] #21 warm typst matrix-citeproc/doc.qmd +35ms stage starting
+
+2026-11-24T14:57:18.381Z [run-trace] #21 warm typst matrix-citeproc/doc.qmd +38ms stage mounting
+
+2026-11-24T14:57:18.383Z [run-trace] #21 warm typst matrix-citeproc/doc.qmd +39ms stage running
+
+2026-11-24T14:57:18.469Z [run-trace] #21 warm typst matrix-citeproc/doc.qmd +125ms ok 121ms
+
+2026-11-24T14:57:18.469Z [run-trace] #22 warm typst matrix-dark-brand/doc.qmd +0ms build-request
+
+2026-11-24T14:57:18.473Z [run-trace] #22 warm typst matrix-dark-brand/doc.qmd +3ms run (loader renders=21)
+
+2026-11-24T14:57:18.473Z [run-trace] #22 warm typst matrix-dark-brand/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:18.473Z [run-trace] #22 warm typst matrix-dark-brand/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:18.474Z [run-trace] #22 warm typst matrix-dark-brand/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:18.475Z [run-trace] #22 warm typst matrix-dark-brand/doc.qmd +5ms stage running
+
+2026-11-24T14:57:18.555Z [run-trace] #22 warm typst matrix-dark-brand/doc.qmd +85ms ok 82ms
+
+2026-11-24T14:57:18.555Z [run-trace] #23 warm typst tables-typst/tables.qmd +0ms build-request
+
+2026-11-24T14:57:18.560Z [run-trace] #23 warm typst tables-typst/tables.qmd +5ms run (loader renders=22)
+
+2026-11-24T14:57:18.560Z [run-trace] #23 warm typst tables-typst/tables.qmd +5ms stage loading
+
+2026-11-24T14:57:18.560Z [run-trace] #23 warm typst tables-typst/tables.qmd +5ms stage starting
+
+2026-11-24T14:57:18.561Z [run-trace] #23 warm typst tables-typst/tables.qmd +6ms stage mounting
+
+2026-11-24T14:57:18.561Z [run-trace] #23 warm typst tables-typst/tables.qmd +7ms stage running
+
+2026-11-24T14:57:18.644Z [run-trace] #23 warm typst tables-typst/tables.qmd +89ms ok 84ms
+
+2026-11-24T14:57:18.644Z [run-trace] #24 warm typst matrix-shift-from-metadata/doc.qmd +0ms build-request
+
+2026-11-24T14:57:18.648Z [run-trace] #24 warm typst matrix-shift-from-metadata/doc.qmd +4ms run (loader renders=24)
+
+2026-11-24T14:57:18.648Z [run-trace] #24 warm typst matrix-shift-from-metadata/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:18.648Z [run-trace] #24 warm typst matrix-shift-from-metadata/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:18.650Z [run-trace] #24 warm typst matrix-shift-from-metadata/doc.qmd +6ms stage mounting
+
+2026-11-24T14:57:18.651Z [run-trace] #24 warm typst matrix-shift-from-metadata/doc.qmd +7ms stage running
+
+2026-11-24T14:57:18.705Z [run-trace] #24 warm typst matrix-shift-from-metadata/doc.qmd +61ms ok 57ms
+
+2026-11-24T14:57:18.705Z [run-trace] #25 warm typst callouts-typst/callouts.qmd +0ms build-request
+
+2026-11-24T14:57:18.710Z [run-trace] #25 warm typst callouts-typst/callouts.qmd +5ms run (loader renders=25)
+
+2026-11-24T14:57:18.710Z [run-trace] #25 warm typst callouts-typst/callouts.qmd +5ms stage loading
+
+2026-11-24T14:57:18.711Z [run-trace] #25 warm typst callouts-typst/callouts.qmd +5ms stage starting
+
+2026-11-24T14:57:18.711Z [run-trace] #25 warm typst callouts-typst/callouts.qmd +6ms stage mounting
+
+2026-11-24T14:57:18.712Z [run-trace] #25 warm typst callouts-typst/callouts.qmd +7ms stage running
+
+2026-11-24T14:57:18.823Z [run-trace] #25 warm typst callouts-typst/callouts.qmd +117ms ok 112ms
+
+2026-11-24T14:57:18.823Z [run-trace] #26 warm typst citations-typst/citations.qmd +0ms build-request
+
+2026-11-24T14:57:18.827Z [run-trace] #26 warm typst citations-typst/citations.qmd +4ms run (loader renders=26)
+
+2026-11-24T14:57:18.827Z [run-trace] #26 warm typst citations-typst/citations.qmd +4ms stage loading
+
+2026-11-24T14:57:18.827Z [run-trace] #26 warm typst citations-typst/citations.qmd +4ms stage starting
+
+2026-11-24T14:57:18.828Z [run-trace] #26 warm typst citations-typst/citations.qmd +5ms stage mounting
+
+2026-11-24T14:57:18.829Z [run-trace] #26 warm typst citations-typst/citations.qmd +6ms stage running
+
+2026-11-24T14:57:18.885Z [run-trace] #26 warm typst citations-typst/citations.qmd +62ms ok 58ms
+
+2026-11-24T14:57:18.885Z [run-trace] #27 warm typst matrix-highlight-palette/doc.qmd +0ms build-request
+
+2026-11-24T14:57:18.888Z [run-trace] #27 warm typst matrix-highlight-palette/doc.qmd +4ms run (loader renders=27)
+
+2026-11-24T14:57:18.889Z [run-trace] #27 warm typst matrix-highlight-palette/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:18.889Z [run-trace] #27 warm typst matrix-highlight-palette/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:18.890Z [run-trace] #27 warm typst matrix-highlight-palette/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:18.890Z [run-trace] #27 warm typst matrix-highlight-palette/doc.qmd +5ms stage running
+
+2026-11-24T14:57:18.945Z [run-trace] #27 warm typst matrix-highlight-palette/doc.qmd +60ms ok 56ms
+
+2026-11-24T14:57:18.945Z [run-trace] #28 warm typst shortcodes-typst/shortcodes.qmd +0ms build-request
+
+2026-11-24T14:57:18.950Z [run-trace] #28 warm typst shortcodes-typst/shortcodes.qmd +5ms run (loader renders=28)
+
+2026-11-24T14:57:18.950Z [run-trace] #28 warm typst shortcodes-typst/shortcodes.qmd +5ms stage loading
+
+2026-11-24T14:57:18.950Z [run-trace] #28 warm typst shortcodes-typst/shortcodes.qmd +5ms stage starting
+
+2026-11-24T14:57:18.951Z [run-trace] #28 warm typst shortcodes-typst/shortcodes.qmd +6ms stage mounting
+
+2026-11-24T14:57:18.952Z [run-trace] #28 warm typst shortcodes-typst/shortcodes.qmd +7ms stage running
+
+2026-11-24T14:57:19.004Z [run-trace] #28 warm typst shortcodes-typst/shortcodes.qmd +59ms ok 54ms
+
+2026-11-24T14:57:19.004Z [run-trace] #29 warm typst shortcodes-typst/shortcodes.qmd +0ms build-request
+
+2026-11-24T14:57:19.008Z [run-trace] #29 warm typst shortcodes-typst/shortcodes.qmd +4ms run (loader renders=29)
+
+2026-11-24T14:57:19.008Z [run-trace] #29 warm typst shortcodes-typst/shortcodes.qmd +4ms stage loading
+
+2026-11-24T14:57:19.008Z [run-trace] #29 warm typst shortcodes-typst/shortcodes.qmd +4ms stage starting
+
+2026-11-24T14:57:19.009Z [run-trace] #29 warm typst shortcodes-typst/shortcodes.qmd +5ms stage mounting
+
+2026-11-24T14:57:19.010Z [run-trace] #29 warm typst shortcodes-typst/shortcodes.qmd +6ms stage running
+
+2026-11-24T14:57:19.075Z [run-trace] #29 warm typst shortcodes-typst/shortcodes.qmd +71ms ok 67ms
+
+2026-11-24T14:57:19.076Z [run-trace] #30 warm typst matrix-toc-depth-only/doc.qmd +0ms build-request
+
+2026-11-24T14:57:19.079Z [run-trace] #30 warm typst matrix-toc-depth-only/doc.qmd +3ms run (loader renders=0)
+
+2026-11-24T14:57:19.079Z [run-trace] #30 warm typst matrix-toc-depth-only/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:19.541Z [run-trace] #30 warm typst matrix-toc-depth-only/doc.qmd +465ms stage starting
+
+2026-11-24T14:57:19.542Z [run-trace] #30 warm typst matrix-toc-depth-only/doc.qmd +467ms stage mounting
+
+2026-11-24T14:57:19.543Z [run-trace] #30 warm typst matrix-toc-depth-only/doc.qmd +467ms stage running
+
+2026-11-24T14:57:19.685Z [run-trace] #30 warm typst matrix-toc-depth-only/doc.qmd +609ms ok 606ms
+
+2026-11-24T14:57:19.685Z [run-trace] #31 warm typst matrix-top-level-division/doc.qmd +0ms build-request
+
+2026-11-24T14:57:19.688Z [run-trace] #31 warm typst matrix-top-level-division/doc.qmd +3ms run (loader renders=2)
+
+2026-11-24T14:57:19.688Z [run-trace] #31 warm typst matrix-top-level-division/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:19.688Z [run-trace] #31 warm typst matrix-top-level-division/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:19.689Z [run-trace] #31 warm typst matrix-top-level-division/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:19.690Z [run-trace] #31 warm typst matrix-top-level-division/doc.qmd +5ms stage running
+
+2026-11-24T14:57:19.770Z [run-trace] #31 warm typst matrix-top-level-division/doc.qmd +85ms ok 82ms
+
+2026-11-24T14:57:19.771Z [run-trace] #32 warm typst images-typst/images.qmd +0ms build-request
+
+2026-11-24T14:57:19.777Z [run-trace] #32 warm typst images-typst/images.qmd +7ms run (loader renders=3)
+
+2026-11-24T14:57:19.777Z [run-trace] #32 warm typst images-typst/images.qmd +7ms stage loading
+
+2026-11-24T14:57:19.777Z [run-trace] #32 warm typst images-typst/images.qmd +7ms stage starting
+
+2026-11-24T14:57:19.779Z [run-trace] #32 warm typst images-typst/images.qmd +9ms stage mounting
+
+2026-11-24T14:57:19.780Z [run-trace] #32 warm typst images-typst/images.qmd +10ms stage running
+
+2026-11-24T14:57:19.874Z [run-trace] #32 warm typst images-typst/images.qmd +103ms ok 96ms
+
+2026-11-24T14:57:19.874Z [run-trace] #33 warm typst matrix-reference-doc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:19.879Z [run-trace] #33 warm typst matrix-reference-doc/doc.qmd +5ms run (loader renders=4)
+
+2026-11-24T14:57:19.879Z [run-trace] #33 warm typst matrix-reference-doc/doc.qmd +5ms stage loading
+
+2026-11-24T14:57:19.879Z [run-trace] #33 warm typst matrix-reference-doc/doc.qmd +5ms stage starting
+
+2026-11-24T14:57:19.880Z [run-trace] #33 warm typst matrix-reference-doc/doc.qmd +7ms stage mounting
+
+2026-11-24T14:57:19.882Z [run-trace] #33 warm typst matrix-reference-doc/doc.qmd +8ms stage running
+
+2026-11-24T14:57:19.941Z [run-trace] #33 warm typst matrix-reference-doc/doc.qmd +66ms ok 61ms
+
+2026-11-24T14:57:19.941Z [run-trace] #34 warm typst matrix-plain/doc.qmd +0ms build-request
+
+2026-11-24T14:57:19.944Z [run-trace] #34 warm typst matrix-plain/doc.qmd +3ms run (loader renders=6)
+
+2026-11-24T14:57:19.944Z [run-trace] #34 warm typst matrix-plain/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:19.944Z [run-trace] #34 warm typst matrix-plain/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:19.945Z [run-trace] #34 warm typst matrix-plain/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:19.945Z [run-trace] #34 warm typst matrix-plain/doc.qmd +4ms stage running
+
+2026-11-24T14:57:20.011Z [run-trace] #34 warm typst matrix-plain/doc.qmd +70ms ok 67ms
+
+2026-11-24T14:57:20.012Z [run-trace] #35 warm typst matrix-highlight-idiomatic/doc.qmd +0ms build-request
+
+2026-11-24T14:57:20.015Z [run-trace] #35 warm typst matrix-highlight-idiomatic/doc.qmd +3ms run (loader renders=7)
+
+2026-11-24T14:57:20.015Z [run-trace] #35 warm typst matrix-highlight-idiomatic/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:20.015Z [run-trace] #35 warm typst matrix-highlight-idiomatic/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:20.016Z [run-trace] #35 warm typst matrix-highlight-idiomatic/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:20.016Z [run-trace] #35 warm typst matrix-highlight-idiomatic/doc.qmd +4ms stage running
+
+2026-11-24T14:57:20.075Z [run-trace] #35 warm typst matrix-highlight-idiomatic/doc.qmd +64ms ok 61ms
+
+2026-11-24T14:57:20.076Z [run-trace] #36 warm typst crossrefs-typst/all-docx.qmd +0ms build-request
+
+2026-11-24T14:57:20.080Z [run-trace] #36 warm typst crossrefs-typst/all-docx.qmd +4ms run (loader renders=8)
+
+2026-11-24T14:57:20.080Z [run-trace] #36 warm typst crossrefs-typst/all-docx.qmd +4ms stage loading
+
+2026-11-24T14:57:20.080Z [run-trace] #36 warm typst crossrefs-typst/all-docx.qmd +4ms stage starting
+
+2026-11-24T14:57:20.081Z [run-trace] #36 warm typst crossrefs-typst/all-docx.qmd +5ms stage mounting
+
+2026-11-24T14:57:20.082Z [run-trace] #36 warm typst crossrefs-typst/all-docx.qmd +6ms stage running
+
+2026-11-24T14:57:20.198Z [run-trace] #36 warm typst crossrefs-typst/all-docx.qmd +122ms ok 118ms
+
+2026-11-24T14:57:20.199Z [run-trace] #37 warm typst matrix-toc-depth/doc.qmd +0ms build-request
+
+2026-11-24T14:57:20.202Z [run-trace] #37 warm typst matrix-toc-depth/doc.qmd +3ms run (loader renders=9)
+
+2026-11-24T14:57:20.202Z [run-trace] #37 warm typst matrix-toc-depth/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:20.202Z [run-trace] #37 warm typst matrix-toc-depth/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:20.203Z [run-trace] #37 warm typst matrix-toc-depth/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:20.203Z [run-trace] #37 warm typst matrix-toc-depth/doc.qmd +5ms stage running
+
+2026-11-24T14:57:20.306Z [run-trace] #37 warm typst matrix-toc-depth/doc.qmd +107ms ok 104ms
+
+2026-11-24T14:57:20.306Z [run-trace] #38 warm typst matrix-highlight-none/doc.qmd +0ms build-request
+
+2026-11-24T14:57:20.309Z [run-trace] #38 warm typst matrix-highlight-none/doc.qmd +3ms run (loader renders=10)
+
+2026-11-24T14:57:20.310Z [run-trace] #38 warm typst matrix-highlight-none/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:20.310Z [run-trace] #38 warm typst matrix-highlight-none/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:20.313Z [run-trace] #38 warm typst matrix-highlight-none/doc.qmd +7ms stage mounting
+
+2026-11-24T14:57:20.313Z [run-trace] #38 warm typst matrix-highlight-none/doc.qmd +7ms stage running
+
+2026-11-24T14:57:20.369Z [run-trace] #38 warm typst matrix-highlight-none/doc.qmd +63ms ok 60ms
+
+2026-11-24T14:57:20.369Z [run-trace] #39 warm typst matrix-highlight-theme-file/doc.qmd +0ms build-request
+
+2026-11-24T14:57:20.372Z [run-trace] #39 warm typst matrix-highlight-theme-file/doc.qmd +3ms run (loader renders=11)
+
+2026-11-24T14:57:20.372Z [run-trace] #39 warm typst matrix-highlight-theme-file/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:20.372Z [run-trace] #39 warm typst matrix-highlight-theme-file/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:20.373Z [run-trace] #39 warm typst matrix-highlight-theme-file/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:20.374Z [run-trace] #39 warm typst matrix-highlight-theme-file/doc.qmd +5ms stage running
+
+2026-11-24T14:57:20.431Z [run-trace] #39 warm typst matrix-highlight-theme-file/doc.qmd +62ms ok 59ms
+
+2026-11-24T14:57:20.431Z [run-trace] #40 warm typst matrix-no-h1-auto-shift/doc.qmd +0ms build-request
+
+2026-11-24T14:57:20.434Z [run-trace] #40 warm typst matrix-no-h1-auto-shift/doc.qmd +3ms run (loader renders=12)
+
+2026-11-24T14:57:20.434Z [run-trace] #40 warm typst matrix-no-h1-auto-shift/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:20.434Z [run-trace] #40 warm typst matrix-no-h1-auto-shift/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:20.435Z [run-trace] #40 warm typst matrix-no-h1-auto-shift/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:20.435Z [run-trace] #40 warm typst matrix-no-h1-auto-shift/doc.qmd +5ms stage running
+
+2026-11-24T14:57:20.495Z [run-trace] #40 warm typst matrix-no-h1-auto-shift/doc.qmd +64ms ok 61ms
+
+2026-11-24T14:57:20.495Z [run-trace] #41 warm typst matrix-toc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:20.498Z [run-trace] #41 warm typst matrix-toc/doc.qmd +3ms run (loader renders=13)
+
+2026-11-24T14:57:20.498Z [run-trace] #41 warm typst matrix-toc/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:20.499Z [run-trace] #41 warm typst matrix-toc/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:20.499Z [run-trace] #41 warm typst matrix-toc/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:20.500Z [run-trace] #41 warm typst matrix-toc/doc.qmd +5ms stage running
+
+2026-11-24T14:57:20.554Z [run-trace] #41 warm typst matrix-toc/doc.qmd +59ms ok 55ms
+
+2026-11-24T14:57:20.554Z [run-trace] #42 warm typst matrix-toc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:20.557Z [run-trace] #42 warm typst matrix-toc/doc.qmd +4ms run (loader renders=14)
+
+2026-11-24T14:57:20.558Z [run-trace] #42 warm typst matrix-toc/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:20.558Z [run-trace] #42 warm typst matrix-toc/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:20.558Z [run-trace] #42 warm typst matrix-toc/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:20.559Z [run-trace] #42 warm typst matrix-toc/doc.qmd +5ms stage running
+
+2026-11-24T14:57:20.614Z [run-trace] #42 warm typst matrix-toc/doc.qmd +60ms ok 56ms
+
+2026-11-24T14:57:20.614Z [run-trace] #43 warm typst matrix-highlight-idiomatic/doc.qmd +0ms build-request
+
+2026-11-24T14:57:20.617Z [run-trace] #43 warm typst matrix-highlight-idiomatic/doc.qmd +3ms run (loader renders=15)
+
+2026-11-24T14:57:20.617Z [run-trace] #43 warm typst matrix-highlight-idiomatic/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:20.617Z [run-trace] #43 warm typst matrix-highlight-idiomatic/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:20.618Z [run-trace] #43 warm typst matrix-highlight-idiomatic/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:20.618Z [run-trace] #43 warm typst matrix-highlight-idiomatic/doc.qmd +5ms stage running
+
+2026-11-24T14:57:20.672Z [run-trace] #43 warm typst matrix-highlight-idiomatic/doc.qmd +58ms ok 55ms
+
+2026-11-24T14:57:20.672Z [run-trace] #44 warm typst matrix-shift-from-metadata/doc.qmd +0ms build-request
+
+2026-11-24T14:57:20.675Z [run-trace] #44 warm typst matrix-shift-from-metadata/doc.qmd +3ms run (loader renders=16)
+
+2026-11-24T14:57:20.675Z [run-trace] #44 warm typst matrix-shift-from-metadata/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:20.675Z [run-trace] #44 warm typst matrix-shift-from-metadata/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:20.676Z [run-trace] #44 warm typst matrix-shift-from-metadata/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:20.676Z [run-trace] #44 warm typst matrix-shift-from-metadata/doc.qmd +4ms stage running
+
+2026-11-24T14:57:20.737Z [run-trace] #44 warm typst matrix-shift-from-metadata/doc.qmd +65ms ok 62ms
+
+2026-11-24T14:57:20.738Z [run-trace] #45 warm typst matrix-no-h1-auto-shift/doc.qmd +0ms build-request
+
+2026-11-24T14:57:20.740Z [run-trace] #45 warm typst matrix-no-h1-auto-shift/doc.qmd +2ms run (loader renders=17)
+
+2026-11-24T14:57:20.741Z [run-trace] #45 warm typst matrix-no-h1-auto-shift/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:20.741Z [run-trace] #45 warm typst matrix-no-h1-auto-shift/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:20.741Z [run-trace] #45 warm typst matrix-no-h1-auto-shift/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:20.742Z [run-trace] #45 warm typst matrix-no-h1-auto-shift/doc.qmd +4ms stage running
+
+2026-11-24T14:57:20.800Z [run-trace] #45 warm typst matrix-no-h1-auto-shift/doc.qmd +62ms ok 59ms
+
+2026-11-24T14:57:20.800Z [run-trace] #46 warm typst matrix-no-h1-auto-shift/doc.qmd +0ms build-request
+
+2026-11-24T14:57:20.803Z [run-trace] #46 warm typst matrix-no-h1-auto-shift/doc.qmd +3ms run (loader renders=18)
+
+2026-11-24T14:57:20.803Z [run-trace] #46 warm typst matrix-no-h1-auto-shift/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:20.803Z [run-trace] #46 warm typst matrix-no-h1-auto-shift/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:20.804Z [run-trace] #46 warm typst matrix-no-h1-auto-shift/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:20.805Z [run-trace] #46 warm typst matrix-no-h1-auto-shift/doc.qmd +6ms stage running
+
+2026-11-24T14:57:20.884Z [run-trace] #46 warm typst matrix-no-h1-auto-shift/doc.qmd +84ms ok 81ms
+
+2026-11-24T14:57:20.884Z [run-trace] #47 warm typst matrix-toc-depth/doc.qmd +0ms build-request
+
+2026-11-24T14:57:20.887Z [run-trace] #47 warm typst matrix-toc-depth/doc.qmd +3ms run (loader renders=19)
+
+2026-11-24T14:57:20.887Z [run-trace] #47 warm typst matrix-toc-depth/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:20.887Z [run-trace] #47 warm typst matrix-toc-depth/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:20.888Z [run-trace] #47 warm typst matrix-toc-depth/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:20.889Z [run-trace] #47 warm typst matrix-toc-depth/doc.qmd +5ms stage running
+
+2026-11-24T14:57:20.949Z [run-trace] #47 warm typst matrix-toc-depth/doc.qmd +65ms ok 62ms
+
+2026-11-24T14:57:20.949Z [run-trace] #48 warm typst matrix-highlight-none/doc.qmd +0ms build-request
+
+2026-11-24T14:57:20.952Z [run-trace] #48 warm typst matrix-highlight-none/doc.qmd +3ms run (loader renders=20)
+
+2026-11-24T14:57:20.952Z [run-trace] #48 warm typst matrix-highlight-none/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:20.952Z [run-trace] #48 warm typst matrix-highlight-none/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:20.953Z [run-trace] #48 warm typst matrix-highlight-none/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:20.953Z [run-trace] #48 warm typst matrix-highlight-none/doc.qmd +4ms stage running
+
+2026-11-24T14:57:21.008Z [run-trace] #48 warm typst matrix-highlight-none/doc.qmd +59ms ok 56ms
+
+2026-11-24T14:57:21.008Z [run-trace] #49 warm typst matrix-dark-brand/doc.qmd +0ms build-request
+
+2026-11-24T14:57:21.011Z [run-trace] #49 warm typst matrix-dark-brand/doc.qmd +3ms run (loader renders=21)
+
+2026-11-24T14:57:21.011Z [run-trace] #49 warm typst matrix-dark-brand/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:21.011Z [run-trace] #49 warm typst matrix-dark-brand/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:21.012Z [run-trace] #49 warm typst matrix-dark-brand/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:21.012Z [run-trace] #49 warm typst matrix-dark-brand/doc.qmd +5ms stage running
+
+2026-11-24T14:57:21.069Z [run-trace] #49 warm typst matrix-dark-brand/doc.qmd +61ms ok 58ms
+
+2026-11-24T14:57:21.069Z [run-trace] #50 warm typst matrix-dark-brand/doc.qmd +0ms build-request
+
+2026-11-24T14:57:21.072Z [run-trace] #50 warm typst matrix-dark-brand/doc.qmd +3ms run (loader renders=22)
+
+2026-11-24T14:57:21.072Z [run-trace] #50 warm typst matrix-dark-brand/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:21.072Z [run-trace] #50 warm typst matrix-dark-brand/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:21.073Z [run-trace] #50 warm typst matrix-dark-brand/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:21.073Z [run-trace] #50 warm typst matrix-dark-brand/doc.qmd +5ms stage running
+
+2026-11-24T14:57:21.136Z [run-trace] #50 warm typst matrix-dark-brand/doc.qmd +67ms ok 64ms
+
+2026-11-24T14:57:21.137Z [run-trace] #51 warm typst shortcodes-typst/shortcodes.qmd +0ms build-request
+
+2026-11-24T14:57:21.141Z [run-trace] #51 warm typst shortcodes-typst/shortcodes.qmd +4ms run (loader renders=23)
+
+2026-11-24T14:57:21.141Z [run-trace] #51 warm typst shortcodes-typst/shortcodes.qmd +4ms stage loading
+
+2026-11-24T14:57:21.141Z [run-trace] #51 warm typst shortcodes-typst/shortcodes.qmd +4ms stage starting
+
+2026-11-24T14:57:21.142Z [run-trace] #51 warm typst shortcodes-typst/shortcodes.qmd +5ms stage mounting
+
+2026-11-24T14:57:21.142Z [run-trace] #51 warm typst shortcodes-typst/shortcodes.qmd +6ms stage running
+
+2026-11-24T14:57:21.196Z [run-trace] #51 warm typst shortcodes-typst/shortcodes.qmd +59ms ok 55ms
+
+2026-11-24T14:57:21.196Z [run-trace] #52 warm typst citations-typst/citations.qmd +0ms build-request
+
+2026-11-24T14:57:21.200Z [run-trace] #52 warm typst citations-typst/citations.qmd +4ms run (loader renders=24)
+
+2026-11-24T14:57:21.200Z [run-trace] #52 warm typst citations-typst/citations.qmd +4ms stage loading
+
+2026-11-24T14:57:21.200Z [run-trace] #52 warm typst citations-typst/citations.qmd +4ms stage starting
+
+2026-11-24T14:57:21.201Z [run-trace] #52 warm typst citations-typst/citations.qmd +5ms stage mounting
+
+2026-11-24T14:57:21.201Z [run-trace] #52 warm typst citations-typst/citations.qmd +5ms stage running
+
+2026-11-24T14:57:21.257Z [run-trace] #52 warm typst citations-typst/citations.qmd +61ms ok 57ms
+
+2026-11-24T14:57:21.257Z [run-trace] #53 warm typst matrix-citeproc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:21.260Z [run-trace] #53 warm typst matrix-citeproc/doc.qmd +3ms run (loader renders=25)
+
+2026-11-24T14:57:21.260Z [run-trace] #53 warm typst matrix-citeproc/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:21.260Z [run-trace] #53 warm typst matrix-citeproc/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:21.261Z [run-trace] #53 warm typst matrix-citeproc/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:21.261Z [run-trace] #53 warm typst matrix-citeproc/doc.qmd +5ms stage running
+
+2026-11-24T14:57:21.321Z [run-trace] #53 warm typst matrix-citeproc/doc.qmd +64ms ok 61ms
+
+2026-11-24T14:57:21.321Z [run-trace] #54 warm typst matrix-toc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:21.324Z [run-trace] #54 warm typst matrix-toc/doc.qmd +3ms run (loader renders=26)
+
+2026-11-24T14:57:21.325Z [run-trace] #54 warm typst matrix-toc/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:21.325Z [run-trace] #54 warm typst matrix-toc/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:21.325Z [run-trace] #54 warm typst matrix-toc/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:21.326Z [run-trace] #54 warm typst matrix-toc/doc.qmd +5ms stage running
+
+2026-11-24T14:57:21.378Z [run-trace] #54 warm typst matrix-toc/doc.qmd +57ms ok 54ms
+
+2026-11-24T14:57:21.379Z [run-trace] #55 warm typst matrix-reference-doc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:21.381Z [run-trace] #55 warm typst matrix-reference-doc/doc.qmd +3ms run (loader renders=27)
+
+2026-11-24T14:57:21.382Z [run-trace] #55 warm typst matrix-reference-doc/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:21.382Z [run-trace] #55 warm typst matrix-reference-doc/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:21.383Z [run-trace] #55 warm typst matrix-reference-doc/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:21.383Z [run-trace] #55 warm typst matrix-reference-doc/doc.qmd +4ms stage running
+
+2026-11-24T14:57:21.436Z [run-trace] #55 warm typst matrix-reference-doc/doc.qmd +57ms ok 54ms
+
+2026-11-24T14:57:21.436Z [run-trace] #56 warm typst matrix-highlight-palette/doc.qmd +0ms build-request
+
+2026-11-24T14:57:21.439Z [run-trace] #56 warm typst matrix-highlight-palette/doc.qmd +3ms run (loader renders=28)
+
+2026-11-24T14:57:21.439Z [run-trace] #56 warm typst matrix-highlight-palette/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:21.439Z [run-trace] #56 warm typst matrix-highlight-palette/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:21.440Z [run-trace] #56 warm typst matrix-highlight-palette/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:21.441Z [run-trace] #56 warm typst matrix-highlight-palette/doc.qmd +5ms stage running
+
+2026-11-24T14:57:21.498Z [run-trace] #56 warm typst matrix-highlight-palette/doc.qmd +62ms ok 59ms
+
+2026-11-24T14:57:21.499Z [run-trace] #57 warm typst matrix-highlight-theme-file/doc.qmd +0ms build-request
+
+2026-11-24T14:57:21.502Z [run-trace] #57 warm typst matrix-highlight-theme-file/doc.qmd +3ms run (loader renders=29)
+
+2026-11-24T14:57:21.502Z [run-trace] #57 warm typst matrix-highlight-theme-file/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:21.502Z [run-trace] #57 warm typst matrix-highlight-theme-file/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:21.502Z [run-trace] #57 warm typst matrix-highlight-theme-file/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:21.503Z [run-trace] #57 warm typst matrix-highlight-theme-file/doc.qmd +4ms stage running
+
+2026-11-24T14:57:21.556Z [run-trace] #57 warm typst matrix-highlight-theme-file/doc.qmd +57ms ok 54ms
+
+2026-11-24T14:57:21.557Z [run-trace] #58 warm typst matrix-plain/doc.qmd +0ms build-request
+
+2026-11-24T14:57:21.559Z [run-trace] #58 warm typst matrix-plain/doc.qmd +3ms run (loader renders=0)
+
+2026-11-24T14:57:21.559Z [run-trace] #58 warm typst matrix-plain/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:22.046Z [run-trace] #58 warm typst matrix-plain/doc.qmd +489ms stage starting
+
+2026-11-24T14:57:22.052Z [run-trace] #58 warm typst matrix-plain/doc.qmd +496ms stage mounting
+
+2026-11-24T14:57:22.052Z [run-trace] #58 warm typst matrix-plain/doc.qmd +496ms stage running
+
+2026-11-24T14:57:22.149Z [run-trace] #58 warm typst matrix-plain/doc.qmd +593ms ok 590ms
+
+2026-11-24T14:57:22.149Z [run-trace] #59 warm typst images-typst/images.qmd +0ms build-request
+
+2026-11-24T14:57:22.153Z [run-trace] #59 warm typst images-typst/images.qmd +4ms run (loader renders=2)
+
+2026-11-24T14:57:22.153Z [run-trace] #59 warm typst images-typst/images.qmd +4ms stage loading
+
+2026-11-24T14:57:22.153Z [run-trace] #59 warm typst images-typst/images.qmd +4ms stage starting
+
+2026-11-24T14:57:22.154Z [run-trace] #59 warm typst images-typst/images.qmd +5ms stage mounting
+
+2026-11-24T14:57:22.155Z [run-trace] #59 warm typst images-typst/images.qmd +6ms stage running
+
+2026-11-24T14:57:22.243Z [run-trace] #59 warm typst images-typst/images.qmd +93ms ok 89ms
+
+2026-11-24T14:57:22.243Z [run-trace] #60 warm typst matrix-toc-depth-only/doc.qmd +0ms build-request
+
+2026-11-24T14:57:22.247Z [run-trace] #60 warm typst matrix-toc-depth-only/doc.qmd +4ms run (loader renders=3)
+
+2026-11-24T14:57:22.247Z [run-trace] #60 warm typst matrix-toc-depth-only/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:22.247Z [run-trace] #60 warm typst matrix-toc-depth-only/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:22.249Z [run-trace] #60 warm typst matrix-toc-depth-only/doc.qmd +6ms stage mounting
+
+2026-11-24T14:57:22.249Z [run-trace] #60 warm typst matrix-toc-depth-only/doc.qmd +6ms stage running
+
+2026-11-24T14:57:22.332Z [run-trace] #60 warm typst matrix-toc-depth-only/doc.qmd +89ms ok 85ms
+
+2026-11-24T14:57:22.332Z [run-trace] #61 warm typst callouts-typst/callouts.qmd +0ms build-request
+
+2026-11-24T14:57:22.338Z [run-trace] #61 warm typst callouts-typst/callouts.qmd +6ms run (loader renders=4)
+
+2026-11-24T14:57:22.339Z [run-trace] #61 warm typst callouts-typst/callouts.qmd +6ms stage loading
+
+2026-11-24T14:57:22.339Z [run-trace] #61 warm typst callouts-typst/callouts.qmd +7ms stage starting
+
+2026-11-24T14:57:22.340Z [run-trace] #61 warm typst callouts-typst/callouts.qmd +8ms stage mounting
+
+2026-11-24T14:57:22.340Z [run-trace] #61 warm typst callouts-typst/callouts.qmd +8ms stage running
+
+2026-11-24T14:57:22.477Z [run-trace] #61 warm typst callouts-typst/callouts.qmd +145ms ok 139ms
+
+2026-11-24T14:57:22.478Z [run-trace] #62 warm typst matrix-top-level-division/doc.qmd +0ms build-request
+
+2026-11-24T14:57:22.481Z [run-trace] #62 warm typst matrix-top-level-division/doc.qmd +3ms run (loader renders=6)
+
+2026-11-24T14:57:22.481Z [run-trace] #62 warm typst matrix-top-level-division/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:22.481Z [run-trace] #62 warm typst matrix-top-level-division/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:22.482Z [run-trace] #62 warm typst matrix-top-level-division/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:22.482Z [run-trace] #62 warm typst matrix-top-level-division/doc.qmd +4ms stage running
+
+2026-11-24T14:57:22.542Z [run-trace] #62 warm typst matrix-top-level-division/doc.qmd +64ms ok 61ms
+
+2026-11-24T14:57:22.542Z [run-trace] #63 warm typst tables-typst/tables.qmd +0ms build-request
+
+2026-11-24T14:57:22.546Z [run-trace] #63 warm typst tables-typst/tables.qmd +3ms run (loader renders=7)
+
+2026-11-24T14:57:22.546Z [run-trace] #63 warm typst tables-typst/tables.qmd +4ms stage loading
+
+2026-11-24T14:57:22.546Z [run-trace] #63 warm typst tables-typst/tables.qmd +4ms stage starting
+
+2026-11-24T14:57:22.546Z [run-trace] #63 warm typst tables-typst/tables.qmd +5ms stage mounting
+
+2026-11-24T14:57:22.547Z [run-trace] #63 warm typst tables-typst/tables.qmd +5ms stage running
+
+2026-11-24T14:57:22.642Z [run-trace] #63 warm typst tables-typst/tables.qmd +100ms ok 97ms
+
+2026-11-24T14:57:22.642Z [run-trace] #64 warm typst crossrefs-typst/all-docx.qmd +0ms build-request
+
+2026-11-24T14:57:22.646Z [run-trace] #64 warm typst crossrefs-typst/all-docx.qmd +4ms run (loader renders=8)
+
+2026-11-24T14:57:22.647Z [run-trace] #64 warm typst crossrefs-typst/all-docx.qmd +4ms stage loading
+
+2026-11-24T14:57:22.647Z [run-trace] #64 warm typst crossrefs-typst/all-docx.qmd +5ms stage starting
+
+2026-11-24T14:57:22.647Z [run-trace] #64 warm typst crossrefs-typst/all-docx.qmd +6ms stage mounting
+
+2026-11-24T14:57:22.648Z [run-trace] #64 warm typst crossrefs-typst/all-docx.qmd +6ms stage running
+
+2026-11-24T14:57:22.737Z [run-trace] #64 warm typst crossrefs-typst/all-docx.qmd +95ms ok 91ms
+
+2026-11-24T14:57:22.762Z [run-trace] #65 fresh typst-pdf callouts-typst/callouts.qmd +0ms build-request
+
+2026-11-24T14:57:22.767Z [run-trace] #65 fresh typst-pdf callouts-typst/callouts.qmd +5ms run (loader renders=9)
+
+2026-11-24T14:57:22.767Z [run-trace] #65 fresh typst-pdf callouts-typst/callouts.qmd +5ms stage loading
+
+2026-11-24T14:57:22.767Z [run-trace] #65 fresh typst-pdf callouts-typst/callouts.qmd +5ms stage starting
+
+2026-11-24T14:57:22.774Z [run-trace] #65 fresh typst-pdf callouts-typst/callouts.qmd +12ms stage mounting
+
+2026-11-24T14:57:22.801Z [run-trace] #65 fresh typst-pdf callouts-typst/callouts.qmd +39ms stage running
+
+2026-11-24T14:57:22.990Z [run-trace] #65 fresh typst-pdf callouts-typst/callouts.qmd +228ms ok 223ms
+
+2026-11-24T14:57:22.990Z [run-trace] #66 fresh typst-pdf citations-typst/citations.qmd +0ms build-request
+
+2026-11-24T14:57:22.994Z [run-trace] #66 fresh typst-pdf citations-typst/citations.qmd +4ms run (loader renders=10)
+
+2026-11-24T14:57:22.994Z [run-trace] #66 fresh typst-pdf citations-typst/citations.qmd +4ms stage loading
+
+2026-11-24T14:57:22.994Z [run-trace] #66 fresh typst-pdf citations-typst/citations.qmd +4ms stage starting
+
+2026-11-24T14:57:23.001Z [run-trace] #66 fresh typst-pdf citations-typst/citations.qmd +11ms stage mounting
+
+2026-11-24T14:57:23.028Z [run-trace] #66 fresh typst-pdf citations-typst/citations.qmd +38ms stage running
+
+2026-11-24T14:57:23.128Z [run-trace] #66 fresh typst-pdf citations-typst/citations.qmd +138ms ok 134ms
+
+2026-11-24T14:57:23.128Z [run-trace] #67 fresh typst-pdf crossrefs-typst/all-docx.qmd +0ms build-request
+
+2026-11-24T14:57:23.133Z [run-trace] #67 fresh typst-pdf crossrefs-typst/all-docx.qmd +5ms run (loader renders=11)
+
+2026-11-24T14:57:23.134Z [run-trace] #67 fresh typst-pdf crossrefs-typst/all-docx.qmd +5ms stage loading
+
+2026-11-24T14:57:23.134Z [run-trace] #67 fresh typst-pdf crossrefs-typst/all-docx.qmd +6ms stage starting
+
+2026-11-24T14:57:23.140Z [run-trace] #67 fresh typst-pdf crossrefs-typst/all-docx.qmd +12ms stage mounting
+
+2026-11-24T14:57:23.169Z [run-trace] #67 fresh typst-pdf crossrefs-typst/all-docx.qmd +41ms stage running
+
+2026-11-24T14:57:23.312Z [run-trace] #67 fresh typst-pdf crossrefs-typst/all-docx.qmd +184ms ok 179ms
+
+2026-11-24T14:57:23.313Z [run-trace] #68 fresh typst-pdf images-typst/images.qmd +0ms build-request
+
+2026-11-24T14:57:23.316Z [run-trace] #68 fresh typst-pdf images-typst/images.qmd +4ms run (loader renders=12)
+
+2026-11-24T14:57:23.316Z [run-trace] #68 fresh typst-pdf images-typst/images.qmd +4ms stage loading
+
+2026-11-24T14:57:23.316Z [run-trace] #68 fresh typst-pdf images-typst/images.qmd +4ms stage starting
+
+2026-11-24T14:57:23.323Z [run-trace] #68 fresh typst-pdf images-typst/images.qmd +11ms stage mounting
+
+2026-11-24T14:57:23.349Z [run-trace] #68 fresh typst-pdf images-typst/images.qmd +36ms stage running
+
+2026-11-24T14:57:23.448Z [run-trace] #68 fresh typst-pdf images-typst/images.qmd +136ms ok 132ms
+
+2026-11-24T14:57:23.449Z [run-trace] #69 fresh typst-pdf shortcodes-typst/shortcodes.qmd +0ms build-request
+
+2026-11-24T14:57:23.453Z [run-trace] #69 fresh typst-pdf shortcodes-typst/shortcodes.qmd +4ms run (loader renders=13)
+
+2026-11-24T14:57:23.454Z [run-trace] #69 fresh typst-pdf shortcodes-typst/shortcodes.qmd +4ms stage loading
+
+2026-11-24T14:57:23.454Z [run-trace] #69 fresh typst-pdf shortcodes-typst/shortcodes.qmd +4ms stage starting
+
+2026-11-24T14:57:23.460Z [run-trace] #69 fresh typst-pdf shortcodes-typst/shortcodes.qmd +11ms stage mounting
+
+2026-11-24T14:57:23.488Z [run-trace] #69 fresh typst-pdf shortcodes-typst/shortcodes.qmd +39ms stage running
+
+2026-11-24T14:57:23.590Z [run-trace] #69 fresh typst-pdf shortcodes-typst/shortcodes.qmd +141ms ok 137ms
+
+2026-11-24T14:57:23.590Z [run-trace] #70 fresh typst-pdf tables-typst/tables.qmd +0ms build-request
+
+2026-11-24T14:57:23.594Z [run-trace] #70 fresh typst-pdf tables-typst/tables.qmd +4ms run (loader renders=14)
+
+2026-11-24T14:57:23.594Z [run-trace] #70 fresh typst-pdf tables-typst/tables.qmd +4ms stage loading
+
+2026-11-24T14:57:23.594Z [run-trace] #70 fresh typst-pdf tables-typst/tables.qmd +4ms stage starting
+
+2026-11-24T14:57:23.601Z [run-trace] #70 fresh typst-pdf tables-typst/tables.qmd +11ms stage mounting
+
+2026-11-24T14:57:23.631Z [run-trace] #70 fresh typst-pdf tables-typst/tables.qmd +41ms stage running
+
+2026-11-24T14:57:23.741Z [run-trace] #70 fresh typst-pdf tables-typst/tables.qmd +151ms ok 147ms
+
+2026-11-24T14:57:23.741Z [run-trace] #71 fresh typst-pdf matrix-citeproc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:23.744Z [run-trace] #71 fresh typst-pdf matrix-citeproc/doc.qmd +3ms run (loader renders=15)
+
+2026-11-24T14:57:23.744Z [run-trace] #71 fresh typst-pdf matrix-citeproc/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:23.744Z [run-trace] #71 fresh typst-pdf matrix-citeproc/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:23.751Z [run-trace] #71 fresh typst-pdf matrix-citeproc/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:23.780Z [run-trace] #71 fresh typst-pdf matrix-citeproc/doc.qmd +39ms stage running
+
+2026-11-24T14:57:23.899Z [run-trace] #71 fresh typst-pdf matrix-citeproc/doc.qmd +158ms ok 155ms
+
+2026-11-24T14:57:23.899Z [run-trace] #72 fresh typst-pdf matrix-dark-brand/doc.qmd +0ms build-request
+
+2026-11-24T14:57:23.902Z [run-trace] #72 fresh typst-pdf matrix-dark-brand/doc.qmd +3ms run (loader renders=16)
+
+2026-11-24T14:57:23.902Z [run-trace] #72 fresh typst-pdf matrix-dark-brand/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:23.902Z [run-trace] #72 fresh typst-pdf matrix-dark-brand/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:23.909Z [run-trace] #72 fresh typst-pdf matrix-dark-brand/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:23.934Z [run-trace] #72 fresh typst-pdf matrix-dark-brand/doc.qmd +34ms stage running
+
+2026-11-24T14:57:24.133Z [run-trace] #72 fresh typst-pdf matrix-dark-brand/doc.qmd +234ms ok 231ms
+
+2026-11-24T14:57:24.133Z [run-trace] #73 fresh typst-pdf matrix-highlight-idiomatic/doc.qmd +0ms build-request
+
+2026-11-24T14:57:24.136Z [run-trace] #73 fresh typst-pdf matrix-highlight-idiomatic/doc.qmd +3ms run (loader renders=17)
+
+2026-11-24T14:57:24.136Z [run-trace] #73 fresh typst-pdf matrix-highlight-idiomatic/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:24.136Z [run-trace] #73 fresh typst-pdf matrix-highlight-idiomatic/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:24.143Z [run-trace] #73 fresh typst-pdf matrix-highlight-idiomatic/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:24.174Z [run-trace] #73 fresh typst-pdf matrix-highlight-idiomatic/doc.qmd +41ms stage running
+
+2026-11-24T14:57:24.288Z [run-trace] #73 fresh typst-pdf matrix-highlight-idiomatic/doc.qmd +155ms ok 152ms
+
+2026-11-24T14:57:24.288Z [run-trace] #74 fresh typst-pdf matrix-highlight-none/doc.qmd +0ms build-request
+
+2026-11-24T14:57:24.291Z [run-trace] #74 fresh typst-pdf matrix-highlight-none/doc.qmd +3ms run (loader renders=18)
+
+2026-11-24T14:57:24.291Z [run-trace] #74 fresh typst-pdf matrix-highlight-none/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:24.291Z [run-trace] #74 fresh typst-pdf matrix-highlight-none/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:24.297Z [run-trace] #74 fresh typst-pdf matrix-highlight-none/doc.qmd +9ms stage mounting
+
+2026-11-24T14:57:24.324Z [run-trace] #74 fresh typst-pdf matrix-highlight-none/doc.qmd +36ms stage running
+
+2026-11-24T14:57:24.412Z [run-trace] #74 fresh typst-pdf matrix-highlight-none/doc.qmd +124ms ok 121ms
+
+2026-11-24T14:57:24.412Z [run-trace] #75 fresh typst-pdf matrix-highlight-palette/doc.qmd +0ms build-request
+
+2026-11-24T14:57:24.415Z [run-trace] #75 fresh typst-pdf matrix-highlight-palette/doc.qmd +3ms run (loader renders=19)
+
+2026-11-24T14:57:24.415Z [run-trace] #75 fresh typst-pdf matrix-highlight-palette/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:24.415Z [run-trace] #75 fresh typst-pdf matrix-highlight-palette/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:24.422Z [run-trace] #75 fresh typst-pdf matrix-highlight-palette/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:24.452Z [run-trace] #75 fresh typst-pdf matrix-highlight-palette/doc.qmd +40ms stage running
+
+2026-11-24T14:57:24.561Z [run-trace] #75 fresh typst-pdf matrix-highlight-palette/doc.qmd +149ms ok 146ms
+
+2026-11-24T14:57:24.561Z [run-trace] #76 fresh typst-pdf matrix-highlight-theme-file/doc.qmd +0ms build-request
+
+2026-11-24T14:57:24.564Z [run-trace] #76 fresh typst-pdf matrix-highlight-theme-file/doc.qmd +3ms run (loader renders=20)
+
+2026-11-24T14:57:24.564Z [run-trace] #76 fresh typst-pdf matrix-highlight-theme-file/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:24.564Z [run-trace] #76 fresh typst-pdf matrix-highlight-theme-file/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:24.571Z [run-trace] #76 fresh typst-pdf matrix-highlight-theme-file/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:24.606Z [run-trace] #76 fresh typst-pdf matrix-highlight-theme-file/doc.qmd +45ms stage running
+
+2026-11-24T14:57:24.711Z [run-trace] #76 fresh typst-pdf matrix-highlight-theme-file/doc.qmd +150ms ok 147ms
+
+2026-11-24T14:57:24.711Z [run-trace] #77 fresh typst-pdf matrix-no-h1-auto-shift/doc.qmd +0ms build-request
+
+2026-11-24T14:57:24.714Z [run-trace] #77 fresh typst-pdf matrix-no-h1-auto-shift/doc.qmd +3ms run (loader renders=21)
+
+2026-11-24T14:57:24.714Z [run-trace] #77 fresh typst-pdf matrix-no-h1-auto-shift/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:24.714Z [run-trace] #77 fresh typst-pdf matrix-no-h1-auto-shift/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:24.721Z [run-trace] #77 fresh typst-pdf matrix-no-h1-auto-shift/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:24.751Z [run-trace] #77 fresh typst-pdf matrix-no-h1-auto-shift/doc.qmd +40ms stage running
+
+2026-11-24T14:57:24.869Z [run-trace] #77 fresh typst-pdf matrix-no-h1-auto-shift/doc.qmd +158ms ok 155ms
+
+2026-11-24T14:57:24.870Z [run-trace] #78 fresh typst-pdf matrix-plain/doc.qmd +0ms build-request
+
+2026-11-24T14:57:24.873Z [run-trace] #78 fresh typst-pdf matrix-plain/doc.qmd +3ms run (loader renders=22)
+
+2026-11-24T14:57:24.873Z [run-trace] #78 fresh typst-pdf matrix-plain/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:24.873Z [run-trace] #78 fresh typst-pdf matrix-plain/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:24.880Z [run-trace] #78 fresh typst-pdf matrix-plain/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:24.907Z [run-trace] #78 fresh typst-pdf matrix-plain/doc.qmd +37ms stage running
+
+2026-11-24T14:57:25.019Z [run-trace] #78 fresh typst-pdf matrix-plain/doc.qmd +149ms ok 146ms
+
+2026-11-24T14:57:25.019Z [run-trace] #79 fresh typst-pdf matrix-reference-doc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:25.022Z [run-trace] #79 fresh typst-pdf matrix-reference-doc/doc.qmd +4ms run (loader renders=23)
+
+2026-11-24T14:57:25.023Z [run-trace] #79 fresh typst-pdf matrix-reference-doc/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:25.023Z [run-trace] #79 fresh typst-pdf matrix-reference-doc/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:25.030Z [run-trace] #79 fresh typst-pdf matrix-reference-doc/doc.qmd +11ms stage mounting
+
+2026-11-24T14:57:25.055Z [run-trace] #79 fresh typst-pdf matrix-reference-doc/doc.qmd +36ms stage running
+
+2026-11-24T14:57:25.176Z [run-trace] #79 fresh typst-pdf matrix-reference-doc/doc.qmd +157ms ok 153ms
+
+2026-11-24T14:57:25.176Z [run-trace] #80 fresh typst-pdf matrix-shift-from-metadata/doc.qmd +0ms build-request
+
+2026-11-24T14:57:25.179Z [run-trace] #80 fresh typst-pdf matrix-shift-from-metadata/doc.qmd +3ms run (loader renders=24)
+
+2026-11-24T14:57:25.179Z [run-trace] #80 fresh typst-pdf matrix-shift-from-metadata/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:25.179Z [run-trace] #80 fresh typst-pdf matrix-shift-from-metadata/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:25.186Z [run-trace] #80 fresh typst-pdf matrix-shift-from-metadata/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:25.215Z [run-trace] #80 fresh typst-pdf matrix-shift-from-metadata/doc.qmd +39ms stage running
+
+2026-11-24T14:57:25.336Z [run-trace] #80 fresh typst-pdf matrix-shift-from-metadata/doc.qmd +159ms ok 156ms
+
+2026-11-24T14:57:25.336Z [run-trace] #81 fresh typst-pdf matrix-toc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:25.339Z [run-trace] #81 fresh typst-pdf matrix-toc/doc.qmd +3ms run (loader renders=25)
+
+2026-11-24T14:57:25.339Z [run-trace] #81 fresh typst-pdf matrix-toc/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:25.339Z [run-trace] #81 fresh typst-pdf matrix-toc/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:25.346Z [run-trace] #81 fresh typst-pdf matrix-toc/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:25.373Z [run-trace] #81 fresh typst-pdf matrix-toc/doc.qmd +37ms stage running
+
+2026-11-24T14:57:25.481Z [run-trace] #81 fresh typst-pdf matrix-toc/doc.qmd +145ms ok 142ms
+
+2026-11-24T14:57:25.481Z [run-trace] #82 fresh typst-pdf matrix-toc-depth/doc.qmd +0ms build-request
+
+2026-11-24T14:57:25.484Z [run-trace] #82 fresh typst-pdf matrix-toc-depth/doc.qmd +3ms run (loader renders=26)
+
+2026-11-24T14:57:25.484Z [run-trace] #82 fresh typst-pdf matrix-toc-depth/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:25.484Z [run-trace] #82 fresh typst-pdf matrix-toc-depth/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:25.491Z [run-trace] #82 fresh typst-pdf matrix-toc-depth/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:25.518Z [run-trace] #82 fresh typst-pdf matrix-toc-depth/doc.qmd +37ms stage running
+
+2026-11-24T14:57:25.626Z [run-trace] #82 fresh typst-pdf matrix-toc-depth/doc.qmd +145ms ok 142ms
+
+2026-11-24T14:57:25.626Z [run-trace] #83 fresh typst-pdf matrix-toc-depth-only/doc.qmd +0ms build-request
+
+2026-11-24T14:57:25.629Z [run-trace] #83 fresh typst-pdf matrix-toc-depth-only/doc.qmd +4ms run (loader renders=27)
+
+2026-11-24T14:57:25.630Z [run-trace] #83 fresh typst-pdf matrix-toc-depth-only/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:25.630Z [run-trace] #83 fresh typst-pdf matrix-toc-depth-only/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:25.636Z [run-trace] #83 fresh typst-pdf matrix-toc-depth-only/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:25.666Z [run-trace] #83 fresh typst-pdf matrix-toc-depth-only/doc.qmd +40ms stage running
+
+2026-11-24T14:57:25.773Z [run-trace] #83 fresh typst-pdf matrix-toc-depth-only/doc.qmd +147ms ok 143ms
+
+2026-11-24T14:57:25.773Z [run-trace] #84 fresh typst-pdf matrix-top-level-division/doc.qmd +0ms build-request
+
+2026-11-24T14:57:25.776Z [run-trace] #84 fresh typst-pdf matrix-top-level-division/doc.qmd +3ms run (loader renders=28)
+
+2026-11-24T14:57:25.776Z [run-trace] #84 fresh typst-pdf matrix-top-level-division/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:25.776Z [run-trace] #84 fresh typst-pdf matrix-top-level-division/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:25.783Z [run-trace] #84 fresh typst-pdf matrix-top-level-division/doc.qmd +10ms stage mounting
+
+2026-11-24T14:57:25.808Z [run-trace] #84 fresh typst-pdf matrix-top-level-division/doc.qmd +35ms stage running
+
+2026-11-24T14:57:25.908Z [run-trace] #84 fresh typst-pdf matrix-top-level-division/doc.qmd +135ms ok 132ms
+
+2026-11-24T14:57:25.913Z [run-trace] #85 warm typst-pdf matrix-citeproc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:25.916Z [run-trace] #85 warm typst-pdf matrix-citeproc/doc.qmd +3ms run (loader renders=29)
+
+2026-11-24T14:57:25.916Z [run-trace] #85 warm typst-pdf matrix-citeproc/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:25.916Z [run-trace] #85 warm typst-pdf matrix-citeproc/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:25.917Z [run-trace] #85 warm typst-pdf matrix-citeproc/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:25.918Z [run-trace] #85 warm typst-pdf matrix-citeproc/doc.qmd +5ms stage running
+
+2026-11-24T14:57:25.980Z [run-trace] #85 warm typst-pdf matrix-citeproc/doc.qmd +67ms ok 64ms
+
+2026-11-24T14:57:25.980Z [run-trace] #86 warm typst-pdf matrix-dark-brand/doc.qmd +0ms build-request
+
+2026-11-24T14:57:25.983Z [run-trace] #86 warm typst-pdf matrix-dark-brand/doc.qmd +3ms run (loader renders=0)
+
+2026-11-24T14:57:25.983Z [run-trace] #86 warm typst-pdf matrix-dark-brand/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:26.516Z [run-trace] #86 warm typst-pdf matrix-dark-brand/doc.qmd +536ms stage starting
+
+2026-11-24T14:57:26.529Z [run-trace] #86 warm typst-pdf matrix-dark-brand/doc.qmd +549ms stage mounting
+
+2026-11-24T14:57:26.530Z [run-trace] #86 warm typst-pdf matrix-dark-brand/doc.qmd +550ms stage running
+
+2026-11-24T14:57:26.663Z [run-trace] #86 warm typst-pdf matrix-dark-brand/doc.qmd +683ms ok 680ms
+
+2026-11-24T14:57:26.665Z [run-trace] #87 warm typst-pdf tables-typst/tables.qmd +0ms build-request
+
+2026-11-24T14:57:26.675Z [run-trace] #87 warm typst-pdf tables-typst/tables.qmd +9ms run (loader renders=2)
+
+2026-11-24T14:57:26.676Z [run-trace] #87 warm typst-pdf tables-typst/tables.qmd +10ms stage loading
+
+2026-11-24T14:57:26.676Z [run-trace] #87 warm typst-pdf tables-typst/tables.qmd +10ms stage starting
+
+2026-11-24T14:57:26.677Z [run-trace] #87 warm typst-pdf tables-typst/tables.qmd +11ms stage mounting
+
+2026-11-24T14:57:26.678Z [run-trace] #87 warm typst-pdf tables-typst/tables.qmd +13ms stage running
+
+2026-11-24T14:57:26.805Z [run-trace] #87 warm typst-pdf tables-typst/tables.qmd +139ms ok 130ms
+
+2026-11-24T14:57:26.805Z [run-trace] #88 warm typst-pdf matrix-shift-from-metadata/doc.qmd +0ms build-request
+
+2026-11-24T14:57:26.809Z [run-trace] #88 warm typst-pdf matrix-shift-from-metadata/doc.qmd +4ms run (loader renders=3)
+
+2026-11-24T14:57:26.809Z [run-trace] #88 warm typst-pdf matrix-shift-from-metadata/doc.qmd +5ms stage loading
+
+2026-11-24T14:57:26.810Z [run-trace] #88 warm typst-pdf matrix-shift-from-metadata/doc.qmd +5ms stage starting
+
+2026-11-24T14:57:26.811Z [run-trace] #88 warm typst-pdf matrix-shift-from-metadata/doc.qmd +6ms stage mounting
+
+2026-11-24T14:57:26.811Z [run-trace] #88 warm typst-pdf matrix-shift-from-metadata/doc.qmd +7ms stage running
+
+2026-11-24T14:57:26.897Z [run-trace] #88 warm typst-pdf matrix-shift-from-metadata/doc.qmd +92ms ok 88ms
+
+2026-11-24T14:57:26.897Z [run-trace] #89 warm typst-pdf callouts-typst/callouts.qmd +0ms build-request
+
+2026-11-24T14:57:26.902Z [run-trace] #89 warm typst-pdf callouts-typst/callouts.qmd +5ms run (loader renders=5)
+
+2026-11-24T14:57:26.902Z [run-trace] #89 warm typst-pdf callouts-typst/callouts.qmd +5ms stage loading
+
+2026-11-24T14:57:26.902Z [run-trace] #89 warm typst-pdf callouts-typst/callouts.qmd +5ms stage starting
+
+2026-11-24T14:57:26.903Z [run-trace] #89 warm typst-pdf callouts-typst/callouts.qmd +6ms stage mounting
+
+2026-11-24T14:57:26.904Z [run-trace] #89 warm typst-pdf callouts-typst/callouts.qmd +7ms stage running
+
+2026-11-24T14:57:27.046Z [run-trace] #89 warm typst-pdf callouts-typst/callouts.qmd +149ms ok 144ms
+
+2026-11-24T14:57:27.047Z [run-trace] #90 warm typst-pdf citations-typst/citations.qmd +0ms build-request
+
+2026-11-24T14:57:27.050Z [run-trace] #90 warm typst-pdf citations-typst/citations.qmd +3ms run (loader renders=6)
+
+2026-11-24T14:57:27.050Z [run-trace] #90 warm typst-pdf citations-typst/citations.qmd +3ms stage loading
+
+2026-11-24T14:57:27.050Z [run-trace] #90 warm typst-pdf citations-typst/citations.qmd +3ms stage starting
+
+2026-11-24T14:57:27.051Z [run-trace] #90 warm typst-pdf citations-typst/citations.qmd +5ms stage mounting
+
+2026-11-24T14:57:27.052Z [run-trace] #90 warm typst-pdf citations-typst/citations.qmd +5ms stage running
+
+2026-11-24T14:57:27.115Z [run-trace] #90 warm typst-pdf citations-typst/citations.qmd +69ms ok 66ms
+
+2026-11-24T14:57:27.116Z [run-trace] #91 warm typst-pdf matrix-highlight-palette/doc.qmd +0ms build-request
+
+2026-11-24T14:57:27.119Z [run-trace] #91 warm typst-pdf matrix-highlight-palette/doc.qmd +3ms run (loader renders=7)
+
+2026-11-24T14:57:27.119Z [run-trace] #91 warm typst-pdf matrix-highlight-palette/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:27.119Z [run-trace] #91 warm typst-pdf matrix-highlight-palette/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:27.120Z [run-trace] #91 warm typst-pdf matrix-highlight-palette/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:27.121Z [run-trace] #91 warm typst-pdf matrix-highlight-palette/doc.qmd +5ms stage running
+
+2026-11-24T14:57:27.183Z [run-trace] #91 warm typst-pdf matrix-highlight-palette/doc.qmd +67ms ok 64ms
+
+2026-11-24T14:57:27.184Z [run-trace] #92 warm typst-pdf shortcodes-typst/shortcodes.qmd +0ms build-request
+
+2026-11-24T14:57:27.188Z [run-trace] #92 warm typst-pdf shortcodes-typst/shortcodes.qmd +4ms run (loader renders=8)
+
+2026-11-24T14:57:27.188Z [run-trace] #92 warm typst-pdf shortcodes-typst/shortcodes.qmd +4ms stage loading
+
+2026-11-24T14:57:27.188Z [run-trace] #92 warm typst-pdf shortcodes-typst/shortcodes.qmd +4ms stage starting
+
+2026-11-24T14:57:27.189Z [run-trace] #92 warm typst-pdf shortcodes-typst/shortcodes.qmd +5ms stage mounting
+
+2026-11-24T14:57:27.189Z [run-trace] #92 warm typst-pdf shortcodes-typst/shortcodes.qmd +6ms stage running
+
+2026-11-24T14:57:27.252Z [run-trace] #92 warm typst-pdf shortcodes-typst/shortcodes.qmd +68ms ok 64ms
+
+2026-11-24T14:57:27.252Z [run-trace] #93 warm typst-pdf shortcodes-typst/shortcodes.qmd +0ms build-request
+
+2026-11-24T14:57:27.256Z [run-trace] #93 warm typst-pdf shortcodes-typst/shortcodes.qmd +4ms run (loader renders=9)
+
+2026-11-24T14:57:27.256Z [run-trace] #93 warm typst-pdf shortcodes-typst/shortcodes.qmd +4ms stage loading
+
+2026-11-24T14:57:27.256Z [run-trace] #93 warm typst-pdf shortcodes-typst/shortcodes.qmd +4ms stage starting
+
+2026-11-24T14:57:27.257Z [run-trace] #93 warm typst-pdf shortcodes-typst/shortcodes.qmd +5ms stage mounting
+
+2026-11-24T14:57:27.258Z [run-trace] #93 warm typst-pdf shortcodes-typst/shortcodes.qmd +6ms stage running
+
+2026-11-24T14:57:27.354Z [run-trace] #93 warm typst-pdf shortcodes-typst/shortcodes.qmd +102ms ok 98ms
+
+2026-11-24T14:57:27.354Z [run-trace] #94 warm typst-pdf matrix-toc-depth-only/doc.qmd +0ms build-request
+
+2026-11-24T14:57:27.357Z [run-trace] #94 warm typst-pdf matrix-toc-depth-only/doc.qmd +4ms run (loader renders=10)
+
+2026-11-24T14:57:27.358Z [run-trace] #94 warm typst-pdf matrix-toc-depth-only/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:27.358Z [run-trace] #94 warm typst-pdf matrix-toc-depth-only/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:27.359Z [run-trace] #94 warm typst-pdf matrix-toc-depth-only/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:27.360Z [run-trace] #94 warm typst-pdf matrix-toc-depth-only/doc.qmd +6ms stage running
+
+2026-11-24T14:57:27.418Z [run-trace] #94 warm typst-pdf matrix-toc-depth-only/doc.qmd +64ms ok 60ms
+
+2026-11-24T14:57:27.419Z [run-trace] #95 warm typst-pdf matrix-top-level-division/doc.qmd +0ms build-request
+
+2026-11-24T14:57:27.422Z [run-trace] #95 warm typst-pdf matrix-top-level-division/doc.qmd +3ms run (loader renders=11)
+
+2026-11-24T14:57:27.422Z [run-trace] #95 warm typst-pdf matrix-top-level-division/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:27.422Z [run-trace] #95 warm typst-pdf matrix-top-level-division/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:27.423Z [run-trace] #95 warm typst-pdf matrix-top-level-division/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:27.423Z [run-trace] #95 warm typst-pdf matrix-top-level-division/doc.qmd +5ms stage running
+
+2026-11-24T14:57:27.483Z [run-trace] #95 warm typst-pdf matrix-top-level-division/doc.qmd +64ms ok 61ms
+
+2026-11-24T14:57:27.483Z [run-trace] #96 warm typst-pdf images-typst/images.qmd +0ms build-request
+
+2026-11-24T14:57:27.486Z [run-trace] #96 warm typst-pdf images-typst/images.qmd +3ms run (loader renders=12)
+
+2026-11-24T14:57:27.486Z [run-trace] #96 warm typst-pdf images-typst/images.qmd +4ms stage loading
+
+2026-11-24T14:57:27.487Z [run-trace] #96 warm typst-pdf images-typst/images.qmd +4ms stage starting
+
+2026-11-24T14:57:27.488Z [run-trace] #96 warm typst-pdf images-typst/images.qmd +5ms stage mounting
+
+2026-11-24T14:57:27.488Z [run-trace] #96 warm typst-pdf images-typst/images.qmd +5ms stage running
+
+2026-11-24T14:57:27.560Z [run-trace] #96 warm typst-pdf images-typst/images.qmd +77ms ok 73ms
+
+2026-11-24T14:57:27.561Z [run-trace] #97 warm typst-pdf matrix-reference-doc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:27.564Z [run-trace] #97 warm typst-pdf matrix-reference-doc/doc.qmd +4ms run (loader renders=13)
+
+2026-11-24T14:57:27.564Z [run-trace] #97 warm typst-pdf matrix-reference-doc/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:27.564Z [run-trace] #97 warm typst-pdf matrix-reference-doc/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:27.565Z [run-trace] #97 warm typst-pdf matrix-reference-doc/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:27.565Z [run-trace] #97 warm typst-pdf matrix-reference-doc/doc.qmd +6ms stage running
+
+2026-11-24T14:57:27.623Z [run-trace] #97 warm typst-pdf matrix-reference-doc/doc.qmd +63ms ok 59ms
+
+2026-11-24T14:57:27.624Z [run-trace] #98 warm typst-pdf matrix-plain/doc.qmd +0ms build-request
+
+2026-11-24T14:57:27.627Z [run-trace] #98 warm typst-pdf matrix-plain/doc.qmd +3ms run (loader renders=14)
+
+2026-11-24T14:57:27.627Z [run-trace] #98 warm typst-pdf matrix-plain/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:27.627Z [run-trace] #98 warm typst-pdf matrix-plain/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:27.628Z [run-trace] #98 warm typst-pdf matrix-plain/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:27.628Z [run-trace] #98 warm typst-pdf matrix-plain/doc.qmd +5ms stage running
+
+2026-11-24T14:57:27.692Z [run-trace] #98 warm typst-pdf matrix-plain/doc.qmd +68ms ok 65ms
+
+2026-11-24T14:57:27.692Z [run-trace] #99 warm typst-pdf matrix-highlight-idiomatic/doc.qmd +0ms build-request
+
+2026-11-24T14:57:27.695Z [run-trace] #99 warm typst-pdf matrix-highlight-idiomatic/doc.qmd +3ms run (loader renders=15)
+
+2026-11-24T14:57:27.695Z [run-trace] #99 warm typst-pdf matrix-highlight-idiomatic/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:27.695Z [run-trace] #99 warm typst-pdf matrix-highlight-idiomatic/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:27.696Z [run-trace] #99 warm typst-pdf matrix-highlight-idiomatic/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:27.697Z [run-trace] #99 warm typst-pdf matrix-highlight-idiomatic/doc.qmd +5ms stage running
+
+2026-11-24T14:57:27.753Z [run-trace] #99 warm typst-pdf matrix-highlight-idiomatic/doc.qmd +61ms ok 58ms
+
+2026-11-24T14:57:27.753Z [run-trace] #100 warm typst-pdf crossrefs-typst/all-docx.qmd +0ms build-request
+
+2026-11-24T14:57:27.759Z [run-trace] #100 warm typst-pdf crossrefs-typst/all-docx.qmd +6ms run (loader renders=16)
+
+2026-11-24T14:57:27.760Z [run-trace] #100 warm typst-pdf crossrefs-typst/all-docx.qmd +6ms stage loading
+
+2026-11-24T14:57:27.760Z [run-trace] #100 warm typst-pdf crossrefs-typst/all-docx.qmd +7ms stage starting
+
+2026-11-24T14:57:27.760Z [run-trace] #100 warm typst-pdf crossrefs-typst/all-docx.qmd +8ms stage mounting
+
+2026-11-24T14:57:27.761Z [run-trace] #100 warm typst-pdf crossrefs-typst/all-docx.qmd +8ms stage running
+
+2026-11-24T14:57:27.851Z [run-trace] #100 warm typst-pdf crossrefs-typst/all-docx.qmd +98ms ok 92ms
+
+2026-11-24T14:57:27.851Z [run-trace] #101 warm typst-pdf matrix-toc-depth/doc.qmd +0ms build-request
+
+2026-11-24T14:57:27.855Z [run-trace] #101 warm typst-pdf matrix-toc-depth/doc.qmd +4ms run (loader renders=17)
+
+2026-11-24T14:57:27.855Z [run-trace] #101 warm typst-pdf matrix-toc-depth/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:27.855Z [run-trace] #101 warm typst-pdf matrix-toc-depth/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:27.858Z [run-trace] #101 warm typst-pdf matrix-toc-depth/doc.qmd +7ms stage mounting
+
+2026-11-24T14:57:27.858Z [run-trace] #101 warm typst-pdf matrix-toc-depth/doc.qmd +7ms stage running
+
+2026-11-24T14:57:27.923Z [run-trace] #101 warm typst-pdf matrix-toc-depth/doc.qmd +72ms ok 68ms
+
+2026-11-24T14:57:27.923Z [run-trace] #102 warm typst-pdf matrix-highlight-none/doc.qmd +0ms build-request
+
+2026-11-24T14:57:27.926Z [run-trace] #102 warm typst-pdf matrix-highlight-none/doc.qmd +3ms run (loader renders=18)
+
+2026-11-24T14:57:27.926Z [run-trace] #102 warm typst-pdf matrix-highlight-none/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:27.926Z [run-trace] #102 warm typst-pdf matrix-highlight-none/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:27.927Z [run-trace] #102 warm typst-pdf matrix-highlight-none/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:27.927Z [run-trace] #102 warm typst-pdf matrix-highlight-none/doc.qmd +4ms stage running
+
+2026-11-24T14:57:27.983Z [run-trace] #102 warm typst-pdf matrix-highlight-none/doc.qmd +60ms ok 57ms
+
+2026-11-24T14:57:27.983Z [run-trace] #103 warm typst-pdf matrix-highlight-theme-file/doc.qmd +0ms build-request
+
+2026-11-24T14:57:27.987Z [run-trace] #103 warm typst-pdf matrix-highlight-theme-file/doc.qmd +4ms run (loader renders=19)
+
+2026-11-24T14:57:27.987Z [run-trace] #103 warm typst-pdf matrix-highlight-theme-file/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:27.987Z [run-trace] #103 warm typst-pdf matrix-highlight-theme-file/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:27.988Z [run-trace] #103 warm typst-pdf matrix-highlight-theme-file/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:27.988Z [run-trace] #103 warm typst-pdf matrix-highlight-theme-file/doc.qmd +5ms stage running
+
+2026-11-24T14:57:28.047Z [run-trace] #103 warm typst-pdf matrix-highlight-theme-file/doc.qmd +64ms ok 60ms
+
+2026-11-24T14:57:28.047Z [run-trace] #104 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +0ms build-request
+
+2026-11-24T14:57:28.050Z [run-trace] #104 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +3ms run (loader renders=20)
+
+2026-11-24T14:57:28.050Z [run-trace] #104 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:28.050Z [run-trace] #104 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:28.051Z [run-trace] #104 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:28.052Z [run-trace] #104 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +5ms stage running
+
+2026-11-24T14:57:28.108Z [run-trace] #104 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +61ms ok 58ms
+
+2026-11-24T14:57:28.108Z [run-trace] #105 warm typst-pdf matrix-toc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:28.112Z [run-trace] #105 warm typst-pdf matrix-toc/doc.qmd +4ms run (loader renders=21)
+
+2026-11-24T14:57:28.112Z [run-trace] #105 warm typst-pdf matrix-toc/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:28.112Z [run-trace] #105 warm typst-pdf matrix-toc/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:28.113Z [run-trace] #105 warm typst-pdf matrix-toc/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:28.113Z [run-trace] #105 warm typst-pdf matrix-toc/doc.qmd +5ms stage running
+
+2026-11-24T14:57:28.175Z [run-trace] #105 warm typst-pdf matrix-toc/doc.qmd +67ms ok 63ms
+
+2026-11-24T14:57:28.175Z [run-trace] #106 warm typst-pdf matrix-toc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:28.179Z [run-trace] #106 warm typst-pdf matrix-toc/doc.qmd +4ms run (loader renders=22)
+
+2026-11-24T14:57:28.179Z [run-trace] #106 warm typst-pdf matrix-toc/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:28.179Z [run-trace] #106 warm typst-pdf matrix-toc/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:28.180Z [run-trace] #106 warm typst-pdf matrix-toc/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:28.180Z [run-trace] #106 warm typst-pdf matrix-toc/doc.qmd +5ms stage running
+
+2026-11-24T14:57:28.238Z [run-trace] #106 warm typst-pdf matrix-toc/doc.qmd +63ms ok 59ms
+
+2026-11-24T14:57:28.238Z [run-trace] #107 warm typst-pdf matrix-highlight-idiomatic/doc.qmd +0ms build-request
+
+2026-11-24T14:57:28.241Z [run-trace] #107 warm typst-pdf matrix-highlight-idiomatic/doc.qmd +3ms run (loader renders=23)
+
+2026-11-24T14:57:28.241Z [run-trace] #107 warm typst-pdf matrix-highlight-idiomatic/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:28.241Z [run-trace] #107 warm typst-pdf matrix-highlight-idiomatic/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:28.242Z [run-trace] #107 warm typst-pdf matrix-highlight-idiomatic/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:28.242Z [run-trace] #107 warm typst-pdf matrix-highlight-idiomatic/doc.qmd +4ms stage running
+
+2026-11-24T14:57:28.298Z [run-trace] #107 warm typst-pdf matrix-highlight-idiomatic/doc.qmd +60ms ok 57ms
+
+2026-11-24T14:57:28.298Z [run-trace] #108 warm typst-pdf matrix-shift-from-metadata/doc.qmd +0ms build-request
+
+2026-11-24T14:57:28.302Z [run-trace] #108 warm typst-pdf matrix-shift-from-metadata/doc.qmd +3ms run (loader renders=24)
+
+2026-11-24T14:57:28.302Z [run-trace] #108 warm typst-pdf matrix-shift-from-metadata/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:28.302Z [run-trace] #108 warm typst-pdf matrix-shift-from-metadata/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:28.303Z [run-trace] #108 warm typst-pdf matrix-shift-from-metadata/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:28.303Z [run-trace] #108 warm typst-pdf matrix-shift-from-metadata/doc.qmd +4ms stage running
+
+2026-11-24T14:57:28.366Z [run-trace] #108 warm typst-pdf matrix-shift-from-metadata/doc.qmd +67ms ok 64ms
+
+2026-11-24T14:57:28.366Z [run-trace] #109 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +0ms build-request
+
+2026-11-24T14:57:28.369Z [run-trace] #109 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +3ms run (loader renders=25)
+
+2026-11-24T14:57:28.369Z [run-trace] #109 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:28.369Z [run-trace] #109 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:28.370Z [run-trace] #109 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:28.370Z [run-trace] #109 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +4ms stage running
+
+2026-11-24T14:57:28.431Z [run-trace] #109 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +65ms ok 62ms
+
+2026-11-24T14:57:28.431Z [run-trace] #110 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +0ms build-request
+
+2026-11-24T14:57:28.434Z [run-trace] #110 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +3ms run (loader renders=26)
+
+2026-11-24T14:57:28.434Z [run-trace] #110 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:28.434Z [run-trace] #110 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:28.435Z [run-trace] #110 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:28.436Z [run-trace] #110 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +5ms stage running
+
+2026-11-24T14:57:28.493Z [run-trace] #110 warm typst-pdf matrix-no-h1-auto-shift/doc.qmd +62ms ok 59ms
+
+2026-11-24T14:57:28.493Z [run-trace] #111 warm typst-pdf matrix-toc-depth/doc.qmd +0ms build-request
+
+2026-11-24T14:57:28.496Z [run-trace] #111 warm typst-pdf matrix-toc-depth/doc.qmd +3ms run (loader renders=27)
+
+2026-11-24T14:57:28.496Z [run-trace] #111 warm typst-pdf matrix-toc-depth/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:28.496Z [run-trace] #111 warm typst-pdf matrix-toc-depth/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:28.497Z [run-trace] #111 warm typst-pdf matrix-toc-depth/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:28.497Z [run-trace] #111 warm typst-pdf matrix-toc-depth/doc.qmd +5ms stage running
+
+2026-11-24T14:57:28.559Z [run-trace] #111 warm typst-pdf matrix-toc-depth/doc.qmd +66ms ok 63ms
+
+2026-11-24T14:57:28.559Z [run-trace] #112 warm typst-pdf matrix-highlight-none/doc.qmd +0ms build-request
+
+2026-11-24T14:57:28.562Z [run-trace] #112 warm typst-pdf matrix-highlight-none/doc.qmd +3ms run (loader renders=28)
+
+2026-11-24T14:57:28.562Z [run-trace] #112 warm typst-pdf matrix-highlight-none/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:28.563Z [run-trace] #112 warm typst-pdf matrix-highlight-none/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:28.563Z [run-trace] #112 warm typst-pdf matrix-highlight-none/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:28.564Z [run-trace] #112 warm typst-pdf matrix-highlight-none/doc.qmd +5ms stage running
+
+2026-11-24T14:57:28.620Z [run-trace] #112 warm typst-pdf matrix-highlight-none/doc.qmd +61ms ok 58ms
+
+2026-11-24T14:57:28.620Z [run-trace] #113 warm typst-pdf matrix-dark-brand/doc.qmd +0ms build-request
+
+2026-11-24T14:57:28.623Z [run-trace] #113 warm typst-pdf matrix-dark-brand/doc.qmd +3ms run (loader renders=29)
+
+2026-11-24T14:57:28.623Z [run-trace] #113 warm typst-pdf matrix-dark-brand/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:28.623Z [run-trace] #113 warm typst-pdf matrix-dark-brand/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:28.624Z [run-trace] #113 warm typst-pdf matrix-dark-brand/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:28.625Z [run-trace] #113 warm typst-pdf matrix-dark-brand/doc.qmd +5ms stage running
+
+2026-11-24T14:57:28.686Z [run-trace] #113 warm typst-pdf matrix-dark-brand/doc.qmd +66ms ok 63ms
+
+2026-11-24T14:57:28.686Z [run-trace] #114 warm typst-pdf matrix-dark-brand/doc.qmd +0ms build-request
+
+2026-11-24T14:57:28.690Z [run-trace] #114 warm typst-pdf matrix-dark-brand/doc.qmd +4ms run (loader renders=0)
+
+2026-11-24T14:57:28.690Z [run-trace] #114 warm typst-pdf matrix-dark-brand/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:29.170Z [run-trace] #114 warm typst-pdf matrix-dark-brand/doc.qmd +484ms stage starting
+
+2026-11-24T14:57:29.172Z [run-trace] #114 warm typst-pdf matrix-dark-brand/doc.qmd +486ms stage mounting
+
+2026-11-24T14:57:29.172Z [run-trace] #114 warm typst-pdf matrix-dark-brand/doc.qmd +486ms stage running
+
+2026-11-24T14:57:29.275Z [run-trace] #114 warm typst-pdf matrix-dark-brand/doc.qmd +590ms ok 586ms
+
+2026-11-24T14:57:29.276Z [run-trace] #115 warm typst-pdf shortcodes-typst/shortcodes.qmd +0ms build-request
+
+2026-11-24T14:57:29.280Z [run-trace] #115 warm typst-pdf shortcodes-typst/shortcodes.qmd +4ms run (loader renders=2)
+
+2026-11-24T14:57:29.280Z [run-trace] #115 warm typst-pdf shortcodes-typst/shortcodes.qmd +4ms stage loading
+
+2026-11-24T14:57:29.280Z [run-trace] #115 warm typst-pdf shortcodes-typst/shortcodes.qmd +4ms stage starting
+
+2026-11-24T14:57:29.285Z [run-trace] #115 warm typst-pdf shortcodes-typst/shortcodes.qmd +9ms stage mounting
+
+2026-11-24T14:57:29.285Z [run-trace] #115 warm typst-pdf shortcodes-typst/shortcodes.qmd +9ms stage running
+
+2026-11-24T14:57:29.362Z [run-trace] #115 warm typst-pdf shortcodes-typst/shortcodes.qmd +86ms ok 82ms
+
+2026-11-24T14:57:29.362Z [run-trace] #116 warm typst-pdf citations-typst/citations.qmd +0ms build-request
+
+2026-11-24T14:57:29.366Z [run-trace] #116 warm typst-pdf citations-typst/citations.qmd +4ms run (loader renders=3)
+
+2026-11-24T14:57:29.367Z [run-trace] #116 warm typst-pdf citations-typst/citations.qmd +4ms stage loading
+
+2026-11-24T14:57:29.367Z [run-trace] #116 warm typst-pdf citations-typst/citations.qmd +4ms stage starting
+
+2026-11-24T14:57:29.369Z [run-trace] #116 warm typst-pdf citations-typst/citations.qmd +7ms stage mounting
+
+2026-11-24T14:57:29.370Z [run-trace] #116 warm typst-pdf citations-typst/citations.qmd +8ms stage running
+
+2026-11-24T14:57:29.456Z [run-trace] #116 warm typst-pdf citations-typst/citations.qmd +94ms ok 90ms
+
+2026-11-24T14:57:29.456Z [run-trace] #117 warm typst-pdf matrix-citeproc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:29.460Z [run-trace] #117 warm typst-pdf matrix-citeproc/doc.qmd +4ms run (loader renders=4)
+
+2026-11-24T14:57:29.460Z [run-trace] #117 warm typst-pdf matrix-citeproc/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:29.460Z [run-trace] #117 warm typst-pdf matrix-citeproc/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:29.461Z [run-trace] #117 warm typst-pdf matrix-citeproc/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:29.461Z [run-trace] #117 warm typst-pdf matrix-citeproc/doc.qmd +5ms stage running
+
+2026-11-24T14:57:29.540Z [run-trace] #117 warm typst-pdf matrix-citeproc/doc.qmd +84ms ok 80ms
+
+2026-11-24T14:57:29.540Z [run-trace] #118 warm typst-pdf matrix-toc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:29.543Z [run-trace] #118 warm typst-pdf matrix-toc/doc.qmd +3ms run (loader renders=6)
+
+2026-11-24T14:57:29.543Z [run-trace] #118 warm typst-pdf matrix-toc/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:29.543Z [run-trace] #118 warm typst-pdf matrix-toc/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:29.545Z [run-trace] #118 warm typst-pdf matrix-toc/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:29.545Z [run-trace] #118 warm typst-pdf matrix-toc/doc.qmd +5ms stage running
+
+2026-11-24T14:57:29.607Z [run-trace] #118 warm typst-pdf matrix-toc/doc.qmd +67ms ok 64ms
+
+2026-11-24T14:57:29.607Z [run-trace] #119 warm typst-pdf matrix-reference-doc/doc.qmd +0ms build-request
+
+2026-11-24T14:57:29.610Z [run-trace] #119 warm typst-pdf matrix-reference-doc/doc.qmd +3ms run (loader renders=7)
+
+2026-11-24T14:57:29.610Z [run-trace] #119 warm typst-pdf matrix-reference-doc/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:29.611Z [run-trace] #119 warm typst-pdf matrix-reference-doc/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:29.612Z [run-trace] #119 warm typst-pdf matrix-reference-doc/doc.qmd +5ms stage mounting
+
+2026-11-24T14:57:29.612Z [run-trace] #119 warm typst-pdf matrix-reference-doc/doc.qmd +5ms stage running
+
+2026-11-24T14:57:29.683Z [run-trace] #119 warm typst-pdf matrix-reference-doc/doc.qmd +76ms ok 73ms
+
+2026-11-24T14:57:29.683Z [run-trace] #120 warm typst-pdf matrix-highlight-palette/doc.qmd +0ms build-request
+
+2026-11-24T14:57:29.686Z [run-trace] #120 warm typst-pdf matrix-highlight-palette/doc.qmd +4ms run (loader renders=8)
+
+2026-11-24T14:57:29.687Z [run-trace] #120 warm typst-pdf matrix-highlight-palette/doc.qmd +4ms stage loading
+
+2026-11-24T14:57:29.687Z [run-trace] #120 warm typst-pdf matrix-highlight-palette/doc.qmd +4ms stage starting
+
+2026-11-24T14:57:29.692Z [run-trace] #120 warm typst-pdf matrix-highlight-palette/doc.qmd +9ms stage mounting
+
+2026-11-24T14:57:29.692Z [run-trace] #120 warm typst-pdf matrix-highlight-palette/doc.qmd +9ms stage running
+
+2026-11-24T14:57:29.754Z [run-trace] #120 warm typst-pdf matrix-highlight-palette/doc.qmd +71ms ok 67ms
+
+2026-11-24T14:57:29.754Z [run-trace] #121 warm typst-pdf matrix-highlight-theme-file/doc.qmd +0ms build-request
+
+2026-11-24T14:57:29.757Z [run-trace] #121 warm typst-pdf matrix-highlight-theme-file/doc.qmd +3ms run (loader renders=9)
+
+2026-11-24T14:57:29.757Z [run-trace] #121 warm typst-pdf matrix-highlight-theme-file/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:29.757Z [run-trace] #121 warm typst-pdf matrix-highlight-theme-file/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:29.758Z [run-trace] #121 warm typst-pdf matrix-highlight-theme-file/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:29.759Z [run-trace] #121 warm typst-pdf matrix-highlight-theme-file/doc.qmd +5ms stage running
+
+2026-11-24T14:57:29.857Z [run-trace] #121 warm typst-pdf matrix-highlight-theme-file/doc.qmd +102ms ok 99ms
+
+2026-11-24T14:57:29.857Z [run-trace] #122 warm typst-pdf matrix-plain/doc.qmd +0ms build-request
+
+2026-11-24T14:57:29.860Z [run-trace] #122 warm typst-pdf matrix-plain/doc.qmd +3ms run (loader renders=10)
+
+2026-11-24T14:57:29.860Z [run-trace] #122 warm typst-pdf matrix-plain/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:29.860Z [run-trace] #122 warm typst-pdf matrix-plain/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:29.861Z [run-trace] #122 warm typst-pdf matrix-plain/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:29.862Z [run-trace] #122 warm typst-pdf matrix-plain/doc.qmd +5ms stage running
+
+2026-11-24T14:57:29.926Z [run-trace] #122 warm typst-pdf matrix-plain/doc.qmd +69ms ok 66ms
+
+2026-11-24T14:57:29.926Z [run-trace] #123 warm typst-pdf images-typst/images.qmd +0ms build-request
+
+2026-11-24T14:57:29.930Z [run-trace] #123 warm typst-pdf images-typst/images.qmd +4ms run (loader renders=11)
+
+2026-11-24T14:57:29.930Z [run-trace] #123 warm typst-pdf images-typst/images.qmd +4ms stage loading
+
+2026-11-24T14:57:29.930Z [run-trace] #123 warm typst-pdf images-typst/images.qmd +4ms stage starting
+
+2026-11-24T14:57:29.931Z [run-trace] #123 warm typst-pdf images-typst/images.qmd +5ms stage mounting
+
+2026-11-24T14:57:29.931Z [run-trace] #123 warm typst-pdf images-typst/images.qmd +6ms stage running
+
+2026-11-24T14:57:30.001Z [run-trace] #123 warm typst-pdf images-typst/images.qmd +75ms ok 71ms
+
+2026-11-24T14:57:30.001Z [run-trace] #124 warm typst-pdf matrix-toc-depth-only/doc.qmd +0ms build-request
+
+2026-11-24T14:57:30.005Z [run-trace] #124 warm typst-pdf matrix-toc-depth-only/doc.qmd +3ms run (loader renders=12)
+
+2026-11-24T14:57:30.005Z [run-trace] #124 warm typst-pdf matrix-toc-depth-only/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:30.005Z [run-trace] #124 warm typst-pdf matrix-toc-depth-only/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:30.006Z [run-trace] #124 warm typst-pdf matrix-toc-depth-only/doc.qmd +4ms stage mounting
+
+2026-11-24T14:57:30.006Z [run-trace] #124 warm typst-pdf matrix-toc-depth-only/doc.qmd +4ms stage running
+
+2026-11-24T14:57:30.065Z [run-trace] #124 warm typst-pdf matrix-toc-depth-only/doc.qmd +63ms ok 60ms
+
+2026-11-24T14:57:30.065Z [run-trace] #125 warm typst-pdf callouts-typst/callouts.qmd +0ms build-request
+
+2026-11-24T14:57:30.070Z [run-trace] #125 warm typst-pdf callouts-typst/callouts.qmd +5ms run (loader renders=13)
+
+2026-11-24T14:57:30.070Z [run-trace] #125 warm typst-pdf callouts-typst/callouts.qmd +5ms stage loading
+
+2026-11-24T14:57:30.070Z [run-trace] #125 warm typst-pdf callouts-typst/callouts.qmd +5ms stage starting
+
+2026-11-24T14:57:30.071Z [run-trace] #125 warm typst-pdf callouts-typst/callouts.qmd +6ms stage mounting
+
+2026-11-24T14:57:30.071Z [run-trace] #125 warm typst-pdf callouts-typst/callouts.qmd +7ms stage running
+
+2026-11-24T14:57:30.200Z [run-trace] #125 warm typst-pdf callouts-typst/callouts.qmd +135ms ok 130ms
+
+2026-11-24T14:57:30.200Z [run-trace] #126 warm typst-pdf matrix-top-level-division/doc.qmd +0ms build-request
+
+2026-11-24T14:57:30.203Z [run-trace] #126 warm typst-pdf matrix-top-level-division/doc.qmd +3ms run (loader renders=14)
+
+2026-11-24T14:57:30.203Z [run-trace] #126 warm typst-pdf matrix-top-level-division/doc.qmd +3ms stage loading
+
+2026-11-24T14:57:30.203Z [run-trace] #126 warm typst-pdf matrix-top-level-division/doc.qmd +3ms stage starting
+
+2026-11-24T14:57:30.206Z [run-trace] #126 warm typst-pdf matrix-top-level-division/doc.qmd +6ms stage mounting
+
+2026-11-24T14:57:30.217Z [run-trace] #126 warm typst-pdf matrix-top-level-division/doc.qmd +17ms stage running
+
+2026-11-24T14:57:30.282Z [run-trace] #126 warm typst-pdf matrix-top-level-division/doc.qmd +82ms ok 79ms
+
+2026-11-24T14:57:30.282Z [run-trace] #127 warm typst-pdf tables-typst/tables.qmd +0ms build-request
+
+2026-11-24T14:57:30.286Z [run-trace] #127 warm typst-pdf tables-typst/tables.qmd +4ms run (loader renders=15)
+
+2026-11-24T14:57:30.286Z [run-trace] #127 warm typst-pdf tables-typst/tables.qmd +4ms stage loading
+
+2026-11-24T14:57:30.286Z [run-trace] #127 warm typst-pdf tables-typst/tables.qmd +4ms stage starting
+
+2026-11-24T14:57:30.287Z [run-trace] #127 warm typst-pdf tables-typst/tables.qmd +5ms stage mounting
+
+2026-11-24T14:57:30.287Z [run-trace] #127 warm typst-pdf tables-typst/tables.qmd +6ms stage running
+
+2026-11-24T14:57:30.385Z [run-trace] #127 warm typst-pdf tables-typst/tables.qmd +103ms ok 99ms
+
+2026-11-24T14:57:30.385Z [run-trace] #128 warm typst-pdf crossrefs-typst/all-docx.qmd +0ms build-request
+
+2026-11-24T14:57:30.391Z [run-trace] #128 warm typst-pdf crossrefs-typst/all-docx.qmd +6ms run (loader renders=16)
+
+2026-11-24T14:57:30.391Z [run-trace] #128 warm typst-pdf crossrefs-typst/all-docx.qmd +6ms stage loading
+
+2026-11-24T14:57:30.391Z [run-trace] #128 warm typst-pdf crossrefs-typst/all-docx.qmd +6ms stage starting
+
+2026-11-24T14:57:30.392Z [run-trace] #128 warm typst-pdf crossrefs-typst/all-docx.qmd +7ms stage mounting
+
+2026-11-24T14:57:30.393Z [run-trace] #128 warm typst-pdf crossrefs-typst/all-docx.qmd +8ms stage running
+
+2026-11-24T14:57:30.497Z [run-trace] #128 warm typst-pdf crossrefs-typst/all-docx.qmd +112ms ok 106ms
+
+  4 passed (29.2s)

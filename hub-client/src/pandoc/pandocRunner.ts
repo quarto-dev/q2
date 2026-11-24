@@ -16,6 +16,13 @@ import { PandocLoadError, type LoadProgress, type PandocLoader } from './pandocL
 /** Wall limit for one render: wasm cannot be interrupted, so a runaway filter is terminated. */
 export const DEFAULT_WALL_TIMEOUT_MS = 120_000;
 
+/**
+ * Limit for a fresh worker to answer `init` with `ready` (instantiating the already-compiled module). Before
+ * this deadline existed the wall timeout was armed only at `ready`, so a worker that stalled during start left
+ * `run()` pending forever (#1266: WebKit in CI hung to the 900 s test timeout with nothing in the log).
+ */
+export const DEFAULT_START_TIMEOUT_MS = 60_000;
+
 /** The slice of `Worker` the runner uses; tests supply a fake. */
 export interface WorkerLike {
   postMessage(message: unknown, transfer?: Transferable[]): void;
@@ -141,6 +148,8 @@ export interface RunnerConfig {
   loader: PandocLoader;
   createWorker: () => WorkerLike;
   wallTimeoutMs?: number;
+  /** See `DEFAULT_START_TIMEOUT_MS`. */
+  startTimeoutMs?: number;
   limits?: Limits;
   /** The runner's clock (grace median, warm-up threshold); default `performance.now`. Warm runner only. */
   now?: () => number;
@@ -183,6 +192,7 @@ export class PandocRunner {
   private readonly loader: PandocLoader;
   private readonly createWorker: () => WorkerLike;
   private readonly wallTimeoutMs: number;
+  private readonly startTimeoutMs: number;
   private readonly limits?: Limits;
   private current: { abort: (reason: Error) => void } | undefined;
   private nextId = 1;
@@ -191,6 +201,7 @@ export class PandocRunner {
     this.loader = config.loader;
     this.createWorker = config.createWorker;
     this.wallTimeoutMs = config.wallTimeoutMs ?? DEFAULT_WALL_TIMEOUT_MS;
+    this.startTimeoutMs = config.startTimeoutMs ?? DEFAULT_START_TIMEOUT_MS;
     this.limits = config.limits;
   }
 
@@ -265,6 +276,7 @@ export class PandocRunner {
           if (settled) return;
           if (msg.type === 'ready') {
             ready = true;
+            if (timer !== undefined) clearTimeout(timer);
             const prepared = prepareForPost(request);
             const inputs = options.inputs ? prepareInputsForPost(options.inputs) : undefined;
             const run: WorkerRequest = { type: 'run', id, request: prepared.value, shareTree, fault: options.fault, ...(inputs ? { inputs: inputs.value } : {}) };
@@ -291,6 +303,10 @@ export class PandocRunner {
         };
         worker.onmessageerror = () => settle(failure('crash', [host('pandoc-crash', 'The pandoc worker sent a message that could not be read.')], notices));
         const init: WorkerRequest = { type: 'init', module: loaded.module, limits: this.limits };
+        const startMs = this.startTimeoutMs;
+        timer = setTimeout(() => {
+          settle(failure('timeout', [host('pandoc-timeout', `The pandoc worker did not start within ${Math.round(startMs / 1000)} s and was stopped.`)], notices));
+        }, startMs);
         try {
           worker.postMessage(init);
         } catch (e) {

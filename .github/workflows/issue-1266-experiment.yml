@@ -1,0 +1,140 @@
+name: "Experiment: #1266 WebKit pandoc-warm hang"
+
+# Temporary (issue #1266, bd-gogn12rc). Runs the WebKit pandoc harness step from
+# hub-client-e2e.yml with the pandoc-warm WebKit skip lifted and per-run stage
+# tracing on, in two variants, three times each:
+#   app     the page boots the full app, as in CI since #1210
+#   no-app  the page boots without mounting the app (no project set, no sync adapter)
+# Delete this file before the branch merges.
+
+on:
+  push:
+    branches:
+      - experiment/issue-1266
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  webkit-pandoc:
+    runs-on: ubuntu-latest
+    if: github.repository == 'quarto-dev/q2'
+    name: WebKit pandoc (${{ matrix.variant }}, attempt ${{ matrix.attempt }})
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [app, no-app]
+        attempt: [1, 2, 3]
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v6
+
+      - name: Set up Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+          components: rust-src
+
+      - name: Set up Clang
+        uses: egor-tensin/setup-clang@v2
+        with:
+          version: latest
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      - name: Install wasm-bindgen-cli
+        run: |
+          VERSION=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/version = |"/, ""); print; exit}' Cargo.lock)
+          cargo install -f wasm-bindgen-cli --version "$VERSION"
+
+      - name: Set up tree-sitter CLI
+        run: |
+          curl -LO https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-linux-x86.gz
+          gunzip tree-sitter-linux-x86.gz
+          chmod +x tree-sitter-linux-x86
+          sudo mv tree-sitter-linux-x86 /usr/local/bin/tree-sitter
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install binaryen (wasm-opt)
+        run: npm install -g binaryen@132.0.0
+
+      - name: Build WASM
+        run: |
+          cd hub-client
+          npm run build:wasm
+
+      - name: Cache pandoc.wasm and typst assets
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/pandoc-wasm
+            .cache/typst-assets
+          key: pandoc-wasm-${{ hashFiles('resources/pandoc-wasm.json', 'resources/typst-wasm.json') }}
+
+      - name: Fetch pandoc.wasm
+        run: node scripts/fetch-pandoc-wasm.mjs --require
+
+      - name: Build TypeScript packages (ts-packages + hub-client)
+        env:
+          VITE_E2E: '1'
+          VITE_DEFAULT_SYNC_SERVER: '/ws'
+          VITE_Q2_SANDBOXED_PREVIEW_URL: 'q2-sandboxed-preview/index.html'
+        run: |
+          for pkg in ts-packages/*/; do
+            if [ -f "$pkg/package.json" ]; then
+              npm run build --workspace "$pkg" --if-present
+            fi
+          done
+          npm run build:sandboxed --workspace hub-client --if-present
+          npm run build --workspace hub-client --if-present
+
+      - name: Install Playwright WebKit
+        run: |
+          cd hub-client
+          npx playwright install --with-deps webkit
+
+      - name: Probe WebKit for pandoc.wasm features
+        run: |
+          cd hub-client
+          npx playwright test --config playwright.harness.config.ts --project=webkit \
+            --workers=1 --retries=0 e2e/pandoc-browser-probe.harness.spec.ts
+
+      # The same command as hub-client-e2e.yml's "Run pandoc harness tests in WebKit"
+      # (all pandoc/typst specs, in order), with the skip lifted and tracing on.
+      - name: Run pandoc harness tests in WebKit
+        env:
+          ISSUE_1266: '1'
+          ISSUE_1266_TRACE: '1'
+          ISSUE_1266_NO_APP: ${{ matrix.variant == 'no-app' && '1' || '' }}
+        run: |
+          cd hub-client
+          npx playwright test --config playwright.harness.config.ts --project=webkit --workers=1 \
+            --reporter=line
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.variant }}-${{ matrix.attempt }}
+          path: |
+            hub-client/playwright-report/
+            hub-client/test-results/
+          retention-days: 14

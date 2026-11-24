@@ -62,6 +62,13 @@ const shareTreeOnce = (): ShareTree => (cachedShareTree ??= wasmRenderer.getPand
  * real Rust export through the warm runner (the preview's) or the fresh one (the app-wide), chosen per call.
  */
 function warmHooks() {
+  // #1266 diagnostics: with `window.__QUARTO_TEST_TRACE_RUNS__` set (an init script in the spec), every hook run
+  // logs its stages to the console, which the spec forwards to the CI log, so a hang names its doc and stage.
+  let traceSeq = 0;
+  const tracing = () => (window as Window & { __QUARTO_TEST_TRACE_RUNS__?: boolean }).__QUARTO_TEST_TRACE_RUNS__ === true;
+  const trace = (seq: number, t0: number, path: string, mode: string, format: string, what: string) => {
+    if (tracing()) console.log(`[run-trace] #${seq} ${mode} ${format} ${path.split('/').slice(-2).join('/')} +${Math.round(performance.now() - t0)}ms ${what}`);
+  };
   async function buildRequest(path: string, format: string, env?: Record<string, string>, fonts?: string[]): Promise<PandocRequest> {
     await wasmRenderer.initWasm();
     const envelope = await wasmRenderer.renderPandocRequest(path, format, { sourceDateEpoch: 1_700_000_000, typstAvailableFonts: fonts });
@@ -75,11 +82,23 @@ function warmHooks() {
     mode: 'warm' | 'fresh',
     options: { format?: string; env?: Record<string, string>; fault?: Fault; fonts?: string[]; wallTimeoutMs?: number; docKey?: string } = {},
   ): Promise<HookRun> {
-    const request = await buildRequest(path, options.format ?? 'typst', options.env, options.fonts);
+    const seq = ++traceSeq;
+    const tq = performance.now();
+    const format = options.format ?? 'typst';
+    const tr = (what: string) => trace(seq, tq, path, mode, format, what);
+    tr('build-request');
+    const request = await buildRequest(path, format, options.env, options.fonts);
     const runner = mode === 'warm' ? getPreviewPandocRunner() : getPandoc().runner;
+    tr(`run (loader renders=${getPandoc().loader.renders})`);
     const t0 = performance.now();
-    const outcome: RunOutcome = await runner.run(request, shareTreeOnce(), { fault: options.fault, wallTimeoutMs: options.wallTimeoutMs, docKey: options.docKey });
+    const outcome: RunOutcome = await runner.run(request, shareTreeOnce(), {
+      fault: options.fault,
+      wallTimeoutMs: options.wallTimeoutMs,
+      docKey: options.docKey,
+      onStage: (stage) => tr(`stage ${stage}`),
+    });
     const elapsedMs = performance.now() - t0;
+    tr(outcome.ok ? `ok ${Math.round(elapsedMs)}ms` : `failed ${outcome.kind}: ${outcome.diagnostics.map((d) => d.message).join(' | ')}`);
     if (outcome.ok) {
       return {
         ok: true,

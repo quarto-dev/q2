@@ -65,7 +65,13 @@ const root = (
   </StrictMode>
 );
 
-createRoot(document.getElementById('root')!).render(
+// #1266 experiment: a harness spec can boot the page without the app (no project set, no sync adapter,
+// no ProjectsHome) so the pandoc hooks run on an otherwise idle page. E2E builds only.
+const skipApp =
+  import.meta.env.VITE_E2E === '1' &&
+  (window as Window & { __QUARTO_TEST_NO_APP__?: boolean }).__QUARTO_TEST_NO_APP__ === true
+
+if (!skipApp) createRoot(document.getElementById('root')!).render(
   <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID || 'disabled'}>
     <AuthProviderRoot provider={authProvider}>
       {root}

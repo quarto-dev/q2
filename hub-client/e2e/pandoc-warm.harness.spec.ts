@@ -25,7 +25,8 @@ test.describe.configure({ mode: 'serial', retries: 0 });
 
 // Skipped in WebKit (#1266): since #1210 the first fresh pandoc run hangs here in CI's Linux WebKit,
 // so every spec in this file hits its timeout. Remove this once #1266 is fixed.
-test.skip(({ browserName }) => browserName === 'webkit', 'hangs in WebKit since #1210; see #1266');
+// `ISSUE_1266=1` lifts the skip for the #1266 CI experiment.
+test.skip(({ browserName }) => browserName === 'webkit' && !process.env.ISSUE_1266, 'hangs in WebKit since #1210; see #1266');
 
 export interface SeedDoc {
   name: string;
@@ -43,6 +44,23 @@ export const matrix = (): SeedDoc[] => matrixDocs().map((d) => ({ name: `matrix-
 export const qmdPath = (d: SeedDoc) => `${DOC_DIR}/${d.name}/${d.qmd}`;
 
 export async function boot(page: Page) {
+  // #1266 experiment switches: ISSUE_1266_TRACE forwards the hooks' per-run stage trace to stdout;
+  // ISSUE_1266_NO_APP boots the page without mounting the app (see `skipApp` in src/main.tsx).
+  if (process.env.ISSUE_1266_TRACE) {
+    await page.addInitScript(() => {
+      (window as Window & { __QUARTO_TEST_TRACE_RUNS__?: boolean }).__QUARTO_TEST_TRACE_RUNS__ = true;
+    });
+    page.on('console', (m) => {
+      const t = m.text();
+      if (t.startsWith('[run-trace]')) console.log(`${new Date().toISOString()} ${t}`);
+    });
+    page.on('crash', () => console.log(`${new Date().toISOString()} [run-trace] page crashed`));
+  }
+  if (process.env.ISSUE_1266_NO_APP) {
+    await page.addInitScript(() => {
+      (window as Window & { __QUARTO_TEST_NO_APP__?: boolean }).__QUARTO_TEST_NO_APP__ = true;
+    });
+  }
   await page.goto('/');
   await page.waitForFunction(() => !!window.__quartoTestReady);
   await page.evaluate(async () => {

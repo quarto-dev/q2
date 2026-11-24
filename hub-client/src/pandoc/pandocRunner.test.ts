@@ -5,12 +5,13 @@ import { PandocRunner, uiStateFor, type RunOutcome } from './pandocRunner';
 import { smokeJob } from './smokeJob';
 import { FakeWorker, OK_RESULT, fakeLoader } from '../test-utils/fakePandocRunner';
 
-function setup(opts: { load?: PandocLoader['load']; wallTimeoutMs?: number; autoReady?: boolean } = {}) {
+function setup(opts: { load?: PandocLoader['load']; wallTimeoutMs?: number; startTimeoutMs?: number; autoReady?: boolean } = {}) {
   const workers: FakeWorker[] = [];
   const { loader, holds } = fakeLoader(opts.load);
   const runner = new PandocRunner({
     loader,
     wallTimeoutMs: opts.wallTimeoutMs,
+    startTimeoutMs: opts.startTimeoutMs,
     createWorker: () => {
       const w = new FakeWorker();
       w.autoReady = opts.autoReady ?? true;
@@ -130,6 +131,47 @@ describe('PandocRunner: abort, timeout, supersede', () => {
       expect(workers[0].terminated).toBe(1);
       expect(holds.active).toBe(0);
       expect(uiStateFor(out)).toBe('timeout');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a worker that never answers init is stopped at the start deadline, not left to hang (#1266)', async () => {
+    vi.useFakeTimers();
+    try {
+      const { runner, workers, holds } = setup({ autoReady: false, startTimeoutMs: 60_000, wallTimeoutMs: 120_000 });
+      const stages: string[] = [];
+      const { request, shareTree } = job();
+      const p = runner.run(request, shareTree, { onStage: (s) => stages.push(s) });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(workers[0].posts.map((m) => m.type)).toEqual(['init']);
+      await vi.advanceTimersByTimeAsync(59_000);
+      expect(workers[0].terminated).toBe(0);
+      await vi.advanceTimersByTimeAsync(2_000);
+      const out = await p;
+      expect(out).toMatchObject({ ok: false, kind: 'timeout' });
+      expect(out.diagnostics[0]).toMatchObject({ origin: 'host', code: 'pandoc-timeout' });
+      expect(out.diagnostics[0].message).toMatch(/did not start/);
+      expect(workers[0].terminated).toBe(1);
+      expect(holds.active).toBe(0);
+      expect(stages).toEqual(['loading', 'starting']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('the start deadline is cleared once the worker is ready; the wall timeout then governs', async () => {
+    vi.useFakeTimers();
+    try {
+      const { runner, workers } = setup({ startTimeoutMs: 1_000, wallTimeoutMs: 120_000 });
+      const { request, shareTree } = job();
+      const p = runner.run(request, shareTree);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(workers[0].posts.map((m) => m.type)).toEqual(['init', 'run']);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(workers[0].terminated).toBe(0);
+      workers[0].respond(OK_RESULT());
+      expect((await p).ok).toBe(true);
     } finally {
       vi.useRealTimers();
     }
