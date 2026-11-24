@@ -1,0 +1,22 @@
+---
+title: "Issue 1296: mermaid ignores mermaid SCSS theme variables"
+format:
+  html:
+    theme:
+      light: [cosmo, custom.scss]
+      dark: [darkly, custom.scss]
+---
+
+```mermaid
+sequenceDiagram
+  Alice->>Bob: Hello
+  Bob-->>Alice: Hi
+```
+
+```mermaid
+graph LR
+  subgraph Cluster title
+    A --> B
+  end
+  B --> C
+```
