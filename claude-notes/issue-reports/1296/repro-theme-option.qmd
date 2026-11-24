@@ -1,0 +1,11 @@
+---
+title: "Issue 1296: mermaid: theme: option"
+format: html
+mermaid:
+  theme: forest
+---
+
+```mermaid
+graph LR
+  A --> B
+```

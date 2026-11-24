@@ -2082,6 +2082,60 @@ pre.graphviz.quarto-figure-right > svg {
   margin-right: 0;
 }
 
+// Mermaid theming (bd-sehm2rha, GH #1296). Ported from Quarto 1's
+// `_quarto-rules.scss` "Mermaid Theming" block. Kept in step with the
+// revealjs copy in `resources/scss/revealjs/quarto-revealjs.scss`.
+//
+// The `$mermaid-*` variables (documented in quarto-web
+// `docs/authoring/_mermaid-theming.qmd`) are published as `--mermaid-*`
+// custom properties. The `themeCSS` that `transforms/mermaid.rs` passes to
+// `mermaid.initialize` reads them through `var()`, so the light and dark
+// stylesheets each carry their own diagram colors and toggling the color
+// scheme re-themes rendered diagrams without re-running mermaid.
+//
+// Two deliberate differences from Quarto 1:
+// - Q1 declares `$mermaid-node-fg-color` twice (`$body-color`, then
+//   `$primary`); with `!default` the first one wins, so it is declared once,
+//   as `$body-color`, to keep Q1's rendered colors.
+// - Q1's themeCSS reads `var(--mermaid-font-weight)` but never defines it;
+//   it is defined here.
+// - The block is `:where(:root)` (zero specificity), not `:root`. q2 emits
+//   these rules after a theme's own rules, so with `:root` a theme that sets a
+//   property by hand (posit-docs sets `--mermaid-font-weight` because Q1 never
+//   did) would be silently overridden.
+$body-color: #222 !default;
+$body-bg: #fff !default;
+$primary: #468 !default;
+$secondary: #999 !default;
+$font-family-sans-serif: sans-serif !default;
+$font-weight-base: 400 !default;
+
+$mermaid-bg-color: $body-bg !default;
+$mermaid-edge-color: $secondary !default;
+$mermaid-node-fg-color: $body-color !default;
+$mermaid-fg-color: $body-color !default;
+$mermaid-fg-color--lighter: lighten($body-color, 10%) !default;
+$mermaid-fg-color--lightest: lighten($body-color, 20%) !default;
+$mermaid-font-family: $font-family-sans-serif !default;
+$mermaid-font-weight: $font-weight-base !default;
+$mermaid-label-bg-color: $body-bg !default;
+$mermaid-label-fg-color: $primary !default;
+$mermaid-node-bg-color: rgba($primary, 0.1) !default;
+
+:where(:root) {
+  --mermaid-bg-color: #{$mermaid-bg-color};
+  --mermaid-edge-color: #{$mermaid-edge-color};
+  --mermaid-node-fg-color: #{$mermaid-node-fg-color};
+  --mermaid-fg-color: #{$mermaid-fg-color};
+  --mermaid-fg-color--lighter: #{$mermaid-fg-color--lighter};
+  --mermaid-fg-color--lightest: #{$mermaid-fg-color--lightest};
+  --mermaid-font-family: #{inspect($mermaid-font-family)};
+  --mermaid-font-weight: #{$mermaid-font-weight};
+  --mermaid-label-bg-color: #{$mermaid-label-bg-color};
+  --mermaid-label-fg-color: #{$mermaid-label-fg-color};
+  --mermaid-node-bg-color: #{$mermaid-node-bg-color};
+}
+
 figure .quarto-notebook-link {
   margin-top: 0.5em;
 }

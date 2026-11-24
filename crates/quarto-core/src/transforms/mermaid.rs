@@ -145,6 +145,26 @@ const MERMAID_ARTIFACT_KEY: &str = "mermaid:runtime";
 /// attribution-viewer includes).
 const MERMAID_JS_SENTINEL: &str = "<!-- quarto-mermaid-js -->";
 
+/// The stylesheet passed to `mermaid.initialize` as `themeCSS` when the
+/// document does not pick a built-in mermaid theme (bd-sehm2rha, GH #1296).
+///
+/// Ported from the `defaultCSS` string in Quarto 1's
+/// `formats/html/mermaid/mermaid-init.js` (itself adapted from
+/// mkdocs-material, Copyright (c) 2016-2022 Martin Donath, MIT). Every color
+/// and font is a `var(--mermaid-*)` reference; the Bootstrap and reveal
+/// stylesheets define those properties from the `$mermaid-*` SCSS variables
+/// (see the "Mermaid theming" block in `_bootstrap-rules.scss`). The light
+/// and dark stylesheets carry different values, so a color-scheme toggle
+/// re-themes diagrams that have already rendered.
+///
+/// mermaid scopes `themeCSS` under the diagram's `#mermaid-N` id and appends
+/// it after its own theme rules in the same `<style>` element, so a rule here
+/// beats a built-in rule of the same specificity.
+///
+/// One rule per line in the source file; [`mermaid_init_options`] joins the
+/// lines.
+const MERMAID_THEME_CSS: &str = include_str!("mermaid_theme.css");
+
 /// See module docs.
 pub struct MermaidRenderTransform;
 
@@ -188,11 +208,12 @@ impl AstTransform for MermaidRenderTransform {
             // line, so they ship no runtime and no script.
             register_mermaid_assets(&mut ctx.artifacts);
             let runtime_url = mermaid_runtime_url(ctx);
+            let options = mermaid_init_options(mermaid_builtin_theme(&ast.meta).as_deref());
             append_with_sentinel(
                 &mut ast.meta,
                 "after-body",
                 MERMAID_JS_SENTINEL,
-                mermaid_script_block(&runtime_url),
+                mermaid_script_block(&runtime_url, &options),
             );
         }
         Ok(())
@@ -330,13 +351,13 @@ fn convert_mermaid_blocks(blocks: &mut Blocks, found: &mut bool) {
 /// `<html>` hidden until its own `DOMContentLoaded` handler (registered
 /// earlier, in the head) shows it. Measured hidden, every diagram lays
 /// out at 16x16. Quarto 1's `mermaid-init.js` waits for `load`.
-fn mermaid_script_block(runtime_url: &str) -> String {
+fn mermaid_script_block(runtime_url: &str, init_options: &str) -> String {
     format!(
         "{MERMAID_JS_SENTINEL}\n\
          <script src=\"{}\"></script>\n\
          <script>\n\
          (function () {{\n\
-         \x20 mermaid.initialize({{ startOnLoad: false }});\n\
+         \x20 mermaid.initialize({init_options});\n\
          \x20 const run = () => mermaid.run({{ querySelector: 'pre.mermaid' }});\n\
          \x20 if (document.readyState === 'loading') {{\n\
          \x20   document.addEventListener('DOMContentLoaded', run);\n\
@@ -347,6 +368,44 @@ fn mermaid_script_block(runtime_url: &str) -> String {
          </script>",
         html_escape(runtime_url)
     )
+}
+
+/// The document's built-in mermaid theme (`mermaid: theme: forest`), if any.
+///
+/// Quarto 1 reads the same key (schema `document-mermaid.yml`: `default`,
+/// `dark`, `forest` or `neutral`) and passes it through to mermaid without
+/// checking it; so does this.
+fn mermaid_builtin_theme(meta: &quarto_pandoc_types::ConfigValue) -> Option<String> {
+    // `as_plain_text`, not `as_str`: a bare front-matter string is stored
+    // as `PandocInlines` (see `resolve_default_copy_mode`).
+    meta.get_path(&["mermaid", "theme"])
+        .and_then(|v| v.as_plain_text())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// The object literal passed to `mermaid.initialize`.
+///
+/// As in Quarto 1's `mermaid-init.js`: a built-in theme replaces the
+/// Quarto `themeCSS` entirely; without one, mermaid keeps its `default`
+/// theme as the base and [`MERMAID_THEME_CSS`] restyles it from the
+/// `--mermaid-*` custom properties.
+fn mermaid_init_options(builtin_theme: Option<&str>) -> String {
+    match builtin_theme {
+        Some(theme) => format!("{{ startOnLoad: false, theme: {} }}", js_string(theme)),
+        None => {
+            let css: String = MERMAID_THEME_CSS.lines().map(str::trim).collect();
+            format!("{{ startOnLoad: false, themeCSS: {} }}", js_string(&css))
+        }
+    }
+}
+
+/// A JavaScript string literal for `s`, safe inside an inline `<script>`:
+/// JSON-quoted, with `<` escaped so a value cannot close the element.
+fn js_string(s: &str) -> String {
+    serde_json::to_string(s)
+        .expect("a string always serializes")
+        .replace('<', "\\u003c")
 }
 
 /// HTML-escape diagram source for embedding as `<pre>` text content.
@@ -460,8 +519,8 @@ mod tests {
         assert_eq!(includes.len(), 1);
         let script = &includes[0];
         assert!(
-            script.contains("mermaid.initialize({ startOnLoad: false })"),
-            "script must initialize with startOnLoad false; got:\n{script}"
+            script.contains("mermaid.initialize({ startOnLoad: false, themeCSS: \""),
+            "script must initialize with startOnLoad false and the Quarto themeCSS; got:\n{script}"
         );
         assert!(
             script.contains("mermaid.run({ querySelector: 'pre.mermaid' })"),
@@ -756,7 +815,7 @@ mod tests {
     /// runs at once.
     #[test]
     fn script_runs_diagrams_after_the_document_has_parsed() {
-        let script = mermaid_script_block("mermaid.min.js");
+        let script = mermaid_script_block("mermaid.min.js", "{ startOnLoad: false }");
         let inline = script
             .split_once("<script>\n")
             .map(|(_, rest)| rest)
@@ -1014,5 +1073,85 @@ mod tests {
             ast.blocks[0]
         );
         assert!(after_body_includes(&ast.meta).is_empty());
+    }
+
+    /// Without `mermaid: theme:`, the init passes Quarto's `themeCSS`
+    /// (bd-sehm2rha, GH #1296): every color comes from a `--mermaid-*`
+    /// custom property that the theme stylesheet defines, and no built-in
+    /// `theme` is set.
+    #[tokio::test]
+    async fn default_init_passes_theme_css_driven_by_css_variables() {
+        let mut ast = Pandoc {
+            meta: default_meta(),
+            blocks: vec![make_codeblock(&["mermaid"], "flowchart LR\n  a --> b")],
+        };
+        run_transform(&mut ast, Format::html()).await;
+        let script = &after_body_includes(&ast.meta)[0];
+
+        let init = script
+            .lines()
+            .find(|l| l.contains("mermaid.initialize("))
+            .expect("initialize call");
+        assert!(init.contains("themeCSS: \""), "got: {init}");
+        assert!(!init.contains("theme: "), "got: {init}");
+        for var in [
+            "--mermaid-fg-color",
+            "--mermaid-edge-color",
+            "--mermaid-node-bg-color",
+            "--mermaid-node-fg-color",
+            "--mermaid-label-fg-color",
+            "--mermaid-label-bg-color",
+            "--mermaid-font-family",
+            "--mermaid-font-weight",
+        ] {
+            assert!(
+                init.contains(&format!("var({var})")),
+                "{var} missing: {init}"
+            );
+        }
+        // Sequence-diagram message text and flowchart clusters: the two
+        // unreadable-in-dark-mode cases from GH #1296.
+        assert!(init.contains(".messageText"), "got: {init}");
+        assert!(init.contains(".cluster"), "got: {init}");
+    }
+
+    /// `mermaid: theme: forest` selects mermaid's built-in theme and drops
+    /// the Quarto `themeCSS`, as Quarto 1's `mermaid-theme` meta does.
+    #[tokio::test]
+    async fn builtin_theme_option_replaces_theme_css() {
+        let entry = |key: &str, value: ConfigValue| quarto_pandoc_types::ConfigMapEntry {
+            key: key.to_string(),
+            key_source: SourceInfo::for_test(),
+            value,
+        };
+        let theme = ConfigValue::new_string("forest", SourceInfo::for_test());
+        let mermaid = ConfigValue::new_map(vec![entry("theme", theme)], SourceInfo::for_test());
+        let meta = ConfigValue::new_map(vec![entry("mermaid", mermaid)], SourceInfo::for_test());
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![make_codeblock(&["mermaid"], "flowchart LR\n  a --> b")],
+        };
+        run_transform(&mut ast, Format::html()).await;
+        let script = &after_body_includes(&ast.meta)[0];
+        assert!(
+            script.contains("mermaid.initialize({ startOnLoad: false, theme: \"forest\" });"),
+            "got:\n{script}"
+        );
+        assert!(!script.contains("themeCSS"), "got:\n{script}");
+    }
+
+    /// A theme name cannot close the inline `<script>` element.
+    #[test]
+    fn theme_value_is_escaped_for_an_inline_script() {
+        let options = mermaid_init_options(Some("x</script><script>alert(1)//"));
+        assert!(!options.contains("</script>"), "got: {options}");
+        assert!(options.contains("\\u003c/script>"), "got: {options}");
+    }
+
+    /// The embedded `themeCSS` never contains `<`, so escaping does not
+    /// change it.
+    #[test]
+    fn theme_css_has_no_angle_brackets() {
+        assert!(!MERMAID_THEME_CSS.contains('<'));
     }
 }
