@@ -1,0 +1,415 @@
+pandoc.wasm ok: .cache/pandoc-wasm/pandoc.wasm, hub-client/public/pandoc/pandoc.wasm.gz
+typst assets ok: hub-client/public/typst/typst.wasm.gz, hub-client/public/typst/fonts.bin.gz, .cache/typst-assets/fonts.bin
+pdf.js viewer ok: hub-client/public/pdfjs, q2-preview-spa/public/pdfjs
+
+> @quarto/annotated-qmd@0.2.0 build
+> tsc
+
+
+> @quarto/components@0.1.0 build
+> tsc
+
+
+> @quarto/pandoc-host@0.0.1 build
+> tsc
+
+
+> @quarto/pandoc-types@0.1.0 build
+> tsc
+
+
+> @quarto/pdf-viewer@0.0.1 build
+> tsc
+
+
+> @quarto/preview-renderer@0.0.1 build
+> tsc
+
+
+> @quarto/preview-runtime@0.0.1 build
+> tsc
+
+
+> @quarto/api@0.1.0 build
+> tsc
+
+
+> @quarto/quarto-automerge-schema@0.0.1 build
+> tsc
+
+
+> @quarto/engine-host-node@0.1.0 build
+> tsc
+
+
+> @quarto/hub-mcp@0.1.0 build
+> rm -rf dist && tsc && node scripts/build-wasm-host.mjs --allow-stub && node -e "import('node:fs').then(fs => fs.chmodSync('dist/index.js', 0o755))"
+
+wasm-host bundled into dist/
+
+> @quarto/quarto-sync-client@0.0.1 build
+> tsc
+
+
+> @quarto/types@0.1.0 build
+> tsc
+
+
+> @quarto/typst-host@0.0.1 build
+> tsc
+
+
+> hub-client@0.0.0 build:sandboxed
+> cd quarto-hub-sandboxed-preview && npm install --silent && npm run build
+
+
+> quarto-hub-sandboxed-preview@0.0.0 build
+> npm run build:main && npm run build:sw
+
+
+> quarto-hub-sandboxed-preview@0.0.0 build:main
+> vite build
+
+vite v6.4.3 building for production...
+transforming...
+✓ 316 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                                      0.80 kB │ gzip:     0.51 kB
+dist/q2-preview-assets/KaTeX_Size3-Regular-CTq5MqoE.woff             4.42 kB
+dist/q2-preview-assets/KaTeX_Size4-Regular-Dl5lxZxV.woff2            4.93 kB
+dist/q2-preview-assets/KaTeX_Size2-Regular-Dy4dx90m.woff2            5.21 kB
+dist/q2-preview-assets/KaTeX_Size1-Regular-mCD8mA8B.woff2            5.47 kB
+dist/q2-preview-assets/KaTeX_Size4-Regular-BF-4gkZK.woff             5.98 kB
+dist/q2-preview-assets/KaTeX_Size2-Regular-oD1tc_U0.woff             6.19 kB
+dist/q2-preview-assets/KaTeX_Size1-Regular-C195tn64.woff             6.50 kB
+dist/q2-preview-assets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2      6.91 kB
+dist/q2-preview-assets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2         6.91 kB
+dist/q2-preview-assets/KaTeX_Size3-Regular-DgpXs0kz.ttf              7.59 kB
+dist/q2-preview-assets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff       7.66 kB
+dist/q2-preview-assets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff          7.72 kB
+dist/q2-preview-assets/KaTeX_Script-Regular-D3wIWfF6.woff2           9.64 kB
+dist/q2-preview-assets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2       10.34 kB
+dist/q2-preview-assets/KaTeX_Size4-Regular-DWFBv043.ttf             10.36 kB
+dist/q2-preview-assets/KaTeX_Script-Regular-D5yQViql.woff           10.59 kB
+dist/q2-preview-assets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2         11.32 kB
+dist/q2-preview-assets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2            11.35 kB
+dist/q2-preview-assets/KaTeX_Size2-Regular-B7gKUWhC.ttf             11.51 kB
+dist/q2-preview-assets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2        12.03 kB
+dist/q2-preview-assets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2          12.22 kB
+dist/q2-preview-assets/KaTeX_Size1-Regular-Dbsnue_I.ttf             12.23 kB
+dist/q2-preview-assets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff        12.32 kB
+dist/q2-preview-assets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf       12.34 kB
+dist/q2-preview-assets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf          12.37 kB
+dist/q2-preview-assets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff          13.21 kB
+dist/q2-preview-assets/KaTeX_Fraktur-Bold-BsDP51OF.woff             13.30 kB
+dist/q2-preview-assets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2      13.57 kB
+dist/q2-preview-assets/KaTeX_SansSerif-Italic-DN2j7dab.woff         14.11 kB
+dist/q2-preview-assets/KaTeX_SansSerif-Bold-DbIhKOiC.woff           14.41 kB
+dist/q2-preview-assets/KaTeX_Typewriter-Regular-C0xS9mPB.woff       16.03 kB
+dist/q2-preview-assets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2         16.40 kB
+dist/q2-preview-assets/KaTeX_Math-Italic-t53AETM-.woff2             16.44 kB
+dist/q2-preview-assets/KaTeX_Script-Regular-C5JkGWo-.ttf            16.65 kB
+dist/q2-preview-assets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2         16.78 kB
+dist/q2-preview-assets/KaTeX_Main-Italic-NWA7e6Wa.woff2             16.99 kB
+dist/q2-preview-assets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff          18.67 kB
+dist/q2-preview-assets/KaTeX_Math-Italic-DA0__PXp.woff              18.75 kB
+dist/q2-preview-assets/KaTeX_Main-BoldItalic-SpSLRI95.woff          19.41 kB
+dist/q2-preview-assets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf         19.44 kB
+dist/q2-preview-assets/KaTeX_Fraktur-Regular-CB_wures.ttf           19.57 kB
+dist/q2-preview-assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf              19.58 kB
+dist/q2-preview-assets/KaTeX_Main-Italic-BMLOBm91.woff              19.68 kB
+dist/q2-preview-assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf          22.36 kB
+dist/q2-preview-assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf            24.50 kB
+dist/q2-preview-assets/KaTeX_Main-Bold-Cx986IdX.woff2               25.32 kB
+dist/q2-preview-assets/KaTeX_Main-Regular-B22Nviop.woff2            26.27 kB
+dist/q2-preview-assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf        27.56 kB
+dist/q2-preview-assets/KaTeX_AMS-Regular-BQhdFMY1.woff2             28.08 kB
+dist/q2-preview-assets/KaTeX_Main-Bold-Jm3AIy58.woff                29.91 kB
+dist/q2-preview-assets/KaTeX_Main-Regular-Dr94JaBh.woff             30.77 kB
+dist/q2-preview-assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf           31.20 kB
+dist/q2-preview-assets/KaTeX_Math-Italic-flOr_0UB.ttf               31.31 kB
+dist/q2-preview-assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf           32.97 kB
+dist/q2-preview-assets/KaTeX_AMS-Regular-DMm9YOAa.woff              33.52 kB
+dist/q2-preview-assets/KaTeX_Main-Italic-3WenGoN9.ttf               33.58 kB
+dist/q2-preview-assets/KaTeX_Main-Bold-waoOVXN0.ttf                 51.34 kB
+dist/q2-preview-assets/KaTeX_Main-Regular-ypZvNtVU.ttf              53.58 kB
+dist/q2-preview-assets/KaTeX_AMS-Regular-DRggAlZN.ttf               63.63 kB
+dist/q2-preview-assets/roboto-regular-CskYmTLH.ttf                 124.30 kB
+dist/q2-preview-assets/roboto-bold-adRjrliE.ttf                    124.86 kB
+dist/q2-preview-assets/roboto-italic-nBUoOsmb.ttf                  128.54 kB
+dist/q2-preview-assets/roboto-bolditalic-Bl64KjJA.ttf              129.18 kB
+dist/q2-preview-assets/hephaestus_svg_wasm_bg-DSY3XVen.wasm      2,405.26 kB │ gzip: 1,028.23 kB
+dist/q2-preview-assets/index-WjA7yZ85.css                           85.99 kB │ gzip:    19.95 kB
+dist/q2-preview-assets/hephaestus-svg-r5qfVgE2.js                   14.46 kB │ gzip:     4.97 kB
+dist/q2-preview-assets/viz-CKKBHPCz.js                           1,354.79 kB │ gzip:   485.92 kB
+dist/q2-preview-assets/index-Tk8lKVeP.js                         1,483.54 kB │ gzip:   468.82 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 2.73s
+✓ Copied dist/ to ../public/q2-sandboxed-preview/
+
+> quarto-hub-sandboxed-preview@0.0.0 build:sw
+> BUILD_TARGET=service-worker vite build
+
+vite v6.4.3 building for production...
+transforming...
+✓ 2 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/serviceWorker.js  2.16 kB │ gzip: 1.13 kB
+✓ built in 39ms
+✓ Copied service worker to ../public/q2-sandboxed-preview/serviceWorker.js
+
+> hub-client@0.0.0 build
+> tsc -b && NODE_OPTIONS=--max-old-space-size=4096 vite build
+
+vite v7.3.5 building client environment for production...
+transforming...
+../node_modules/zod/v4/core/util.js (400:0): A comment
+
+"// Wrapped in a `@__PURE__` IIFE: esbuild never tree-shakes a top-level initializer that contains a member access on `Number`, so the bare object literal survived into every bundle."
+
+in "../node_modules/zod/v4/core/util.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+../node_modules/zod/v4/core/regexes.js (74:0): A comment
+
+"/** Anchors a pattern source. The interpolation lives here rather than at the call site because
+ * esbuild will not drop a `@__PURE__` call whose own argument interpolates a variable, but it
+ * will drop `anchor(dateSource)`. Keeping it inline pinned `date` into every bundle. */"
+
+in "../node_modules/zod/v4/core/regexes.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+[plugin vite:resolve] Module "fs/promises" has been externalized for browser compatibility, imported by "/Users/cscheid/rooms/room-1/q2/node_modules/web-tree-sitter/web-tree-sitter.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin vite:resolve] Module "module" has been externalized for browser compatibility, imported by "/Users/cscheid/rooms/room-1/q2/node_modules/web-tree-sitter/web-tree-sitter.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+✓ 2201 modules transformed.
+Export "Repo" of module "../node_modules/@automerge/automerge-repo/dist/Repo.js" was reexported through module "../node_modules/@automerge/automerge-repo/dist/index.js" while both modules are dependencies of each other and will end up in different chunks by current Rollup settings. This scenario is not well supported at the moment as it will produce a circular dependency between chunks and will likely lead to broken execution order.
+Either change the import in "src/debug/services/repo.ts" to point directly to the exporting module or reconfigure "output.manualChunks" to ensure these modules end up in the same chunk.
+Export "Repo" of module "../node_modules/@automerge/automerge-repo/dist/Repo.js" was reexported through module "../node_modules/@automerge/automerge-repo/dist/index.js" while both modules are dependencies of each other and will end up in different chunks by current Rollup settings. This scenario is not well supported at the moment as it will produce a circular dependency between chunks and will likely lead to broken execution order.
+Either change the import in "../ts-packages/quarto-sync-client/src/client.ts" to point directly to the exporting module or reconfigure "output.manualChunks" to ensure these modules end up in the same chunk.
+Export "Repo" of module "../node_modules/@automerge/automerge-repo/dist/Repo.js" was reexported through module "../node_modules/@automerge/automerge-repo/dist/index.js" while both modules are dependencies of each other and will end up in different chunks by current Rollup settings. This scenario is not well supported at the moment as it will produce a circular dependency between chunks and will likely lead to broken execution order.
+Either change the import in "src/components/demo/SimpleAuthDemo.tsx" to point directly to the exporting module or reconfigure "output.manualChunks" to ensure these modules end up in the same chunk.
+Export "Repo" of module "../node_modules/@automerge/automerge-repo/dist/Repo.js" was reexported through module "../node_modules/@automerge/automerge-repo/dist/index.js" while both modules are dependencies of each other and will end up in different chunks by current Rollup settings. This scenario is not well supported at the moment as it will produce a circular dependency between chunks and will likely lead to broken execution order.
+Either change the import in "src/components/demo/ProjectDemo.tsx" to point directly to the exporting module or reconfigure "output.manualChunks" to ensure these modules end up in the same chunk.
+Export "Repo" of module "../node_modules/@automerge/automerge-repo/dist/Repo.js" was reexported through module "../node_modules/@automerge/automerge-repo/dist/index.js" while both modules are dependencies of each other and will end up in different chunks by current Rollup settings. This scenario is not well supported at the moment as it will produce a circular dependency between chunks and will likely lead to broken execution order.
+Either change the import in "src/components/demo/canvas/RepoNode.tsx" to point directly to the exporting module or reconfigure "output.manualChunks" to ensure these modules end up in the same chunk.
+Export "Repo" of module "../node_modules/@automerge/automerge-repo/dist/Repo.js" was reexported through module "../node_modules/@automerge/automerge-repo/dist/index.js" while both modules are dependencies of each other and will end up in different chunks by current Rollup settings. This scenario is not well supported at the moment as it will produce a circular dependency between chunks and will likely lead to broken execution order.
+Either change the import in "src/services/projectSetService.ts" to point directly to the exporting module or reconfigure "output.manualChunks" to ensure these modules end up in the same chunk.
+../node_modules/web-tree-sitter/web-tree-sitter.js (2343:30): Use of eval in "../node_modules/web-tree-sitter/web-tree-sitter.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+../node_modules/web-tree-sitter/web-tree-sitter.js (2366:32): Use of eval in "../node_modules/web-tree-sitter/web-tree-sitter.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+rendering chunks...
+computing gzip size...
+dist/debug.html                                            1.21 kB │ gzip:      0.57 kB
+dist/index.html                                            1.32 kB │ gzip:      0.58 kB
+dist/q2-debug.html                                         1.50 kB │ gzip:      0.71 kB
+dist/q2-preview.html                                       1.54 kB │ gzip:      0.74 kB
+dist/assets/KaTeX_Size3-Regular-CTq5MqoE.woff              4.42 kB
+dist/assets/KaTeX_Size4-Regular-Dl5lxZxV.woff2             4.93 kB
+dist/assets/KaTeX_Size2-Regular-Dy4dx90m.woff2             5.21 kB
+dist/assets/KaTeX_Size1-Regular-mCD8mA8B.woff2             5.47 kB
+dist/assets/KaTeX_Size4-Regular-BF-4gkZK.woff              5.98 kB
+dist/assets/KaTeX_Size2-Regular-oD1tc_U0.woff              6.19 kB
+dist/assets/KaTeX_Size1-Regular-C195tn64.woff              6.50 kB
+dist/assets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2       6.91 kB
+dist/assets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2          6.91 kB
+dist/assets/KaTeX_Size3-Regular-DgpXs0kz.ttf               7.59 kB
+dist/assets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff        7.66 kB
+dist/assets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff           7.72 kB
+dist/assets/KaTeX_Script-Regular-D3wIWfF6.woff2            9.64 kB
+dist/assets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2        10.34 kB
+dist/assets/KaTeX_Size4-Regular-DWFBv043.ttf              10.36 kB
+dist/assets/KaTeX_Script-Regular-D5yQViql.woff            10.59 kB
+dist/assets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2          11.32 kB
+dist/assets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2             11.35 kB
+dist/assets/KaTeX_Size2-Regular-B7gKUWhC.ttf              11.51 kB
+dist/assets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2         12.03 kB
+dist/assets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2           12.22 kB
+dist/assets/KaTeX_Size1-Regular-Dbsnue_I.ttf              12.23 kB
+dist/assets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff         12.32 kB
+dist/assets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf        12.34 kB
+dist/assets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf           12.37 kB
+dist/assets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff           13.21 kB
+dist/assets/KaTeX_Fraktur-Bold-BsDP51OF.woff              13.30 kB
+dist/assets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2       13.57 kB
+dist/assets/KaTeX_SansSerif-Italic-DN2j7dab.woff          14.11 kB
+dist/assets/KaTeX_SansSerif-Bold-DbIhKOiC.woff            14.41 kB
+dist/assets/KaTeX_Typewriter-Regular-C0xS9mPB.woff        16.03 kB
+dist/assets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2          16.40 kB
+dist/assets/KaTeX_Math-Italic-t53AETM-.woff2              16.44 kB
+dist/assets/KaTeX_Script-Regular-C5JkGWo-.ttf             16.65 kB
+dist/assets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2          16.78 kB
+dist/assets/KaTeX_Main-Italic-NWA7e6Wa.woff2              16.99 kB
+dist/assets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff           18.67 kB
+dist/assets/KaTeX_Math-Italic-DA0__PXp.woff               18.75 kB
+dist/assets/KaTeX_Main-BoldItalic-SpSLRI95.woff           19.41 kB
+dist/assets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf          19.44 kB
+dist/assets/KaTeX_Fraktur-Regular-CB_wures.ttf            19.57 kB
+dist/assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf               19.58 kB
+dist/assets/KaTeX_Main-Italic-BMLOBm91.woff               19.68 kB
+dist/assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf           22.36 kB
+dist/assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf             24.50 kB
+dist/assets/KaTeX_Main-Bold-Cx986IdX.woff2                25.32 kB
+dist/assets/KaTeX_Main-Regular-B22Nviop.woff2             26.27 kB
+dist/assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf         27.56 kB
+dist/assets/KaTeX_AMS-Regular-BQhdFMY1.woff2              28.08 kB
+dist/assets/KaTeX_Main-Bold-Jm3AIy58.woff                 29.91 kB
+dist/assets/KaTeX_Main-Regular-Dr94JaBh.woff              30.77 kB
+dist/assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf            31.20 kB
+dist/assets/KaTeX_Math-Italic-flOr_0UB.ttf                31.31 kB
+dist/assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf            32.97 kB
+dist/assets/KaTeX_AMS-Regular-DMm9YOAa.woff               33.52 kB
+dist/assets/KaTeX_Main-Italic-3WenGoN9.ttf                33.58 kB
+dist/assets/typst.worker-Bf1Ay39t.js                      42.91 kB
+dist/assets/pandoc.worker-Db-ac9St.js                     45.30 kB
+dist/assets/KaTeX_Main-Bold-waoOVXN0.ttf                  51.34 kB
+dist/assets/KaTeX_Main-Regular-ypZvNtVU.ttf               53.58 kB
+dist/assets/KaTeX_AMS-Regular-DRggAlZN.ttf                63.63 kB
+dist/assets/codicon-ngg6Pgfi.ttf                         121.97 kB
+dist/assets/roboto-regular-CskYmTLH.ttf                  124.30 kB
+dist/assets/roboto-bold-adRjrliE.ttf                     124.86 kB
+dist/assets/roboto-italic-nBUoOsmb.ttf                   128.54 kB
+dist/assets/roboto-bolditalic-Bl64KjJA.ttf               129.18 kB
+dist/assets/web-tree-sitter-EThTNaPu.wasm                200.30 kB │ gzip:     80.32 kB
+dist/assets/editor.worker-C2_AfrSl.js                    251.68 kB
+dist/assets/json.worker-C838mOW9.js                      382.97 kB
+dist/assets/html.worker-eZJr__P7.js                      693.07 kB
+dist/assets/css.worker-NZNbQL3P.js                     1,030.27 kB
+dist/assets/hephaestus_svg_wasm_bg-DSY3XVen.wasm       2,405.26 kB │ gzip:  1,028.23 kB
+dist/assets/automerge_wasm_bg-LjMxZKTS.wasm            3,644.23 kB │ gzip:  1,147.33 kB
+dist/assets/ts.worker-BfwyojP3.js                      7,010.03 kB
+dist/assets/wasm_quarto_hub_client_bg-BNbEAhmf.wasm   44,015.75 kB │ gzip: 12,079.79 kB
+dist/assets/DebugInspectorPanel-BlSkwI_g.css               4.72 kB │ gzip:      1.09 kB
+dist/assets/debug-D1NragO5.css                            10.32 kB │ gzip:      2.28 kB
+dist/assets/plainText-DxB02YXk.css                        29.90 kB │ gzip:      8.08 kB
+dist/assets/customRegistry-CxOhluiv.css                   55.98 kB │ gzip:     11.99 kB
+dist/assets/main-CEc1Bxwa.css                            292.27 kB │ gzip:     48.71 kB
+dist/assets/q2-debug-B1DFzG9u.css                        575.15 kB │ gzip:    430.66 kB
+dist/assets/__vite-browser-external-BIHI7g3E.js            0.03 kB │ gzip:      0.05 kB
+dist/assets/azcli-Y6nb8tq_.js                              0.71 kB │ gzip:      0.28 kB
+dist/assets/ini-Kd9XrMLS.js                                0.96 kB │ gzip:      0.50 kB
+dist/assets/javascript-MfI5pnu8.js                         0.98 kB │ gzip:      0.54 kB
+dist/assets/csp-D-4FJmMZ.js                                1.28 kB │ gzip:      0.49 kB
+dist/assets/pla-DSh2-awV.js                                1.55 kB │ gzip:      0.61 kB
+dist/assets/scheme-BPhDTwHR.js                             1.63 kB │ gzip:      0.78 kB
+dist/assets/flow9-BeJ5waoc.js                              1.67 kB │ gzip:      0.81 kB
+dist/assets/sb-BBc9UKZt.js                                 1.69 kB │ gzip:      0.79 kB
+dist/assets/bat-BwHxbl9M.js                                1.71 kB │ gzip:      0.83 kB
+dist/assets/dockerfile-BG73LgW2.js                         1.73 kB │ gzip:      0.63 kB
+dist/assets/pascaligo-DtZ0uQbO.js                          1.86 kB │ gzip:      0.87 kB
+dist/assets/metafileToSvg-47Bk0Q26.js                      1.92 kB │ gzip:      1.03 kB
+dist/assets/lua-Cyyb5UIc.js                                1.99 kB │ gzip:      0.89 kB
+dist/assets/cameligo-Bf6VGUru.js                           2.05 kB │ gzip:      0.92 kB
+dist/assets/xml-CSh27YlE.js                                2.11 kB │ gzip:      0.84 kB
+dist/assets/graphql-BxJiqAUM.js                            2.12 kB │ gzip:      0.99 kB
+dist/assets/sass-DmtGGF8t.js                               2.16 kB │ gzip:      1.05 kB
+dist/assets/objective-c-BDtDVThU.js                        2.26 kB │ gzip:      1.02 kB
+dist/assets/lexon-OrD6JF1K.js                              2.30 kB │ gzip:      0.89 kB
+dist/assets/bicep-CFznDFnq.js                              2.40 kB │ gzip:      0.93 kB
+dist/assets/sparql-CJmd_6j2.js                             2.41 kB │ gzip:      1.12 kB
+dist/assets/mips-CiqrrVzr.js                               2.44 kB │ gzip:      1.03 kB
+dist/assets/go-acbASCJo.js                                 2.52 kB │ gzip:      1.11 kB
+dist/assets/sophia-CnS9iZB_.js                             2.63 kB │ gzip:      1.17 kB
+dist/assets/typespec-Btyra-wh.js                           2.66 kB │ gzip:      1.05 kB
+dist/assets/m3-B8OfTtLu.js                                 2.68 kB │ gzip:      1.28 kB
+dist/assets/fsharp-PahG7c26.js                             2.85 kB │ gzip:      1.28 kB
+dist/assets/pascal-vHIfCaH5.js                             2.86 kB │ gzip:      1.36 kB
+dist/assets/shell-DiJ1NA_G.js                              2.94 kB │ gzip:      1.16 kB
+dist/assets/DebugInspectorPanel-BXGli8oJ.js                2.97 kB │ gzip:      1.34 kB
+dist/assets/r-j7ic8hl3.js                                  2.99 kB │ gzip:      1.24 kB
+dist/assets/qsharp-Bw9ernYp.js                             3.05 kB │ gzip:      1.37 kB
+dist/assets/java-CXBNlu9o.js                               3.08 kB │ gzip:      1.36 kB
+dist/assets/powershell-COWaemsV.js                         3.13 kB │ gzip:      1.34 kB
+dist/assets/cssMode-hGVYn3a4.js                            3.21 kB │ gzip:      1.23 kB
+dist/assets/cypher-cTPe9QuQ.js                             3.25 kB │ gzip:      1.40 kB
+dist/assets/kotlin-s7OhZKlX.js                             3.26 kB │ gzip:      1.43 kB
+dist/assets/redis-Bu5POkcn.js                              3.42 kB │ gzip:      1.44 kB
+dist/assets/tcl-Dm6ycUr_.js                                3.43 kB │ gzip:      1.33 kB
+dist/assets/coffee-Bd8akH9Z.js                             3.45 kB │ gzip:      1.26 kB
+dist/assets/hcl-DtV1sZF8.js                                3.45 kB │ gzip:      1.45 kB
+dist/assets/markdown-BFxVWTOG.js                           3.65 kB │ gzip:      1.35 kB
+dist/assets/liquid-BQspSjgs.js                             3.65 kB │ gzip:      1.53 kB
+dist/assets/htmlMode-rSuUex1N.js                           3.67 kB │ gzip:      1.35 kB
+dist/assets/yaml-S2WEDIcp.js                               3.72 kB │ gzip:      1.39 kB
+dist/assets/restructuredtext-CqXO7rUv.js                   3.76 kB │ gzip:      1.33 kB
+dist/assets/less-9HpZscsL.js                               3.76 kB │ gzip:      1.38 kB
+dist/assets/apex-DNDY2TF8.js                               3.82 kB │ gzip:      1.73 kB
+dist/assets/python-BNYB9aU7.js                             3.90 kB │ gzip:      1.55 kB
+dist/assets/rust-BzKRNQWT.js                               4.02 kB │ gzip:      1.79 kB
+dist/assets/dart-BOtBlQCF.js                               4.11 kB │ gzip:      1.61 kB
+dist/assets/css-DdJfP1eB.js                                4.37 kB │ gzip:      1.34 kB
+dist/assets/csharp-Co3qMtFm.js                             4.39 kB │ gzip:      1.69 kB
+dist/assets/NodeWebSocketClientAdapter-AmYA7OHx.js         4.45 kB │ gzip:      1.66 kB
+dist/assets/mdx-CF1MZ4Fk.js                                4.50 kB │ gzip:      1.32 kB
+dist/assets/pug-8SOpv6rk.js                                4.69 kB │ gzip:      1.61 kB
+dist/assets/html-B1OF_rdN.js                               4.71 kB │ gzip:      1.27 kB
+dist/assets/msdax-DmeGPVcC.js                              4.77 kB │ gzip:      1.91 kB
+dist/assets/swift-CnmFD0ga.js                              4.77 kB │ gzip:      2.00 kB
+dist/assets/typescript-6xWot_YU.js                         5.08 kB │ gzip:      2.05 kB
+dist/assets/cpp-BbWJElDN.js                                5.16 kB │ gzip:      2.06 kB
+dist/assets/ecl-BEgZUVRK.js                                5.20 kB │ gzip:      2.19 kB
+dist/assets/vb-Db0cS2oM.js                                 5.65 kB │ gzip:      2.02 kB
+dist/assets/twig-Csy3S7wG.js                               5.84 kB │ gzip:      1.49 kB
+dist/assets/scss-CBJaRo0y.js                               6.27 kB │ gzip:      1.71 kB
+dist/assets/handlebars-DZKSwI0b.js                         6.47 kB │ gzip:      1.48 kB
+dist/assets/julia-cl7-CwDS.js                              7.01 kB │ gzip:      2.62 kB
+dist/assets/scala-D9hQfWCl.js                              7.18 kB │ gzip:      2.06 kB
+dist/assets/wgsl-DumH7NcR.js                               7.19 kB │ gzip:      2.71 kB
+dist/assets/st-CHwy0fLd.js                                 7.26 kB │ gzip:      2.21 kB
+dist/assets/systemverilog-Bs9z6M-B.js                      7.47 kB │ gzip:      2.72 kB
+dist/assets/postiats-CocnycG-.js                           7.72 kB │ gzip:      2.40 kB
+dist/assets/php-BBUBE1dy.js                                7.89 kB │ gzip:      2.04 kB
+dist/assets/perl-Ub6l9XKa.js                               8.12 kB │ gzip:      3.10 kB
+dist/assets/ruby-zBfavPgS.js                               8.37 kB │ gzip:      2.54 kB
+dist/assets/razor-DbpqyDVa.js                              8.47 kB │ gzip:      2.16 kB
+dist/assets/debug-DvIujdJY.js                              8.51 kB │ gzip:      3.22 kB
+dist/assets/protobuf-Brw8urJB.js                           8.91 kB │ gzip:      2.04 kB
+dist/assets/clojure-Dnu-v4kV.js                            9.51 kB │ gzip:      3.57 kB
+dist/assets/elixir-BkW5O-1t.js                            10.12 kB │ gzip:      2.50 kB
+dist/assets/sql-ClhHkBeG.js                               10.16 kB │ gzip:      3.79 kB
+dist/assets/mysql-C_tMU-Nz.js                             11.14 kB │ gzip:      4.01 kB
+dist/assets/redshift-Bs9aos_-.js                          11.66 kB │ gzip:      4.30 kB
+dist/assets/jsonMode-CScYRpjm.js                          12.59 kB │ gzip:      4.65 kB
+dist/assets/pgsql-BlNEE0v7.js                             13.33 kB │ gzip:      4.46 kB
+dist/assets/test-hooks-DdBD37Fy.js                        13.65 kB │ gzip:      5.76 kB
+dist/assets/abap-DLDM7-KI.js                              14.03 kB │ gzip:      5.27 kB
+dist/assets/hephaestus-svg-DDo-BIAJ.js                    14.32 kB │ gzip:      4.93 kB
+dist/assets/freemarker2-DaIaQbVi.js                       15.77 kB │ gzip:      4.01 kB
+dist/assets/powerquery-tScXyioY.js                        16.80 kB │ gzip:      4.81 kB
+dist/assets/solidity-Db0IVjzk.js                          18.46 kB │ gzip:      4.41 kB
+dist/assets/q2-debug-JvszXshK.js                          19.58 kB │ gzip:      6.06 kB
+dist/assets/tsMode-BBd1zj3H.js                            22.17 kB │ gzip:      6.33 kB
+dist/assets/lspLanguageFeatures-CXBjiWEo.js               28.69 kB │ gzip:      7.74 kB
+dist/assets/DevHarness-70PtOEJc.js                        30.46 kB │ gzip:      9.13 kB
+dist/assets/QuickPick-DguLczyx.js                         32.85 kB │ gzip:     12.17 kB
+dist/assets/wasm_quarto_hub_client-DvDUSG5d.js            33.30 kB │ gzip:      9.99 kB
+dist/assets/WMFJS.bundle.min-tfNJJAXp.js                  56.13 kB │ gzip:     14.17 kB
+dist/assets/EMFJS.bundle.min-DJeQx9Zi.js                  56.47 kB │ gzip:     14.30 kB
+dist/assets/authService-BhvtW9t8.js                       81.01 kB │ gzip:     25.84 kB
+dist/assets/with-selector-D9SL7sfe.js                    109.15 kB │ gzip:     33.39 kB
+dist/assets/WebSocketServerAdapter-BA1gVMLC.js           143.86 kB │ gzip:     40.41 kB
+dist/assets/customRegistry-D01JMV-K.js                   180.18 kB │ gzip:     50.36 kB
+dist/assets/client-BswPlEyj.js                           222.74 kB │ gzip:     69.40 kB
+dist/assets/plainText-igZDRJCg.js                        263.79 kB │ gzip:     78.62 kB
+dist/assets/q2-preview-BVsHw1js.js                       796.18 kB │ gzip:    265.52 kB
+dist/assets/viz-CkvutK1M.js                            1,353.89 kB │ gzip:    485.49 kB
+dist/assets/sass.default--eI-0YPR.js                   3,309.89 kB │ gzip:    704.25 kB
+dist/assets/main-Np_S4zkI.js                           8,008.82 kB │ gzip:  2,020.83 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 59.18s
+
+Running 5 tests using 1 worker
+
+[1/5] [webkit] › e2e/pandoc-warm.harness.spec.ts:155:3 › warm path: correctness matrix › A,B,A byte equality over a shuffled sequence of the typst recordings and the argv matrix, with no fallbacks
+[2/5] [webkit] › e2e/pandoc-warm.harness.spec.ts:183:3 › warm path: correctness matrix › the env between renders does not leak: each render sees its own request env
+[3/5] [webkit] › e2e/pandoc-warm.harness.spec.ts:198:3 › warm path: correctness matrix › an error, an out-of-memory run and a hang each leave the pool serving byte-equal renders
+[4/5] [webkit] › e2e/pandoc-warm.harness.spec.ts:232:3 › warm path: correctness matrix › 100 warm renders keep the wasm linear memory flat and every output byte-equal
+[webkit] › e2e/pandoc-warm.harness.spec.ts:232:3 › warm path: correctness matrix › 100 warm renders keep the wasm linear memory flat and every output byte-equal
+{"memoryBytes":{"run1":47710208,"run10":48824320,"run50":48889856,"run100":48889856}}
+
+[5/5] [webkit] › e2e/pandoc-warm.harness.spec.ts:253:3 › warm path: correctness matrix › overlapping renders under the real preview pane: frames never go backwards and the last edit is the last frame
+  5 passed (52.4s)

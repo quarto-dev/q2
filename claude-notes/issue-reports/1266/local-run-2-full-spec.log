@@ -1,0 +1,30 @@
+
+Running 13 tests using 1 worker
+
+[1/13] [webkit] › e2e/pandoc-warm.harness.spec.ts:70:3 › warm hooks (smoke) › a warm run is byte-equal to a fresh run of the same document, and says it was warm
+[2/13] [webkit] › e2e/pandoc-warm.harness.spec.ts:89:3 › warm hooks (smoke) › a sequence runs in one round trip and keeps the order it was given
+[3/13] [webkit] › e2e/pandoc-warm.harness.spec.ts:100:3 › warm hooks (smoke) › the typing hook drives the real pane and logs frames, starts and edits on one clock
+[4/13] [webkit] › e2e/pandoc-warm.harness.spec.ts:155:3 › warm path: correctness matrix › A,B,A byte equality over a shuffled sequence of the typst recordings and the argv matrix, with no fallbacks
+[5/13] [webkit] › e2e/pandoc-warm.harness.spec.ts:183:3 › warm path: correctness matrix › the env between renders does not leak: each render sees its own request env
+[6/13] [webkit] › e2e/pandoc-warm.harness.spec.ts:198:3 › warm path: correctness matrix › an error, an out-of-memory run and a hang each leave the pool serving byte-equal renders
+[7/13] [webkit] › e2e/pandoc-warm.harness.spec.ts:232:3 › warm path: correctness matrix › 100 warm renders keep the wasm linear memory flat and every output byte-equal
+[webkit] › e2e/pandoc-warm.harness.spec.ts:232:3 › warm path: correctness matrix › 100 warm renders keep the wasm linear memory flat and every output byte-equal
+{"memoryBytes":{"run1":47710208,"run10":48693248,"run50":48889856,"run100":48889856}}
+
+[8/13] [webkit] › e2e/pandoc-warm.harness.spec.ts:253:3 › warm path: correctness matrix › overlapping renders under the real preview pane: frames never go backwards and the last edit is the last frame
+[9/13] [webkit] › e2e/pandoc-warm.harness.spec.ts:306:3 › warm path: larger fixtures › an orange-book-class project page and brand.qmd: warm equals fresh, with the x10 and x100 scaling recorded
+[webkit] › e2e/pandoc-warm.harness.spec.ts:306:3 › warm path: larger fixtures › an orange-book-class project page and brand.qmd: warm equals fresh, with the x10 and x100 scaling recorded
+{"label":"orange-book chapter1","outputBytes":24635,"freshMs":903,"warmMs":169,"warmMemoryMb":138}
+
+{"label":"brand.qmd","outputBytes":80282,"freshMs":1527,"warmMs":647,"warmMemoryMb":165}
+
+{"label":"callouts x10","outputBytes":48508,"freshMs":688,"warmMs":569,"warmMemoryMb":167}
+
+{"label":"callouts x100","outputBytes":350008,"freshMs":5541,"warmMs":5132,"warmMemoryMb":258}
+
+[10/13] [webkit] › e2e/pandoc-warm.harness.spec.ts:361:3 › warm path: timing › pandoc leg: warm callouts against fresh in the same run
+[11/13] [webkit] › e2e/pandoc-warm.harness.spec.ts:382:3 › warm path: timing › whole refresh: warm beats fresh by half of the saving Task 0(f) measured
+[12/13] [webkit] › e2e/pandoc-warm.harness.spec.ts:404:3 › warm path: timing › typing: overlapping renders at three edit intervals, frames in order
+[13/13] [webkit] › e2e/pandoc-warm.harness.spec.ts:430:3 › warm path: timing › typing: one edit after a pause shows a frame within the measured warm whole refresh plus the debounce plus 50 ms
+  4 skipped
+  9 passed (1.7m)
