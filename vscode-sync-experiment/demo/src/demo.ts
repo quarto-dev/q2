@@ -817,7 +817,9 @@ export class Demo {
    */
   async typeAfter(who: 'host' | 'guest', previous: string, text: string): Promise<void> {
     const lines = wrapText(previous, 64).split('\n');
-    await this.typeParagraphAt(who, lines[lines.length - 1]!.trim(), text);
+    // A narrow editor soft-wraps even a 64-character line, so no one rendered row holds all of it: find the row that
+    // holds its end, which is also where End puts the caret.
+    await this.typeParagraphAt(who, lines[lines.length - 1]!.trim().slice(-18).trim(), text);
   }
 
   /** Click the first line containing `lineNeedle`, open a blank-line-separated paragraph below it, and type `text`. */
