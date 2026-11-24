@@ -795,11 +795,25 @@ export class Demo {
    * at the end of the document sits below the fold of the other window). The text is typed at a human tempo.
    */
   async typeUnder(who: 'host' | 'guest', heading: string, text: string): Promise<void> {
+    await this.typeParagraphAt(who, heading, text);
+  }
+
+  /**
+   * Type a new paragraph right after an earlier paragraph, so a reply reads below what it answers. `previous` is that
+   * paragraph's text as it was typed: the new one goes after its last hard-wrapped line.
+   */
+  async typeAfter(who: 'host' | 'guest', previous: string, text: string): Promise<void> {
+    const lines = wrapText(previous, 64).split('\n');
+    await this.typeParagraphAt(who, lines[lines.length - 1]!.trim(), text);
+  }
+
+  /** Click the first line containing `lineNeedle`, open a blank-line-separated paragraph below it, and type `text`. */
+  private async typeParagraphAt(who: 'host' | 'guest', lineNeedle: string, text: string): Promise<void> {
     const page = this.editorPage(who);
     const vs = this.kinds[who] === 'vscode';
     // Monaco renders only the visible lines, and a synced preview may have scrolled this editor away from the heading.
     await this.scrollTop(who);
-    await page.locator(vs ? '.editor-instance .view-line' : '.monaco-editor .view-line', { hasText: heading }).first().click();
+    await page.locator(vs ? '.editor-instance .view-line' : '.monaco-editor .view-line', { hasText: lineNeedle }).first().click();
     await page.keyboard.press('End');
     await page.keyboard.press('Enter');
     await page.keyboard.press('Enter');

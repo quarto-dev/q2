@@ -67,9 +67,9 @@ export function vscodeShareStory(d: Demo): Step[] {
         await d.pause(1500);
         await d.typeNoWait(`q2 provide-hub ${d.projectId} --server ${d.qhubWs} --file ${R_PAPER}`);
         await d.waitOutput(/Review it, then choose/, 'host', 90_000);
-        // Her consent comes almost at once: she knows what she is about to run.
-        await d.pause(600);
-        await d.typeNoWait('1');
+        // Her consent comes at once: she knows what she is about to run, so one key with no thinking pause.
+        await d.pause(250);
+        await d.typeNoWait('1', 'host', 'all');
         await d.waitPrompt(180_000);
       },
       check: async () => {
@@ -177,9 +177,9 @@ export function vscodeShareStory(d: Demo): Step[] {
     },
     {
       id: 'myra-replies',
-      caption: 'Myra answers in VS Code, and it reaches Maurice. Each has now seen the other type after the branch round trip: they have converged.',
+      caption: 'Myra answers in VS Code, in the paragraph after his, and it reaches Maurice. Each has now seen the other type after the branch round trip: they have converged.',
       action: async () => {
-        await d.typeUnder('host', 'Introduction', EDITS.tipAnswer);
+        await d.typeAfter('host', EDITS.tipReply, EDITS.tipAnswer);
       },
       check: async () => {
         await shows(d, 'host', EDITS.tipAnswerNeedle);

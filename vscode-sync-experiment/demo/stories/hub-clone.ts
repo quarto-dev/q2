@@ -118,7 +118,7 @@ export function hubCloneStory(d: Demo): Step[] {
       id: 'maurice-replies',
       caption: 'Maurice answers from his clone. Her words reached him, and now his reach her: they have converged.',
       action: async () => {
-        await d.typeUnder('guest', 'Introduction', EDITS.mauriceReply);
+        await d.typeAfter('guest', EDITS.myra, EDITS.mauriceReply);
       },
       check: async () => {
         await until("the hub wrote Maurice's reply", () => diskFlat(d, PY_PAPER).includes(EDITS.mauriceReplyNeedle));

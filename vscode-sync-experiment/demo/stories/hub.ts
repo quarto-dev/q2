@@ -179,7 +179,7 @@ export function hubStory(d: Demo): Step[] {
       id: 'myra-replies',
       caption: 'Myra answers his question. Each has now seen the other type after the rebase: they have converged.',
       action: async () => {
-        await d.typeUnder('host', 'Introduction', EDITS.myraReply);
+        await d.typeAfter('host', EDITS.ideaAgain, EDITS.myraReply);
       },
       check: async () => {
         await until("the hub wrote Myra's reply", () => diskFlat(d, PY_PAPER).includes(EDITS.myraReplyNeedle));
