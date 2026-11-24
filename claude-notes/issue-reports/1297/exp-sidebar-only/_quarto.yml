@@ -1,0 +1,21 @@
+# Issue #1297 variant: sidebar only (no navbar). Q1 labels the sidebar "Site" here.
+# Landmarks: secondary nav, breadcrumbs, sidebar, in-page TOC, page nav.
+quarto-required: "^2"
+
+project:
+  type: website
+
+website:
+  title: "Landmarks"
+  sidebar:
+    contents:
+      - index.qmd
+      - section: "Guide"
+        contents:
+          - guide/one.qmd
+          - guide/two.qmd
+  page-navigation: true
+
+format:
+  html:
+    toc: true

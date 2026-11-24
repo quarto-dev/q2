@@ -1,0 +1,11 @@
+---
+title: Guide two
+---
+
+## Heading A
+
+Text.
+
+## Heading B
+
+More text.
