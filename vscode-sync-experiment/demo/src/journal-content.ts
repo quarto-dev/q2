@@ -40,13 +40,14 @@ export const EDITS = {
   tipAnswer:
     'Cross-correlation over the first cycle alone would have too few points, so we shall estimate the lag from the full series and report its confidence interval.',
   tipAnswerNeedle: 'report its confidence interval',
-  /** The speculative branch of the vscode-share story: Maurice types in the browser, Myra answers after his paragraph. */
-  telepathyMaurice:
-    'If the fused network carries anticipatory signals, the coupling between distant tips should not decay with the gap between them, and the cross-spectrum of separated colonies ought to show coherent power at the driving frequency.',
-  telepathyMauriceNeedle: 'coherent power at the driving frequency',
-  telepathyMyra:
-    'We therefore propose to separate sister colonies by a copper mesh and a Faraday cage, and to listen for spiking trains in the dark; if the hyphae are conversing, we should like to know what they make of us.',
-  telepathyMyraNeedle: 'listen for spiking trains in the dark',
+  /** The speculative branch of the vscode-share story: Myra decides the sentence about clocks must go, and says so. */
+  clockNeedle: 'Suppose each colony keeps a private clock',
+  warning:
+    'We should avoid this line of speculation, since an apparent shared phase may come from the chamber alone, and the chamber has no opinions.',
+  warningNeedle: 'We should avoid this line of speculation',
+  /** Maurice agrees and sharpens the same sentence: its first three words become these. */
+  warningLead: 'We must never pursue',
+  warningStrongNeedle: 'We must never pursue this line of speculation',
   /** Myra commits in a fever, with a typo, because git will not let her leave the branch otherwise. */
   telepathyCommit: 'THE HYPHAE ARE TALKING!! coherence confimed across the mesh, see sec 4 (written at 3am)',
 } as const;
@@ -128,25 +129,12 @@ function telepathyProse(topic: string): string {
 ${topic} remains poorly characterized in the heterokaryotic setting. We follow the formalism of Glass and Fleissner [3]
 and extend it to oscillating substrate humidity.
 
-A stranger possibility has dogged us since the second replicate. If anastomosis is more than plumbing, if the fused
-network carries anticipatory signals from one hyphal front to another, then what we have been calling noise in the
-${series} may be correspondence. We call the conjecture hyphal telepathy, and we mean the term operationally: a
-statistical dependence between distant tips that survives conditioning on every shared physical cause we can name.
-
-## Methods
-
-Colonies were grown on defined medium at 22 °C under a sinusoidal humidity schedule. All simulations use fixed seeds.
-For the speculative arm, sister colonies were separated by a 4 mm air gap, by a copper mesh, and in one trial by a
-sheet of lead-free solder, and their ${series} were recorded in separate chambers whose humidity schedules were
-deliberately held out of phase.
-
 ## Speculative extensions
 
-Suppose each colony keeps a private clock, entrained by the humidity cycle, and that fusion events act as handshakes
-that reconcile the clocks of neighboring fronts. Two colonies that have never touched would then keep unrelated time.
-Two that have fused would drift into a common phase, and a colony cut from the network would remember the shared
-rhythm for a number of cycles, much as a severed flatworm is said to remember its maze. We observed no such memory,
-but we did not look for long enough.
+Suppose each colony keeps a private clock, entrained by the humidity cycle, and that fusion events reset it.
+Two colonies that have never touched would then keep unrelated time. Two that have fused would drift into a common
+phase, and a colony cut from the network would remember the shared rhythm for a number of cycles, much as a severed
+flatworm is said to remember its maze. We observed no such memory, but we did not look for long enough.
 
 A harder version of the conjecture supposes that the network anticipates. In the dry regime the tips slow before the
 chamber has dried, as if the mycelium had read the schedule ahead of the sensors. We are aware that a lag in the
@@ -162,7 +150,19 @@ Finally, with the caution proper to a journal of theoretical mycodynamics, we re
 unattended over a long weekend and returned to find its fusion events arranged, on the plate, in what appeared to be
 a dotted line. The authors disagree about whether this is a result.
 
+## Methods
+
+Colonies were grown on defined medium at 22 °C under a sinusoidal humidity schedule. All simulations use fixed seeds.
+For the speculative arm, sister colonies were separated by a 4 mm air gap, by a copper mesh, and in one trial by a
+sheet of lead-free solder, and their ${series} were recorded in separate chambers whose humidity schedules were
+deliberately held out of phase.
+
 ## Discussion
+
+A stranger possibility has dogged us since the second replicate. If anastomosis is more than plumbing, if the fused
+network carries anticipatory signals from one hyphal front to another, then what we have been calling noise in the
+${series} may be correspondence. We call the conjecture hyphal telepathy, and we mean the term operationally: a
+statistical dependence between distant tips that survives conditioning on every shared physical cause we can name.
 
 The effect is small, robust, and almost certainly real. The telepathy hypothesis is none of these things, but it makes
 a sharp prediction: the cross-spectrum between separated colonies should show coherent power at the driving frequency,

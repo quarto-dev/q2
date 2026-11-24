@@ -844,6 +844,29 @@ export class Demo {
     }
   }
 
+  /**
+   * Delete the whole line (one hard-wrapped source line, however it soft-wraps on screen) that contains `lineNeedle`, and
+   * type `text` in its place, hard-wrapped, at a human tempo. A rewrite of one sentence: she deletes it and says something else.
+   */
+  async replaceLine(who: 'host' | 'guest', lineNeedle: string, text: string): Promise<void> {
+    const page = this.editorPage(who);
+    const vs = this.kinds[who] === 'vscode';
+    await this.scrollTop(who);
+    await page.locator(vs ? '.editor-instance .view-line' : '.monaco-editor .view-line', { hasText: lineNeedle }).first().click();
+    if (!this.o.fast) await new Promise((r) => setTimeout(r, 800)); // the line is visible before it goes
+    await page.keyboard.press('ControlOrMeta+Shift+K'); // delete line: the caret lands at the start of the next one
+    await page.keyboard.press('Home');
+    const plan = this.typist.plan(wrapText(text, 64) + '\n', { paste: 'none' });
+    const wait = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+    await wait(plan.lead);
+    for (const step of plan.steps) {
+      await wait(step.wait);
+      if (step.backspace) await page.keyboard.press('Backspace');
+      else if (step.paste) await page.keyboard.insertText(step.text ?? '');
+      else await page.keyboard.type(step.text ?? '');
+    }
+  }
+
   /** Record what each editor window shows right now (the story's end state), for the event log. */
   async recordFinalState(): Promise<void> {
     for (const who of ['host', 'guest'] as const) {

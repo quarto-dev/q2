@@ -132,32 +132,48 @@ export function vscodeShareStory(d: Demo): Step[] {
         await d.scrollTop('guest');
         await shows(d, 'host', 'After reanalysis');
         await shows(d, 'guest', 'After reanalysis');
-        await shows(d, 'host', 'hyphal telepathy');
-        await shows(d, 'guest', 'hyphal telepathy');
+        // The abstract is always on screen; the speculative paragraphs lower down may be below the fold of a short window.
+        await shows(d, 'host', 'keeping each other informed');
+        await shows(d, 'guest', 'keeping each other informed');
+        await shows(d, 'host', EDITS.clockNeedle);
+        await shows(d, 'guest', EDITS.clockNeedle);
         await until('the guest saw the swap notice', async () => (await d.notices('guest')) === 1);
         await until('the corrigendum appeared on disk', () => disk(d, 'celia-2026-corrigendum-variance-components.qmd').length > 0);
       },
     },
     {
-      id: 'telepathy-maurice',
-      caption: 'Maurice tries a thought on the branch in the browser: it appears in her editor.',
-      action: () => d.typeUnder('guest', 'Introduction', EDITS.telepathyMaurice),
+      id: 'telepathy-myra',
+      caption: 'Rereading the speculation, Myra decides the sentence about private clocks must go. She deletes it and writes a warning in its place.',
+      action: async () => {
+        await d.replaceLine('host', EDITS.clockNeedle, EDITS.warning);
+      },
       check: async () => {
-        await shows(d, 'guest', EDITS.telepathyMauriceNeedle);
-        await shows(d, 'host', EDITS.telepathyMauriceNeedle);
+        await shows(d, 'host', EDITS.warningNeedle);
+        await shows(d, 'guest', EDITS.warningNeedle);
+        await shows(d, 'host', EDITS.clockNeedle, false);
+        await shows(d, 'guest', EDITS.clockNeedle, false);
       },
     },
     {
-      id: 'telepathy-myra',
-      caption: 'Myra follows it in her own paragraph, and saves.',
+      id: 'telepathy-maurice',
+      caption: 'Maurice agrees, and sharpens the same sentence: should avoid becomes must never pursue.',
       action: async () => {
-        await d.typeAfter('host', EDITS.telepathyMaurice, EDITS.telepathyMyra);
-        await saveHostUntil(d, EDITS.telepathyMauriceNeedle, EDITS.telepathyMyraNeedle);
+        await d.replaceLead('guest', 'We should avoid', 3, EDITS.warningLead);
       },
       check: async () => {
-        await shows(d, 'host', EDITS.telepathyMyraNeedle);
-        await shows(d, 'guest', EDITS.telepathyMyraNeedle);
-        await shows(d, 'guest', EDITS.telepathyMauriceNeedle);
+        await shows(d, 'guest', EDITS.warningStrongNeedle);
+        await shows(d, 'host', EDITS.warningStrongNeedle);
+        await shows(d, 'host', 'We should avoid', false);
+      },
+    },
+    {
+      id: 'telepathy-save',
+      caption: 'Myra saves, so the rewritten sentence reaches her disk.',
+      action: async () => {
+        await saveHostUntil(d, EDITS.warningStrongNeedle);
+      },
+      check: async () => {
+        expect(diskFlat(d, R_PAPER)).not.toContain(EDITS.clockNeedle);
       },
     },
     {
@@ -167,9 +183,9 @@ export function vscodeShareStory(d: Demo): Step[] {
       check: async () => {
         await d.waitOutput(/would be overwritten by checkout/, 'host', 15_000);
         expect(d.git('branch', '--show-current').trim()).toBe('hyphal-telepathy');
-        // Nothing moved: both still show the branch and both edits.
-        await shows(d, 'host', EDITS.telepathyMyraNeedle);
-        await shows(d, 'guest', EDITS.telepathyMyraNeedle);
+        // Nothing moved: both still show the branch and the rewritten sentence.
+        await shows(d, 'host', EDITS.warningStrongNeedle);
+        await shows(d, 'guest', EDITS.warningStrongNeedle);
         expect(await d.notices('guest')).toBe(1);
       },
     },
@@ -180,8 +196,8 @@ export function vscodeShareStory(d: Demo): Step[] {
       check: async () => {
         await until('the commit exists', () => d.git('log', '-1', '--format=%s').trim() === EDITS.telepathyCommit);
         // A commit changes nothing the readers see.
-        await shows(d, 'host', EDITS.telepathyMyraNeedle);
-        await shows(d, 'guest', EDITS.telepathyMyraNeedle);
+        await shows(d, 'host', EDITS.warningStrongNeedle);
+        await shows(d, 'guest', EDITS.warningStrongNeedle);
       },
     },
     {
@@ -192,8 +208,7 @@ export function vscodeShareStory(d: Demo): Step[] {
         await d.scrollTop('guest');
         for (const who of ['host', 'guest'] as const) {
           await shows(d, who, 'After reanalysis', false);
-          await shows(d, who, EDITS.telepathyMauriceNeedle, false);
-          await shows(d, who, EDITS.telepathyMyraNeedle, false);
+          await shows(d, who, EDITS.warningStrongNeedle, false);
           // The paragraph Maurice typed on main before the branch is the same one for both.
           await shows(d, who, EDITS.tipNeedle);
         }
