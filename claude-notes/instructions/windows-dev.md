@@ -56,9 +56,7 @@ gh workflow run q2-preview-spa-e2e.yml --ref <branch> -f runners='["windows-late
 ```
 
 On Windows each job runs its `run:` steps under Git Bash, so the steps stay POSIX.
-The Windows legs of the TS and Playwright workflows have not been run yet; expect
-to fix setup steps (WASM build, Playwright browsers) on the first runs. The Rust
-leg skips the tree-sitter grammar test and the Jupyter kernel setup on Windows.
+The Rust leg skips the tree-sitter grammar test and the Jupyter kernel setup on Windows.
 
 The pre-landing gate is still a cross-check, which works
 from any OS because `cargo check`/`cargo clippy` do not link:
