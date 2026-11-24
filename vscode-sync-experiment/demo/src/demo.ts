@@ -43,6 +43,18 @@ export function wrapText(text: string, width: number): string {
   return lines.join('\n');
 }
 
+/**
+ * A short piece of the end of `text`, for finding the row that holds it. A narrow editor soft-wraps even a 64-character
+ * line, and rows break at spaces, so a needle of several words can straddle two rows and match neither. The last word
+ * cannot straddle; when it is too short to be distinctive, the last two words are used. The row holding the end of a
+ * paragraph is also where End puts the caret.
+ */
+export function lastRowNeedle(text: string): string {
+  const words = text.trim().split(/\s+/);
+  const last = words[words.length - 1]!;
+  return last.length >= 7 ? last : words.slice(-2).join(' ');
+}
+
 export type Preset = 'hub-browser' | 'hub-vscode-host' | 'hub-vscode-clone' | 'vscode-share';
 
 export interface DemoOptions {
@@ -816,10 +828,29 @@ export class Demo {
    * paragraph's text as it was typed: the new one goes after its last hard-wrapped line.
    */
   async typeAfter(who: 'host' | 'guest', previous: string, text: string): Promise<void> {
-    const lines = wrapText(previous, 64).split('\n');
-    // A narrow editor soft-wraps even a 64-character line, so no one rendered row holds all of it: find the row that
-    // holds its end, which is also where End puts the caret.
-    await this.typeParagraphAt(who, lines[lines.length - 1]!.trim().slice(-18).trim(), text);
+    await this.typeParagraphAt(who, lastRowNeedle(previous), text);
+  }
+
+  /**
+   * Add `text` at the end of a paragraph, as new lines of the same paragraph (no blank line), after the row holding
+   * `endNeedle`: a sentence added to what is already there.
+   */
+  async appendToParagraph(who: 'host' | 'guest', endNeedle: string, text: string): Promise<void> {
+    const page = this.editorPage(who);
+    const vs = this.kinds[who] === 'vscode';
+    await this.scrollToRow(who, endNeedle);
+    await page.locator(vs ? '.editor-instance .view-line' : '.monaco-editor .view-line', { hasText: endNeedle }).first().click();
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    const plan = this.typist.plan(wrapText(text, 64), { paste: 'none' });
+    const wait = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+    await wait(plan.lead);
+    for (const step of plan.steps) {
+      await wait(step.wait);
+      if (step.backspace) await page.keyboard.press('Backspace');
+      else if (step.paste) await page.keyboard.insertText(step.text ?? '');
+      else await page.keyboard.type(step.text ?? '');
+    }
   }
 
   /** Click the first line containing `lineNeedle`, open a blank-line-separated paragraph below it, and type `text`. */
@@ -834,29 +865,6 @@ export class Demo {
     await page.keyboard.press('Enter');
     // Hard-wrapped, as an author's editor would: a long unbroken line runs off the pane in VS Code.
     const plan = this.typist.plan(wrapText(text, 64), { paste: 'none' });
-    const wait = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
-    await wait(plan.lead);
-    for (const step of plan.steps) {
-      await wait(step.wait);
-      if (step.backspace) await page.keyboard.press('Backspace');
-      else if (step.paste) await page.keyboard.insertText(step.text ?? '');
-      else await page.keyboard.type(step.text ?? '');
-    }
-  }
-
-  /**
-   * Delete the whole line (one hard-wrapped source line, however it soft-wraps on screen) that contains `lineNeedle`, and
-   * type `text` in its place, hard-wrapped, at a human tempo. A rewrite of one sentence: she deletes it and says something else.
-   */
-  async replaceLine(who: 'host' | 'guest', lineNeedle: string, text: string): Promise<void> {
-    const page = this.editorPage(who);
-    const vs = this.kinds[who] === 'vscode';
-    await this.scrollTop(who);
-    await page.locator(vs ? '.editor-instance .view-line' : '.monaco-editor .view-line', { hasText: lineNeedle }).first().click();
-    if (!this.o.fast) await new Promise((r) => setTimeout(r, 800)); // the line is visible before it goes
-    await page.keyboard.press('ControlOrMeta+Shift+K'); // delete line: the caret lands at the start of the next one
-    await page.keyboard.press('Home');
-    const plan = this.typist.plan(wrapText(text, 64) + '\n', { paste: 'none' });
     const wait = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
     await wait(plan.lead);
     for (const step of plan.steps) {
@@ -919,6 +927,37 @@ export class Demo {
     const page = this.kinds[who] === 'vscode' ? this.vscode[who]!.page : (who === 'host' ? this.hostEditor : this.guestEditor)!.page;
     await page.locator(this.kinds[who] === 'vscode' ? '.editor-instance .view-lines' : '.monaco-editor .view-lines').first().click();
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowUp' : 'Control+Home');
+  }
+
+  /**
+   * Scroll an editor, as a reader would with the wheel, until the row holding `needle` is on screen and well clear of the
+   * bottom edge. Monaco renders only the rows in view, so text lower in a long paper cannot be read or clicked until then.
+   */
+  async scrollToRow(who: 'host' | 'guest', needle: string): Promise<void> {
+    const page = this.editorPage(who);
+    const vs = this.kinds[who] === 'vscode';
+    const rowSel = vs ? '.editor-instance .view-line' : '.monaco-editor .view-line';
+    const rows = page.locator(rowSel, { hasText: needle });
+    const lines = page.locator(vs ? '.editor-instance .view-lines' : '.monaco-editor .view-lines').first();
+    // The visible pane, not `.view-lines` (whose box can span the whole content).
+    const pane = page.locator(vs ? '.editor-instance .monaco-editor' : '.monaco-editor').first();
+    await this.scrollTop(who);
+    await lines.hover();
+    for (let i = 0; i < 40 && (await rows.count()) === 0; i++) {
+      await page.mouse.wheel(0, 160);
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    if ((await rows.count()) === 0) throw new Error(`${who} editor: no row holding ${JSON.stringify(needle)} after scrolling`);
+    // Found, but perhaps at the bottom edge or only in Monaco's overscan: bring it to about a third of the way down so
+    // the lines after it show too. Wheel scrolling animates, so measure again after each move.
+    for (let i = 0; i < 8; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      const [row, box] = [await rows.first().boundingBox(), await pane.boundingBox()];
+      if (!row || !box) continue;
+      const want = box.y + box.height * 0.35;
+      if (row.y >= box.y + box.height * 0.1 && row.y <= box.y + box.height * 0.5) return;
+      await page.mouse.wheel(0, Math.round(row.y - want));
+    }
   }
 
   /** The number of swap notices an editor shows (always 0 for VS Code, which shows notifications, not this banner). */

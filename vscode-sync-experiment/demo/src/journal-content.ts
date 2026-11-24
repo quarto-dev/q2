@@ -40,16 +40,20 @@ export const EDITS = {
   tipAnswer:
     'Cross-correlation over the first cycle alone would have too few points, so we shall estimate the lag from the full series and report its confidence interval.',
   tipAnswerNeedle: 'report its confidence interval',
-  /** The speculative branch of the vscode-share story: Myra decides the sentence about clocks must go, and says so. */
-  clockNeedle: 'Suppose each colony keeps a private clock',
-  warning:
-    'We should avoid this line of speculation, since an apparent shared phase may come from the chamber alone, and the chamber has no opinions.',
-  warningNeedle: 'We should avoid this line of speculation',
-  /** Maurice agrees and sharpens the same sentence: its first three words become these. */
-  warningLead: 'We must never pursue',
-  warningStrongNeedle: 'We must never pursue this line of speculation',
-  /** Myra commits in a fever, with a typo, because git will not let her leave the branch otherwise. */
-  telepathyCommit: 'THE HYPHAE ARE TALKING!! coherence confimed across the mesh, see sec 4 (written at 3am)',
+  /**
+   * The speculative branch of the vscode-share story. Myra adds what the sealed chambers did to the end of the
+   * paragraph about anticipation, and Maurice adds the same observation from his own series. The paragraph ends
+   * `arriving in the spring, or never.`, and its last word is the anchor that finds it.
+   */
+  echoEnd: 'never.',
+  echoMyra:
+    'When we pulsed the humidity in the first chamber, the second answered with the same pulse train, delayed by 7.3 seconds, and it kept answering for some minutes after we stopped.',
+  echoMyraNeedle: 'delayed by 7.3 seconds',
+  echoMaurice:
+    'I recorded the echo as well: it persisted for nine cycles, with a period slightly longer than ours, as if the message were being repeated more slowly for our benefit.',
+  echoMauriceNeedle: 'persisted for nine cycles',
+  /** Myra commits, calmer than she feels, because git will not let her leave the branch otherwise. */
+  telepathyCommit: 'Added what we saw at 2 a.m. I am not claiming anything. Saving it before I lose my nerve.',
 } as const;
 
 export const GITIGNORE = '.venv/\n__pycache__/\n.quarto/\n*_files/\n_site/\n';
@@ -131,10 +135,10 @@ and extend it to oscillating substrate humidity.
 
 ## Speculative extensions
 
-Suppose each colony keeps a private clock, entrained by the humidity cycle, and that fusion events reset it.
-Two colonies that have never touched would then keep unrelated time. Two that have fused would drift into a common
-phase, and a colony cut from the network would remember the shared rhythm for a number of cycles, much as a severed
-flatworm is said to remember its maze. We observed no such memory, but we did not look for long enough.
+Suppose each colony keeps a private clock, entrained by the humidity cycle, and that fusion events reset it. Two
+colonies that have never touched would then keep unrelated time. Two that have fused would drift into a common phase,
+and a colony cut from the network would remember the shared rhythm for a number of cycles, much as a severed flatworm
+is said to remember its maze. We observed no such memory, but we did not look for long enough.
 
 A harder version of the conjecture supposes that the network anticipates. In the dry regime the tips slow before the
 chamber has dried, as if the mycelium had read the schedule ahead of the sensors. We are aware that a lag in the

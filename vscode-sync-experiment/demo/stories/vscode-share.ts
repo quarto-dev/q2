@@ -6,9 +6,18 @@
  */
 import { expect } from '@playwright/test';
 import type { Step } from '../src/driver';
-import { Demo, R_PAPER } from '../src/demo';
+import { Demo, R_PAPER, lastRowNeedle } from '../src/demo';
 import { EDITS } from '../src/journal-content';
 import { diskFlat, disk, shows, until } from './hub';
+
+/**
+ * `shows`, after scrolling that editor to the row holding `anchor`: text lower in the paper is rendered only while in view.
+ * Use an anchor that stays on the page, such as the end of the paragraph the edit joined.
+ */
+async function showsNear(d: Demo, who: 'host' | 'guest', anchor: string, needle: string): Promise<void> {
+  await d.scrollToRow(who, anchor);
+  await shows(d, who, needle);
+}
 
 /** Myra saves in VS Code, over and over, until her file on disk holds every needle (VS Code writes only on save). */
 async function saveHostUntil(d: Demo, ...needles: string[]): Promise<void> {
@@ -135,45 +144,41 @@ export function vscodeShareStory(d: Demo): Step[] {
         // The abstract is always on screen; the speculative paragraphs lower down may be below the fold of a short window.
         await shows(d, 'host', 'keeping each other informed');
         await shows(d, 'guest', 'keeping each other informed');
-        await shows(d, 'host', EDITS.clockNeedle);
-        await shows(d, 'guest', EDITS.clockNeedle);
         await until('the guest saw the swap notice', async () => (await d.notices('guest')) === 1);
         await until('the corrigendum appeared on disk', () => disk(d, 'celia-2026-corrigendum-variance-components.qmd').length > 0);
       },
     },
     {
       id: 'telepathy-myra',
-      caption: 'Rereading the speculation, Myra decides the sentence about private clocks must go. She deletes it and writes a warning in its place.',
+      caption: 'Myra adds what the sealed chambers did last night to the paragraph about anticipation.',
       action: async () => {
-        await d.replaceLine('host', EDITS.clockNeedle, EDITS.warning);
+        await d.appendToParagraph('host', EDITS.echoEnd, EDITS.echoMyra);
       },
       check: async () => {
-        await shows(d, 'host', EDITS.warningNeedle);
-        await shows(d, 'guest', EDITS.warningNeedle);
-        await shows(d, 'host', EDITS.clockNeedle, false);
-        await shows(d, 'guest', EDITS.clockNeedle, false);
+        await showsNear(d, 'host', EDITS.echoEnd, EDITS.echoMyraNeedle);
+        await showsNear(d, 'guest', EDITS.echoEnd, EDITS.echoMyraNeedle);
       },
     },
     {
       id: 'telepathy-maurice',
-      caption: 'Maurice agrees, and sharpens the same sentence: should avoid becomes must never pursue.',
+      caption: 'Maurice adds a sentence of his own: he recorded the echo too.',
       action: async () => {
-        await d.replaceLead('guest', 'We should avoid', 3, EDITS.warningLead);
+        await d.appendToParagraph('guest', lastRowNeedle(EDITS.echoMyra), EDITS.echoMaurice);
       },
       check: async () => {
-        await shows(d, 'guest', EDITS.warningStrongNeedle);
-        await shows(d, 'host', EDITS.warningStrongNeedle);
-        await shows(d, 'host', 'We should avoid', false);
+        await showsNear(d, 'guest', EDITS.echoEnd, EDITS.echoMauriceNeedle);
+        await showsNear(d, 'host', EDITS.echoEnd, EDITS.echoMauriceNeedle);
+        await showsNear(d, 'guest', EDITS.echoEnd, EDITS.echoMyraNeedle);
       },
     },
     {
       id: 'telepathy-save',
-      caption: 'Myra saves, so the rewritten sentence reaches her disk.',
+      caption: 'Myra saves, so both sentences reach her disk.',
       action: async () => {
-        await saveHostUntil(d, EDITS.warningStrongNeedle);
+        await saveHostUntil(d, EDITS.echoMyraNeedle, EDITS.echoMauriceNeedle);
       },
       check: async () => {
-        expect(diskFlat(d, R_PAPER)).not.toContain(EDITS.clockNeedle);
+        expect(diskFlat(d, R_PAPER)).toContain(EDITS.echoMauriceNeedle);
       },
     },
     {
@@ -183,9 +188,9 @@ export function vscodeShareStory(d: Demo): Step[] {
       check: async () => {
         await d.waitOutput(/would be overwritten by checkout/, 'host', 15_000);
         expect(d.git('branch', '--show-current').trim()).toBe('hyphal-telepathy');
-        // Nothing moved: both still show the branch and the rewritten sentence.
-        await shows(d, 'host', EDITS.warningStrongNeedle);
-        await shows(d, 'guest', EDITS.warningStrongNeedle);
+        // Nothing moved: both still show the branch and both sentences.
+        await showsNear(d, 'host', EDITS.echoEnd, EDITS.echoMauriceNeedle);
+        await showsNear(d, 'guest', EDITS.echoEnd, EDITS.echoMauriceNeedle);
         expect(await d.notices('guest')).toBe(1);
       },
     },
@@ -196,8 +201,8 @@ export function vscodeShareStory(d: Demo): Step[] {
       check: async () => {
         await until('the commit exists', () => d.git('log', '-1', '--format=%s').trim() === EDITS.telepathyCommit);
         // A commit changes nothing the readers see.
-        await shows(d, 'host', EDITS.warningStrongNeedle);
-        await shows(d, 'guest', EDITS.warningStrongNeedle);
+        await showsNear(d, 'host', EDITS.echoEnd, EDITS.echoMauriceNeedle);
+        await showsNear(d, 'guest', EDITS.echoEnd, EDITS.echoMauriceNeedle);
       },
     },
     {
@@ -208,12 +213,14 @@ export function vscodeShareStory(d: Demo): Step[] {
         await d.scrollTop('guest');
         for (const who of ['host', 'guest'] as const) {
           await shows(d, who, 'After reanalysis', false);
-          await shows(d, who, EDITS.warningStrongNeedle, false);
           // The paragraph Maurice typed on main before the branch is the same one for both.
           await shows(d, who, EDITS.tipNeedle);
         }
         await until('the pilot study is back', () => disk(d, 'rott-mildew-2025-preliminary-fusion.qmd').length > 0);
         expect(d.git('branch', '--show-current').trim()).toBe('main');
+        // Rows below the fold are not rendered, so also read the file: the speculation is on its branch, not here.
+        expect(diskFlat(d, R_PAPER)).not.toContain(EDITS.echoMyraNeedle);
+        expect(diskFlat(d, R_PAPER)).not.toContain(EDITS.echoMauriceNeedle);
       },
     },
     {
