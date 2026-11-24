@@ -48,6 +48,21 @@ code.sourceCode {
   white-space: pre;
 }
 
+// `code-overflow: wrap | scroll`. ported from _quarto-rules.scss:319-325.
+// Quarto 1 has the class on the `<pre>`; q2's writer puts a highlighted
+// block's extra classes on the outer `div.sourceCode`, so both shapes are
+// matched. The document-level option needs no Sass variable here:
+// `CodeBlockGenerateTransform` stamps the class on every source block.
+pre.code-overflow-wrap > code.sourceCode,
+div.sourceCode.code-overflow-wrap > pre > code.sourceCode {
+  white-space: pre-wrap;
+}
+
+pre.code-overflow-scroll > code.sourceCode,
+div.sourceCode.code-overflow-scroll > pre > code.sourceCode {
+  white-space: pre;
+}
+
 // Quarto 1 inherits these from Pandoc's baseline highlighting CSS
 // ($highlighting-css$). Without `pre.sourceCode { margin: 0 }`,
 // Bootstrap reboot's `pre { margin-bottom: 1rem }` is trapped inside
@@ -62,4 +77,59 @@ div.sourceCode {
 
 pre.sourceCode {
   margin: 0;
+}
+
+// Line numbers (`.number-lines`, `code-line-numbers: true`). Pandoc's
+// baseline highlighting CSS, which Quarto 1 gets from `$highlighting-css$`.
+// The HTML writer emits one `<span id="cb1-1"><a href="#cb1-1"></a>…</span>`
+// per line inside `pre.numberSource`; a CSS counter numbers them. The rules
+// are scoped to `pre.numberSource` because q2 writes per-line spans only for
+// numbered blocks: elsewhere the direct children of `<code>` are `.hl-*`
+// token spans, which Pandoc's unscoped `pre > code.sourceCode > span` rules
+// would restyle.
+pre.numberSource > code.sourceCode {
+  position: relative;
+}
+
+pre.numberSource > code.sourceCode > span {
+  display: inline-block;
+  line-height: 1.25;
+}
+
+pre.numberSource code {
+  counter-reset: source-line 0;
+}
+
+pre.numberSource code > span {
+  position: relative;
+  left: -4em;
+  counter-increment: source-line;
+}
+
+pre.numberSource code > span > a:first-child::before {
+  content: counter(source-line);
+  position: relative;
+  left: -1em;
+  text-align: right;
+  vertical-align: baseline;
+  border: none;
+  display: inline-block;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  padding: 0 4px;
+  width: 4em;
+}
+
+// After `pre.sourceCode { margin: 0 }` above, which has the same
+// specificity. Pandoc also sets `padding-left: 4px` here; Quarto 1's theme
+// overrides it with the code block padding, so it is left out.
+//
+// `overflow: visible` is Pandoc's `.sourceCode { overflow: visible }`, needed
+// here because the line spans sit 4em to the left of the `<pre>`'s content
+// box: Bootstrap's `pre { overflow: auto }` would clip the numbers. The outer
+// `div.sourceCode` still scrolls a long line.
+pre.numberSource {
+  margin-left: 3em;
+  overflow: visible;
 }

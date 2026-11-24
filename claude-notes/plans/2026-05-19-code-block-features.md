@@ -147,17 +147,29 @@ session can pick it up without re-auditing Q1.
   Browser e2e: hover shows icon, click swaps to checkmark + shows
   tooltip, state reverts after 1s. See Phase 3 hand-off below.)*
 
-- [ ] **Phase 3 — Code folding.** `code-fold: true|show`. Render
+- [x] **Phase 3 — Code folding.** `code-fold: true|show`. Render
   `<details class="code-fold" [open]><summary>…</summary>…</details>`
   *outside* the filename wrapper (Q1's DecoratedCodeBlock
-  composition pattern — see audit notes).
+  composition pattern — see audit notes). *(Done 2026-11-24. Per-cell
+  option, document default and `code-summary`; executed cells only, as
+  in Q1. The `<details>` open and close tags are sibling `RawBlock`s
+  so `details` is a direct child of `div.cell`. Not done: markdown in
+  the summary text, and the q2-preview React renderer, which skips the
+  fold layer because split raw HTML cannot enclose content there. Same
+  change: the `filename` cell option, no copy button on class-less
+  blocks (bd-xaaucvfz), `code-overflow`.)*
 
 ---
 
 *Phases 4 – 6 are deferred to separate sessions. Notes below kept for
 continuity; do not implement in the current iteration.*
 
-- [ ] **Phase 4 — Line numbers.** *(Deferred.)* Annotate `CodeBlock`
+- [x] **Phase 4 — Line numbers.** *(Done 2026-11-24 for HTML:
+  `code-line-numbers` and `.number-lines` / `.numberLines` with
+  `startFrom`. The HTML writer emits Pandoc's per-line spans for
+  numbered blocks only, and `highlight.scss` carries Pandoc's
+  `pre.numberSource` rules. Reveal line highlighting from a line spec
+  is still open. Original note follows.)* Annotate `CodeBlock`
   with Pandoc's `.number-lines` class. For Reveal.js/Docusaurus,
   stash the line range in a kv attribute (Q1 uses
   `kCodeLineNumbers`). Pandoc's syntax highlighter renders the

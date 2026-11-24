@@ -177,7 +177,7 @@ pub use callout::CalloutTransform;
 pub use callout_resolve::CalloutResolveTransform;
 pub use categories_sidebar::CategoriesSidebarTransform;
 pub use code_block_generate::{
-    CodeBlockDecoration, CodeBlockDecorationKey, CodeBlockGenerateTransform, CopyMode,
+    CodeBlockDecoration, CodeBlockDecorationKey, CodeBlockGenerateTransform, CopyMode, FoldMode,
     resolve_default_copy_mode,
 };
 pub use code_block_render::CodeBlockRenderTransform;

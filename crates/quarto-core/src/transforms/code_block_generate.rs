@@ -68,7 +68,87 @@ pub struct CodeBlockDecoration {
     /// scaffold and only differ in the ported SCSS selector
     /// (`$code-copy-selector`) that controls button visibility.
     pub copy: CopyMode,
-    // Phase 3: pub fold: FoldMode, pub summary: Option<String>
+    /// Phase 3: fold mode for an executed cell's source block. Resolved
+    /// from the block's `code-fold` attribute, falling back to the
+    /// document-level `code-fold` key. Always [`FoldMode::None`] for
+    /// blocks without the `cell-code` class and for formats that are
+    /// not HTML-based, matching Q1's `foldcode.lua`.
+    pub fold: FoldMode,
+    /// Phase 3: text of the `<summary>` element. `Some` exactly when
+    /// `fold` is not [`FoldMode::None`]. Resolved from the block's
+    /// `code-summary` attribute, then the document-level
+    /// `code-summary`, then Q1's default `"Code"`.
+    pub summary: Option<String>,
+    /// Phase 3: the block carried the `hidden` class, which Q1 copies
+    /// onto the `<details>` element so a hidden cell's fold is hidden
+    /// with it.
+    pub fold_hidden: bool,
+}
+
+/// Resolution of the `code-fold` option for one code block.
+///
+/// Q1's mapping (`foldAttribute` in `quarto-post/foldcode.lua`):
+///
+/// - `true`, `"true"`, `"1"` → folded and closed.
+/// - `false`, `"false"`, `"0"`, unset → not folded.
+/// - `"show"` → folded and open.
+/// - any other string → folded and closed (Q1 only tests for `"show"`
+///   when it writes the `open` attribute).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum FoldMode {
+    /// No `<details>` wrapper.
+    #[default]
+    None,
+    /// `<details class="code-fold">`, closed on load.
+    Hide,
+    /// `<details open class="code-fold">`, open on load.
+    Show,
+}
+
+impl FoldMode {
+    /// `true` when a `<details>` wrapper should be emitted.
+    pub fn is_on(self) -> bool {
+        !matches!(self, FoldMode::None)
+    }
+
+    /// Parse the string form of a `code-fold` value (a block attribute
+    /// or a document-level string).
+    pub fn from_attr(value: &str) -> Self {
+        match value.trim() {
+            "" | "false" | "0" | "none" => FoldMode::None,
+            "show" => FoldMode::Show,
+            _ => FoldMode::Hide,
+        }
+    }
+}
+
+/// Q1's default `<summary>` text (`summaryAttribute` in `foldcode.lua`).
+pub const DEFAULT_CODE_SUMMARY: &str = "Code";
+
+/// Resolve the document-level `code-fold` default. Unset is
+/// [`FoldMode::None`].
+pub fn resolve_default_fold_mode(meta: &quarto_pandoc_types::ConfigValue) -> FoldMode {
+    let Some(value) = meta.get("code-fold") else {
+        return FoldMode::None;
+    };
+    if let Some(b) = value.as_bool() {
+        return if b { FoldMode::Hide } else { FoldMode::None };
+    }
+    // `as_plain_text`, not `as_str`: a bare `code-fold: show` is stored
+    // as `PandocInlines` (see `resolve_default_copy_mode`).
+    match value.as_plain_text() {
+        Some(s) => FoldMode::from_attr(&s),
+        None => FoldMode::None,
+    }
+}
+
+/// Resolve the document-level `code-summary` default, or
+/// [`DEFAULT_CODE_SUMMARY`] when the key is unset or empty.
+pub fn resolve_default_code_summary(meta: &quarto_pandoc_types::ConfigValue) -> String {
+    meta.get("code-summary")
+        .and_then(|v| v.as_plain_text())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_CODE_SUMMARY.to_string())
 }
 
 /// Resolution of the document-level `code-copy` metadata key.
@@ -136,6 +216,54 @@ pub fn resolve_default_copy_mode(meta: &quarto_pandoc_types::ConfigValue) -> Cop
         };
     }
     CopyMode::Hover
+}
+
+/// Resolution of `code-line-numbers` for one block
+/// (`lineNumbersAttribute` in Q1's `quarto-pre/line-numbers.lua`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LineNumbers {
+    /// No numbering.
+    Off,
+    /// Number every line.
+    On,
+    /// A string other than a boolean: a line spec such as `"2,4"` or
+    /// `"|1|2"`. Numbers the block; Reveal also highlights from it.
+    Spec(String),
+}
+
+impl LineNumbers {
+    pub fn from_bool(b: bool) -> Self {
+        if b { LineNumbers::On } else { LineNumbers::Off }
+    }
+
+    /// Parse the string form. `"1"` means `true` except in formats that
+    /// accept line specs (`accept_specs`, Reveal), where it is line 1.
+    pub fn from_attr(value: &str, accept_specs: bool) -> Self {
+        match value.trim() {
+            "true" => LineNumbers::On,
+            "1" if !accept_specs => LineNumbers::On,
+            "false" | "0" | "" => LineNumbers::Off,
+            other => LineNumbers::Spec(other.to_string()),
+        }
+    }
+}
+
+/// `true` for the two spellings of Pandoc's line-numbering class.
+fn is_number_lines_class(class: &str) -> bool {
+    class == "number-lines" || class == "numberLines"
+}
+
+/// Map the document-level `code-overflow` key to the class Q1 writes
+/// for the per-block form. `None` when the key is unset or not one of
+/// `wrap` / `scroll`.
+pub fn resolve_default_overflow_class(
+    meta: &quarto_pandoc_types::ConfigValue,
+) -> Option<&'static str> {
+    match meta.get("code-overflow")?.as_plain_text()?.trim() {
+        "wrap" => Some("code-overflow-wrap"),
+        "scroll" => Some("code-overflow-scroll"),
+        _ => None,
+    }
 }
 
 /// Stable identity used to key
@@ -221,6 +349,32 @@ impl AstTransform for CodeBlockGenerateTransform {
         // (Preview / hub-client buttons are styled + hover-hidden but inert,
         // matching plain-HTML preview; an iframe-safe init is a follow-up.)
         let doc_default_copy = resolve_default_copy_mode(&ast.meta);
+        // Phase 3: fold defaults. Q1 folds only in HTML-based formats
+        // (`_quarto.format.isHtmlOutput()`), so other formats keep the
+        // attributes on the block untouched.
+        // Document-level `code-overflow: wrap | scroll`. Q1 feeds this to
+        // a Sass variable (`$code-white-space`); q2 stamps the per-block
+        // class instead, which the ported `.code-overflow-*` rules style.
+        let doc_overflow_class = resolve_default_overflow_class(&ast.meta);
+        let fold_enabled = ctx.format.identifier.is_html_based();
+        // Phase 4: line numbers. HTML-based formats only; elsewhere the
+        // attribute stays on the block for Pandoc's own filters.
+        let is_revealjs = ctx.format.identifier == crate::format::FormatIdentifier::Revealjs;
+        let doc_default_line_numbers =
+            ast.meta
+                .get("code-line-numbers")
+                .map_or(LineNumbers::Off, |v| match v.as_bool() {
+                    Some(b) => LineNumbers::from_bool(b),
+                    None => v.as_plain_text().map_or(LineNumbers::Off, |s| {
+                        LineNumbers::from_attr(&s, is_revealjs)
+                    }),
+                });
+        // Every source block counts, numbered or not, so a block's id
+        // does not change when its neighbours gain line numbers.
+        let mut source_block_counter = 0usize;
+
+        let doc_default_fold = resolve_default_fold_mode(&ast.meta);
+        let doc_default_summary = resolve_default_code_summary(&ast.meta);
 
         walk_blocks_mut(&mut ast.blocks, &mut |block| {
             let Block::CodeBlock(cb) = block else {
@@ -233,9 +387,85 @@ impl AstTransform for CodeBlockGenerateTransform {
             // Future phases will extend this match.
             let filename = cb.attr.2.get("filename").cloned();
 
+            // Phase 3: only an executed cell's source block folds
+            // (`.cell-code`); a plain fenced block never does, even
+            // with a `code-fold` attribute. The attributes are consumed
+            // here so they do not leak into the page as `data-code-fold`.
+            let (fold, summary, fold_hidden) =
+                if fold_enabled && cb.attr.1.iter().any(|c| c == "cell-code") {
+                    let fold_attr = cb.attr.2.remove("code-fold");
+                    let summary_attr = cb.attr.2.remove("code-summary");
+                    let fold = match fold_attr.as_deref() {
+                        Some(v) => FoldMode::from_attr(v),
+                        None => doc_default_fold,
+                    };
+                    if fold.is_on() {
+                        let summary = summary_attr
+                            .filter(|s| !s.trim().is_empty())
+                            .unwrap_or_else(|| doc_default_summary.clone());
+                        let hidden = cb.attr.1.iter().any(|c| c == "hidden");
+                        (fold, Some(summary), hidden)
+                    } else {
+                        (FoldMode::None, None, false)
+                    }
+                } else {
+                    (FoldMode::None, None, false)
+                };
+
+            // Q1 adds the copy button to `pre.sourceCode` only, that is,
+            // to blocks with a language. A block with no class at all
+            // (a cell's printed output, a bare fence) gets none.
+            // (bd-xaaucvfz)
+            let copy = if cb.attr.1.is_empty() {
+                CopyMode::Off
+            } else {
+                doc_default_copy
+            };
+
+            // Phase 4: `code-line-numbers` (block attribute, then the
+            // document default) resolves to Pandoc's `.number-lines`
+            // class, which the HTML writer turns into per-line markup.
+            // Q1: `quarto-pre/line-numbers.lua`, source blocks only.
+            if fold_enabled && !cb.attr.1.is_empty() {
+                source_block_counter += 1;
+                let line_numbers = match cb.attr.2.remove("code-line-numbers") {
+                    Some(v) => LineNumbers::from_attr(&v, is_revealjs),
+                    None => doc_default_line_numbers.clone(),
+                };
+                if line_numbers != LineNumbers::Off
+                    && !cb.attr.1.iter().any(|c| is_number_lines_class(c))
+                {
+                    cb.attr.1.push("number-lines".to_string());
+                }
+                // Reveal keeps a line spec ("1,3", "|1|2") for its
+                // highlight step; other formats only number.
+                if is_revealjs && let LineNumbers::Spec(spec) = &line_numbers {
+                    cb.attr
+                        .2
+                        .insert("code-line-numbers".to_string(), spec.clone());
+                }
+                // Numbered lines need a block id for their anchors
+                // (`cb3-10`). Pandoc names every code block this way.
+                if cb.attr.0.is_empty() && cb.attr.1.iter().any(|c| is_number_lines_class(c)) {
+                    cb.attr.0 = format!("cb{source_block_counter}");
+                }
+            }
+
+            // A block's own `.code-overflow-*` class (or the cell option
+            // the engine turned into one) wins over the document default.
+            if let Some(class) = doc_overflow_class
+                && !cb.attr.1.is_empty()
+                && !cb.attr.1.iter().any(|c| c.starts_with("code-overflow-"))
+            {
+                cb.attr.1.push(class.to_string());
+            }
+
             let decoration = CodeBlockDecoration {
                 filename,
-                copy: doc_default_copy,
+                copy,
+                fold,
+                summary,
+                fold_hidden,
             };
 
             // Skip blocks that produced no actual decoration — keeps
@@ -278,9 +508,9 @@ impl AstTransform for CodeBlockGenerateTransform {
 /// when nothing is decorated and to skip individual blocks that
 /// landed in the sideband but turned out to have no actionable
 /// content (defensive — Generate already filters with the same
-/// predicate). Phase 3 will extend the disjunction with `fold`.
+/// predicate).
 pub(crate) fn decoration_has_any_field(d: &CodeBlockDecoration) -> bool {
-    d.filename.is_some() || d.copy.is_on()
+    d.filename.is_some() || d.copy.is_on() || d.fold.is_on()
 }
 
 /// Walk every `CodeBlock` in the document, descending into containers
@@ -302,7 +532,10 @@ fn walk_block_mut(block: &mut Block, f: &mut impl FnMut(&mut Block)) {
     match block {
         Block::CodeBlock(_) => f(block),
         Block::BlockQuote(bq) => walk_blocks_mut(&mut bq.content, f),
-        Block::Div(div) => walk_blocks_mut(&mut div.content, f),
+        Block::Div(div) => {
+            hoist_div_filename(div);
+            walk_blocks_mut(&mut div.content, f)
+        }
         // Custom-node block slots: since #1050 a callout is still a
         // `Callout` custom node when this transform runs (bd-akkproqy).
         Block::Custom(node) => {
@@ -338,6 +571,27 @@ fn walk_block_mut(block: &mut Block, f: &mut impl FnMut(&mut Block)) {
         // variants / CaptionBlock are all leaf-ish from the perspective
         // of block-level code-block discovery.
         _ => {}
+    }
+}
+
+/// Move a `filename` attribute from a `Div` onto the `CodeBlock` that
+/// is its first child, so the per-block filename path decorates it.
+///
+/// This is how a `filename` cell option arrives: the engine writes it
+/// on the `div.cell`, not on the source fence. Q1 has the same rule in
+/// `quarto-pre/code-filename.lua` ("Div with `filename` whose first
+/// block is a CodeBlock"). A filename already on the code block wins.
+fn hoist_div_filename(div: &mut quarto_pandoc_types::block::Div) {
+    if !div.attr.2.contains_key("filename") {
+        return;
+    }
+    let Some(Block::CodeBlock(cb)) = div.content.first_mut() else {
+        return;
+    };
+    if let Some(filename) = div.attr.2.remove("filename")
+        && !cb.attr.2.contains_key("filename")
+    {
+        cb.attr.2.insert("filename".to_string(), filename);
     }
 }
 
@@ -608,6 +862,401 @@ mod tests {
         let deco = &ctx.code_block_decorations[&key];
         assert_eq!(deco.filename.as_deref(), Some("hello.py"));
         assert_eq!(deco.copy, CopyMode::Hover);
+    }
+
+    // ── Phase 3: fold ─────────────────────────────────────────────────
+
+    /// `meta` map with arbitrary entries, for the fold tests.
+    fn meta_with(entries: Vec<(&str, quarto_pandoc_types::ConfigValueKind)>) -> ConfigValue {
+        use quarto_pandoc_types::{ConfigMapEntry, ConfigValueKind, MergeOp};
+        ConfigValue {
+            value: ConfigValueKind::Map(
+                entries
+                    .into_iter()
+                    .map(|(key, value)| ConfigMapEntry {
+                        key: key.to_string(),
+                        key_source: SourceInfo::for_test(),
+                        value: ConfigValue {
+                            value,
+                            source_info: SourceInfo::for_test(),
+                            merge_op: MergeOp::Concat,
+                        },
+                    })
+                    .collect(),
+            ),
+            source_info: SourceInfo::for_test(),
+            merge_op: MergeOp::Concat,
+        }
+    }
+
+    /// Run Generate over one block and return its decoration (if any)
+    /// plus the block as Generate left it.
+    async fn generate_one(
+        meta: ConfigValue,
+        block: Block,
+        format: Format,
+    ) -> (Option<CodeBlockDecoration>, Block) {
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![block],
+        };
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        CodeBlockGenerateTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let key = CodeBlockDecorationKey::from_source_info(ast.blocks[0].source_info()).unwrap();
+        let deco = ctx.code_block_decorations.get(&key).cloned();
+        (deco, ast.blocks.remove(0))
+    }
+
+    fn kv<'a>(block: &'a Block, key: &str) -> Option<&'a String> {
+        let Block::CodeBlock(cb) = block else {
+            panic!("expected CodeBlock");
+        };
+        cb.attr.2.get(key)
+    }
+
+    #[test]
+    fn fold_mode_from_attr_follows_q1() {
+        assert_eq!(FoldMode::from_attr("true"), FoldMode::Hide);
+        assert_eq!(FoldMode::from_attr("1"), FoldMode::Hide);
+        assert_eq!(FoldMode::from_attr("show"), FoldMode::Show);
+        assert_eq!(FoldMode::from_attr("false"), FoldMode::None);
+        assert_eq!(FoldMode::from_attr("0"), FoldMode::None);
+        assert_eq!(FoldMode::from_attr("none"), FoldMode::None);
+        // Q1 writes `open` only for "show"; any other string folds closed.
+        assert_eq!(FoldMode::from_attr("hide"), FoldMode::Hide);
+    }
+
+    #[test]
+    fn resolve_default_fold_mode_reads_bool_and_string() {
+        assert_eq!(
+            resolve_default_fold_mode(&ConfigValue::default()),
+            FoldMode::None
+        );
+        assert_eq!(
+            resolve_default_fold_mode(&meta_with(vec![("code-fold", yaml_bool(true))])),
+            FoldMode::Hide
+        );
+        assert_eq!(
+            resolve_default_fold_mode(&meta_with(vec![("code-fold", yaml_bool(false))])),
+            FoldMode::None
+        );
+        assert_eq!(
+            resolve_default_fold_mode(&meta_with(vec![("code-fold", yaml_str("show"))])),
+            FoldMode::Show
+        );
+        // Bare front-matter strings arrive as PandocInlines.
+        assert_eq!(
+            resolve_default_fold_mode(&meta_with(vec![("code-fold", yaml_inlines("show"))])),
+            FoldMode::Show
+        );
+    }
+
+    #[test]
+    fn resolve_default_code_summary_falls_back_to_code() {
+        assert_eq!(
+            resolve_default_code_summary(&ConfigValue::default()),
+            "Code"
+        );
+        assert_eq!(
+            resolve_default_code_summary(&meta_with(vec![(
+                "code-summary",
+                yaml_inlines("Reveal")
+            )])),
+            "Reveal"
+        );
+    }
+
+    #[tokio::test]
+    async fn generate_folds_cell_code_from_block_attribute() {
+        let block = make_codeblock(
+            "x",
+            vec!["r", "cell-code"],
+            vec![("code-fold", "true"), ("code-summary", "Show the sum")],
+        );
+        let (deco, block) = generate_one(ConfigValue::default(), block, Format::html()).await;
+        let deco = deco.expect("decoration");
+        assert_eq!(deco.fold, FoldMode::Hide);
+        assert_eq!(deco.summary.as_deref(), Some("Show the sum"));
+        assert!(!deco.fold_hidden);
+        // Consumed, so the writer does not emit `data-code-fold`.
+        assert!(kv(&block, "code-fold").is_none());
+        assert!(kv(&block, "code-summary").is_none());
+    }
+
+    #[tokio::test]
+    async fn generate_folds_cell_code_from_document_default() {
+        let meta = meta_with(vec![
+            ("code-fold", yaml_inlines("show")),
+            ("code-summary", yaml_inlines("Reveal code")),
+        ]);
+        let block = make_codeblock("x", vec!["r", "cell-code"], vec![]);
+        let (deco, _) = generate_one(meta, block, Format::html()).await;
+        let deco = deco.expect("decoration");
+        assert_eq!(deco.fold, FoldMode::Show);
+        assert_eq!(deco.summary.as_deref(), Some("Reveal code"));
+    }
+
+    #[tokio::test]
+    async fn generate_block_fold_false_overrides_document_default() {
+        let meta = meta_with(vec![("code-fold", yaml_bool(true))]);
+        let block = make_codeblock("x", vec!["r", "cell-code"], vec![("code-fold", "false")]);
+        let (deco, block) = generate_one(meta, block, Format::html()).await;
+        let deco = deco.expect("copy decoration still present");
+        assert_eq!(deco.fold, FoldMode::None);
+        assert!(deco.summary.is_none());
+        assert!(kv(&block, "code-fold").is_none());
+    }
+
+    #[tokio::test]
+    async fn generate_summary_defaults_to_code() {
+        let block = make_codeblock("x", vec!["r", "cell-code"], vec![("code-fold", "true")]);
+        let (deco, _) = generate_one(ConfigValue::default(), block, Format::html()).await;
+        assert_eq!(deco.unwrap().summary.as_deref(), Some("Code"));
+    }
+
+    #[tokio::test]
+    async fn generate_never_folds_a_plain_fenced_block() {
+        // Q1 folds only `.cell-code`. A plain block keeps its attribute,
+        // also as in Q1, even under a document default.
+        let meta = meta_with(vec![("code-fold", yaml_bool(true))]);
+        let block = make_codeblock("x", vec!["python"], vec![("code-fold", "true")]);
+        let (deco, block) = generate_one(meta, block, Format::html()).await;
+        assert_eq!(deco.unwrap().fold, FoldMode::None);
+        assert_eq!(kv(&block, "code-fold").map(String::as_str), Some("true"));
+    }
+
+    #[tokio::test]
+    async fn generate_carries_hidden_class_to_fold() {
+        let block = make_codeblock(
+            "x",
+            vec!["r", "cell-code", "hidden"],
+            vec![("code-fold", "true")],
+        );
+        let (deco, _) = generate_one(ConfigValue::default(), block, Format::html()).await;
+        assert!(deco.unwrap().fold_hidden);
+    }
+
+    #[tokio::test]
+    async fn generate_folds_in_revealjs_and_dashboard() {
+        for name in ["revealjs", "dashboard"] {
+            let format = Format::from_format_string(name).unwrap();
+            let block = make_codeblock("x", vec!["r", "cell-code"], vec![("code-fold", "true")]);
+            let (deco, _) = generate_one(ConfigValue::default(), block, format).await;
+            assert_eq!(deco.unwrap().fold, FoldMode::Hide);
+        }
+    }
+
+    #[tokio::test]
+    async fn generate_does_not_fold_outside_html_formats() {
+        let meta = meta_with(vec![("code-copy", yaml_bool(false))]);
+        let block = make_codeblock("x", vec!["r", "cell-code"], vec![("code-fold", "true")]);
+        let (deco, block) = generate_one(meta, block, Format::docx()).await;
+        assert!(deco.is_none());
+        assert_eq!(kv(&block, "code-fold").map(String::as_str), Some("true"));
+    }
+
+    #[tokio::test]
+    async fn generate_hoists_cell_filename_onto_its_code_block() {
+        // The engine writes a `filename` cell option on `div.cell`.
+        let mut kvs = hashlink::LinkedHashMap::new();
+        kvs.insert("filename".to_string(), "calc.R".to_string());
+        let cell = Block::Div(Box::new(quarto_pandoc_types::block::Div {
+            attr: (String::new(), vec!["cell".to_string()], kvs).into(),
+            content: vec![make_codeblock("f <- 6", vec!["r", "cell-code"], vec![])],
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+        }));
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![cell],
+        };
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        CodeBlockGenerateTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+
+        let Block::Div(cell) = &ast.blocks[0] else {
+            panic!("expected cell Div");
+        };
+        assert!(
+            cell.attr.2.get("filename").is_none(),
+            "the Div must not keep the attribute (it would render as data-filename)"
+        );
+        let key = CodeBlockDecorationKey::from_source_info(cell.content[0].source_info()).unwrap();
+        assert_eq!(
+            ctx.code_block_decorations[&key].filename.as_deref(),
+            Some("calc.R")
+        );
+    }
+
+    #[tokio::test]
+    async fn generate_leaves_div_filename_when_first_child_is_not_code() {
+        let mut kvs = hashlink::LinkedHashMap::new();
+        kvs.insert("filename".to_string(), "calc.R".to_string());
+        let div = Block::Div(Box::new(quarto_pandoc_types::block::Div {
+            attr: (String::new(), vec![], kvs).into(),
+            content: vec![],
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+        }));
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![div],
+        };
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        CodeBlockGenerateTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let Block::Div(div) = &ast.blocks[0] else {
+            panic!("expected Div");
+        };
+        assert_eq!(
+            div.attr.2.get("filename").map(String::as_str),
+            Some("calc.R")
+        );
+    }
+
+    #[tokio::test]
+    async fn generate_gives_no_copy_button_to_a_block_without_a_language() {
+        // bd-xaaucvfz: a cell's printed output is a class-less CodeBlock.
+        let block = make_codeblock("[1] 0.6", vec![], vec![]);
+        let (deco, block) = generate_one(ConfigValue::default(), block, Format::html()).await;
+        assert!(deco.is_none(), "got {:?}", deco);
+        let Block::CodeBlock(cb) = &block else {
+            panic!("expected CodeBlock");
+        };
+        assert!(cb.attr.1.is_empty(), "no code-with-copy class expected");
+    }
+
+    fn classes(block: &Block) -> &Vec<String> {
+        let Block::CodeBlock(cb) = block else {
+            panic!("expected CodeBlock");
+        };
+        &cb.attr.1
+    }
+
+    #[tokio::test]
+    async fn generate_stamps_document_code_overflow_on_source_blocks() {
+        let meta = meta_with(vec![("code-overflow", yaml_inlines("wrap"))]);
+        let block = make_codeblock("x", vec!["python"], vec![]);
+        let (_, block) = generate_one(meta, block, Format::html()).await;
+        assert!(classes(&block).contains(&"code-overflow-wrap".to_string()));
+    }
+
+    #[tokio::test]
+    async fn generate_keeps_a_blocks_own_code_overflow_class() {
+        let meta = meta_with(vec![("code-overflow", yaml_inlines("wrap"))]);
+        let block = make_codeblock("x", vec!["python", "code-overflow-scroll"], vec![]);
+        let (_, block) = generate_one(meta, block, Format::html()).await;
+        assert!(!classes(&block).contains(&"code-overflow-wrap".to_string()));
+    }
+
+    #[tokio::test]
+    async fn generate_does_not_stamp_code_overflow_on_output_blocks() {
+        let meta = meta_with(vec![("code-overflow", yaml_inlines("wrap"))]);
+        let block = make_codeblock("[1] 1", vec![], vec![]);
+        let (_, block) = generate_one(meta, block, Format::html()).await;
+        assert!(classes(&block).is_empty());
+    }
+
+    // ── Phase 4: line numbers ─────────────────────────────────────────
+
+    fn block_id(block: &Block) -> &str {
+        let Block::CodeBlock(cb) = block else {
+            panic!("expected CodeBlock");
+        };
+        &cb.attr.0
+    }
+
+    #[test]
+    fn line_numbers_from_attr_follows_q1() {
+        assert_eq!(LineNumbers::from_attr("true", false), LineNumbers::On);
+        assert_eq!(LineNumbers::from_attr("1", false), LineNumbers::On);
+        assert_eq!(LineNumbers::from_attr("false", false), LineNumbers::Off);
+        assert_eq!(LineNumbers::from_attr("0", true), LineNumbers::Off);
+        assert_eq!(
+            LineNumbers::from_attr("2,4", false),
+            LineNumbers::Spec("2,4".to_string())
+        );
+        // Reveal reads "1" as line 1.
+        assert_eq!(
+            LineNumbers::from_attr("1", true),
+            LineNumbers::Spec("1".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn generate_turns_code_line_numbers_attr_into_number_lines_class() {
+        let block = make_codeblock("x", vec!["python"], vec![("code-line-numbers", "true")]);
+        let (_, block) = generate_one(ConfigValue::default(), block, Format::html()).await;
+        assert!(classes(&block).contains(&"number-lines".to_string()));
+        assert!(kv(&block, "code-line-numbers").is_none());
+        assert_eq!(block_id(&block), "cb1");
+    }
+
+    #[tokio::test]
+    async fn generate_applies_document_code_line_numbers_and_block_false_wins() {
+        let meta = meta_with(vec![("code-line-numbers", yaml_bool(true))]);
+        let block = make_codeblock("x", vec!["python"], vec![]);
+        let (_, block) = generate_one(meta.clone(), block, Format::html()).await;
+        assert!(classes(&block).contains(&"number-lines".to_string()));
+
+        let block = make_codeblock("x", vec!["python"], vec![("code-line-numbers", "false")]);
+        let (_, block) = generate_one(meta.clone(), block, Format::html()).await;
+        assert!(!classes(&block).contains(&"number-lines".to_string()));
+        assert!(block_id(&block).is_empty());
+
+        // An output block (no class) is never numbered.
+        let block = make_codeblock("[1] 1", vec![], vec![]);
+        let (_, block) = generate_one(meta, block, Format::html()).await;
+        assert!(classes(&block).is_empty());
+    }
+
+    #[tokio::test]
+    async fn generate_line_spec_numbers_in_html_and_is_kept_for_revealjs() {
+        let block = make_codeblock("x", vec!["python"], vec![("code-line-numbers", "2,4")]);
+        let (_, block) = generate_one(ConfigValue::default(), block, Format::html()).await;
+        assert!(classes(&block).contains(&"number-lines".to_string()));
+        assert!(kv(&block, "code-line-numbers").is_none());
+
+        let block = make_codeblock("x", vec!["python"], vec![("code-line-numbers", "2,4")]);
+        let format = Format::from_format_string("revealjs").unwrap();
+        let (_, block) = generate_one(ConfigValue::default(), block, format).await;
+        assert!(classes(&block).contains(&"number-lines".to_string()));
+        assert_eq!(
+            kv(&block, "code-line-numbers").map(String::as_str),
+            Some("2,4")
+        );
+    }
+
+    #[tokio::test]
+    async fn generate_gives_an_id_to_a_number_lines_block_and_keeps_an_existing_one() {
+        let block = make_codeblock("x", vec!["python", "numberLines"], vec![]);
+        let (_, block) = generate_one(ConfigValue::default(), block, Format::html()).await;
+        assert_eq!(block_id(&block), "cb1");
+
+        let mut block = make_codeblock("x", vec!["python", "number-lines"], vec![]);
+        if let Block::CodeBlock(cb) = &mut block {
+            cb.attr.0 = "mine".to_string();
+        }
+        let (_, block) = generate_one(ConfigValue::default(), block, Format::html()).await;
+        assert_eq!(block_id(&block), "mine");
     }
 
     // ── resolve_default_copy_mode (unit) ──────────────────────────────

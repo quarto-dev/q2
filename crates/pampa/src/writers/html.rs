@@ -598,10 +598,16 @@ fn write_highlighted_codeblock<W: Write>(
 ) -> std::io::Result<()> {
     let (id, classes, kvs) = &*codeblock.attr;
 
-    // First class (if any) is the language, per Pandoc convention.
+    // Pandoc's line-numbering classes. `.number-lines` is also what
+    // Quarto's `code-line-numbers: true` resolves to.
+    let numbered = classes.iter().any(|c| is_number_lines_class(c));
+
+    // First class (if any) is the language, per Pandoc convention,
+    // unless it is a numbering class (a `{.number-lines}` block has no
+    // language).
     let (language, extras) = match classes.split_first() {
-        Some((first, rest)) => (Some(first.as_str()), rest),
-        None => (None, &classes[..]),
+        Some((first, rest)) if !is_number_lines_class(first) => (Some(first.as_str()), rest),
+        _ => (None, &classes[..]),
     };
 
     // <div class="sourceCode [extras]" id="..."> ...
@@ -618,8 +624,12 @@ fn write_highlighted_codeblock<W: Write>(
     write_block_source_attrs(block, ctx)?;
     write!(ctx, ">")?;
 
-    // <pre class="sourceCode [lang]" [kv attrs except hl-spans]>
+    // <pre class="sourceCode [numberSource] [lang]" [kv attrs except hl-spans]>
+    // `numberSource` is the class Pandoc's line-number CSS keys off.
     write!(ctx, "<pre class=\"sourceCode")?;
+    if numbered {
+        write!(ctx, " numberSource")?;
+    }
     if let Some(lang) = language {
         write!(ctx, " {}", escape_html(lang))?;
     }
@@ -641,13 +651,29 @@ fn write_highlighted_codeblock<W: Write>(
     if let Some(lang) = language {
         write!(ctx, " {}", escape_html(lang))?;
     }
-    write!(ctx, "\">")?;
+    write!(ctx, "\"")?;
 
-    if let Some(spans) = spans {
-        write_highlighted_body(&codeblock.text, spans, ctx)?;
-    } else {
-        write!(ctx, "{}", escape_html(&codeblock.text))?;
+    // Pandoc's `startFrom` attribute: the first line's number. The CSS
+    // counter starts one below it.
+    let start_from = kvs
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("startFrom"))
+        .and_then(|(_, v)| v.trim().parse::<usize>().ok())
+        .unwrap_or(1);
+    if numbered && start_from != 1 {
+        write!(
+            ctx,
+            " style=\"counter-reset: source-line {};\"",
+            start_from.saturating_sub(1)
+        )?;
     }
+    write!(ctx, ">")?;
+
+    let lines = numbered.then_some(NumberedLines {
+        block_id: id,
+        start: start_from,
+    });
+    write_highlighted_body(&codeblock.text, spans.unwrap_or(&[]), lines, ctx)?;
 
     writeln!(ctx, "</code></pre></div>")?;
     Ok(())
@@ -662,6 +688,21 @@ fn read_hl_spans(attr: &Attr) -> Option<Vec<quarto_highlight_encoding::Highlight
     if spans.is_empty() { None } else { Some(spans) }
 }
 
+/// `true` for the two spellings of Pandoc's line-numbering class.
+fn is_number_lines_class(class: &str) -> bool {
+    class == "number-lines" || class == "numberLines"
+}
+
+/// Per-line markup request for [`write_highlighted_body`].
+#[derive(Clone, Copy)]
+struct NumberedLines<'a> {
+    /// The code block's id (`cb3`); empty when it has none, in which
+    /// case the line spans carry no id and no anchor target.
+    block_id: &'a str,
+    /// Number of the first line (Pandoc's `startFrom`, default 1).
+    start: usize,
+}
+
 /// Emit the body of a code container — the part that lives between the
 /// opening and closing tags — with nested `<span class="hl-…">` tags
 /// driven by `spans`. Capture names from the tree-sitter query flow
@@ -673,9 +714,17 @@ fn read_hl_spans(attr: &Attr) -> Option<Vec<quarto_highlight_encoding::Highlight
 /// overlap. We walk them in start-order, opening new spans before
 /// emitting text and closing them when they end. Identical start/end
 /// pairs are resolved by outer-first (larger range first).
+///
+/// With `lines`, each source line is additionally wrapped in Pandoc's
+/// per-line markup, `<span id="cb1-2"><a href="#cb1-2"></a>…</span>`,
+/// which the `pre.numberSource` CSS counts and numbers. A highlight
+/// span that crosses a line break is closed at the end of the line and
+/// reopened on the next, so line spans are always direct children of
+/// `<code>`.
 fn write_highlighted_body<W: Write>(
     text: &str,
     spans: &[quarto_highlight_encoding::HighlightSpan],
+    lines: Option<NumberedLines<'_>>,
     ctx: &mut HtmlWriterContext<'_, W>,
 ) -> std::io::Result<()> {
     // Event list: (byte_offset, tie_breaker, event_kind)
@@ -708,26 +757,89 @@ fn write_highlighted_body<W: Write>(
         })
     });
 
+    // Highlight spans currently open, outermost first. Only consulted
+    // in numbered mode, to close and reopen them around a line break.
+    let mut open: Vec<&str> = Vec::new();
+    let mut line_no = lines.map_or(0, |l| l.start);
+
+    fn open_line<W: Write>(
+        lines: NumberedLines<'_>,
+        line_no: usize,
+        ctx: &mut HtmlWriterContext<'_, W>,
+    ) -> std::io::Result<()> {
+        if lines.block_id.is_empty() {
+            write!(ctx, "<span><a></a>")
+        } else {
+            let id = format!("{}-{}", escape_html(lines.block_id), line_no);
+            write!(ctx, "<span id=\"{id}\"><a href=\"#{id}\"></a>")
+        }
+    }
+
+    if let Some(lines) = lines
+        && !text.is_empty()
+    {
+        open_line(lines, line_no, ctx)?;
+    }
+
+    // Write `text[from..to]`, breaking line spans at each newline.
+    let mut flush = |from: usize,
+                     to: usize,
+                     open: &[&str],
+                     ctx: &mut HtmlWriterContext<'_, W>|
+     -> std::io::Result<()> {
+        let segment = &text[from..to];
+        let Some(lines) = lines else {
+            return write!(ctx, "{}", escape_html(segment));
+        };
+        let mut offset = from;
+        for (i, piece) in segment.split('\n').enumerate() {
+            if i > 0 {
+                // The newline at `offset - 1` ends the current line.
+                for _ in open {
+                    write!(ctx, "</span>")?;
+                }
+                writeln!(ctx, "</span>")?;
+                // No empty trailing line for a final newline.
+                if offset < text.len() {
+                    line_no += 1;
+                    open_line(lines, line_no, ctx)?;
+                    for capture in open {
+                        write!(ctx, "<span class=\"hl-{}\">", capture_to_class(capture))?;
+                    }
+                }
+            }
+            write!(ctx, "{}", escape_html(piece))?;
+            offset += piece.len() + 1;
+        }
+        Ok(())
+    };
+
     let mut cursor = 0usize;
     for (offset, _, kind) in &events {
         // Flush text between cursor and the event.
         if *offset > cursor && cursor < text.len() {
             let end = (*offset).min(text.len());
-            write!(ctx, "{}", escape_html(&text[cursor..end]))?;
+            flush(cursor, end, &open, ctx)?;
             cursor = end;
         }
         match kind {
             EventKind::Open(capture) => {
                 write!(ctx, "<span class=\"hl-{}\">", capture_to_class(capture))?;
+                open.push(capture);
             }
             EventKind::Close => {
                 write!(ctx, "</span>")?;
+                open.pop();
             }
         }
     }
     // Any trailing text after the last event.
     if cursor < text.len() {
-        write!(ctx, "{}", escape_html(&text[cursor..]))?;
+        flush(cursor, text.len(), &open, ctx)?;
+    }
+    // Close the last line, unless a final newline already did.
+    if lines.is_some() && !text.is_empty() && !text.ends_with('\n') {
+        write!(ctx, "</span>")?;
     }
     Ok(())
 }
@@ -947,7 +1059,7 @@ fn write_inline<W: Write>(
             write_inline_source_attrs(inline, ctx)?;
             write!(ctx, ">")?;
             if let Some(spans) = &spans {
-                write_highlighted_body(&c.text, spans, ctx)?;
+                write_highlighted_body(&c.text, spans, None, ctx)?;
             } else {
                 write!(ctx, "{}", escape_html(&c.text))?;
             }
@@ -1569,7 +1681,10 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
                 .attr
                 .2
                 .contains_key(quarto_highlight_encoding::SPANS_ATTR_KEY);
-            if source_code {
+            // A numbered block always takes the `div.sourceCode` path,
+            // which writes the per-line markup, even with no language.
+            let numbered = codeblock.attr.1.iter().any(|c| is_number_lines_class(c));
+            if source_code || numbered {
                 write_highlighted_codeblock(codeblock, block, spans.as_deref(), ctx)?;
             } else {
                 write!(ctx, "<pre")?;
@@ -2676,6 +2791,115 @@ mod tests {
         let mut output = Vec::new();
         write(&pandoc, &ctx, &mut output).unwrap();
         String::from_utf8(output).unwrap()
+    }
+
+    fn numbered_codeblock(
+        id: &str,
+        classes: &[&str],
+        text: &str,
+        kvs_in: &[(&str, &str)],
+    ) -> Block {
+        let mut kvs = hashlink::LinkedHashMap::new();
+        for (k, v) in kvs_in {
+            kvs.insert(k.to_string(), v.to_string());
+        }
+        Block::CodeBlock(Box::new(CodeBlock {
+            attr: (
+                id.to_string(),
+                classes.iter().map(|c| c.to_string()).collect(),
+                kvs,
+            )
+                .into(),
+            text: text.to_string(),
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        }))
+    }
+
+    #[test]
+    fn number_lines_codeblock_emits_pandoc_line_spans() {
+        let html = render_block_to_html(numbered_codeblock(
+            "cb1",
+            &["python", "number-lines"],
+            "a = 1\nb = 2",
+            &[("data-hl-spans", "[]")],
+        ));
+        assert_eq!(
+            html.trim_end(),
+            "<div class=\"sourceCode number-lines\" id=\"cb1\">\
+             <pre class=\"sourceCode numberSource python\">\
+             <code class=\"sourceCode python\">\
+             <span id=\"cb1-1\"><a href=\"#cb1-1\"></a>a = 1</span>\n\
+             <span id=\"cb1-2\"><a href=\"#cb1-2\"></a>b = 2</span>\
+             </code></pre></div>"
+        );
+    }
+
+    #[test]
+    fn number_lines_start_from_offsets_ids_and_counter() {
+        let html = render_block_to_html(numbered_codeblock(
+            "cb3",
+            &["python", "numberLines"],
+            "a\nb\n",
+            &[("data-hl-spans", "[]"), ("startFrom", "10")],
+        ));
+        assert!(
+            html.contains(
+                "<code class=\"sourceCode python\" style=\"counter-reset: source-line 9;\">"
+            ),
+            "got:\n{html}"
+        );
+        assert!(html.contains("<span id=\"cb3-10\">"), "got:\n{html}");
+        assert!(html.contains("<span id=\"cb3-11\">"), "got:\n{html}");
+        // A final newline does not open an empty third line.
+        assert!(!html.contains("cb3-12"), "got:\n{html}");
+    }
+
+    #[test]
+    fn number_lines_splits_a_highlight_span_that_crosses_lines() {
+        // One `string` capture over both lines.
+        let html = render_block_to_html(numbered_codeblock(
+            "cb1",
+            &["python", "number-lines"],
+            "\"a\nb\"",
+            &[("data-hl-spans", r#"[[0,5,"string"]]"#)],
+        ));
+        assert!(
+            html.contains(
+                "<span id=\"cb1-1\"><a href=\"#cb1-1\"></a><span class=\"hl-string\">&quot;a</span></span>\n\
+                 <span id=\"cb1-2\"><a href=\"#cb1-2\"></a><span class=\"hl-string\">b&quot;</span></span>"
+            ),
+            "got:\n{html}"
+        );
+    }
+
+    #[test]
+    fn number_lines_as_only_class_is_not_treated_as_language() {
+        let html = render_block_to_html(numbered_codeblock(
+            "cb1",
+            &["number-lines"],
+            "x",
+            &[("data-hl-spans", "[]")],
+        ));
+        assert!(
+            html.contains("<pre class=\"sourceCode numberSource\">"),
+            "got:\n{html}"
+        );
+        assert!(html.contains("<code class=\"sourceCode\">"), "got:\n{html}");
+    }
+
+    #[test]
+    fn unnumbered_codeblock_has_no_line_spans() {
+        let html = render_block_to_html(numbered_codeblock(
+            "",
+            &["python"],
+            "a\nb",
+            &[("data-hl-spans", "[]")],
+        ));
+        assert!(
+            html.contains("<code class=\"sourceCode python\">a\nb</code>"),
+            "got:\n{html}"
+        );
     }
 
     #[test]
