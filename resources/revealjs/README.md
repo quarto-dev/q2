@@ -31,3 +31,16 @@ When bumping reveal.js (e.g. a hub-client `reveal.js` dependency bump), re-copy
 the same files from `node_modules/reveal.js/dist/`, update the version above,
 and re-run `cargo xtask verify`. Additional themes / plugins are added in later
 phases of the revealjs epic (`claude-notes/plans/2026-06-08-revealjs-presentations.md`).
+
+## Plugins
+
+| File                                    | Source                                                                 | Purpose |
+| --------------------------------------- | ---------------------------------------------------------------------- | ------- |
+| `plugins/line-highlight/line-highlight.js`  | quarto-cli `src/resources/formats/revealjs/plugins/line-highlight/` | Quarto 1's `QuartoLineHighlight` plugin: `code-line-numbers="1,3"` and stepped `"\|1\|2-3"` |
+| `plugins/line-highlight/line-highlight.css` | same                                                                | its styles |
+
+Copied unchanged from quarto-cli (MIT; the plugin is adapted from reveal.js's
+own highlight plugin, also MIT). `assemble.rs` passes
+`window.QuartoLineHighlight` to `Reveal.initialize` as a plugin. The plugin
+reads `data-code-line-numbers` from `div.sourceCode` and expects Pandoc's
+per-line spans, which the HTML writer emits for numbered blocks.

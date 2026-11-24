@@ -619,6 +619,13 @@ fn write_highlighted_codeblock<W: Write>(
     if !id.is_empty() {
         write!(ctx, " id=\"{}\"", escape_html(id))?;
     }
+    // Reveal's line-highlight plugin reads these two from
+    // `div.sourceCode`, where Pandoc writes them.
+    for (k, v) in kvs {
+        if is_line_highlight_attr(k) {
+            write!(ctx, " data-{}=\"{}\"", escape_html(k), escape_html(v))?;
+        }
+    }
     // Source-tracking / attribution attrs describe the block — they
     // belong on the outermost element.
     write_block_source_attrs(block, ctx)?;
@@ -635,7 +642,7 @@ fn write_highlighted_codeblock<W: Write>(
     }
     write!(ctx, "\"")?;
     for (k, v) in kvs {
-        if k == quarto_highlight_encoding::SPANS_ATTR_KEY {
+        if k == quarto_highlight_encoding::SPANS_ATTR_KEY || is_line_highlight_attr(k) {
             continue;
         }
         if should_prefix_attribute(k) {
@@ -686,6 +693,12 @@ fn read_hl_spans(attr: &Attr) -> Option<Vec<quarto_highlight_encoding::Highlight
     let raw = attr.2.get(quarto_highlight_encoding::SPANS_ATTR_KEY)?;
     let spans = quarto_highlight_encoding::decode(raw).ok()?;
     if spans.is_empty() { None } else { Some(spans) }
+}
+
+/// Attributes the Reveal line-highlight plugin looks up on
+/// `div.sourceCode` (as `data-…`).
+fn is_line_highlight_attr(key: &str) -> bool {
+    key == "code-line-numbers" || key == "code-line-fragment-indices"
 }
 
 /// `true` for the two spellings of Pandoc's line-numbering class.
@@ -2886,6 +2899,26 @@ mod tests {
             "got:\n{html}"
         );
         assert!(html.contains("<code class=\"sourceCode\">"), "got:\n{html}");
+    }
+
+    #[test]
+    fn code_line_numbers_spec_is_written_on_the_outer_div() {
+        let html = render_block_to_html(numbered_codeblock(
+            "cb5",
+            &["python", "number-lines"],
+            "a\nb",
+            &[("data-hl-spans", "[]"), ("code-line-numbers", "|1|2")],
+        ));
+        assert!(
+            html.contains(
+                "<div class=\"sourceCode number-lines\" id=\"cb5\" data-code-line-numbers=\"|1|2\">"
+            ),
+            "got:\n{html}"
+        );
+        assert!(
+            html.contains("<pre class=\"sourceCode numberSource python\">"),
+            "got:\n{html}"
+        );
     }
 
     #[test]

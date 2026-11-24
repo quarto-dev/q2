@@ -101,3 +101,15 @@
   height: 100%;
   display: block;
 }
+
+/* Numbered code blocks (`code-line-numbers`). Pandoc's baseline rule gives
+   `pre.numberSource` a 3em left margin for the number gutter; in a deck
+   Quarto 1's theme resets the margin and the line-highlight plugin's CSS
+   positions the numbers inside the block instead. Pandoc also paints the
+   numbers #aaaaaa; without it they take the deck's link colour. */
+.reveal pre.numberSource {
+  margin-left: 0;
+}
+.reveal pre.numberSource code > span > a:first-child::before {
+  color: #aaaaaa;
+}
