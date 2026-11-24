@@ -1,6 +1,6 @@
 /** The text of the journal (DM9): every page but `index.qmd` is a paper. Data are simulated with fixed seeds. */
 
-export type Variant = 'main' | 'main-edit' | 'revision' | 'feature';
+export type Variant = 'main' | 'main-edit' | 'revision' | 'feature' | 'hyphal-telepathy';
 
 /** What the authors type in the demo: on-topic paragraphs, long enough to be seen across the room. */
 export const EDITS = {
@@ -40,6 +40,15 @@ export const EDITS = {
   tipAnswer:
     'Cross-correlation over the first cycle alone would have too few points, so we shall estimate the lag from the full series and report its confidence interval.',
   tipAnswerNeedle: 'report its confidence interval',
+  /** The speculative branch of the vscode-share story: Maurice types in the browser, Myra answers after his paragraph. */
+  telepathyMaurice:
+    'If the fused network carries anticipatory signals, the coupling between distant tips should not decay with the gap between them, and the cross-spectrum of separated colonies ought to show coherent power at the driving frequency.',
+  telepathyMauriceNeedle: 'coherent power at the driving frequency',
+  telepathyMyra:
+    'We therefore propose to separate sister colonies by a copper mesh and a Faraday cage, and to listen for spiking trains in the dark; if the hyphae are conversing, we should like to know what they make of us.',
+  telepathyMyraNeedle: 'listen for spiking trains in the dark',
+  /** Myra commits in a fever, with a typo, because git will not let her leave the branch otherwise. */
+  telepathyCommit: 'THE HYPHAE ARE TALKING!! coherence confimed across the mesh, see sec 4 (written at 3am)',
 } as const;
 
 export const GITIGNORE = '.venv/\n__pycache__/\n.quarto/\n*_files/\n_site/\n';
@@ -108,6 +117,62 @@ The effect is small, robust, and almost certainly real.
 `;
 }
 
+/**
+ * The same two papers on the speculative branch: far more text, and a good deal stranger. The Introduction heading and
+ * its first paragraph are as on `main`, so the story's edits land in the same place on every branch.
+ */
+function telepathyProse(topic: string): string {
+  const series = topic === 'Tip extension' ? 'extension rates' : 'fusion times';
+  return `## Introduction
+
+${topic} remains poorly characterized in the heterokaryotic setting. We follow the formalism of Glass and Fleissner [3]
+and extend it to oscillating substrate humidity.
+
+A stranger possibility has dogged us since the second replicate. If anastomosis is more than plumbing, if the fused
+network carries anticipatory signals from one hyphal front to another, then what we have been calling noise in the
+${series} may be correspondence. We call the conjecture hyphal telepathy, and we mean the term operationally: a
+statistical dependence between distant tips that survives conditioning on every shared physical cause we can name.
+
+## Methods
+
+Colonies were grown on defined medium at 22 °C under a sinusoidal humidity schedule. All simulations use fixed seeds.
+For the speculative arm, sister colonies were separated by a 4 mm air gap, by a copper mesh, and in one trial by a
+sheet of lead-free solder, and their ${series} were recorded in separate chambers whose humidity schedules were
+deliberately held out of phase.
+
+## Speculative extensions
+
+Suppose each colony keeps a private clock, entrained by the humidity cycle, and that fusion events act as handshakes
+that reconcile the clocks of neighboring fronts. Two colonies that have never touched would then keep unrelated time.
+Two that have fused would drift into a common phase, and a colony cut from the network would remember the shared
+rhythm for a number of cycles, much as a severed flatworm is said to remember its maze. We observed no such memory,
+but we did not look for long enough.
+
+A harder version of the conjecture supposes that the network anticipates. In the dry regime the tips slow before the
+chamber has dried, as if the mycelium had read the schedule ahead of the sensors. We are aware that a lag in the
+humidity probe would produce the same pattern, and we have ordered a second probe, which the supplier describes as
+arriving in the spring, or never.
+
+A harder version still treats the vegetative network as a slow nervous system, with calcium waves for impulses and
+septal pores for synapses, and asks what such a system would find worth saying. The most economical answer is
+nothing at all. The least economical answer is that it is saying a great deal, to the soil, to the roots, and
+occasionally to us, in a dialect whose phonemes are the interspike intervals of a single hypha.
+
+Finally, with the caution proper to a journal of theoretical mycodynamics, we record that one of us left a pilot dish
+unattended over a long weekend and returned to find its fusion events arranged, on the plate, in what appeared to be
+a dotted line. The authors disagree about whether this is a result.
+
+## Discussion
+
+The effect is small, robust, and almost certainly real. The telepathy hypothesis is none of these things, but it makes
+a sharp prediction: the cross-spectrum between separated colonies should show coherent power at the driving frequency,
+with a phase that does not depend on the gap. We propose to test it before anyone writes a grant.
+`;
+}
+
+/** The text of a paper's Introduction to Discussion on the variant. */
+const proseFor = (v: Variant, topic: string) => (v === 'hyphal-telepathy' ? telepathyProse(topic) : prose(topic));
+
 const R_CHUNK_MAIN = `\`\`\`{r}
 #| echo: true
 #| fig-width: 6
@@ -155,6 +220,8 @@ const ABSTRACT: Record<Variant, string> = {
   'main-edit': 'Hyphal tip extension differs reliably across three humidity regimes (p = 0.049).',
   revision: 'Hyphal tip extension appears to differ across humidity regimes, though marginally (p = 0.051).',
   feature: 'After reanalysis with a corrected variance structure, tip extension differs across regimes (p = 0.031).',
+  'hyphal-telepathy':
+    'After reanalysis with a corrected variance structure, tip extension differs across regimes (p = 0.031), and the residuals suggest that distant colonies may be keeping each other informed.',
 };
 
 const PY_ABSTRACT: Record<Variant, string> = {
@@ -162,10 +229,12 @@ const PY_ABSTRACT: Record<Variant, string> = {
   'main-edit': 'The periodogram of fusion events shows a reliable peak at the humidity oscillation frequency.',
   revision: 'The periodogram of fusion events appears to show a peak at the humidity oscillation frequency, though marginally.',
   feature: 'After reanalysis with a stronger noise model, the periodogram of fusion events shows a sharper peak at the humidity oscillation frequency.',
+  'hyphal-telepathy':
+    'After reanalysis with a stronger noise model, the periodogram of fusion events shows a sharper peak at the humidity oscillation frequency, and a second, unexplained peak at the frequency of nothing in particular.',
 };
 
 export function papers(v: Variant): Record<string, string> {
-  const feat = v === 'feature';
+  const feat = v === 'feature' || v === 'hyphal-telepathy';
   const out: Record<string, string> = {
     'celia-morel-2026-anastomosis-kinetics.qmd':
       front({
@@ -197,7 +266,7 @@ export function papers(v: Variant): Record<string, string> {
         abstract: ABSTRACT[v],
         keywords: ['tip extension', 'mixed-effects model', 'variance components'],
       }) +
-      `\n${prose('Tip extension')}\n## Results\n\n${feat ? R_CHUNK_FEATURE : R_CHUNK_MAIN}\n` +
+      `\n${proseFor(v, 'Tip extension')}\n## Results\n\n${feat ? R_CHUNK_FEATURE : R_CHUNK_MAIN}\n` +
       REFS,
     'morel-2026-fusion-spectra.qmd':
       front({
@@ -207,7 +276,7 @@ export function papers(v: Variant): Record<string, string> {
         abstract: PY_ABSTRACT[v],
         keywords: ['point process', 'periodogram', 'bootstrap'],
       }) +
-      `\n${prose('Fusion spectra')}\n## Results\n\n${feat ? PY_CHUNK_FEATURE : PY_CHUNK_MAIN}\n` +
+      `\n${proseFor(v, 'Fusion spectra')}\n## Results\n\n${feat ? PY_CHUNK_FEATURE : PY_CHUNK_MAIN}\n` +
       REFS,
   };
   if (!feat) {

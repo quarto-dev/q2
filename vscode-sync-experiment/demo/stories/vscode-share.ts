@@ -10,6 +10,17 @@ import { Demo, R_PAPER } from '../src/demo';
 import { EDITS } from '../src/journal-content';
 import { diskFlat, disk, shows, until } from './hub';
 
+/** Myra saves in VS Code, over and over, until her file on disk holds every needle (VS Code writes only on save). */
+async function saveHostUntil(d: Demo, ...needles: string[]): Promise<void> {
+  const page = d.vscode.host!.page;
+  await until('the edits reached the saved file', async () => {
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S');
+    await new Promise((r) => setTimeout(r, 700));
+    const text = diskFlat(d, R_PAPER);
+    return needles.every((n) => text.includes(n));
+  });
+}
+
 export function vscodeShareStory(d: Demo): Step[] {
   return [
     {
@@ -114,26 +125,80 @@ export function vscodeShareStory(d: Demo): Step[] {
       },
     },
     {
-      id: 'switch-feature',
-      caption: 'Myra switches to the feature branch: her editor and the guest follow.',
-      command: 'git switch feature',
+      id: 'switch-telepathy',
+      caption: 'Myra has a wild idea. She switches to a branch for it, hyphal-telepathy, and the guest follows.',
+      command: 'git switch hyphal-telepathy',
       check: async () => {
         await d.scrollTop('guest');
         await shows(d, 'host', 'After reanalysis');
         await shows(d, 'guest', 'After reanalysis');
+        await shows(d, 'host', 'hyphal telepathy');
+        await shows(d, 'guest', 'hyphal telepathy');
         await until('the guest saw the swap notice', async () => (await d.notices('guest')) === 1);
         await until('the corrigendum appeared on disk', () => disk(d, 'celia-2026-corrigendum-variance-components.qmd').length > 0);
       },
     },
     {
+      id: 'telepathy-maurice',
+      caption: 'Maurice tries a thought on the branch in the browser: it appears in her editor.',
+      action: () => d.typeUnder('guest', 'Introduction', EDITS.telepathyMaurice),
+      check: async () => {
+        await shows(d, 'guest', EDITS.telepathyMauriceNeedle);
+        await shows(d, 'host', EDITS.telepathyMauriceNeedle);
+      },
+    },
+    {
+      id: 'telepathy-myra',
+      caption: 'Myra follows it in her own paragraph, and saves.',
+      action: async () => {
+        await d.typeAfter('host', EDITS.telepathyMaurice, EDITS.telepathyMyra);
+        await saveHostUntil(d, EDITS.telepathyMauriceNeedle, EDITS.telepathyMyraNeedle);
+      },
+      check: async () => {
+        await shows(d, 'host', EDITS.telepathyMyraNeedle);
+        await shows(d, 'guest', EDITS.telepathyMyraNeedle);
+        await shows(d, 'guest', EDITS.telepathyMauriceNeedle);
+      },
+    },
+    {
+      id: 'switch-refused',
+      caption: 'She tries to go back to main, but git will not: her saved edits would be overwritten.',
+      command: 'git switch main',
+      check: async () => {
+        await d.waitOutput(/would be overwritten by checkout/, 'host', 15_000);
+        expect(d.git('branch', '--show-current').trim()).toBe('hyphal-telepathy');
+        // Nothing moved: both still show the branch and both edits.
+        await shows(d, 'host', EDITS.telepathyMyraNeedle);
+        await shows(d, 'guest', EDITS.telepathyMyraNeedle);
+        expect(await d.notices('guest')).toBe(1);
+      },
+    },
+    {
+      id: 'telepathy-commit',
+      caption: 'In a fever, she commits it, misspelling and all.',
+      command: `git commit -qam '${EDITS.telepathyCommit}'`,
+      check: async () => {
+        await until('the commit exists', () => d.git('log', '-1', '--format=%s').trim() === EDITS.telepathyCommit);
+        // A commit changes nothing the readers see.
+        await shows(d, 'host', EDITS.telepathyMyraNeedle);
+        await shows(d, 'guest', EDITS.telepathyMyraNeedle);
+      },
+    },
+    {
       id: 'switch-main',
-      caption: 'And back to main.',
+      caption: 'Now git lets her go back to main. The speculation stays on its branch, and the two are on main together.',
       command: 'git switch main',
       check: async () => {
         await d.scrollTop('guest');
-        await shows(d, 'host', 'After reanalysis', false);
-        await shows(d, 'guest', 'After reanalysis', false);
+        for (const who of ['host', 'guest'] as const) {
+          await shows(d, who, 'After reanalysis', false);
+          await shows(d, who, EDITS.telepathyMauriceNeedle, false);
+          await shows(d, who, EDITS.telepathyMyraNeedle, false);
+          // The paragraph Maurice typed on main before the branch is the same one for both.
+          await shows(d, who, EDITS.tipNeedle);
+        }
         await until('the pilot study is back', () => disk(d, 'rott-mildew-2025-preliminary-fusion.qmd').length > 0);
+        expect(d.git('branch', '--show-current').trim()).toBe('main');
       },
     },
     {

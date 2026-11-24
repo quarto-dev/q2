@@ -2,7 +2,7 @@
  * The demo's fixture: the Journal of Theoretical Mycodynamics, vol. 17, issue 3 (DM9).
  *
  * `buildJournal(dir)` makes a deterministic git repository (fixed dates, identity, and bytes) with branches `main`,
- * `feature` (Myra's reanalysis), and `revision` (edits the abstract line that `main` also edits, for the rebase conflict).
+ * `feature` (Myra's reanalysis), `hyphal-telepathy` (the same changes with a great deal more speculation), and `revision` (edits the abstract line that `main` also edits, for the rebase conflict).
  * Papers are data in `./journal-content`; the micrograph PNGs and the R and Python project files are committed under `../journal/`.
  */
 
@@ -108,15 +108,20 @@ export function buildJournal(dir: string): string {
   write(dir, PY_PAPER, papers('revision')[PY_PAPER]!);
   commit('2026-03-10T09:00:00Z', 'Reviewer 2: soften the abstract');
 
-  git(undefined, 'switch', '--quiet', '-c', 'feature', 'main');
-  const feat = papers('feature');
-  write(dir, R_PAPER, feat[R_PAPER]!);
-  write(dir, 'morel-2026-fusion-spectra.qmd', feat['morel-2026-fusion-spectra.qmd']!);
-  copyFileSync(path.join(assets, 'micrograph-feature.png'), path.join(dir, 'figures/micrograph.png'));
-  git(undefined, 'rm', '--quiet', PILOT);
-  write(dir, CORRIGENDUM, feat[CORRIGENDUM]!);
-  write(dir, 'index.qmd', indexQmd(Object.keys(feat)));
-  commit('2026-03-16T09:00:00Z', 'Reanalysis: new model, recolored micrograph, pilot study retracted, corrigendum');
+  // `feature` and `hyphal-telepathy` change the same files the same way; the speculative branch has far more text.
+  const reanalysis = (branch: string, variant: 'feature' | 'hyphal-telepathy', date: string, msg: string) => {
+    git(undefined, 'switch', '--quiet', '-c', branch, 'main');
+    const feat = papers(variant);
+    write(dir, R_PAPER, feat[R_PAPER]!);
+    write(dir, 'morel-2026-fusion-spectra.qmd', feat['morel-2026-fusion-spectra.qmd']!);
+    copyFileSync(path.join(assets, 'micrograph-feature.png'), path.join(dir, 'figures/micrograph.png'));
+    git(undefined, 'rm', '--quiet', PILOT);
+    write(dir, CORRIGENDUM, feat[CORRIGENDUM]!);
+    write(dir, 'index.qmd', indexQmd(Object.keys(feat)));
+    commit(date, msg);
+  };
+  reanalysis('feature', 'feature', '2026-03-16T09:00:00Z', 'Reanalysis: new model, recolored micrograph, pilot study retracted, corrigendum');
+  reanalysis('hyphal-telepathy', 'hyphal-telepathy', '2026-03-18T09:00:00Z', 'Speculative reanalysis: the hyphae may be keeping each other informed');
 
   git(undefined, 'switch', '--quiet', 'main');
   return dir;
