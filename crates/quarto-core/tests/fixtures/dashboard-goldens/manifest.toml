@@ -241,6 +241,12 @@ q1_golden = false
 note = "Phase 6. D5-Q15: header-for / footer-for may name the target card's or cell's own id (Q1 only resolves ids inside a card and fails fatally here, dashboard.lua:732). The card itself carries no id, as in Q1"
 
 [[fixture]]
+path = "contract/c44-diagram-cards.qmd"
+status = "divergence"
+q1_golden = false
+note = "A dot or mermaid diagram block is a card, bare or alone in a .card div. Q1 spells these {dot} / {mermaid} cells and renders a plain dot / mermaid block as source code, so there is no like-for-like Q1 golden. The .q2.skeleton is Quarto 1.9.38's skeleton of this document with {dot} / {mermaid}, less what comes from Q1 diagrams being cells: the cell class on the card (bare) or card body (in a .card div), and the cell-output-display wrapper divs around the diagram. Grids, cards, titles, fill classes and expand buttons are Q1's"
+
+[[fixture]]
 path = "q1/0-card-syntax.qmd"
 requires = ["knitr"]
 status = "match"

@@ -278,7 +278,7 @@ pub(crate) fn strip_links_and_notes(inlines: &[Inline]) -> Inlines {
 /// This is the same `write_inlines_to` quarto-core already uses to render
 /// inline metadata (`template.rs`, `revealjs/footer_logo.rs`); it handles
 /// escaping, so the label no longer goes through `html_escape`.
-fn render_toc_label(title: &[Inline]) -> String {
+pub(crate) fn render_toc_label(title: &[Inline]) -> String {
     let stripped = strip_links_and_notes(title);
     let mut out: Vec<u8> = Vec::new();
     match pampa::writers::html::write_inlines_to(&stripped, &mut out) {
@@ -409,7 +409,7 @@ fn render_toc_level(entries: &[TocEntry], expanded: Option<i64>, top: bool) -> S
 }
 
 /// Escape HTML special characters.
-fn html_escape(s: &str) -> String {
+pub(crate) fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")

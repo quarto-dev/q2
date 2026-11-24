@@ -7428,6 +7428,7 @@ dependencies = [
  "anyhow",
  "crossbeam-channel",
  "insta",
+ "libc",
  "lsp-server",
  "lsp-types 0.97.0",
  "notify",
@@ -7443,6 +7444,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tracing",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -70,6 +70,13 @@ bibliography's `{#refs}` div, numbered in the same sequence as
 `book.chapters` — so, like the scaffold's References chapter, it's
 usually marked `.unnumbered` too.
 
+A `bibliography` is enough to turn citations on in a book; the
+`filters: [citeproc]` entry is optional. A book written for Quarto 1,
+which lists `references.qmd` as an ordinary last chapter instead of
+using `book.references`, works too: without that key, the references
+chapter is the first chapter that contains a `::: {#refs}` div. In
+HTML, each citation links to its entry in the references chapter.
+
 ### Parts and appendices
 
 Group chapters under a titled divider using `part`:

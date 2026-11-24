@@ -841,3 +841,150 @@ fn math_in_callout_table_and_notes_loads_engine() {
         );
     }
 }
+
+// ── table of contents (`toc: true`) ──────────────────────────────────────
+//
+// Quarto 1 (`share/formats/revealjs/pandoc/toc-slide.html`) adds a
+// horizontal `<section id="TOC">` slide right after the title slide. Its list
+// links use reveal's hash routing: `href="#/<id>"`, `id="/toc-<id>"`.
+
+const TOC_DECK: &str = "---\ntitle: Deck\nformat: revealjs\ntoc: true\n---\n\n\
+# Section A\n\n## Slide one\n\nText.\n\n## Slide two {#custom-id}\n\nText.\n\n\
+### Sub heading\n\nNot a slide.\n\n# Section B {.unnumbered}\n\n\
+## Slide three {.unlisted}\n\nText.\n\n## Slide four\n\nText.\n";
+
+/// The `<section id="TOC">…</section>` markup of a rendered deck.
+fn toc_slide(html: &str) -> &str {
+    let start = html
+        .find("<section id=\"TOC\"")
+        .unwrap_or_else(|| panic!("deck has no TOC slide:\n{html}"));
+    let end = start + html[start..].find("</section>").expect("TOC slide closes");
+    &html[start..end]
+}
+
+#[test]
+fn toc_slide_follows_the_title_slide() {
+    let html = render_revealjs(TOC_DECK);
+    let title = html.find("id=\"title-slide\"").expect("title slide");
+    let toc = html.find("<section id=\"TOC\"").expect("TOC slide");
+    let first_body = html.find("id=\"section-a\"").expect("first body slide");
+    assert!(
+        title < toc && toc < first_body,
+        "TOC sits between title and body"
+    );
+    // A horizontal slide: no section is open around it.
+    let before = &html[..toc];
+    assert!(
+        before.matches("<section").count() == before.matches("</section>").count(),
+        "TOC slide must be top-level (horizontal)"
+    );
+}
+
+#[test]
+fn toc_slide_lists_sections_and_slides_like_quarto_1() {
+    let html = render_revealjs(TOC_DECK);
+    let toc = compact(toc_slide(&html));
+    let expected = compact(
+        r##"<section id="TOC" class="section"><nav role="doc-toc">
+<h2 id="toc-title">Table of contents</h2>
+<ul>
+<li><a href="#/section-a" id="/toc-section-a">Section A</a>
+<ul>
+<li><a href="#/slide-one" id="/toc-slide-one">Slide one</a></li>
+<li><a href="#/custom-id" id="/toc-custom-id">Slide two</a>
+<ul>
+<li><a href="#/sub-heading" id="/toc-sub-heading">Sub heading</a></li>
+</ul></li>
+</ul></li>
+<li><a href="#/section-b" id="/toc-section-b">Section B</a>
+<ul>
+<li><a href="#/slide-four" id="/toc-slide-four">Slide four</a></li>
+</ul></li>
+</ul>
+</nav>"##,
+    );
+    assert_eq!(toc, expected);
+}
+
+#[test]
+fn toc_false_or_unset_adds_no_slide() {
+    for toc in ["toc: false\n", ""] {
+        let html = render_revealjs(&format!(
+            "---\ntitle: D\nformat: revealjs\n{toc}---\n\n## A\n\n## B\n"
+        ));
+        assert!(!html.contains("id=\"TOC\""), "no TOC slide for `{toc}`");
+    }
+}
+
+#[test]
+fn toc_without_title_slide_comes_first() {
+    let html = render_revealjs("---\nformat: revealjs\ntoc: true\n---\n\n## Eins\n\n## Zwei\n");
+    let toc = html.find("<section id=\"TOC\"").expect("TOC slide");
+    let first = html.find("<section").expect("a slide");
+    assert_eq!(
+        toc, first,
+        "the TOC is the first slide without a title slide"
+    );
+}
+
+#[test]
+fn toc_options_depth_title_numbers_and_lang() {
+    let html = render_revealjs(
+        "---\ntitle: D\nformat: revealjs\ntoc: true\ntoc-depth: 1\n\
+         toc-title: \"Agenda *today*\"\n---\n\n# Section A\n\n## Slide one\n\n# Section B\n\n## Slide two\n",
+    );
+    let toc = toc_slide(&html);
+    assert!(
+        toc.contains("<h2 id=\"toc-title\">Agenda <em>today</em></h2>"),
+        "{toc}"
+    );
+    assert!(
+        toc.contains("#/section-a") && toc.contains("#/section-b"),
+        "{toc}"
+    );
+    assert!(
+        !toc.contains("slide-one"),
+        "toc-depth: 1 lists only `#` sections: {toc}"
+    );
+
+    let html = render_revealjs(
+        "---\ntitle: D\nlang: de\nformat: revealjs\ntoc: true\n---\n\n## Eins\n\n## Zwei\n",
+    );
+    assert!(toc_slide(&html).contains(">Inhaltsverzeichnis</h2>"));
+
+    let html = render_revealjs(
+        "---\nformat: revealjs\ntoc: true\nnumber-sections: true\n---\n\n# Section A\n\n## Slide one\n",
+    );
+    let toc = toc_slide(&html);
+    assert!(
+        toc.contains("<span class=\"header-section-number\">1</span> Section A"),
+        "{toc}"
+    );
+}
+
+/// Quarto 1 does not number the title slide's `<h1 class="title">`: with
+/// `number-sections`, the first `#` section is 1, on its slide and in the
+/// TOC. q2 counted the generated title heading as section 1.
+#[test]
+fn number_sections_skip_the_title_slide_heading() {
+    let html = render_revealjs(
+        "---\ntitle: Deck\nformat: revealjs\ntoc: true\nnumber-sections: true\n---\n\n\
+         # Section A\n\n## Slide one\n\n# Section B\n\n## Slide two\n",
+    );
+    let title_start = html.find("id=\"title-slide\"").expect("title slide");
+    let title_end = title_start + html[title_start..].find("</section>").unwrap();
+    assert!(
+        !html[title_start..title_end].contains("header-section-number"),
+        "the title heading must not be numbered"
+    );
+    let toc = toc_slide(&html);
+    assert!(
+        toc.contains("<span class=\"header-section-number\">1</span> Section A")
+            && toc.contains("<span class=\"header-section-number\">2</span> Section B"),
+        "{toc}"
+    );
+    assert!(
+        html.contains("<span class=\"header-section-number\">1.1</span> Slide one"),
+        "slide numbers start at 1.1"
+    );
+}

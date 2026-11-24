@@ -194,7 +194,14 @@ impl<'a> Walker<'a> {
     fn visit_block(&mut self, block: &mut Block) {
         match block {
             Block::Header(h) => {
-                self.visit_header(h);
+                // The reveal title slide's `<h1 class="title">`
+                // (`RevealSlidesTransform`) stands in for Quarto 1's
+                // template-built title, which is not a document heading:
+                // it is not numbered, indexed or a `sec` target. Its
+                // inlines may still hold references.
+                if !self.is_reveal_title_heading(h) {
+                    self.visit_header(h);
+                }
                 self.visit_inlines(&mut h.content);
             }
             Block::Paragraph(p) => self.visit_inlines(&mut p.content),
@@ -289,6 +296,15 @@ impl<'a> Walker<'a> {
             }
             _ => {}
         }
+    }
+
+    /// The title heading of the reveal title slide: class `title`, directly
+    /// inside `section#title-slide`.
+    fn is_reveal_title_heading(&self, header: &Header) -> bool {
+        self.section_ids
+            .last()
+            .is_some_and(|id| id == "title-slide")
+            && header.attr.1.iter().any(|c| c == "title")
     }
 
     fn visit_header(&mut self, header: &mut Header) {

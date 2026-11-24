@@ -1,0 +1,45 @@
+---
+title: "Data URI Social Image Ignored"
+description: "A social media preview image is a data URI, which social media sites can't fetch; it is ignored."
+code: Q-5-60
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-60` — Data URI Social Image Ignored
+
+> A social media preview image is a data URI, which social media sites can't fetch; it is ignored.
+
+## What this means
+
+`og:image` and `twitter:image` tell social media sites where to fetch
+a page's preview image. A data URI (`data:image/png;base64,...`) puts
+the image inside the page instead of at a URL, and those sites don't
+read it.
+
+Quarto ignores the data URI and looks for another preview image: an
+image in the page body, then `website.image`.
+
+## Why this happens
+
+The page's `image:`, or an `image` option under `open-graph` /
+`twitter-card` or `website.image`, is a data URI.
+
+## How to fix
+
+Save the image as a file in the project and point at the file:
+
+```yaml
+---
+title: My Post
+image: cover.png
+---
+```
+
+## Related errors
+
+- [`Q-5-58`](Q-5-58.qmd) — a preview image left out for lack of
+  `site-url`.

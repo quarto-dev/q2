@@ -1,0 +1,36 @@
+---
+title: "Revealjs table of contents"
+format: revealjs
+toc: true
+# Quarto 1 adds a horizontal `<section id="TOC">` slide after the title
+# slide (`toc-slide.html`), with reveal hash links (`#/id`, `id="/toc-id"`).
+# `.unlisted` slides are left out; headings below the slide level are listed.
+_quarto:
+  tests:
+    revealjs:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "div.slides > section#title-slide + section#TOC > nav[role='doc-toc'] > h2#toc-title",
+            "section#TOC a[href='#/section-a'][id='/toc-section-a']",
+            "section#TOC li > ul > li > a[href='#/custom-id']",
+            "section#TOC a[href='#/sub-heading']",
+          ]
+        - ["section#TOC a[href='#/hidden']"]
+---
+
+# Section A
+
+## Slide one
+
+Text.
+
+## Slide two {#custom-id}
+
+### Sub heading
+
+Not a slide.
+
+## Hidden {.unlisted}
+
+Text.

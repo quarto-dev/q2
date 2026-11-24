@@ -1,0 +1,41 @@
+---
+title: "References Div Outside The References Chapter"
+description: "A book chapter has a `#refs` div, but the book's bibliography goes into another chapter, so this div stays empty."
+code: Q-23-4
+subsystem: citeproc
+status: stub
+since: "99.9.9"
+categories:
+  - citeproc
+  - book
+---
+
+# `Q-23-4` — References Div Outside The References Chapter
+
+> A book chapter has a `#refs` div, but a book has one bibliography
+> and it goes into another chapter. This div stays empty.
+
+## What this means
+
+An HTML book has one bibliography for the whole book, written into one
+references chapter. A `#refs` div in any other chapter is not filled:
+it renders as an empty div. A single document works differently. There,
+a `#refs` div marks where that document's own reference list goes.
+
+## Why this happens
+
+The references chapter is the chapter `book.references` names. If that
+key is not set, it is the first chapter, in book order, that contains a
+`#refs` div. This warning appears on every other chapter that also has
+a `#refs` div.
+
+## How to fix
+
+Remove the `#refs` div from the chapter the warning names. If that
+chapter is the one that should hold the bibliography, name it with
+`book.references` in `_quarto.yml`, or remove the `#refs` div from the
+chapters before it.
+
+## Related
+
+- `Q-23-3`: the book has citations but no references chapter at all.

@@ -1,0 +1,60 @@
+---
+title: "Social Image Needs site-url"
+description: "A page's Open Graph or Twitter Card preview image was left out because `website.site-url` is not set, and social media sites need an absolute image URL."
+code: Q-5-58
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-58` — Social Image Needs `site-url`
+
+> A page's Open Graph or Twitter Card preview image was left out because `website.site-url` is not set, and social media sites need an absolute image URL.
+
+## What this means
+
+A website with `open-graph` or `twitter-card` enabled writes
+`og:image` and `twitter:image` tags so that a shared link shows a
+preview image. Social media sites fetch that image on their own, from
+outside your site, so the tag must hold an absolute URL such as
+`https://example.com/images/cover.png`.
+
+Quarto builds that URL from `website.site-url`. This site doesn't set
+one, so Quarto can't, and it leaves the image tags out rather than
+writing a relative path no crawler can follow. The other tags (title,
+description, card type) are still written.
+
+## Why this happens
+
+The site enables social metadata:
+
+```yaml
+website:
+  title: My Site
+  open-graph: true
+```
+
+and the page has a preview image: an `image:` in its front matter, an
+image in its body, or a site-wide `website.image`.
+
+## How to fix
+
+Set `site-url` to the address the site is published at:
+
+```yaml
+website:
+  title: My Site
+  site-url: https://example.com
+  open-graph: true
+```
+
+If you don't want preview images, set `image: false` on the page to
+stop Quarto looking for one in its body.
+
+## Related errors
+
+- [`Q-5-60`](Q-5-60.qmd) — a preview image that is a data URI.
+
+See also [Social metadata](../../guides/projects/social-metadata.qmd).

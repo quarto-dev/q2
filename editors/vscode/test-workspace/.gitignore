@@ -1,0 +1,4 @@
+# Render outputs from previews / smoke tests
+*.html
+*_files/
+.quarto/

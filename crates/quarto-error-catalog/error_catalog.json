@@ -1903,6 +1903,34 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-57",
     "since_version": "99.9.9"
   },
+  "Q-5-58": {
+    "subsystem": "project",
+    "title": "Social Image Needs site-url",
+    "message_template": "A page's Open Graph or Twitter Card preview image was left out because `website.site-url` is not set, and social media sites need an absolute image URL.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-58",
+    "since_version": "99.9.9"
+  },
+  "Q-5-59": {
+    "subsystem": "project",
+    "title": "Invalid Social Metadata Option",
+    "message_template": "An `open-graph` or `twitter-card` setting, or one of their options, has the wrong type and is ignored.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-59",
+    "since_version": "99.9.9"
+  },
+  "Q-5-60": {
+    "subsystem": "project",
+    "title": "Data URI Social Image Ignored",
+    "message_template": "A social media preview image is a data URI, which social media sites can't fetch; it is ignored.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-60",
+    "since_version": "99.9.9"
+  },
+  "Q-5-61": {
+    "subsystem": "project",
+    "title": "Twitter Card Image Size Ignored",
+    "message_template": "`twitter-card` sets `image-width` or `image-height`, which have no effect because Twitter Cards have no image size tags.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-61",
+    "since_version": "99.9.9"
+  },
   "Q-13-8": {
     "subsystem": "navigation",
     "title": "Unsupported toc-location value",
@@ -2272,6 +2300,20 @@
     "title": "Citation Key Not Found",
     "message_template": "No reference has this citation key, so the citation renders as the key followed by `?`, in bold.",
     "docs_url": "https://quarto.org/docs/errors/citeproc/Q-23-2",
+    "since_version": "99.9.9"
+  },
+  "Q-23-3": {
+    "subsystem": "citeproc",
+    "title": "Book Has No References Chapter",
+    "message_template": "A book's chapters cite references, but no chapter can hold the bibliography, so the book has no reference list and its citations are not linked.",
+    "docs_url": "https://quarto.org/docs/errors/citeproc/Q-23-3",
+    "since_version": "99.9.9"
+  },
+  "Q-23-4": {
+    "subsystem": "citeproc",
+    "title": "References Div Outside The References Chapter",
+    "message_template": "A book chapter has a `#refs` div, but the book's bibliography goes into another chapter. This div stays empty.",
+    "docs_url": "https://quarto.org/docs/errors/citeproc/Q-23-4",
     "since_version": "99.9.9"
   },
   "Q-24-1": {

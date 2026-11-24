@@ -206,8 +206,10 @@ other figure; an uncaptioned one sits at the start of the line.
 
 ## Diagram options
 
-Diagram blocks accept `label`, `fig-cap`, `fig-scap`, `fig-alt`, and
-`fig-align`. Graphviz blocks also accept `graph-layout`. A diagram has
+Diagram blocks accept `label`, `fig-cap`, `fig-scap`, `fig-alt`,
+`fig-align`, and `title`. In a dashboard, `title` is the title of the
+diagram's card; in other formats it has no effect. Graphviz blocks also
+accept `graph-layout`. A diagram has
 no execution engine to interpret anything else, so Quarto warns about an
 option it cannot act on rather than passing it silently into the drawing.
 

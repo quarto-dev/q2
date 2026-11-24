@@ -1,0 +1,44 @@
+---
+title: "Twitter Card Image Size Ignored"
+description: "`twitter-card` sets `image-width` or `image-height`, which have no effect because Twitter Cards have no image size tags."
+code: Q-5-61
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-61` — Twitter Card Image Size Ignored
+
+> `twitter-card` sets `image-width` or `image-height`, which have no effect because Twitter Cards have no image size tags.
+
+## What this means
+
+Open Graph has `og:image:width` and `og:image:height` tags; Twitter
+Cards have no equivalent. A size set under `twitter-card` has nowhere
+to go, so Quarto ignores it.
+
+## Why this happens
+
+```yaml
+website:
+  twitter-card:
+    image-width: 1200
+    image-height: 630
+```
+
+## How to fix
+
+Move the size under `open-graph`, or remove it:
+
+```yaml
+website:
+  open-graph:
+    image-width: 1200
+    image-height: 630
+  twitter-card: true
+```
+
+When the image file can be read, Quarto takes the size from the file
+and the declared size isn't needed.

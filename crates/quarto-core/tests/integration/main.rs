@@ -177,6 +177,7 @@ pub mod pandoc_filters;
 pub mod pandoc_filters_patch;
 pub mod pandoc_goldens;
 pub mod pandoc_goldens_fixtures;
+pub mod pandoc_invocation_trace;
 pub mod pandoc_long_tail_formats;
 pub mod pandoc_meta_mapping;
 pub mod pandoc_profile_cut;
@@ -232,6 +233,7 @@ pub mod repo_actions_pipeline;
 pub mod responsive_images_pipeline;
 pub mod revealjs_features;
 pub mod revealjs_format;
+pub mod revealjs_website;
 pub mod root_directory_metadata;
 pub mod sass_cache_key;
 pub mod secondary_nav_pipeline;
@@ -262,5 +264,6 @@ pub mod website_drafts;
 pub mod website_post_render;
 pub mod website_post_render_format_gate;
 pub mod website_search;
+pub mod website_social_meta;
 
 fn main() {}

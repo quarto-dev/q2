@@ -1,6 +1,6 @@
 /**
  * FileTypePicker — "File type:" radio group of icon buttons (.qmd, .md,
- * .yml, other). Choosing "other" reveals a field for a custom extension.
+ * .yml, other). With "other" the filename is used as typed.
  */
 
 import type { ReactNode } from 'react';
@@ -19,17 +19,9 @@ const CHOICES: Array<{ id: FileTypeChoice; label: string; icon: ReactNode }> = [
 export interface FileTypePickerProps {
   value: FileTypeChoice;
   onChange: (choice: FileTypeChoice) => void;
-  /** Custom extension (no dot) used when `value` is `other`. */
-  customExtension: string;
-  onCustomExtensionChange: (ext: string) => void;
 }
 
-export default function FileTypePicker({
-  value,
-  onChange,
-  customExtension,
-  onCustomExtensionChange,
-}: FileTypePickerProps) {
+export default function FileTypePicker({ value, onChange }: FileTypePickerProps) {
   return (
     <div className="file-type-picker">
       <div className="file-type-choices" role="radiogroup" aria-label={dialogs.newFile.typeLabel}>
@@ -51,20 +43,6 @@ export default function FileTypePicker({
           </button>
         ))}
       </div>
-      {value === 'other' && (
-        <div className="file-type-custom">
-          <label htmlFor="file-type-extension">{dialogs.newFile.extensionLabel}</label>
-          <input
-            id="file-type-extension"
-            type="text"
-            className="qh-input focus-accent"
-            value={customExtension}
-            onChange={(e) => onCustomExtensionChange(e.target.value.replace(/^\.+/, ''))}
-            placeholder={dialogs.newFile.extensionPlaceholder}
-            autoFocus
-          />
-        </div>
-      )}
     </div>
   );
 }

@@ -25,8 +25,18 @@
 //! - `page-footer: false` (affirmative disable).
 //! - `page-footer` absent or `page-footer: true`.
 //! - `navigation.footer` already populated (user override).
+//!
+//! ## Decks
+//!
+//! [`FooterGenerateTransform::top_level_only`] (the RevealJS pipeline)
+//! reads only the top-level `page-footer:`, never `website.page-footer:`.
+//! The website footer is site chrome; Quarto 1 never shows it on a deck.
+//! A deck's own `footer:` reaches the top-level key through
+//! `RevealFooterAliasTransform`.
 
-use quarto_navigation::{FooterRegion, NavigationItem, resolve_page_footer};
+use quarto_navigation::{
+    FooterRegion, NavigationItem, resolve_page_footer, resolve_top_level_page_footer,
+};
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
@@ -37,11 +47,26 @@ use crate::transforms::navigation_drafts::prune_unlinkable_items;
 use crate::transforms::navigation_enrich::enrich_navigation_items;
 use crate::transforms::navigation_href::resolve_metadata_path;
 
-pub struct FooterGenerateTransform;
+pub struct FooterGenerateTransform {
+    /// Also read `website.page-footer:` (true for website pages).
+    website_scope: bool,
+}
 
 impl FooterGenerateTransform {
+    /// Footer generation for pages: top-level `page-footer:` merged with
+    /// `website.page-footer:`.
     pub fn new() -> Self {
-        Self
+        Self {
+            website_scope: true,
+        }
+    }
+
+    /// Footer generation for RevealJS decks: top-level `page-footer:`
+    /// only (see the module docs).
+    pub fn top_level_only() -> Self {
+        Self {
+            website_scope: false,
+        }
     }
 }
 
@@ -70,7 +95,12 @@ impl AstTransform for FooterGenerateTransform {
             return Ok(());
         }
 
-        let Some(mut footer) = resolve_page_footer(&ast.meta) else {
+        let resolved = if self.website_scope {
+            resolve_page_footer(&ast.meta)
+        } else {
+            resolve_top_level_page_footer(&ast.meta)
+        };
+        let Some(mut footer) = resolved else {
             return Ok(());
         };
 

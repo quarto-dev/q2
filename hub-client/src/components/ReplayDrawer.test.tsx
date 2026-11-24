@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import ReplayDrawer from './ReplayDrawer';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 
@@ -691,56 +691,20 @@ describe('ReplayDrawer', () => {
       expect(screen.getByRole('tooltip').textContent).toBe('Hide authors overlay');
     });
 
-    it('renders disabled with an explanatory tooltip when attributionDisabled is true', () => {
+    it.each([
+      ['collapsed', makeState()],
+      ['expanded', makeState({ isActive: true, historyLength: 100, currentIndex: 42, currentContent: 'hello', currentHeads: null, timestamp: 1710000000, actor: 'abcdef0123456789abcdef0123456789', chunkActors: [] })],
+    ])('is hidden in the %s drawer when attributionDisabled is true', (_name, state) => {
       render(
         <ReplayDrawer
-          state={makeState()}
-          controls={controls}
-          attributionOn={false}
-          onAttributionChange={vi.fn()}
-          attributionDisabled={true}
-        />,
-      );
-      const pill = screen.getByLabelText(/unavailable/);
-      expect((pill as HTMLButtonElement).disabled).toBe(true);
-      // Disabled buttons swallow pointer events, so the tooltip's hover
-      // handlers live on its wrapper span. Hover shows after a 400ms delay.
-      vi.useFakeTimers();
-      fireEvent.mouseOver(pill.parentElement!);
-      act(() => vi.advanceTimersByTime(450));
-      expect(screen.getByRole('tooltip').textContent).toMatch(/not available for this format/);
-      vi.useRealTimers();
-    });
-
-    it('suppresses on/generating modifier classes while disabled', () => {
-      render(
-        <ReplayDrawer
-          state={makeState()}
+          state={state}
           controls={controls}
           attributionOn={true}
           onAttributionChange={vi.fn()}
-          attributionGenerating={true}
           attributionDisabled={true}
         />,
       );
-      const pill = screen.getByLabelText(/unavailable/);
-      expect(pill.className).not.toContain('replay-drawer__attribution--on');
-      expect(pill.className).not.toContain('replay-drawer__attribution--generating');
-    });
-
-    it('does not fire onAttributionChange when clicked while disabled', () => {
-      const onChange = vi.fn();
-      render(
-        <ReplayDrawer
-          state={makeState()}
-          controls={controls}
-          attributionOn={false}
-          onAttributionChange={onChange}
-          attributionDisabled={true}
-        />,
-      );
-      fireEvent.click(screen.getByLabelText(/unavailable/));
-      expect(onChange).not.toHaveBeenCalled();
+      expect(screen.queryByLabelText(/Authors/)).toBeNull();
     });
   });
 

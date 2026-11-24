@@ -1,0 +1,407 @@
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	﻿2026-11-19T07:11:32.1564324Z Current runner version: '2.338.2'
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:11:32.1604887Z ##[group]Runner Image Provisioner
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:11:32.1606565Z Hosted Compute Agent
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:11:32.1607691Z Version: 20261103.629
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:11:32.1609048Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:11:32.1610361Z Build Date: 2026-11-03T17:26:59Z
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:11:32.1611543Z Worker ID: {58f7b8a5-fb7f-44a1-af06-6e196b1bee68}
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:11:32.1612870Z Region: eastus
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:11:34.3862462Z ##[group]Run actions/checkout@v6
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:11:42.1991982Z ##[group]Run git ls-files | while read file; do
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:14.1791676Z ##[group]Run dtolnay/rust-toolchain@nightly
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:14.1918593Z ##[group]Run if [[ -z $toolchain ]]; then
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:14.2105687Z ##[group]Run echo CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:14.2250406Z ##[group]Run if ! command -v rustup &>/dev/null; then
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:14.2409029Z ##[group]Run set -f  # split targets and components on commas and whitespace, without glob expansion
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:24.5948111Z ##[group]Run rustup default "$toolchain" --force-non-host
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:24.6238737Z ##[group]Run DATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:24.6638688Z ##[group]Run if [ -z "${CARGO_INCREMENTAL+set}" ]; then
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:24.6775222Z ##[group]Run if [ -z "${CARGO_TERM_COLOR+set}" ]; then
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:24.6903935Z ##[group]Run # implemented in 1.66, stabilized in 1.68, made default in 1.70
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:24.7267787Z ##[group]Run # https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:24.7521878Z ##[group]Run rustc +"$toolchain" --version --verbose
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:24.7891523Z ##[group]Run egor-tensin/setup-clang@v2
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:24.7924789Z ##[group]Run $linux_host = 'Linux' -eq 'Linux'
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:13:59.7172303Z ##[group]Run $linux_host = 'Linux' -eq 'Linux'
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:00.1213955Z ##[group]Run Swatinem/rust-cache@v2
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6759574Z ##[group]Run taiki-e/install-action@wasm-pack
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6785057Z ##[group]Run bail() {
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6785629Z ^[[36;1m  printf '::error::install-action: %s\n' "$*"^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6786213Z ^[[36;1m  exit 1^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6786434Z ^[[36;1m}^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6786826Z ^[[36;1m# If /bin/sh is dash, environment variable containing % is not imported, but is fine^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6787364Z ^[[36;1m# because it also means that it will not be exposed to subprocess.^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6787788Z ^[[36;1mif /usr/bin/env | grep -Eq '^BASH_FUNC_'; then^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6788331Z ^[[36;1m  bail 'bash function injection via BASH_FUNC_ environment variable is not allowed for security reasons'^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6789011Z ^[[36;1mfi^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6789238Z ^[[36;1mif ! command -v bash >/dev/null; then^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6789583Z ^[[36;1m  if grep -Eq '^ID=alpine' /etc/os-release; then^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6790036Z ^[[36;1m    printf '::group::Install packages required for install-action (bash)\n'^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6790467Z ^[[36;1m    # NB: sync with apk_install in main.sh^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6790798Z ^[[36;1m    if command -v sudo >/dev/null; then^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6791120Z ^[[36;1m      sudo apk --no-cache add bash^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.6791475Z ^[[36;1m    elif command -v doas >/dev/null; then^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:14:12.8676509Z ##[group]Run VERSION=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/version = |"/, ""); print; exit}' Cargo.lock)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:15:43.9928038Z ##[group]Run curl -LO https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-linux-x86.gz
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:15:44.2044149Z ##[group]Run actions/setup-node@v6
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:15:47.4329158Z ##[group]Run npm ci
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:16:57.3855717Z ##[group]Run npm install -g binaryen@132.0.0
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:16:58.6524043Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:27:25.4286722Z ##[group]Run actions/cache@v4
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:27:26.1320818Z ##[group]Run node scripts/fetch-pandoc-wasm.mjs --require
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:27:36.1233774Z ##[group]Run for pkg in ts-packages/*/; do
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:29:24.1019971Z ##[group]Run cargo build --bin hub
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:33:25.8335316Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:33:26.6860368Z ##[group]Run actions/cache@v4
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:33:30.4792624Z ##[group]Run cargo build -p quarto-output-extract
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:33:51.9994023Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:36:13.4605683Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:38.6122684Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:47.7304967Z [WebServer] 7:38:47 AM [vite] ws proxy error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:47.7327426Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:47.7351092Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:47.7367229Z [WebServer] 7:38:47 AM [vite] ws proxy socket error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:47.7368130Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:47.7369009Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:47.7717669Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:47.7767018Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:47.7788355Z [createNewProject] Creating index document with ID 2gd8PWRdiTDaUnL9K96NS9Kdoq3L
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:47.7801336Z [createNewProject] Index document created, ID: 2gd8PWRdiTDaUnL9K96NS9Kdoq3L
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:49.1217621Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:49.1257256Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:49.1260793Z [createNewProject] Creating index document with ID 3q4KT6Q1cyzfmtiUVAz8uKkKtdsp
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:49.1288211Z [createNewProject] Index document created, ID: 3q4KT6Q1cyzfmtiUVAz8uKkKtdsp
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:55.2476456Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:55.2489487Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:55.2491546Z [createNewProject] Creating index document with ID 4LaW6LhYAi41vHKJ4JCw2BMotsyt
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:38:55.2512235Z [createNewProject] Index document created, ID: 4LaW6LhYAi41vHKJ4JCw2BMotsyt
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:48.0477439Z [WebServer] 7:39:48 AM [vite] ws proxy error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:48.0497000Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:48.0507311Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:48.0514295Z [WebServer] 7:39:48 AM [vite] ws proxy socket error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:48.0514963Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:48.0515761Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:48.1007807Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:48.1022987Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:48.1038305Z [createNewProject] Creating index document with ID Fm4VRf9NCEM452EgA5uxM9uZztu
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:48.1040332Z [createNewProject] Index document created, ID: Fm4VRf9NCEM452EgA5uxM9uZztu
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:54.6249539Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:54.6307820Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:54.6337284Z [createNewProject] Creating index document with ID qZYVJuwZ3oeEowSLs5ornFMeQne
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:54.6367146Z [createNewProject] Index document created, ID: qZYVJuwZ3oeEowSLs5ornFMeQne
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:56.3140164Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:56.3209069Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:56.3257301Z [createNewProject] Creating index document with ID 3DPpoozsuMunWi8dyQA1A9GVE3W7
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:39:56.3279546Z [createNewProject] Index document created, ID: 3DPpoozsuMunWi8dyQA1A9GVE3W7
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:44:10.1515199Z   1 skipped
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:44:10.1515641Z   101 passed (5.5m)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:44:10.2960823Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:44:43.8384473Z   4 passed (32.7s)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:44:43.8808721Z ##[group]Run cd hub-client
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:30.3617200Z [WebServer] 7:45:30 AM [vite] ws proxy error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:30.3632413Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:30.3634303Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:30.3636066Z [WebServer] 7:45:30 AM [vite] ws proxy socket error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:30.3637006Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:30.3638278Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:30.4369325Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:30.4427025Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:30.4444895Z [createNewProject] Creating index document with ID 2iDbWPw2vBnh3LoCdrFug6m85DEy
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:30.4498466Z [createNewProject] Index document created, ID: 2iDbWPw2vBnh3LoCdrFug6m85DEy
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:31.5739105Z ··Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:31.5822469Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:31.5897603Z [createNewProject] Creating index document with ID 2LnCUjbiCnrLp3YVQdvtvUv3Rd4M
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:31.5935425Z [createNewProject] Index document created, ID: 2LnCUjbiCnrLp3YVQdvtvUv3Rd4M
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:31.6360221Z Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:31.6428409Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:31.6448651Z [createNewProject] Creating index document with ID 4Yu2kkxkutHS8LCHeFQGRYJnub5W
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:31.6462694Z [createNewProject] Index document created, ID: 4Yu2kkxkutHS8LCHeFQGRYJnub5W
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:38.7730668Z [WebServer] 7:45:38 AM [vite] ws proxy error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:38.7748130Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:38.7777130Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:38.7806821Z [WebServer] 7:45:38 AM [vite] ws proxy socket error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:38.7807837Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:38.7837044Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:38.8761022Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:38.8866904Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:38.8897153Z [createNewProject] Creating index document with ID 3XKsZ3AAWJSi9gA7ySJiyn9sFYkT
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:38.8967160Z [createNewProject] Index document created, ID: 3XKsZ3AAWJSi9gA7ySJiyn9sFYkT
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:39.7655757Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:39.7746732Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:39.7764979Z [createNewProject] Creating index document with ID 3joX1DYd4RjRp8nJGPEfyECeQYvW
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:39.7768842Z [createNewProject] Index document created, ID: 3joX1DYd4RjRp8nJGPEfyECeQYvW
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:40.2670390Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:40.2758077Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:40.2761026Z [createNewProject] Creating index document with ID 2goxAdZkdrc8Bq3DiwGE2ftUm6Zq
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:40.2794092Z [createNewProject] Index document created, ID: 2goxAdZkdrc8Bq3DiwGE2ftUm6Zq
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:55.4476993Z [WebServer] 7:45:55 AM [vite] ws proxy error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:55.4577022Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:55.4599785Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:55.4797133Z [WebServer] 7:45:55 AM [vite] ws proxy socket error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:55.4845032Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:55.4875068Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:55.5797847Z ·°·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:55.5858727Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:55.5877393Z [createNewProject] Creating index document with ID BqDa2AEAFd1ZiqmHhArSXwgPHyv
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:55.5909148Z [createNewProject] Index document created, ID: BqDa2AEAFd1ZiqmHhArSXwgPHyv
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:55.6281990Z Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:55.6358623Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:55.6379097Z [createNewProject] Creating index document with ID skhbFArSTN8L4oojXKgWNi5Pm6x
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:55.6380725Z [createNewProject] Index document created, ID: skhbFArSTN8L4oojXKgWNi5Pm6x
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:56.3530517Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:56.3628660Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:56.3667499Z [createNewProject] Creating index document with ID hKVcf8dcg82wq5cgVmvYa1S4sxu
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:45:56.3698365Z [createNewProject] Index document created, ID: hKVcf8dcg82wq5cgVmvYa1S4sxu
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:46.1261043Z [WebServer] 7:46:46 AM [vite] ws proxy error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:46.1290609Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:46.1316896Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:46.1337280Z [WebServer] 7:46:46 AM [vite] ws proxy socket error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:46.1346746Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:46.1376849Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:46.2085810Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:46.2147038Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:46.2177071Z [createNewProject] Creating index document with ID 3anA34p8i41sjQ5enp9rXcZZuZgw
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:46.2178570Z [createNewProject] Index document created, ID: 3anA34p8i41sjQ5enp9rXcZZuZgw
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:47.0205624Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:47.0278709Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:47.0298561Z [createNewProject] Creating index document with ID p39YqMiuCq48fRbeL29fKUFL2se
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:47.0336989Z [createNewProject] Index document created, ID: p39YqMiuCq48fRbeL29fKUFL2se
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:52.9440047Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:52.9517843Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:52.9567474Z [createNewProject] Creating index document with ID 3B9gLYz4fKqACV4aqivuUbQtrFkN
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:46:52.9617183Z [createNewProject] Index document created, ID: 3B9gLYz4fKqACV4aqivuUbQtrFkN
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:01.6083479Z [WebServer] 7:47:01 AM [vite] ws proxy error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:01.6106661Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:01.6137118Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:01.6161017Z [WebServer] 7:47:01 AM [vite] ws proxy socket error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:01.6179839Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:01.6180973Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:01.7044533Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:01.7151977Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:01.7157073Z [createNewProject] Creating index document with ID 45ZokMFuACku2wfs6dfuBM4HWk8o
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:01.7204559Z [createNewProject] Index document created, ID: 45ZokMFuACku2wfs6dfuBM4HWk8o
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:03.1798237Z [smoke-diag] dom-assertions-skipped strand=bd-ijlapt70 kind=q2-preview
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:03.5248022Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:03.5497284Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:03.5527221Z [createNewProject] Creating index document with ID Z78SZrtCVZLZcuoZi2QkwhfVrGS
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:03.5597522Z [createNewProject] Index document created, ID: Z78SZrtCVZLZcuoZi2QkwhfVrGS
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:04.1769226Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:04.1889397Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:04.1939509Z [createNewProject] Creating index document with ID 2aFjMPnNCDqeH99RfMpeNbT4LRxn
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:31.2034886Z [WebServer] 7:47:31 AM [vite] ws proxy error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:31.2066857Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:31.2207330Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:31.2256587Z [WebServer] 7:47:31 AM [vite] ws proxy socket error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:31.2286773Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:31.2349542Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:31.3117471Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:31.3236521Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:31.3238108Z [createNewProject] Creating index document with ID Ne63NVnr9ksD1fpp29nfRDEy8pC
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:31.3303925Z [createNewProject] Index document created, ID: Ne63NVnr9ksD1fpp29nfRDEy8pC
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:32.8947490Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:33.6987164Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:33.7023751Z [createNewProject] Creating index document with ID 96ws62ZLhUjjke7zNUTqPkaTtk4
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:33.7086832Z [createNewProject] Index document created, ID: 96ws62ZLhUjjke7zNUTqPkaTtk4
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:47.4617882Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:47.4641144Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:47.4709904Z [createNewProject] Creating index document with ID 3RUp6BmzHuwDLpdni7DLwRwrF4cc
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:47.4746857Z [createNewProject] Index document created, ID: 3RUp6BmzHuwDLpdni7DLwRwrF4cc
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:50.0917105Z [WebServer] 7:47:50 AM [vite] ws proxy error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:50.0987254Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:50.0999539Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:50.1056910Z [WebServer] 7:47:50 AM [vite] ws proxy socket error:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:50.1119659Z [WebServer] Error: read ECONNRESET
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:50.1188001Z [WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:221:20)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:50.1658505Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:50.1767414Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:50.1797201Z [createNewProject] Creating index document with ID 3VAx59Cj9TVcF282cw9P4LX6GxcU
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:47:50.1807955Z [createNewProject] Index document created, ID: 3VAx59Cj9TVcF282cw9P4LX6GxcU
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:48:03.9131052Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:48:03.9249611Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:48:03.9267025Z [createNewProject] Creating index document with ID o6nYSC99UL8HBUr7mHaQ8pea91r
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:48:03.9336949Z [createNewProject] Index document created, ID: o6nYSC99UL8HBUr7mHaQ8pea91r
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:48:04.9872114Z ·Waiting for peer connection...
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:48:05.0035656Z Peer connected
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:48:05.0077382Z [createNewProject] Creating index document with ID 317CA4MtrBRZEguDfGys3KssWQK1
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T07:48:05.0097411Z [createNewProject] Index document created, ID: 317CA4MtrBRZEguDfGys3KssWQK1
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1917146Z   1) [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › toc-containers/content-visible-span-kept.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1918219Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1918839Z     Error: Timed out after 75000ms waiting for preview iframe to render.
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1921224Z     [smoke-diag] stage=CONNECT_STALL wasmReady=true vfs=143 projectSelector=1 connecting=0 connError=0 editor=0 loadingPreview=0 iframe=0 bodyLen=-1 syncPeers=0 syncRetryTicks=0 syncRetryTimer=0
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1923153Z     Console errors:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1924095Z     Failed to load resource: the server responded with a status of 401 (Unauthorized)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1924778Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1925069Z        at helpers/previewExtraction.ts:446
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1925509Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1925823Z       444 |     ? `\nConsole errors:\n${consoleErrors.join('\n')}`
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1926632Z       445 |     : '\nNo console errors captured.';
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1927091Z     > 446 |   throw new Error(
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1927918Z           |         ^
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1928651Z       447 |     `Timed out after ${timeout}ms waiting for preview iframe to render.\n${diagLine}${errorContext}`,
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1929470Z       448 |   );
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1976777Z   2) [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › toc/toc-expand-depth.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1977162Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1977419Z     Error: Timed out after 75000ms waiting for preview iframe to render.
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1979378Z     [smoke-diag] stage=CONNECT_STALL wasmReady=true vfs=143 projectSelector=1 connecting=0 connError=0 editor=0 loadingPreview=0 iframe=0 bodyLen=-1 syncPeers=0 syncRetryTicks=0 syncRetryTimer=0
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1980457Z     Console errors:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1980891Z     Failed to load resource: the server responded with a status of 401 (Unauthorized)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1981234Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1981389Z        at helpers/previewExtraction.ts:446
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1981600Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1981794Z       444 |     ? `\nConsole errors:\n${consoleErrors.join('\n')}`
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1982203Z       445 |     : '\nNo console errors captured.';
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1982534Z     > 446 |   throw new Error(
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1982791Z           |         ^
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1983295Z       447 |     `Timed out after ${timeout}ms waiting for preview iframe to render.\n${diagLine}${errorContext}`,
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.1983786Z       448 |   );
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2043242Z   3) [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › q2-preview/multi-element-project/index.qmd [q2-preview] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2044066Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2044485Z     Error: Timed out after 75000ms waiting for preview iframe to render.
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2060232Z     [smoke-diag] stage=CONNECT_STALL wasmReady=true vfs=143 projectSelector=1 connecting=0 connError=0 editor=0 loadingPreview=0 iframe=0 bodyLen=-1 syncPeers=0 syncRetryTicks=0 syncRetryTimer=0
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2061663Z     Console errors:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2062385Z     Failed to load resource: the server responded with a status of 401 (Unauthorized)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2062981Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2063225Z        at helpers/previewExtraction.ts:446
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2063827Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2064186Z       444 |     ? `\nConsole errors:\n${consoleErrors.join('\n')}`
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2064928Z       445 |     : '\nNo console errors captured.';
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2065557Z     > 446 |   throw new Error(
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2066227Z           |         ^
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2067161Z       447 |     `Timed out after ${timeout}ms waiting for preview iframe to render.\n${diagLine}${errorContext}`,
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2068041Z       448 |   );
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2078304Z   4) [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › q2-preview/title-block-multi-author.qmd [q2-preview] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2079086Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2079502Z     Error: Timed out after 75000ms waiting for preview iframe to render.
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2081441Z     [smoke-diag] stage=CONNECT_STALL wasmReady=true vfs=143 projectSelector=1 connecting=0 connError=0 editor=0 loadingPreview=0 iframe=0 bodyLen=-1 syncPeers=0 syncRetryTicks=0 syncRetryTimer=0
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2082874Z     Console errors:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2083568Z     Failed to load resource: the server responded with a status of 401 (Unauthorized)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2084175Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2084439Z        at helpers/previewExtraction.ts:446
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2084803Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2085152Z       444 |     ? `\nConsole errors:\n${consoleErrors.join('\n')}`
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2085853Z       445 |     : '\nNo console errors captured.';
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2086617Z     > 446 |   throw new Error(
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2087043Z           |         ^
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2087908Z       447 |     `Timed out after ${timeout}ms waiting for preview iframe to render.\n${diagLine}${errorContext}`,
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2088762Z       448 |   );
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2127555Z   5) [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › repo-actions/page-level-true.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2128234Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2128495Z     Error: Timed out after 75000ms waiting for preview iframe to render.
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2130251Z     [smoke-diag] stage=CONNECT_STALL wasmReady=true vfs=143 projectSelector=1 connecting=0 connError=0 editor=0 loadingPreview=0 iframe=0 bodyLen=-1 syncPeers=0 syncRetryTicks=0 syncRetryTimer=0
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2131609Z     Console errors:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2132343Z     Failed to load resource: the server responded with a status of 401 (Unauthorized)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2132939Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2133224Z        at helpers/previewExtraction.ts:446
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2133607Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2133984Z       444 |     ? `\nConsole errors:\n${consoleErrors.join('\n')}`
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2134730Z       445 |     : '\nNo console errors captured.';
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2135349Z     > 446 |   throw new Error(
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2135832Z           |         ^
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2136968Z       447 |     `Timed out after ${timeout}ms waiting for preview iframe to render.\n${diagLine}${errorContext}`,
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2137876Z       448 |   );
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2146982Z   6) [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › themes/theme-project-scss-relpath/chapters/subdir-relpath.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2147520Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2147754Z     Error: Timed out after 75000ms waiting for preview iframe to render.
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2148742Z     [smoke-diag] stage=CONNECT_STALL wasmReady=true vfs=143 projectSelector=1 connecting=0 connError=0 editor=0 loadingPreview=0 iframe=0 bodyLen=-1 syncPeers=0 syncRetryTicks=0 syncRetryTimer=0
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2149529Z     Console errors:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2149946Z     Failed to load resource: the server responded with a status of 401 (Unauthorized)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2150276Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2150421Z        at helpers/previewExtraction.ts:446
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2150629Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2150829Z       444 |     ? `\nConsole errors:\n${consoleErrors.join('\n')}`
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2151234Z       445 |     : '\nNo console errors captured.';
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2151567Z     > 446 |   throw new Error(
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2151822Z           |         ^
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2152318Z       447 |     `Timed out after ${timeout}ms waiting for preview iframe to render.\n${diagLine}${errorContext}`,
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2152948Z       448 |   );
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2175654Z   7) [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › themes/theme-project-scss-relpath/root-relpath.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2176343Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2176585Z     Error: Timed out after 75000ms waiting for preview iframe to render.
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2177565Z     [smoke-diag] stage=CONNECT_STALL wasmReady=true vfs=143 projectSelector=1 connecting=0 connError=0 editor=0 loadingPreview=0 iframe=0 bodyLen=-1 syncPeers=0 syncRetryTicks=0 syncRetryTimer=0
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2178659Z     Console errors:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2179530Z     Failed to load resource: the server responded with a status of 401 (Unauthorized)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2179941Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2180104Z        at helpers/previewExtraction.ts:446
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2180339Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2180544Z       444 |     ? `\nConsole errors:\n${consoleErrors.join('\n')}`
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2180945Z       445 |     : '\nNo console errors captured.';
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2181278Z     > 446 |   throw new Error(
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2181532Z           |         ^
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2182025Z       447 |     `Timed out after ${timeout}ms waiting for preview iframe to render.\n${diagLine}${errorContext}`,
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2182509Z       448 |   );
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2205425Z   8) [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › toc-containers/tabset-pane-heading-not-in-toc.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2206090Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2206375Z     Error: Timed out after 75000ms waiting for preview iframe to render.
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2207371Z     [smoke-diag] stage=CONNECT_STALL wasmReady=true vfs=143 projectSelector=1 connecting=0 connError=0 editor=0 loadingPreview=0 iframe=0 bodyLen=-1 syncPeers=0 syncRetryTicks=0 syncRetryTimer=0
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2208346Z     Console errors:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2208755Z     Failed to load resource: the server responded with a status of 401 (Unauthorized)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2209092Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2209242Z        at helpers/previewExtraction.ts:446
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2209450Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2209646Z       444 |     ? `\nConsole errors:\n${consoleErrors.join('\n')}`
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2210059Z       445 |     : '\nNo console errors captured.';
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2210385Z     > 446 |   throw new Error(
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2210643Z           |         ^
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2211136Z       447 |     `Timed out after ${timeout}ms waiting for preview iframe to render.\n${diagLine}${errorContext}`,
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2211620Z       448 |   );
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2217165Z   9) [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › toc/toc-expand-false.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2217542Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2217765Z     Error: Timed out after 75000ms waiting for preview iframe to render.
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2218760Z     [smoke-diag] stage=CONNECT_STALL wasmReady=true vfs=143 projectSelector=1 connecting=0 connError=0 editor=0 loadingPreview=0 iframe=0 bodyLen=-1 syncPeers=0 syncRetryTicks=0 syncRetryTimer=0
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2219554Z     Console errors:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2219961Z     Failed to load resource: the server responded with a status of 401 (Unauthorized)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2220293Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2220441Z        at helpers/previewExtraction.ts:446
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2220640Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2220839Z       444 |     ? `\nConsole errors:\n${consoleErrors.join('\n')}`
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2221245Z       445 |     : '\nNo console errors captured.';
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2221567Z     > 446 |   throw new Error(
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2221831Z           |         ^
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2222324Z       447 |     `Timed out after ${timeout}ms waiting for preview iframe to render.\n${diagLine}${errorContext}`,
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2222801Z       448 |   );
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2228342Z   10) [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › toc/toc-expand-zero.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2228729Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2228960Z     Error: Timed out after 75000ms waiting for preview iframe to render.
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2229946Z     [smoke-diag] stage=CONNECT_STALL wasmReady=true vfs=143 projectSelector=1 connecting=0 connError=0 editor=0 loadingPreview=0 iframe=0 bodyLen=-1 syncPeers=0 syncRetryTicks=0 syncRetryTimer=0
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2230741Z     Console errors:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2231150Z     Failed to load resource: the server responded with a status of 401 (Unauthorized)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2231480Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2231623Z        at helpers/previewExtraction.ts:446
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2231828Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2232029Z       444 |     ? `\nConsole errors:\n${consoleErrors.join('\n')}`
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2232552Z       445 |     : '\nNo console errors captured.';
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2232892Z     > 446 |   throw new Error(
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2233141Z           |         ^
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2233630Z       447 |     `Timed out after ${timeout}ms waiting for preview iframe to render.\n${diagLine}${errorContext}`,
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2234110Z       448 |   );
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2256672Z   2 failed
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2257280Z     [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › toc-containers/content-visible-span-kept.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2258113Z     [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › toc/toc-expand-depth.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2258578Z   8 flaky
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2259191Z     [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › q2-preview/multi-element-project/index.qmd [q2-preview] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2260136Z     [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › q2-preview/title-block-multi-author.qmd [q2-preview] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2260996Z     [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › repo-actions/page-level-true.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2261969Z     [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › themes/theme-project-scss-relpath/chapters/subdir-relpath.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2262972Z     [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › themes/theme-project-scss-relpath/root-relpath.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2263923Z     [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › toc-containers/tabset-pane-heading-not-in-toc.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2264760Z     [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › toc/toc-expand-false.qmd [html] 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2265508Z     [chromium] › e2e/smoke-all.spec.ts:60:7 › smoke-all E2E tests › toc/toc-expand-zero.qmd [html] ─
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2266066Z   8 skipped
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.2266290Z   199 passed (22.3m)
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.6785846Z ##[error]Process completed with exit code 1.
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.6872361Z ##[group]Run npm test -w ts-packages/sync-test-harness
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.6872811Z ^[[36;1mnpm test -w ts-packages/sync-test-harness^[[0m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.6923534Z shell: /usr/bin/bash -e {0}
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.6923804Z env:
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.6924024Z   CARGO_HOME: /home/runner/.cargo
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.6924307Z   CARGO_INCREMENTAL: 0
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.6924544Z   CARGO_TERM_COLOR: always
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.6924788Z   CACHE_ON_FAILURE: true
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.6925027Z ##[endgroup]
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.8440353Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.8440944Z > @quarto/sync-test-harness@0.0.1 test
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.8441529Z > vitest run
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:01.8441698Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:02.1674202Z 
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:02.1677194Z ^[[1m^[[46m RUN ^[[49m^[[22m ^[[36mv3.2.6 ^[[39m^[[90m/home/runner/work/q2/q2/ts-packages/sync-test-harness^[[39m
+Hub-Client E2E Tests (chromium)	UNKNOWN STEP	2026-11-19T08:07:19.0688448Z ##[group]Run actions/upload-artifact@v7

@@ -31,6 +31,9 @@
 //!   level-2 section (`href#id`, `section` = heading text, h3+ folded
 //!   in), `objectID == href`, `crumbs` from the sidebar trail with the
 //!   navbar crumb merged in front (`merge-navbar-crumbs`).
+//! - RevealJS decks are indexed per slide, as in Quarto 1: one record
+//!   per slide (`deck.html#slide-id`, deck title, slide heading as
+//!   `section`, speaker notes included), no title slide.
 //! - Drafts, pages with `search: false`, and `404.html` are excluded
 //!   from the bundle and from `search.json`.
 //! - A `RenderMode::Subset` render keeps the pages it skipped in the
@@ -938,4 +941,115 @@ fn v1_state_search_json_is_removed() {
     );
     assert_clean(&render_in(&project_dir, RenderMode::Full).unwrap());
     assert!(!project_dir.join(SEARCH_JSON).exists());
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RevealJS decks
+// ═══════════════════════════════════════════════════════════════════
+
+/// [`records_site`] plus two decks: `talks/deck.qmd` (a divider, two
+/// slides, speaker notes, a subtitle on the title slide) and
+/// `talks/hidden-deck.qmd` with `search: false`.
+fn deck_site(dir: &Path) {
+    records_site(dir);
+    write(
+        &dir.join("talks/deck.qmd"),
+        "---\ntitle: Launch Deck\nsubtitle: Subtitle words\nformat: revealjs\n---\n\n\
+         # Part one\n\n\
+         Divider words.\n\n\
+         ## Slide alpha\n\n\
+         Alpha slide words.\n\n\
+         ::: {.notes}\nSpeaker note words.\n:::\n\n\
+         ## Slide beta {#beta}\n\n\
+         Beta slide words.\n",
+    );
+    write(
+        &dir.join("talks/hidden-deck.qmd"),
+        "---\ntitle: Hidden Deck\nformat: revealjs\nsearch: false\n---\n\n\
+         ## Only slide\n\n\
+         Opted-out deck words.\n",
+    );
+}
+
+/// The decoded text of every Pagefind fragment, concatenated.
+fn fragment_text(project_dir: &Path) -> String {
+    let mut all_text = String::new();
+    for entry in std::fs::read_dir(project_dir.join(BUNDLE_DIR).join("fragment")).unwrap() {
+        let bytes = std::fs::read(entry.unwrap().path()).unwrap();
+        let mut decoder = flate2::read::GzDecoder::new(bytes.as_slice());
+        let mut out = Vec::new();
+        std::io::Read::read_to_end(&mut decoder, &mut out).unwrap();
+        all_text.push_str(&String::from_utf8_lossy(&out));
+    }
+    all_text
+}
+
+/// Quarto 1 indexes a deck one record per slide (`section.level2`):
+/// `href#slide-id`, the deck title as `title`, the slide heading as
+/// `section`, speaker notes included; the title slide is not indexed.
+#[test]
+fn deck_slides_get_quarto1_search_records() {
+    let project_dir = render_project(deck_site);
+    let recs = records(&project_dir);
+
+    let alpha = record(&recs, "talks/deck.html#slide-alpha");
+    assert_eq!(
+        alpha["objectID"].as_str(),
+        Some("talks/deck.html#slide-alpha")
+    );
+    assert_eq!(alpha["title"].as_str(), Some("Launch Deck"));
+    assert_eq!(alpha["section"].as_str(), Some("Slide alpha"));
+    let text = alpha["text"].as_str().unwrap();
+    assert_contains(text, "Alpha slide words.", "slide text");
+    assert_contains(text, "Speaker note words.", "speaker notes, as in Quarto 1");
+    assert_not_contains(text, "Beta slide words.", "one slide per record");
+
+    let beta = record(&recs, "talks/deck.html#beta");
+    assert_eq!(beta["section"].as_str(), Some("Slide beta"));
+
+    let hrefs: Vec<&str> = recs.iter().map(|r| r["href"].as_str().unwrap()).collect();
+    assert!(
+        !hrefs.contains(&"talks/deck.html#title-slide"),
+        "the title slide is not a record; hrefs: {hrefs:?}"
+    );
+    for r in recs
+        .iter()
+        .filter(|r| r["href"].as_str().unwrap().starts_with("talks/deck.html"))
+    {
+        assert_not_contains(
+            r["text"].as_str().unwrap(),
+            "Subtitle words",
+            "title slide text",
+        );
+    }
+    // Text outside any slide record (the divider) stays on the deck's
+    // page record, as for pages (a q2 departure: Quarto 1 drops it).
+    let page = record(&recs, "talks/deck.html");
+    assert_contains(
+        page["text"].as_str().unwrap(),
+        "Divider words.",
+        "divider text",
+    );
+    assert_not_contains(
+        page["text"].as_str().unwrap(),
+        "Alpha slide words.",
+        "page text",
+    );
+}
+
+#[test]
+fn decks_are_in_the_pagefind_bundle_unless_opted_out() {
+    let project_dir = render_project(deck_site);
+    let all_text = fragment_text(&project_dir);
+    assert_contains(&all_text, "talks/deck.html", "deck page in the bundle");
+    assert_contains(&all_text, "Alpha slide words", "slide text indexed");
+    assert_contains(&all_text, "slide-alpha", "per-slide anchor for sub-results");
+    assert_not_contains(&all_text, "Subtitle words", "title slide not indexed");
+    assert_not_contains(&all_text, "Opted-out deck words", "search: false deck");
+    assert_not_contains(&all_text, "talks/hidden-deck.html", "search: false deck");
+    // Three pages from the base fixture plus the deck.
+    assert_eq!(
+        read_json(&project_dir.join(MANIFEST))["pages"].as_u64(),
+        Some(4)
+    );
 }

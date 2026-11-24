@@ -9,6 +9,7 @@ use crate::pandoc::inline::Inline;
 use crate::pandoc::list::{ListNumberDelim, ListNumberStyle};
 use crate::pandoc::table::{Alignment, Cell, ColWidth, Row, Table};
 use crate::pandoc::treesitter_utils::html_block::{starts_block_html, starts_raw_text_element};
+use crate::pandoc::treesitter_utils::span_link_helpers::escape_uri;
 use crate::pandoc::{
     Block, BlockQuote, BulletList, CodeBlock, DefinitionList, Figure, Header, HorizontalRule,
     LineBlock, OrderedList, Pandoc, Paragraph, Plain, RawBlock, Str,
@@ -2339,7 +2340,7 @@ fn write_link(
     write!(buf, "[")?;
     write_inline_run(&link.content, buf, ctx, false)?;
     write!(buf, "](")?;
-    write!(buf, "{}", link.target.0)?;
+    write!(buf, "{}", escape_uri(&link.target.0))?;
     if !link.target.1.is_empty() {
         write!(buf, " \"{}\"", escape_quotes(&link.target.1))?;
     }
@@ -2358,7 +2359,7 @@ fn write_image(
     write!(buf, "![")?;
     write_inline_run(&image.content, buf, ctx, false)?;
     write!(buf, "](")?;
-    write!(buf, "{}", image.target.0)?;
+    write!(buf, "{}", escape_uri(&image.target.0))?;
     if !image.target.1.is_empty() {
         write!(buf, " \"{}\"", escape_quotes(&image.target.1))?;
     }
@@ -3426,7 +3427,24 @@ pub fn write_single_inline<T: std::io::Write>(
     inline: &crate::pandoc::Inline,
     buf: &mut T,
 ) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
+    write_single_inline_in_emphasis(inline, &[], buf)
+}
+
+/// Like [`write_single_inline`], for an inline that will be placed inside
+/// emphasis containers the writer does not emit itself.
+///
+/// `enclosing` lists those containers' delimiters, outermost first. The
+/// incremental writer uses this when it splices a new inline between
+/// delimiters copied from the original source: without them, a new `Emph`
+/// directly inside a kept `**…**` picks `*` and the result reads `***x***`
+/// (GH #1268).
+pub fn write_single_inline_in_emphasis<T: std::io::Write>(
+    inline: &crate::pandoc::Inline,
+    enclosing: &[EmphasisStackFrame],
+    buf: &mut T,
+) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
     let mut ctx = QmdWriterContext::new();
+    ctx.emphasis_stack = enclosing.to_vec();
     if let Err(e) = write_inline(inline, buf, &mut ctx) {
         return Err(vec![
             quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")

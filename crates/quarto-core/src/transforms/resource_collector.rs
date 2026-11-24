@@ -227,6 +227,9 @@ impl<'a> ResourceVisitor<'a> {
                 }
             }
             Block::Div(d) => {
+                if d.attr.1.iter().any(|c| c == "section") {
+                    self.collect_section_backgrounds(&d.attr.2, &d.source_info);
+                }
                 for block in &d.content {
                     self.visit_block(block);
                 }
@@ -438,6 +441,33 @@ impl<'a> ResourceVisitor<'a> {
         }
     }
 
+    /// Collect a `<section>`'s background media: reveal.js slide
+    /// backgrounds (`{background-image=...}` on a slide heading lands on
+    /// its section Div and is written as `data-background-image`).
+    /// Quarto 1 treats the same two section attributes as file resources
+    /// (`kHtmlResourceTags` in `core/html.ts`). A background video may
+    /// list several comma-separated sources (reveal.js splits on `,`).
+    fn collect_section_backgrounds(
+        &mut self,
+        attrs: &hashlink::LinkedHashMap<String, String>,
+        origin: &quarto_source_map::SourceInfo,
+    ) {
+        for (key, value) in attrs {
+            match key.strip_prefix("data-").unwrap_or(key) {
+                "background-image" => self.collect_resource(value.trim(), origin.clone()),
+                "background-video" => {
+                    for source in value.split(',') {
+                        let source = source.trim();
+                        if !source.is_empty() {
+                            self.collect_resource(source, origin.clone());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn collect_resource(&mut self, url: &str, origin: quarto_source_map::SourceInfo) {
         // Skip external URLs and inlined data URIs — nothing on
         // disk to copy.
@@ -634,6 +664,58 @@ mod tests {
             ],
             "relative image URLs in order, deduped; external dropped; \
              leading-/ mapped to doc-dir-relative"
+        );
+    }
+
+    fn div(classes: &[&str], attrs: &[(&str, &str)]) -> Block {
+        let mut kv = hashlink::LinkedHashMap::new();
+        for (k, v) in attrs {
+            kv.insert((*k).to_string(), (*v).to_string());
+        }
+        Block::Div(Box::new(quarto_pandoc_types::block::Div {
+            attr: (
+                String::new(),
+                classes.iter().map(|c| (*c).to_string()).collect(),
+                kv,
+            )
+                .into(),
+            content: vec![],
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        }))
+    }
+
+    /// reveal.js slide backgrounds live on the slide's section Div; both
+    /// spellings (`background-image` as authored, `data-background-image`
+    /// written out) are resources, and a video lists `,`-separated sources.
+    #[test]
+    fn section_background_media_are_collected() {
+        let blocks = vec![
+            div(
+                &["section"],
+                &[
+                    ("background-image", "img/bg.png"),
+                    ("background-color", "red"),
+                ],
+            ),
+            div(
+                &["section"],
+                &[("data-background-video", "media/a.mp4, media/a.webm")],
+            ),
+            div(
+                &["section"],
+                &[("background-image", "https://example.com/remote.png")],
+            ),
+            // Not a section: a plain Div attribute is not a resource.
+            div(&["note"], &[("background-image", "img/other.png")]),
+        ];
+        assert_eq!(
+            collect_referenced_asset_urls(&blocks),
+            vec![
+                "img/bg.png".to_string(),
+                "media/a.mp4".to_string(),
+                "media/a.webm".to_string(),
+            ]
         );
     }
 

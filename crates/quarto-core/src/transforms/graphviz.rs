@@ -195,7 +195,7 @@ fn graphviz_runtime_url(ctx: &RenderContext) -> String {
 /// - `graph-layout` becomes `data-graph-layout`.
 /// - `fig-alt` becomes `data-fig-alt`.
 fn pre_open_tag(attrs: &hashlink::LinkedHashMap<String, String>) -> String {
-    let mut tag = String::from("<pre class=\"graphviz");
+    let mut tag = String::from(PRE_OPEN);
     if let Some(align @ ("left" | "center" | "right")) = attrs.get("fig-align").map(String::as_str)
     {
         tag.push_str(" quarto-figure-");
@@ -216,6 +216,21 @@ fn pre_open_tag(attrs: &hashlink::LinkedHashMap<String, String>) -> String {
     }
     tag.push('>');
     tag
+}
+
+/// Start of every `<pre>` this transform emits ([`pre_open_tag`]), up to
+/// the end of the first class name (followed by `"` or a space).
+const PRE_OPEN: &str = "<pre class=\"graphviz";
+
+/// Whether `raw` is a diagram this transform emitted. The dashboard card
+/// builder counts it as card content, as Quarto 1 counts a `{dot}` cell,
+/// although other raw HTML is not.
+pub(crate) fn is_graphviz_pre(raw: &RawBlock) -> bool {
+    raw.format == "html"
+        && raw
+            .text
+            .strip_prefix(PRE_OPEN)
+            .is_some_and(|rest| rest.starts_with(['"', ' ']))
 }
 
 /// Walk `blocks`, replacing each `CodeBlock` carrying the `dot` class
@@ -466,6 +481,46 @@ mod tests {
             script.contains("querySelectorAll('pre.graphviz')"),
             "script must lay out every pre.graphviz; got:\n{script}"
         );
+    }
+
+    /// `is_graphviz_pre` recognizes every `<pre>` this transform emits
+    /// (bare, or with alignment, layout and alt attributes), and nothing else.
+    #[tokio::test]
+    async fn is_graphviz_pre_recognizes_emitted_blocks_only() {
+        let mut ast = doc(vec![
+            make_codeblock(&["dot"], DIGRAPH),
+            make_codeblock_with_attrs(
+                &["dot"],
+                DIGRAPH,
+                &[
+                    ("fig-align", "right"),
+                    ("graph-layout", "neato"),
+                    ("fig-alt", "A graph"),
+                ],
+            ),
+        ]);
+        run_transform(&mut ast, Format::html()).await;
+        assert_eq!(ast.blocks.len(), 2);
+        for block in &ast.blocks {
+            let Block::RawBlock(raw) = block else {
+                panic!("expected RawBlock; got {block:?}");
+            };
+            assert!(is_graphviz_pre(raw), "{}", raw.text);
+        }
+        let raw = |format: &str, text: &str| RawBlock {
+            format: format.to_string(),
+            text: text.to_string(),
+            source_info: SourceInfo::for_test(),
+        };
+        assert!(!is_graphviz_pre(&raw(
+            "html",
+            "<pre class=\"graphvizx\">a</pre>"
+        )));
+        assert!(!is_graphviz_pre(&raw("html", "<div>raw</div>")));
+        assert!(!is_graphviz_pre(&raw(
+            "latex",
+            "<pre class=\"graphviz\">a</pre>"
+        )));
     }
 
     /// The emitted script must reference the bundled runtime by

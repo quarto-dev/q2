@@ -205,8 +205,14 @@ impl AstTransform for TocGenerateTransform {
 
         let config = TocConfig { depth, title };
 
-        // Generate TOC from document blocks
-        let toc = generate_toc(&ast.blocks, &config);
+        // Generate TOC from document blocks. A reveal deck is already a
+        // slide tree whose slide headings have handed their ids to their
+        // `<section>`s, so the builder gets those headings back first.
+        let toc = if crate::format::is_revealjs_target(&ctx.format.target_format) {
+            generate_toc(&crate::revealjs::toc::slide_headings(&ast.blocks), &config)
+        } else {
+            generate_toc(&ast.blocks, &config)
+        };
 
         // Skip if no entries were generated
         if toc.entries.is_empty() {

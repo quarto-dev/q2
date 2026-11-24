@@ -33,6 +33,13 @@ use crate::types::ConfigValue;
 /// keys); arrays concatenate. Either layer can use `!prefer` to take
 /// full precedence for its subtree.
 ///
+/// Exception — page-level navigation selectors: for `navbar` and
+/// `sidebar`, a top-level scalar other than `false` does not replace
+/// `website.<key>`; the nested value is returned as-is. In Quarto 1 a
+/// page's `sidebar: <id>` picks a sidebar (see
+/// `quarto_navigation::sidebar::sidebar_for_page`) and `navbar: true`
+/// keeps the site's navbar; only `false` turns either off (GH #1217).
+///
 /// Returns `None` if neither location is present. Returns
 /// `Some(materialized)` otherwise — callers are responsible for any
 /// `as_bool() == Some(false)` "affirmative disable" handling.
@@ -42,9 +49,20 @@ pub fn resolve_website_value(meta: &ConfigValue, key: &str) -> Option<ConfigValu
     match (top, nested) {
         (None, None) => None,
         (None, Some(w)) => Some(w.clone()),
+        (Some(t), Some(w)) if is_navigation_selector(key, t) => Some(w.clone()),
         (Some(t), None) => Some(t.clone()),
         (Some(t), Some(w)) => MergedConfig::new(vec![w, t]).materialize().ok(),
     }
+}
+
+/// A top-level `navbar`/`sidebar` scalar that selects or keeps the
+/// site's navigation rather than defining it: anything but a map, an
+/// array, or `false`.
+fn is_navigation_selector(key: &str, top: &ConfigValue) -> bool {
+    matches!(key, "navbar" | "sidebar")
+        && top.as_map_entries().is_none()
+        && top.as_array().is_none()
+        && top.as_bool() != Some(false)
 }
 
 #[cfg(test)]
@@ -298,5 +316,60 @@ mod tests {
         assert_eq!(resolved.as_bool(), Some(false));
         // Sanity: ConfigValueKind preserved as scalar through (Some, None) branch.
         assert!(matches!(resolved.value, ConfigValueKind::Scalar { .. }));
+    }
+
+    /// GH #1217 — a page's `sidebar: <id>` selects a sidebar; it must
+    /// not replace the site's sidebar definitions.
+    #[test]
+    fn top_level_sidebar_id_keeps_nested_sidebar() {
+        let sidebars = arr(vec![map(vec![("id", s("main"))])]);
+        let meta = map(vec![
+            ("website", map(vec![("sidebar", sidebars)])),
+            ("sidebar", s("main")),
+        ]);
+        let resolved = resolve_website_value(&meta, "sidebar").unwrap();
+        let items = resolved.as_array().expect("site sidebars kept");
+        assert_eq!(items.len(), 1);
+    }
+
+    /// GH #1217 — a page's `navbar: true` keeps the site's navbar.
+    #[test]
+    fn top_level_navbar_true_keeps_nested_navbar() {
+        let meta = map(vec![
+            (
+                "website",
+                map(vec![("navbar", map(vec![("logo", s("a.png"))]))]),
+            ),
+            ("navbar", b(true)),
+        ]);
+        let resolved = resolve_website_value(&meta, "navbar").unwrap();
+        assert!(resolved.get("logo").is_some(), "site navbar kept");
+    }
+
+    /// `false` still disables; the selector rule doesn't apply to it.
+    #[test]
+    fn top_level_false_still_disables_navigation() {
+        for key in ["navbar", "sidebar"] {
+            let meta = map(vec![
+                ("website", map(vec![(key, map(vec![("logo", s("a.png"))]))])),
+                (key, b(false)),
+            ]);
+            assert_eq!(
+                resolve_website_value(&meta, key).unwrap().as_bool(),
+                Some(false)
+            );
+        }
+    }
+
+    /// The selector rule is limited to navigation keys: other scalars
+    /// still override `website.<key>`.
+    #[test]
+    fn top_level_scalar_overrides_other_keys() {
+        let meta = map(vec![
+            ("website", map(vec![("draft-mode", s("gone"))])),
+            ("draft-mode", s("visible")),
+        ]);
+        let resolved = resolve_website_value(&meta, "draft-mode").unwrap();
+        assert_eq!(resolved.as_plain_text().as_deref(), Some("visible"));
     }
 }

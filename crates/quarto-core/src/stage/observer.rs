@@ -231,6 +231,18 @@ pub trait PipelineObserver: Send + Sync {
         false
     }
 
+    /// Whether this observer wants the exact pandoc invocation recorded as
+    /// a [`PANDOC_INVOCATION_KIND`](super::stages::PANDOC_INVOCATION_KIND)
+    /// aux payload (the AST pandoc reads, the decoded filter params, the
+    /// argv), so the vendored Lua filter stage can be replayed in isolation.
+    ///
+    /// Building the payload re-parses the serialized AST, so
+    /// `PandocWriteStage` does it only when the observer opts in. The JSON
+    /// trace observer does; everything else keeps the default `false`.
+    fn wants_pandoc_invocation(&self) -> bool {
+        false
+    }
+
     /// Whether this observer wants the engines to build execution records
     /// (EXR-5).
     ///
@@ -350,6 +362,14 @@ macro_rules! trace_event {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The pandoc-invocation payload re-parses the whole AST, so it is
+    /// opt-in: observers other than the JSON trace keep the default.
+    #[test]
+    fn test_observers_do_not_want_pandoc_invocation_by_default() {
+        assert!(!NoopObserver::new().wants_pandoc_invocation());
+        assert!(!CountingObserver::new().wants_pandoc_invocation());
+    }
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 

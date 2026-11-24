@@ -102,7 +102,7 @@ use crate::transforms::{
     TableFloatClassForwardTransform, TheoremSugarTransform, TitleBannerTransform,
     TitleBlockTransform, TocGenerateTransform, TocLocationTransform, TocRenderTransform,
     WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform, WebsiteFaviconTransform,
-    WebsiteTitlePrefixTransform,
+    WebsiteSocialMetaTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -973,7 +973,25 @@ pub fn build_html_pipeline_pause_stages(
 pub fn build_html_pipeline_finishing_stages(
     lower_bound: crate::transform::TransformPhase,
 ) -> Vec<Box<dyn PipelineStage>> {
-    finishing_stages_from(build_html_pipeline_stages_with_options(None), lower_bound)
+    build_html_pipeline_finishing_stages_with_options(lower_bound, None)
+}
+
+/// [`build_html_pipeline_finishing_stages`] with an optional
+/// [`ApplyTemplateConfig`] for the final `ApplyTemplateStage`.
+///
+/// A resumed render that writes a page to disk must pass a config with
+/// the page's resolver: `ApplyTemplateStage` runs in this half of the
+/// pipeline, and without a resolver it links each CSS / JS artifact by its
+/// bare path (`quarto/quarto-theme-….css`) instead of its place under the
+/// project's lib dir (`site_libs/quarto/…`).
+pub fn build_html_pipeline_finishing_stages_with_options(
+    lower_bound: crate::transform::TransformPhase,
+    apply_config: Option<ApplyTemplateConfig>,
+) -> Vec<Box<dyn PipelineStage>> {
+    finishing_stages_from(
+        build_html_pipeline_stages_with_options(apply_config),
+        lower_bound,
+    )
 }
 
 /// The Pandoc-hybrid stage list paused after `upper_bound` — P2's
@@ -2295,6 +2313,8 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 ///     and append a `<link rel="stylesheet">` so `bi-*` icons render (bd-bsut)
 /// 4c. `WebsiteCanonicalUrlTransform` - Set `canonical-url` from
 ///     `website.site-url + output_href` (Phase 7)
+/// 4c'. `WebsiteSocialMetaTransform` - Append `og:*` / `twitter:*` meta tags
+///     for `open-graph` / `twitter-card` (bd-tyvt)
 /// 4d. `DraftAlertTransform` - For `draft: true` pages, set the localized
 ///     `rendered.draft-alert-text` the template's `#quarto-draft-alert`
 ///     banner gates on, and append a `quarto:status` meta tag
@@ -2370,6 +2390,23 @@ fn footer_render_stage(is_revealjs: bool) -> Box<dyn crate::transform::AstTransf
     }
 }
 
+/// Select the format-specific TOC-render stage, the sibling of
+/// [`footer_render_stage`].
+///
+/// TOC *generation* is format-agnostic (`TocGenerateTransform` →
+/// `navigation.toc`); rendering is not. `format: html` renders the page TOC
+/// into `rendered.navigation.toc` for the template (and, from it, the
+/// scroll-tracking script). `format: revealjs` adds Quarto 1's TOC *slide*
+/// after the title slide instead, with reveal hash links, and must not run the
+/// html render, whose output nothing in a deck reads.
+fn toc_render_stage(is_revealjs: bool) -> Box<dyn crate::transform::AstTransform> {
+    if is_revealjs {
+        Box::new(crate::revealjs::RevealTocTransform::new())
+    } else {
+        Box::new(TocRenderTransform::new())
+    }
+}
+
 /// The format-specific *presentation* transforms that run in the Finalization
 /// phase, after the crossref custom nodes have been rendered to writer-visible
 /// shapes (`CrossrefRenderTransform`).
@@ -2391,6 +2428,26 @@ fn reveal_finalization_transforms(
 ) -> Vec<Box<dyn crate::transform::AstTransform>> {
     if is_revealjs {
         vec![Box::new(crate::revealjs::RevealAutoStretchTransform::new())]
+    } else {
+        Vec::new()
+    }
+}
+
+/// Dashboard transforms that must see a diagram while it is still a code
+/// block, i.e. before `mermaid-render` / `graphviz-render`. Today the only
+/// member wraps a titled diagram in a titled `.card` div, so the option
+/// reaches the card builder (`DashboardTransform`, which runs last). A
+/// sibling of [`reveal_finalization_transforms`]: the one place that maps
+/// "dashboard" to these transforms, rather than an inline `if`.
+///
+/// `TransformPhase::Finalization`, like the diagram transforms it precedes.
+fn dashboard_pre_diagram_transforms(
+    is_dashboard: bool,
+) -> Vec<Box<dyn crate::transform::AstTransform>> {
+    if is_dashboard {
+        vec![Box::new(
+            crate::dashboard::DashboardDiagramTitleTransform::new(),
+        )]
     } else {
         Vec::new()
     }
@@ -2507,10 +2564,19 @@ pub fn build_transform_pipeline(
     // in the future; today they're independent.
     // See `claude-notes/plans/2026-04-27-websites-phase-7.md`
     // §Decision 3.
-    pipeline.push(Box::new(WebsiteTitlePrefixTransform::new()));
+    // Decks put the site title first (`Site – Deck`), as Quarto 1 does.
+    pipeline.push(Box::new(if is_revealjs {
+        WebsiteTitlePrefixTransform::site_first()
+    } else {
+        WebsiteTitlePrefixTransform::new()
+    }));
     pipeline.push(Box::new(WebsiteFaviconTransform::new()));
     pipeline.push(Box::new(WebsiteBootstrapIconsTransform::new()));
     pipeline.push(Box::new(WebsiteCanonicalUrlTransform::new()));
+    // `og:*` / `twitter:*` meta tags (bd-tyvt). After title-prefix, whose
+    // composed `pagetitle` is the tags' default title, and before
+    // title-block / sectionize, so the first paragraph is still top level.
+    pipeline.push(Box::new(WebsiteSocialMetaTransform::new(runtime.clone())));
     // User-declared stylesheets (bd-format-css-not-copied-crn3bjdz):
     // copy `css:` files into the output tree and rewrite the entries
     // to per-page hrefs. Not website-scoped — default projects (and
@@ -2652,7 +2718,13 @@ pub fn build_transform_pipeline(
     // PageNavGenerate must run after SidebarGenerate so it reads the
     // resolved `navigation.sidebar` for the current page.
     pipeline.push(Box::new(PageNavGenerateTransform::new()));
-    pipeline.push(Box::new(FooterGenerateTransform::new()));
+    // Decks read only the top-level `page-footer:` (their own `footer:` is
+    // aliased there): the website footer is site chrome, not a slide footer.
+    pipeline.push(Box::new(if is_revealjs {
+        FooterGenerateTransform::top_level_only()
+    } else {
+        FooterGenerateTransform::new()
+    }));
     // Announcement banner (bd-website-announcement-w1gtpzki): resolves
     // `website.announcement` from the merged page metadata into
     // `navigation.announcement`. Format-agnostic like the footer generate.
@@ -2700,7 +2772,7 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(
         crate::project::listing::feed::ListingFeedLinkTransform::new(),
     ));
-    pipeline.push(Box::new(TocRenderTransform::new()));
+    pipeline.push(toc_render_stage(is_revealjs));
     // Placement decision for the rendered TOC (bd-e2kpwy7n): must run
     // after TocRenderTransform (it gates on `rendered.navigation.toc`)
     // and before SidebarRenderTransform (which consumes the
@@ -2847,6 +2919,10 @@ pub fn build_transform_pipeline(
     // hoisted `<img>` is still visible to resource collection). See
     // `reveal_finalization_transforms` and bd-w0c6d38k.
     pipeline.extend(reveal_finalization_transforms(is_revealjs));
+    // Dashboards: a diagram's `title` option becomes its card title. Must
+    // precede the two diagram transforms below, which replace the code
+    // block (and its `title` attribute) with a raw `<pre>`.
+    pipeline.extend(dashboard_pre_diagram_transforms(is_dashboard));
     // bd-5m4ga0s1: replace ```mermaid code blocks with
     // `<pre class="mermaid">` RawBlocks + the after-body CDN script.
     // HTML-family self-gated (html + revealjs). Must precede
@@ -3179,6 +3255,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "website-favicon",
     "website-bootstrap-icons",
     "website-canonical-url",
+    "website-social-meta",
     // Navigation phase: chrome generate + render (TOC, navbar, sidebar,
     // page-nav, footer, announcement, listings) has no Pandoc-writer output
     // slot.
@@ -3342,6 +3419,7 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     ("website-favicon", Bucket::B2),
     ("website-bootstrap-icons", Bucket::B2),
     ("website-canonical-url", Bucket::B2),
+    ("website-social-meta", Bucket::B2),
     // Copies `css:` files into the output tree and rewrites the entries to
     // per-page hrefs — a stylesheet plumbing step with no Pandoc analog.
     ("format-css", Bucket::B2),
@@ -7202,6 +7280,7 @@ mod tests {
                 "website-favicon",
                 "website-bootstrap-icons",
                 "website-canonical-url",
+                "website-social-meta",
                 "format-css",
                 "draft-alert",
                 "about-page-diagnostics",
@@ -7307,6 +7386,7 @@ mod tests {
                 "website-favicon",
                 "website-bootstrap-icons",
                 "website-canonical-url",
+                "website-social-meta",
                 "format-css",
                 "draft-alert",
                 "about-page-diagnostics",
@@ -7337,7 +7417,7 @@ mod tests {
                 "categories-sidebar",
                 "listing-feed-stage",
                 "listing-feed-link",
-                "toc-render",
+                "reveal-toc",
                 "toc-location",
                 "toc-js",
                 "repo-actions-render",
@@ -7696,6 +7776,7 @@ mod tests {
                 "website-favicon",
                 "website-bootstrap-icons",
                 "website-canonical-url",
+                "website-social-meta",
                 "format-css",
                 "draft-alert",
                 "about-page-diagnostics",

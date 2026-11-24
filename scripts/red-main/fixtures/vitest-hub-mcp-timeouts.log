@@ -1,0 +1,227 @@
+Workspace TS suites (macos-latest)	UNKNOWN STEP	﻿2026-11-23T20:30:36.7126930Z Current runner version: '2.338.2'
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:30:36.7181420Z ##[group]Runner Image Provisioner
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:30:36.7182120Z Hosted Compute Agent
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:30:36.7190090Z Version: 20261111.635
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:30:36.7191820Z Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:30:36.7193750Z Build Date: 2026-11-11T01:49:01Z
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:30:36.7194370Z Worker ID: {56e46e37-6316-4ee3-9344-b52c2e473dbf}
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:30:36.7194910Z Region: westus
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:30:39.6110530Z ##[group]Run actions/checkout@v6
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:31:01.4064700Z ##[group]Run actions/setup-node@v6
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:31:03.6357550Z ##[group]Run npm ci
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:34:22.0509620Z ##[group]Run for pkg in ts-packages/*/; do
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:36:22.0124110Z ##[group]Run node ts-packages/quarto-hub-mcp/dist/index.js --help
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:36:25.1193300Z ##[group]Run npm test -w ts-packages/preview-renderer
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:36:27.9916860Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.8 ^[[39m^[[90m/Users/runner/work/q2/q2/ts-packages/preview-renderer^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.6891930Z ^[[22m^[[39mTSX transpilation error: SyntaxError: /component.tsx: Unexpected token (1:6)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.6896070Z  ^[[32m✓^[[39m src/utils/tsxTranspiler.test.ts ^[[2m(^[[22m^[[2m2 tests^[[22m^[[2m)^[[22m^[[32m 115^[[2mms^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.6989810Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.7091230Z > 1 | const = <p>;
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.7192640Z     |       ^
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.7306060Z     at constructor (/Users/runner/work/q2/q2/node_modules/^[[4m@babel/standalone^[[24m/babel.js:14776:19)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.7428910Z     at TypeScriptParserMixin.raise (/Users/runner/work/q2/q2/node_modules/^[[4m@babel/standalone^[[24m/babel.js:20977:19)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.7547790Z     at TypeScriptParserMixin.unexpected (/Users/runner/work/q2/q2/node_modules/^[[4m@babel/standalone^[[24m/babel.js:21000:18)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.7654170Z     at TypeScriptParserMixin.parseIdentifierName (/Users/runner/work/q2/q2/node_modules/^[[4m@babel/standalone^[[24m/babel.js:26776:14)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.7759590Z     at TypeScriptParserMixin.parseIdentifier (/Users/runner/work/q2/q2/node_modules/^[[4m@babel/standalone^[[24m/babel.js:26755:23)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.7918950Z     at TypeScriptParserMixin.parseBindingAtom (/Users/runner/work/q2/q2/node_modules/^[[4m@babel/standalone^[[24m/babel.js:21789:19)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.8034430Z     at TypeScriptParserMixin.parseBindingAtom (/Users/runner/work/q2/q2/node_modules/^[[4m@babel/standalone^[[24m/babel.js:24484:55)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.8045140Z     at TypeScriptParserMixin.parseVarId (/Users/runner/work/q2/q2/node_modules/^[[4m@babel/standalone^[[24m/babel.js:28036:21)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.8163880Z     at TypeScriptParserMixin.parseVarId (/Users/runner/work/q2/q2/node_modules/^[[4m@babel/standalone^[[24m/babel.js:24283:42)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:03.8284860Z     at TypeScriptParserMixin.parseVar (/Users/runner/work/q2/q2/node_modules/^[[4m@babel/standalone^[[24m/babel.js:28017:14)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:07.7619190Z ##[group]Run npm test -w ts-packages/preview-runtime
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:09.3728860Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.8 ^[[39m^[[90m/Users/runner/work/q2/q2/ts-packages/preview-runtime^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:10.3937610Z ^[[22m^[[39mRender error: Error: boom
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:10.3939310Z  ^[[32m✓^[[39m src/renderQueue.test.ts ^[[2m(^[[22m^[[2m7 tests^[[22m^[[2m)^[[22m^[[32m 71^[[2mms^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:10.3982990Z     at ^[[90m/Users/runner/work/q2/q2/ts-packages/preview-runtime/^[[39msrc/renderQueue.test.ts:296:29
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:10.4089910Z     at file:///Users/runner/work/q2/q2/node_modules/^[[4m@vitest/runner^[[24m/dist/chunk-artifact.js:1903:20
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:10.4195560Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:11.0032980Z  ^[[32m✓^[[39m src/automergeSync.test.ts ^[[2m(^[[22m^[[2m33 tests^[[22m^[[2m)^[[22m^[[32m 77^[[2mms^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:11.0436810Z  ^[[32m✓^[[39m src/userGrammar/Cache.test.ts ^[[2m(^[[22m^[[2m9 tests^[[22m^[[2m)^[[22m^[[32m 72^[[2mms^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:11.5535870Z  ^[[32m✓^[[39m src/userGrammar/Discovery.test.ts ^[[2m(^[[22m^[[2m12 tests^[[22m^[[2m)^[[22m^[[32m 56^[[2mms^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:11.5901500Z  ^[[32m✓^[[39m src/userGrammar/Highlight.wasm.test.ts ^[[2m(^[[22m^[[2m6 tests^[[22m^[[2m)^[[22m^[[32m 104^[[2mms^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:12.1817160Z  ^[[32m✓^[[39m src/wasmRenderer.test.ts ^[[2m(^[[22m^[[2m8 tests^[[22m^[[2m)^[[22m^[[32m 24^[[2mms^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:12.3544540Z  ^[[32m✓^[[39m src/diffToEditorChanges.test.ts ^[[2m(^[[22m^[[2m7 tests^[[22m^[[2m)^[[22m^[[32m 183^[[2mms^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:12.6856550Z  ^[[32m✓^[[39m src/perfGauges.test.ts ^[[2m(^[[22m^[[2m2 tests^[[22m^[[2m)^[[22m^[[32m 14^[[2mms^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:12.8389190Z  ^[[32m✓^[[39m src/pipelineKind.test.ts ^[[2m(^[[22m^[[2m8 tests^[[22m^[[2m)^[[22m^[[32m 14^[[2mms^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:13.1239640Z  ^[[32m✓^[[39m src/placeholder.test.ts ^[[2m(^[[22m^[[2m1 test^[[22m^[[2m)^[[22m^[[32m 6^[[2mms^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:13.1337810Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:13.2115790Z ##[group]Run npm test -w ts-packages/pdf-viewer
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:14.7557370Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.8 ^[[39m^[[90m/Users/runner/work/q2/q2/ts-packages/pdf-viewer^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:17.0007200Z ##[group]Run npm run typecheck:tests -w ts-packages/pandoc-host
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:23.8714940Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.8 ^[[39m^[[90m/Users/runner/work/q2/q2/ts-packages/pandoc-host^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:37:26.8659880Z ##[group]Run node scripts/fetch-pandoc-wasm.mjs --require
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:38:00.8980150Z ##[group]Run TYPST_PARITY_VERSION=$(node -p "require('./resources/typst-wasm.json').typst_version")
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:38:04.2702630Z ##[group]Run npm run typecheck:tests -w ts-packages/typst-host
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:38:09.7298600Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.8 ^[[39m^[[90m/Users/runner/work/q2/q2/ts-packages/typst-host^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:38:24.1182790Z ##[group]Run npm test -w ts-packages/quarto-api
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:38:26.5154860Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.8 ^[[39m^[[90m/Users/runner/work/q2/q2/ts-packages/quarto-api^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:38:34.4541100Z ##[group]Run npm test -w ts-packages/quarto-automerge-schema
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:38:35.9022910Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.8 ^[[39m^[[90m/Users/runner/work/q2/q2/ts-packages/quarto-automerge-schema^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:38:37.5060170Z ##[group]Run npm test -w ts-packages/annotated-qmd
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:38:44.3734800Z ##[group]Run npm test -w ts-packages/wasm-js-bridge
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:38:45.8115900Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.8 ^[[39m^[[90m/Users/runner/work/q2/q2/ts-packages/wasm-js-bridge^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:38:51.7840150Z ##[group]Run npm test -w q2-preview-spa
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:38:53.5088650Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.8 ^[[39m^[[90m/Users/runner/work/q2/q2/q2-preview-spa^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:03.3676290Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.8 ^[[39m^[[90m/Users/runner/work/q2/q2/q2-preview-spa^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.6924020Z     error: ^[[32m'render failed'^[[39m,
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.7032860Z     diagnostics: [ ^[[36m[Object]^[[39m ],
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.7034270Z     pass1_failures: [ ^[[36m[Object]^[[39m ]
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.7068390Z   }
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.7069230Z }
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.7069480Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.7072880Z ^[[90mstderr^[[2m | src/PreviewApp.integration.test.tsx^[[2m > ^[[22m^[[2mPreviewApp diagnostics surface (bd-b9kzg)^[[2m > ^[[22m^[[2mclears the warnings overlay when the next render is clean
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.7084650Z ^[[22m^[[39mAn update to PreviewApp inside a test was not wrapped in act(...).
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.7118780Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.7137260Z When testing, code that causes React state updates should be wrapped into act(...):
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.7241270Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.7297560Z act(() => {
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.7404880Z   /* fire events that update state */
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.7432200Z });
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.7550920Z /* assert on the output */
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.8110340Z     error: ^[[32m'first render failed'^[[39m,
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.8110900Z     diagnostics: [ ^[[36m[Object]^[[39m ]
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.8111220Z   }
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.8111420Z }
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.8111550Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.8634640Z ^[[90mstderr^[[2m | src/PreviewApp.integration.test.tsx^[[2m > ^[[22m^[[2mPreviewApp: formats with no live preview (bd-kltzdhle, D5)^[[2m > ^[[22m^[[2mexplains a successful render that produced html instead of ast_json, naming the format
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.8745590Z ^[[22m^[[39mdeps fetch returned 404 for index.qmd; filter falls open
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.8831410Z diagnostics fetch returned 404 for index.qmd; leaving prior list in place
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.8937250Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.8988030Z ^[[90mstderr^[[2m | src/PreviewApp.integration.test.tsx^[[2m > ^[[22m^[[2mPreviewApp: live PDF pane for typst pages (Plan 11)^[[2m > ^[[22m^[[2mtypst page renders PdfPane not iframe
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.9037850Z ^[[22m^[[39mdeps fetch returned 404 for index.qmd; filter falls open
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.9151140Z diagnostics fetch returned 404 for index.qmd; leaving prior list in place
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.9225730Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.9230890Z ^[[90mstderr^[[2m | src/PreviewApp.integration.test.tsx^[[2m > ^[[22m^[[2mPreviewApp: live PDF pane for typst pages (Plan 11)^[[2m > ^[[22m^[[2mtypst-pdf as the first page does not hang on the boot spinner
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:12.9253890Z ^[[22m^[[39mdeps fetch returned 404 for index.qmd; filter falls open
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:16.6065530Z ##[group]Run npm test -w q2-demos/kanban
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:18.3600790Z ^[[1m^[[46m RUN ^[[49m^[[22m ^[[36mv3.2.6 ^[[39m^[[90m/Users/runner/work/q2/q2/q2-demos/kanban^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:20.6807800Z ^[[1m^[[46m RUN ^[[49m^[[22m ^[[36mv3.2.6 ^[[39m^[[90m/Users/runner/work/q2/q2/q2-demos/kanban^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:23.2945160Z ##[group]Run npm test -w trace-viewer
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:24.9285790Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.8 ^[[39m^[[90m/Users/runner/work/q2/q2/trace-viewer^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:27.6433090Z ##[group]Run npm test -w ts-packages/quarto-sync-client -- --retry=2
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:29.3898150Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.8 ^[[39m^[[90m/Users/runner/work/q2/q2/ts-packages/quarto-sync-client^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1792750Z     at <wasm_bindgen[6a6137e48d096a2c]::JsValue as core[9fdf64a6790eadef]::convert::From<automerge_wasm[9d9426a195ac1bae]::error::ReceiveSyncMessage>>::from (wasm://wasm/automerge_wasm.wasm-00de6d06:1:2544486)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1793740Z     at automerge_receiveSyncMessage (wasm://wasm/automerge_wasm.wasm-00de6d06:1:2002193)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1794980Z     at automerge_receiveSyncMessage externref shim (wasm://wasm/automerge_wasm.wasm-00de6d06:1:2800328)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1799130Z     at automerge_receiveSyncMessage externref shim multivalue shim (wasm://wasm/automerge_wasm.wasm-00de6d06:1:2787274)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1801100Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1803610Z ^[[90mstderr^[[2m | src/full-stack-file-collision.test.ts^[[2m > ^[[22m^[[2mH4-file full-stack repro + fix: legacy stable-actor peer + real hub relay^[[2m > ^[[22m^[[2ma duplicate-seq collision on a file document, swallowed by Repo.ts, is self-healed by recoverFileDocument
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1805220Z ^[[22m^[[39m[automerge-repo:repo] error handling inbound message RangeError: duplicate seq 2 found for actor 2e9bb71a561de64827b1c038c4278210
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1806550Z     at /Users/runner/work/q2/q2/node_modules/^[[4m@automerge/automerge^[[24m/dist/mjs/wasm_bindgen_output/nodejs/automerge_wasm.cjs:2243:25
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1807680Z     at wrapError (/Users/runner/work/q2/q2/node_modules/^[[4m@automerge/automerge^[[24m/dist/mjs/wasm_bindgen_output/nodejs/automerge_wasm.cjs:2596:18)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1808930Z     at __wbg_new_19e1be967b5131c8 (/Users/runner/work/q2/q2/node_modules/^[[4m@automerge/automerge^[[24m/dist/mjs/wasm_bindgen_output/nodejs/automerge_wasm.cjs:2242:57)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1813220Z     at <js_sys[3e1e4126523a8975]::RangeError>::new::__wbg_new_19e1be967b5131c8 catch wrapper (wasm://wasm/automerge_wasm.wasm-00de6d06:1:2787968)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1814570Z     at <js_sys[3e1e4126523a8975]::RangeError>::new::__wbg_new_19e1be967b5131c8 externref shim (wasm://wasm/automerge_wasm.wasm-00de6d06:1:2800022)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1815400Z     at <js_sys[3e1e4126523a8975]::RangeError>::new (wasm://wasm/automerge_wasm.wasm-00de6d06:1:2806778)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1817280Z     at <wasm_bindgen[6a6137e48d096a2c]::JsValue as core[9fdf64a6790eadef]::convert::From<automerge_wasm[9d9426a195ac1bae]::error::ReceiveSyncMessage>>::from (wasm://wasm/automerge_wasm.wasm-00de6d06:1:2544486)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1818260Z     at automerge_receiveSyncMessage (wasm://wasm/automerge_wasm.wasm-00de6d06:1:2002193)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1818970Z     at automerge_receiveSyncMessage externref shim (wasm://wasm/automerge_wasm.wasm-00de6d06:1:2800328)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1820220Z     at automerge_receiveSyncMessage externref shim multivalue shim (wasm://wasm/automerge_wasm.wasm-00de6d06:1:2787274)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1820880Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1822670Z ^[[90mstderr^[[2m | src/full-stack-file-collision.test.ts^[[2m > ^[[22m^[[2mH4-file full-stack repro + fix: legacy stable-actor peer + real hub relay^[[2m > ^[[22m^[[2ma duplicate-seq collision on a file document, swallowed by Repo.ts, is self-healed by recoverFileDocument
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1887210Z ^[[22m^[[39m[quarto-sync-client] recovered file document 3g7AvfxwUC7LJQvwBWCzk56X5x89 (main.qmd)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.1887830Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.2117920Z ^[[90mstdout^[[2m | src/full-stack-file-collision.test.ts^[[2m > ^[[22m^[[2mH4-file full-stack repro + fix: legacy stable-actor peer + real hub relay^[[2m > ^[[22m^[[2ma duplicate-seq collision on a file document, swallowed by Repo.ts, is self-healed by recoverFileDocument
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.2224490Z ^[[22m^[[39mWaiting for peer connection...
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.2326360Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.2431230Z ^[[90mstdout^[[2m | src/file-collision-recovery.test.ts^[[2m > ^[[22m^[[2mfile-document duplicate-seq recovery backoff^[[2m > ^[[22m^[[2mspaces recoveries by the cooldown and suppresses collisions inside it
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.2539440Z ^[[22m^[[39m[createNewProject] Creating index document with ID CHTPK19UvXAnXndYcCP6a9mhR3y
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.2644670Z [createNewProject] Index document created, ID: CHTPK19UvXAnXndYcCP6a9mhR3y
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:31.2747420Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:50.6898710Z ##[group]Run npm test -w ts-packages/quarto-hub-mcp
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:39:52.2925380Z ^[[1m^[[30m^[[46m RUN ^[[49m^[[39m^[[22m ^[[36mv4.1.8 ^[[39m^[[90m/Users/runner/work/q2/q2/ts-packages/quarto-hub-mcp^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:00.3601400Z ^[[22m^[[39mCredentialStore: keyring read failed (Platform secure storage failure: D-Bus error: failed to connect to Secret Service (libsecret))
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:00.3605400Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:00.3606820Z ^[[90mstderr^[[2m | src/auth/credential-store.test.ts^[[2m > ^[[22m^[[2mCredentialStore caching^[[2m > ^[[22m^[[2mdoes not cache a transient read failure — the next read retries the backend
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:00.3607920Z ^[[22m^[[39mCredentialStore: keyring read failed (transient libsecret hiccup)
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:00.3608350Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:00.3815940Z  ^[[32m✓^[[39m src/auth/credential-store.test.ts ^[[2m(^[[22m^[[2m28 tests^[[22m^[[2m | ^[[22m^[[33m2 skipped^[[39m^[[2m)^[[22m^[[32m 43^[[2mms^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:00.7672240Z ^[[90mstderr^[[2m | src/e2e-auth.test.ts
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:00.7775720Z ^[[22m^[[39m[e2e-auth] SKIPPING: hub binary missing at /Users/runner/work/q2/q2/target/debug/hub (cargo build -p quarto-hub) or non-unix
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:00.7776960Z  ^[[2m^[[90m↓^[[39m^[[22m src/e2e-auth.test.ts ^[[2m(^[[22m^[[2m4 tests^[[22m^[[2m | ^[[22m^[[33m4 skipped^[[39m^[[2m)^[[22m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:00.7844160Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:00.8912250Z  ^[[32m✓^[[39m src/hub-mcp.test.ts ^[[2m(^[[22m^[[2m29 tests^[[22m^[[2m | ^[[22m^[[33m1 skipped^[[39m^[[2m)^[[22m^[[33m 4377^[[2mms^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:01.6670100Z ^[[90mstdout^[[2m | src/resources.test.ts^[[2m > ^[[22m^[[2mresources/list + resources/read (BP-5)^[[2m > ^[[22m^[[2menumerates a connected project’s files as hub:// resources
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:01.6776180Z ^[[22m^[[39mWaiting for peer connection...
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:01.6877750Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:40:01.6983850Z ^[[90mstdout^[[2m | src/resources.test.ts^[[2m > ^[[22m^[[2mresources/list + resources/read (BP-5)^[[2m > ^[[22m^[[2menumerates a connected project’s files as hub:// resources
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3255570Z ^[[31m⎯⎯⎯⎯⎯⎯⎯^[[39m^[[1m^[[41m Failed Tests 3 ^[[49m^[[22m^[[31m⎯⎯⎯⎯⎯⎯⎯^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3256840Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3270830Z ^[[41m^[[1m FAIL ^[[22m^[[49m src/exit-drain.test.ts^[[2m > ^[[22mexit drains outbound sync (bd-10deu8h4)^[[2m > ^[[22mcreate_project then immediate stdin EOF must not lose the created docs
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3319660Z ^[[31m^[[1mError^[[22m: Timeout waiting for response to request 2^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3326830Z ^[[36m ^[[2m❯^[[22m McpTestClient.waitForResponse src/mcp-test-client.ts:^[[2m309:15^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3562030Z     ^[[90m307|^[[39m       }
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3566250Z     ^[[90m308|^[[39m       ^[[35mif^[[39m (^[[33mDate^[[39m^[[33m.^[[39m^[[34mnow^[[39m() ^[[33m>^[[39m deadline) {
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3568440Z     ^[[90m309|^[[39m         throw new Error(`Timeout waiting for response to request ${id}…
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3570240Z     ^[[90m   |^[[39m               ^[[31m^^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3571250Z     ^[[90m310|^[[39m       }
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3573330Z     ^[[90m311|^[[39m       ^[[35mawait^[[39m ^[[35mnew^[[39m ^[[33mPromise^[[39m^[[33m<^[[39m^[[35mvoid^[[39m^[[33m>^[[39m((resolve) ^[[33m=>^[[39m {
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3580410Z ^[[90m ^[[2m❯^[[22m McpTestClient.callTool src/mcp-test-client.ts:^[[2m214:22^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3583570Z ^[[90m ^[[2m❯^[[22m src/exit-drain.test.ts:^[[2m123:20^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3583810Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3584310Z ^[[31m^[[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3584590Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3587410Z ^[[41m^[[1m FAIL ^[[22m^[[49m src/upload-local-file.test.ts^[[2m > ^[[22medit upload^[[2m > ^[[22mhandles a full-size image without a conversation-sized payload
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3589980Z ^[[31m^[[1mError^[[22m: Test timed out in 5000ms.
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3593600Z If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3595620Z ^[[36m ^[[2m❯^[[22m src/upload-local-file.test.ts:^[[2m98:3^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3652060Z     ^[[90m 96|^[[39m   })^[[33m;^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3652900Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3661520Z     ^[[90m 97|^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3663190Z     ^[[90m 98|^[[39m   it('handles a full-size image without a conversation-sized payload',…
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3675940Z     ^[[90m   |^[[39m   ^[[31m^^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3678070Z ^[[2m Test Files ^[[22m ^[[1m^[[31m2 failed^[[39m^[[22m^[[2m | ^[[22m^[[1m^[[32m60 passed^[[39m^[[22m^[[2m | ^[[22m^[[33m9 skipped^[[39m^[[90m (71)^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3705560Z     ^[[90m 99|^[[39m     ^[[35mconst^[[39m big ^[[33m=^[[39m ^[[33mBuffer^[[39m^[[33m.^[[39m^[[34mconcat^[[39m([^[[33mPNG^[[39m^[[33m,^[[39m ^[[33mBuffer^[[39m^[[33m.^[[39m^[[34malloc^[[39m(^[[34m8^[[39m ^[[33m*^[[39m ^[[34m1024^[[39m ^[[33m*^[[39m ^[[34m1024^[[39m^[[33m,^[[39m ^[[34m7^[[39m)])^[[33m;^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3716570Z ^[[2m      Tests ^[[22m ^[[1m^[[31m3 failed^[[39m^[[22m^[[2m | ^[[22m^[[1m^[[32m587 passed^[[39m^[[22m^[[2m | ^[[22m^[[33m69 skipped^[[39m^[[90m (659)^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3722250Z     ^[[90m100|^[[39m     ^[[35mconst^[[39m result ^[[33m=^[[39m ^[[35mawait^[[39m ^[[34mupload^[[39m(^[[34mwriteSource^[[39m(^[[32m'big.png'^[[39m^[[33m,^[[39m big))^[[33m;^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3724060Z ^[[2m   Start at ^[[22m 20:39:52
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3725040Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.3738210Z ^[[41m^[[1m FAIL ^[[22m^[[49m src/upload-local-file.test.ts^[[2m > ^[[22medit upload^[[2m > ^[[22maccepts a file at exactly the size cap and refuses one byte more
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.4075640Z ##[error]Error: Timeout waiting for response to request 2
+Workspace TS suites (macos-latest)	UNKNOWN STEP	 ❯ McpTestClient.waitForResponse src/mcp-test-client.ts:309:15
+Workspace TS suites (macos-latest)	UNKNOWN STEP	 ❯ McpTestClient.callTool src/mcp-test-client.ts:214:22
+Workspace TS suites (macos-latest)	UNKNOWN STEP	 ❯ src/exit-drain.test.ts:123:20
+Workspace TS suites (macos-latest)	UNKNOWN STEP	
+Workspace TS suites (macos-latest)	UNKNOWN STEP	
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.4147880Z ^[[31m^[[1mError^[[22m: Test timed out in 5000ms.
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.4150170Z If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.4153330Z ^[[36m ^[[2m❯^[[22m src/upload-local-file.test.ts:^[[2m107:3^[[22m^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.4154710Z     ^[[90m105|^[[39m   })^[[33m;^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.4155540Z     ^[[90m106|^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.4157260Z     ^[[90m107|^[[39m   it('accepts a file at exactly the size cap and refuses one byte more…
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.4171620Z     ^[[90m   |^[[39m   ^[[31m^^[[39m
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.4174630Z     ^[[90m108|^[[39m     const atCap = Buffer.concat([PNG, Buffer.alloc(MAX_UPLOAD_BYTES - …
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.4177360Z     ^[[90m109|^[[39m     expect((await upload(writeSource('cap.png', atCap))).isError).not.…
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.4191460Z ##[error]Error: Test timed out in 5000ms.
+Workspace TS suites (macos-latest)	UNKNOWN STEP	If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+Workspace TS suites (macos-latest)	UNKNOWN STEP	 ❯ src/upload-local-file.test.ts:98:3
+Workspace TS suites (macos-latest)	UNKNOWN STEP	
+Workspace TS suites (macos-latest)	UNKNOWN STEP	
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.4195130Z 
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.4203980Z ##[error]Error: Test timed out in 5000ms.
+Workspace TS suites (macos-latest)	UNKNOWN STEP	If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+Workspace TS suites (macos-latest)	UNKNOWN STEP	 ❯ src/upload-local-file.test.ts:107:3
+Workspace TS suites (macos-latest)	UNKNOWN STEP	
+Workspace TS suites (macos-latest)	UNKNOWN STEP	
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.4976260Z npm error Lifecycle script `test` failed with error:
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.5051150Z npm error code 1
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.5058010Z npm error path /Users/runner/work/q2/q2/ts-packages/quarto-hub-mcp
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.5103380Z npm error workspace @quarto/hub-mcp@0.1.0
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.5147070Z npm error location /Users/runner/work/q2/q2/ts-packages/quarto-hub-mcp
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.5149230Z npm error command failed
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.5153090Z npm error command sh -c vitest run
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.5230540Z ##[error]Process completed with exit code 1.
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:26.5959420Z Post job cleanup.
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:27.5707230Z [command]/opt/homebrew/bin/git version
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:27.6230010Z git version 2.56.1
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:27.6330990Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/be8cc6f9-69e9-40df-b7c5-e07582bc81cf/.gitconfig'
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:27.6353070Z Temporarily overriding HOME='/Users/runner/work/_temp/be8cc6f9-69e9-40df-b7c5-e07582bc81cf' before making global git config changes
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:27.6360060Z Adding repository directory to the temporary git global config as a safe directory
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:27.6370360Z [command]/opt/homebrew/bin/git config --global --add safe.directory /Users/runner/work/q2/q2
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:27.6661830Z Removing SSH command configuration
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:27.6685460Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:27.6904320Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:27.9830290Z Removing HTTP extra header
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:27.9834510Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:28.0010820Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+Workspace TS suites (macos-latest)	UNKNOWN STEP	2026-11-23T20:42:28.4557320Z Removing includeIf entries pointing to credentials config files

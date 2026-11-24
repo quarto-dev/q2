@@ -658,9 +658,9 @@ fn cv_entry(key: &str, value: ConfigValue, info: &SourceInfo) -> ConfigMapEntry 
 /// Rules, in order (matches Q1 `sidebarForHref` with source-path
 /// comparisons instead of output-href comparisons):
 ///
-/// 1. If `meta` sets `site-sidebar: <id>` (Q1-compat, canonical) or
-///    `website.sidebar-id: <id>` (namespaced alternative), prefer the
-///    sidebar with that `id`.
+/// 1. If `meta` sets `sidebar: <id>` (Quarto 1's page-level form, GH
+///    #1217), `site-sidebar: <id>`, or `website.sidebar-id: <id>`
+///    (namespaced alternative), prefer the sidebar with that `id`.
 /// 2. Otherwise, if exactly one sidebar is configured *and* it has
 ///    no `id`, that sidebar applies regardless of containment (Q1
 ///    wildcard).
@@ -677,9 +677,12 @@ pub fn sidebar_for_page<'a>(
     }
 
     // Rule 1 — explicit override.
+    // A top-level `sidebar` map or array is a sidebar definition, not
+    // an id; `as_plain_text` yields `None` for those (and for `false`).
     let explicit_id = meta
-        .get("site-sidebar")
+        .get("sidebar")
         .and_then(|v| v.as_plain_text())
+        .or_else(|| meta.get("site-sidebar").and_then(|v| v.as_plain_text()))
         .or_else(|| {
             meta.get_path(&["website", "sidebar-id"])
                 .and_then(|v| v.as_plain_text())
@@ -1820,6 +1823,24 @@ mod tests {
         let sidebars = vec![main, reference];
         let meta = map(vec![("site-sidebar", s("reference"))]);
         let picked = sidebar_for_page(&sidebars, "some-other.qmd", &meta).unwrap();
+        assert_eq!(picked.id.as_deref(), Some("reference"));
+    }
+
+    /// GH #1217 — Quarto 1's page-level `sidebar: <id>` selects the
+    /// sidebar with that id.
+    #[test]
+    fn resolve_page_level_sidebar_id_selects() {
+        let main = sidebar_from_yaml(map(vec![
+            ("id", s("main")),
+            ("contents", arr(vec![s("a.qmd")])),
+        ]));
+        let reference = sidebar_from_yaml(map(vec![
+            ("id", s("reference")),
+            ("contents", arr(vec![s("r.qmd")])),
+        ]));
+        let sidebars = vec![main, reference];
+        let meta = map(vec![("sidebar", s("reference"))]);
+        let picked = sidebar_for_page(&sidebars, "a.qmd", &meta).unwrap();
         assert_eq!(picked.id.as_deref(), Some("reference"));
     }
 

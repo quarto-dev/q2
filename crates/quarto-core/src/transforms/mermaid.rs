@@ -42,7 +42,8 @@
 //!   remain engine territory.
 //! - Explicit `mermaid.run()` rather than `startOnLoad: true` so the
 //!   diagrams render regardless of when the module executes relative
-//!   to `DOMContentLoaded`.
+//!   to `DOMContentLoaded` (deferred to it while the document is still
+//!   loading; see `mermaid_script_block`).
 //!
 //! # Bundling (bd-mermaid-runtime-not-bundled-vxejw159)
 //!
@@ -248,6 +249,21 @@ fn mermaid_runtime_url(ctx: &RenderContext) -> String {
 /// `quarto-figure-<align>` class on the `<pre>` itself, as Q1 does for a
 /// bare image (`quarto-post/html.lua`); the stylesheet aligns the
 /// rendered `<svg>` from either position.
+/// Start of every `<pre>` this transform emits, up to the end of the first
+/// class name (followed by `"` or a space).
+const PRE_OPEN: &str = "<pre class=\"mermaid";
+
+/// Whether `raw` is a diagram this transform emitted. The dashboard card
+/// builder counts it as card content, as Quarto 1 counts a `{mermaid}`
+/// cell, although other raw HTML is not.
+pub(crate) fn is_mermaid_pre(raw: &RawBlock) -> bool {
+    raw.format == "html"
+        && raw
+            .text
+            .strip_prefix(PRE_OPEN)
+            .is_some_and(|rest| rest.starts_with(['"', ' ']))
+}
+
 fn convert_mermaid_blocks(blocks: &mut Blocks, found: &mut bool) {
     for block in blocks.iter_mut() {
         match block {
@@ -263,6 +279,7 @@ fn convert_mermaid_blocks(blocks: &mut Blocks, found: &mut bool) {
                     _ => "mermaid".to_string(),
                 };
                 let text = format!("<pre class=\"{class}\">\n{}\n</pre>", html_escape(&cb.text));
+                debug_assert!(text.starts_with(PRE_OPEN));
                 let source_info = cb.source_info.clone();
                 *block = Block::RawBlock(Box::new(RawBlock {
                     format: "html".to_string(),
@@ -307,13 +324,26 @@ fn convert_mermaid_blocks(blocks: &mut Blocks, found: &mut bool) {
 /// `DOMContentLoaded` — in embedded contexts (iframes, late injection)
 /// load-event timing is not guaranteed. Every `pre.mermaid` element
 /// precedes the after-body slot, so they are all parsed by this point.
+///
+/// While the document is still loading, the run waits for
+/// `DOMContentLoaded`: mermaid measures label text, and a dashboard keeps
+/// `<html>` hidden until its own `DOMContentLoaded` handler (registered
+/// earlier, in the head) shows it. Measured hidden, every diagram lays
+/// out at 16x16. Quarto 1's `mermaid-init.js` waits for `load`.
 fn mermaid_script_block(runtime_url: &str) -> String {
     format!(
         "{MERMAID_JS_SENTINEL}\n\
          <script src=\"{}\"></script>\n\
          <script>\n\
-         mermaid.initialize({{ startOnLoad: false }});\n\
-         mermaid.run({{ querySelector: 'pre.mermaid' }});\n\
+         (function () {{\n\
+         \x20 mermaid.initialize({{ startOnLoad: false }});\n\
+         \x20 const run = () => mermaid.run({{ querySelector: 'pre.mermaid' }});\n\
+         \x20 if (document.readyState === 'loading') {{\n\
+         \x20   document.addEventListener('DOMContentLoaded', run);\n\
+         \x20 }} else {{\n\
+         \x20   run();\n\
+         \x20 }}\n\
+         }})();\n\
          </script>",
         html_escape(runtime_url)
     )
@@ -716,6 +746,72 @@ mod tests {
              node_modules/mermaid/dist/mermaid.min.js — re-sync the vendored copy \
              (see resources/mermaid/README.md § Updating)"
         );
+    }
+
+    /// The diagrams run once the document has parsed, not inline. A
+    /// dashboard hides `<html>` (`quarto-dashboard.js` adds `hidden` in
+    /// the head and removes it on `DOMContentLoaded`); mermaid measuring
+    /// labels before that lays every diagram out at 16x16. Quarto 1 waits
+    /// for `load`. A late-injected script (document already parsed) still
+    /// runs at once.
+    #[test]
+    fn script_runs_diagrams_after_the_document_has_parsed() {
+        let script = mermaid_script_block("mermaid.min.js");
+        let inline = script
+            .split_once("<script>\n")
+            .map(|(_, rest)| rest)
+            .expect("inline script");
+        assert_eq!(
+            inline,
+            "(function () {\n\
+             \x20 mermaid.initialize({ startOnLoad: false });\n\
+             \x20 const run = () => mermaid.run({ querySelector: 'pre.mermaid' });\n\
+             \x20 if (document.readyState === 'loading') {\n\
+             \x20   document.addEventListener('DOMContentLoaded', run);\n\
+             \x20 } else {\n\
+             \x20   run();\n\
+             \x20 }\n\
+             })();\n\
+             </script>"
+        );
+    }
+
+    /// `is_mermaid_pre` recognizes every `<pre>` this transform emits
+    /// (bare or with a `fig-align` class), and nothing else.
+    #[tokio::test]
+    async fn is_mermaid_pre_recognizes_emitted_blocks_only() {
+        let mut aligned = make_codeblock(&["mermaid"], "flowchart LR");
+        if let Block::CodeBlock(cb) = &mut aligned {
+            cb.attr
+                .2
+                .insert("fig-align".to_string(), "center".to_string());
+        }
+        let mut ast = Pandoc {
+            meta: default_meta(),
+            blocks: vec![make_codeblock(&["mermaid"], "flowchart LR"), aligned],
+        };
+        run_transform(&mut ast, Format::html()).await;
+        assert_eq!(ast.blocks.len(), 2);
+        for block in &ast.blocks {
+            let Block::RawBlock(raw) = block else {
+                panic!("expected RawBlock; got {block:?}");
+            };
+            assert!(is_mermaid_pre(raw), "{}", raw.text);
+        }
+        let raw = |format: &str, text: &str| RawBlock {
+            format: format.to_string(),
+            text: text.to_string(),
+            source_info: SourceInfo::for_test(),
+        };
+        assert!(!is_mermaid_pre(&raw(
+            "html",
+            "<pre class=\"mermaidx\">a</pre>"
+        )));
+        assert!(!is_mermaid_pre(&raw("html", "<div>raw</div>")));
+        assert!(!is_mermaid_pre(&raw(
+            "latex",
+            "<pre class=\"mermaid\">a</pre>"
+        )));
     }
 
     /// Two diagrams → two `<pre>` blocks, but the script is appended

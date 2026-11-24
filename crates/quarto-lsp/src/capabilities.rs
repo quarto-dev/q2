@@ -1,8 +1,8 @@
 //! LSP capability negotiation.
 
 use lsp_types::{
-    OneOf, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions,
+    OneOf, SemanticTokensFullOptions, SemanticTokensOptions, SemanticTokensServerCapabilities,
+    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
 };
 
 /// Get the server capabilities to report to the client.
@@ -26,6 +26,17 @@ pub fn server_capabilities() -> ServerCapabilities {
 
         // Document symbols (outline)
         document_symbol_provider: Some(OneOf::Left(true)),
+
+        // Quarto 2's own highlighting (bd-xnpyb2vv P1). Full documents
+        // only; range and delta wait for measurements on large documents.
+        semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
+            SemanticTokensOptions {
+                legend: crate::semantic_tokens::legend(),
+                full: Some(SemanticTokensFullOptions::Bool(true)),
+                range: None,
+                ..Default::default()
+            },
+        )),
 
         // Protocol extensions (epic bd-3f6ijnw9, C4): each `quarto/*`
         // method with the version of its wire schema. Clients check this
@@ -55,6 +66,18 @@ mod tests {
     fn capabilities_include_document_sync() {
         let caps = server_capabilities();
         assert!(caps.text_document_sync.is_some());
+    }
+
+    #[test]
+    fn capabilities_include_semantic_tokens() {
+        let caps = server_capabilities();
+        let Some(SemanticTokensServerCapabilities::SemanticTokensOptions(opts)) =
+            caps.semantic_tokens_provider
+        else {
+            panic!("no semantic tokens provider");
+        };
+        assert!(!opts.legend.token_types.is_empty());
+        assert_eq!(opts.full, Some(SemanticTokensFullOptions::Bool(true)));
     }
 
     #[test]
