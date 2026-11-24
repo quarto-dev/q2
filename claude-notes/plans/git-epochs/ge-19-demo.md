@@ -617,3 +617,12 @@ seed 1, clone runs only. Keep it separate from this fix.
 - `vscode-share` still ends on a commit; its converged step is pending.
 
 Known intermittent defect, not fixed here: when Maurice's typing crosses a hard wrap, the space at the wrap can vanish (`at the drivingfrequency` in the hub's file). It appeared in one `--fast` run of `hub-vscode-clone` that ran in parallel with another demo, and the `maurice-types` needle then timed out. A solo rerun passed.
+
+### Names on the cursors (2026-11-24)
+
+Presence names came from three different places: VS Code used the `quartoHub.userName` setting or `<OS user> (VS Code)`, and the `q2 preview --ui editor` page (the hub-client embed build, which keeps its identity in an in-memory store, not IndexedDB) started each session with a random "Adjective Animal" name. So seeding IndexedDB from the demo cannot work.
+
+- `hub-client` (`d1176312a`, changelog `fc6927e6f`): in the ephemeral preview build, `?as=<name>` and an optional `?color=#RRGGBB` set the identity before presence starts. Without `?color=`, the color derives from the name. A persistent profile is never renamed by a link.
+- Demo: every browser page opens with `?as=Myra` (host) or `?as=Maurice` (guest), and every VS Code window launches with `quartoHub.userName` set the same way.
+- Checked by reading `window.quartoDebug.am.presence()` (enabled with `localStorage.quartoDebug = '1'`): browser to browser, VS Code clone guest seen from the browser host, and VS Code host seen from the browser guest each show "Myra" and "Maurice".
+- Not done: VS Code colors are still random per run (no color setting); a story step that asserts the names is not written.

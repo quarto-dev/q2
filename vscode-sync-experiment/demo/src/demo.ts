@@ -91,6 +91,12 @@ export const defaultOptions = (over: Partial<DemoOptions> = {}): DemoOptions => 
  */
 const VSCODE_SETTINGS = { 'files.autoSave': 'off' };
 
+/** Who sits at each side in every preset: cursors and the status show these names, never a random or machine name. */
+const PERSON = { host: 'Myra', guest: 'Maurice' } as const;
+
+/** VS Code's user settings for one side's window: the shared ones, and `quartoHub.userName` for the cursor label. */
+const vscodeSettings = (who: 'host' | 'guest') => ({ ...VSCODE_SETTINGS, 'quartoHub.userName': PERSON[who] });
+
 export const R_PAPER = 'celia-2026-tip-extension-lmm.qmd';
 export const PY_PAPER = 'morel-2026-fusion-spectra.qmd';
 
@@ -471,7 +477,7 @@ export class Demo {
     await ensureWasm();
     // Already open when the story starts (play); launched here for the fast runs and the tests.
     if (!this.vscode.host) {
-      const v = await launchVscode({ workspace: this.journal, env: { QUARTO_HUB_TEST_SYNC_SERVER: this.qhubWs }, settings: VSCODE_SETTINGS });
+      const v = await launchVscode({ workspace: this.journal, env: { QUARTO_HUB_TEST_SYNC_SERVER: this.qhubWs }, settings: vscodeSettings('host') });
       this.vscode.host = v;
       this.computeLayout();
       await this.placeVscode(v, this.layout.hostEditor);
@@ -565,6 +571,13 @@ export class Demo {
     await this.openGuestBrowser(this.guestPreviewUrl);
   }
 
+  /** A page URL that names the person at that side (`?as=`, which the preview editor reads before presence starts). */
+  private named(url: string, who: 'host' | 'guest'): string {
+    const u = new URL(url);
+    u.searchParams.set('as', PERSON[who]);
+    return u.toString();
+  }
+
   async openGuestBrowser(url: string, file = R_PAPER): Promise<void> {
     this.computeLayout();
     if (!this.guestEditor) {
@@ -573,7 +586,7 @@ export class Demo {
       this.guestEditor = guest;
     }
     const { openProject, openFile } = await import('../../../q2-preview-spa/e2e/helpers/editor');
-    await openProject(this.guestEditor.page, url);
+    await openProject(this.guestEditor.page, this.named(url, 'guest'));
     await openFile(this.guestEditor.page, file);
   }
 
@@ -715,7 +728,7 @@ export class Demo {
     await ensureWasm();
     const viaQhub = this.o.preset === 'vscode-share';
     // In `vscode-share` the window is the originator: it shares through the standalone hub, whose address it is launched with.
-    const v = await launchVscode({ workspace: this.journal, env: viaQhub ? { QUARTO_HUB_TEST_SYNC_SERVER: this.qhubWs } : undefined, settings: VSCODE_SETTINGS });
+    const v = await launchVscode({ workspace: this.journal, env: viaQhub ? { QUARTO_HUB_TEST_SYNC_SERVER: this.qhubWs } : undefined, settings: vscodeSettings('host') });
     this.vscode.host = v;
     await this.placeVscode(v, this.layout.hostEditor);
     await openVscodeFile(v.page, viaQhub ? R_PAPER : PY_PAPER);
@@ -744,7 +757,7 @@ export class Demo {
       return;
     }
     await bindFolder({ root: this.journal, indexDocId: this.projectId, syncServer: this.wsUrl, mode: 'editor-only' });
-    const v = await launchVscode({ workspace: this.journal, settings: VSCODE_SETTINGS });
+    const v = await launchVscode({ workspace: this.journal, settings: vscodeSettings('host') });
     this.vscode.host = v;
     await this.placeVscode(v, this.layout.hostEditor);
     await v.page.locator('.statusbar').getByText('Quarto Hub: editor only').waitFor({ timeout: 60_000 });
@@ -756,7 +769,7 @@ export class Demo {
     await ensureWasm();
     const peer = await HeadlessPeer.joinAsClone(this.guestDir, this.wsUrl, this.projectId);
     await peer.stop();
-    const v = await launchVscode({ workspace: this.guestDir, settings: VSCODE_SETTINGS });
+    const v = await launchVscode({ workspace: this.guestDir, settings: vscodeSettings('guest') });
     this.vscode.guest = v;
     await this.placeVscode(v, this.layout.guestEditor);
     await v.page.locator('.statusbar').getByText('Quarto Hub: clone').waitFor({ timeout: 60_000 });
@@ -893,7 +906,7 @@ export class Demo {
   private async openProject(page: Page, file: string): Promise<void> {
     const { openProject, openFile } = await import('../../../q2-preview-spa/e2e/helpers/editor');
     try {
-      await openProject(page, this.hubUrl);
+      await openProject(page, this.named(this.hubUrl, page === this.guestEditor?.page ? 'guest' : 'host'));
       await openFile(page, file);
     } catch (e) {
       await page.screenshot({ path: path.join(this.logs, `open-failed-${Date.now()}.png`) }).catch(() => {});
@@ -1120,7 +1133,7 @@ export class Demo {
           }
           for (const w of [this.hostEditor, this.guestEditor]) {
             if (!w) continue;
-            await w.page.goto(this.hubUrl);
+            await w.page.goto(this.named(this.hubUrl, w === this.guestEditor ? 'guest' : 'host'));
           }
           if (this.hostEditor) await this.openProject(this.hostEditor.page, PY_PAPER);
           if (this.guestEditor) await this.openProject(this.guestEditor.page, PY_PAPER);
