@@ -143,7 +143,9 @@ Rscript -e 'cat(R.version.string, "\n"); cat(.libPaths(), sep = "\n"); cat("knit
 ```
 
 The first library should be the checkout's `.rvenv/lib`, and the knitr
-version should match `rproj.lock`.
+version should match `rproj.lock`. Keep `.rvenv/bin` ahead of `~/.local/bin`
+on PATH on Linux and macOS: rig's user mode puts the default R's `Rscript`
+there, without the project library.
 
 ### Acceptance: execute a smoke document
 

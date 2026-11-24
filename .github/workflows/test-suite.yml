@@ -267,7 +267,6 @@ jobs:
           echo "$GITHUB_WORKSPACE/.rvenv/bin" >> "$GITHUB_PATH"
           export PATH="$GITHUB_WORKSPACE/.rvenv/bin:$PATH"
           Rscript -e 'cat(R.version.string, "\n"); cat(.libPaths(), sep = "\n")'
-          (cd "$RUNNER_TEMP" && bash "$GITHUB_WORKSPACE/.github/scripts/r-probe.sh" sync-tmp)
 
       - name: Save locked R project library
         if: steps.rig-cache.outputs.cache-hit != 'true'
@@ -352,6 +351,10 @@ jobs:
           version: "0.13.7"
           python-version: "3.12"
           activate-environment: true
+          # By default setup-uv prepends ~/.local/bin on Linux and macOS, where
+          # rig's user-mode Rscript shim (default R, no project library)
+          # shadows .rvenv/bin. Windows already defaults to a temp dir.
+          tool-bin-dir: ${{ runner.temp }}/uv-tool-bin
 
       - name: Set up locked Jupyter kernel and widget packages
         shell: bash
@@ -366,12 +369,14 @@ jobs:
           jupyter --version
           jupyter kernelspec list
 
-      - name: R probe (temporary, bd-9kbjjeb6)
-        if: ${{ !cancelled() }}
+      # Fail here, rather than as silently skipped knitr tests, if a later
+      # PATH change put another Rscript ahead of .rvenv/bin. Runs outside the
+      # checkout so the root .Renviron cannot mask it.
+      - name: Check R project library on PATH
         shell: bash
         run: |
-          (cd "$GITHUB_WORKSPACE/crates/quarto-core" && bash "$GITHUB_WORKSPACE/.github/scripts/r-probe.sh" pretest-crate)
-          (cd "$RUNNER_TEMP" && bash "$GITHUB_WORKSPACE/.github/scripts/r-probe.sh" pretest-tmp)
+          cd "$RUNNER_TEMP"
+          Rscript -e 'lib <- normalizePath(file.path(Sys.getenv("GITHUB_WORKSPACE"), ".rvenv", "lib"), winslash = "/"); for (p in c("knitr", "rmarkdown", "jsonlite")) { d <- normalizePath(dirname(find.package(p)), winslash = "/"); if (d != lib) stop(p, " found in ", d, ", expected ", lib) }; cat("R project library OK:", lib, "\n")'
 
       # `ci` profile + `--tests` makes a separate `cargo build` redundant.
       # `--tests` (not `--all-targets`) excludes benches — `quarto-yaml` declares
@@ -399,7 +404,6 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/engine-smoke"
-          (cd "$RUNNER_TEMP/engine-smoke" && bash "$GITHUB_WORKSPACE/.github/scripts/r-probe.sh" smoke)
           cat > "$RUNNER_TEMP/engine-smoke/knitr.qmd" <<'EOF'
           ---
           title: "R engine smoke"
