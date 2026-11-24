@@ -1,0 +1,82 @@
+---
+title: "revealjs: layout panels"
+format: revealjs
+# A deck lays `layout-ncol`, `layout-nrow` and `layout` Divs out in rows and
+# cells, with the same markup as an HTML page (Quarto 1 `layout/html.lua`
+# serves both). A heading inside a panel becomes a bold paragraph at the top
+# of the next cell, because a deck would read it as a slide title. A panel
+# image sits in a cell, so auto-stretch leaves it alone. The fourth slide is
+# the case of Quarto 1's crossrefs/float/revealjs/revealjs-subfloat-1.qmd,
+# less the sub-figure numbering.
+_quarto:
+  tests:
+    revealjs:
+      ensureHtmlElements:
+        - - 'section#two-columns div.quarto-layout-panel[data-layout-ncol="2"] > div.quarto-layout-row:only-child > div.quarto-layout-cell[style="flex-basis: 50.0%;justify-content: flex-start;"]:nth-child(2)'
+          - 'section#two-rows div.quarto-layout-panel > div.quarto-layout-row:nth-child(2):last-child > div.quarto-layout-cell:nth-child(2)'
+          - 'section#custom div.quarto-layout-row:first-child > div.quarto-layout-cell[style="flex-basis: 50.0%;justify-content: flex-start;"]:nth-child(2):last-child'
+          - 'section#custom div.quarto-layout-row:nth-child(2) > div.quarto-layout-cell[style="flex-basis: 100.0%;justify-content: flex-start;"]:only-child'
+          - 'section#a-figure div#fig-pair.quarto-layout-panel > figure > div > div.quarto-layout-row > div.quarto-layout-cell:nth-child(2)'
+          - 'section#a-figure div#fig-pair > figure > figcaption'
+          - 'section#headings div.quarto-layout-cell:first-child > p:first-child > strong'
+          - 'section#headings div.quarto-layout-cell:nth-child(2) > p:first-child > strong'
+        - - 'section div.quarto-layout-panel h3'
+          - 'section div.quarto-layout-panel img.r-stretch'
+          - 'section > img'
+      ensureCssRegexMatches:
+        - - '\.quarto-layout-row\s*\{[^}]*display:\s*flex'
+          - '\.quarto-layout-cell\s*\{[^}]*margin-right:\s*20px'
+        - []
+---
+
+## Two columns
+
+::: {layout-ncol=2}
+![One](placeholder.png)
+
+![Two](placeholder.png)
+:::
+
+## Two rows
+
+::: {layout-nrow=2}
+![A](placeholder.png)
+
+![B](placeholder.png)
+
+![C](placeholder.png)
+
+![D](placeholder.png)
+:::
+
+## Custom
+
+::: {layout="[[1,1],[1]]"}
+![A](placeholder.png)
+
+![B](placeholder.png)
+
+![C](placeholder.png)
+:::
+
+## A figure
+
+::: {#fig-pair layout-ncol=2}
+![Left](placeholder.png)
+
+![Right](placeholder.png)
+
+Two figures
+:::
+
+## Headings
+
+::: {layout-ncol=2}
+### Left title
+
+Left text.
+
+### Right title
+
+Right text.
+:::

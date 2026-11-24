@@ -1,0 +1,141 @@
+---
+title: "html: layout panels"
+format: html
+# A Div with `layout-ncol`, `layout-nrow` or `layout` becomes a
+# `quarto-layout-panel` of `quarto-layout-row` Divs, each holding
+# `quarto-layout-cell` Divs whose width is an inline `flex-basis` (Quarto 1
+# `layout/layout.lua` and `layout/html.lua`). Cases taken from Quarto 1's
+# panel fixtures (smoke-all/2024/03/14/9076.qmd, 2024/01/09/8187.qmd,
+# crossrefs/float/multirow-layout.qmd): rows from a column count, rows from a
+# row count, a `layout` with relative widths and a spacer, alignment, a
+# figure div that keeps its caption, and a code cell whose source moves in
+# front of the panel.
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - - 'div#ncol.quarto-layout-panel[data-layout-ncol="2"] > div.quarto-layout-row:only-child > div.quarto-layout-cell[style="flex-basis: 50.0%;justify-content: flex-start;"]:nth-child(2)'
+          - 'div#ncol div.quarto-layout-cell > div.quarto-figure > figure'
+          - 'div#three > div.quarto-layout-row:nth-child(2) > div.quarto-layout-cell[style="flex-basis: 33.3%;justify-content: flex-start;"]:nth-child(2):last-child'
+          - 'div#nrow > div.quarto-layout-row:nth-child(2):last-child > div.quarto-layout-cell:nth-child(2):last-child'
+          - 'div#custom > div.quarto-layout-row:first-child > div.quarto-figure-spacer.quarto-layout-cell[style="flex-basis: 20.0%;justify-content: flex-start;"]:nth-child(2)'
+          - 'div#custom > div.quarto-layout-row:first-child > div.quarto-layout-cell[style="flex-basis: 40.0%;justify-content: flex-start;"]:nth-child(3)'
+          - 'div#custom > div.quarto-layout-row:nth-child(2) > div.quarto-layout-cell[style="flex-basis: 100.0%;justify-content: flex-start;"]:only-child'
+          - 'div#aligned > div.quarto-layout-row.quarto-layout-valign-bottom > div.quarto-layout-cell[style="flex-basis: 30.0%;justify-content: flex-end;"]'
+          - 'div#aligned > div.quarto-layout-row > div.quarto-layout-cell[style="flex-basis: 70.0%;justify-content: flex-end;"]'
+          - 'div#bare div.quarto-layout-cell[style="flex-basis: 50.0%;justify-content: center;"] > p > img'
+          - 'div#bare div.quarto-layout-cell[style="flex-basis: 50.0%;justify-content: center;"] > table'
+          - 'div#divs > div.quarto-layout-row > div.one.quarto-layout-cell'
+          - 'div#fig-pair.quarto-layout-panel > figure.quarto-float > div > div.quarto-layout-row > div.quarto-layout-cell:nth-child(2)'
+          - 'div#fig-pair > figure > figcaption'
+          - 'div.cell.quarto-layout-panel > div.quarto-layout-row > div.quarto-layout-cell:nth-child(2) > p > img'
+        - - 'div#aligned[data-layout-valign]'
+          - 'div#fig-pair[data-layout-ncol]'
+          - 'div.quarto-layout-panel div.cell-code'
+          - 'div.quarto-layout-panel pre'
+          - 'div.quarto-layout-cell > div.quarto-layout-cell'
+      ensureCssRegexMatches:
+        - - '\.quarto-layout-row\s*\{[^}]*display:\s*flex'
+          - '\.quarto-layout-cell\s*\{[^}]*margin-right:\s*20px'
+        - []
+---
+
+## Column count
+
+::: {#ncol layout-ncol=2}
+![One](placeholder.png)
+
+![Two](placeholder.png)
+:::
+
+::: {#three layout-ncol=3}
+![A](placeholder.png)
+
+![B](placeholder.png)
+
+![C](placeholder.png)
+
+![D](placeholder.png)
+
+![E](placeholder.png)
+:::
+
+## Row count
+
+::: {#nrow layout-nrow=2}
+![A](placeholder.png)
+
+![B](placeholder.png)
+
+![C](placeholder.png)
+
+![D](placeholder.png)
+:::
+
+## Custom layout
+
+::: {#custom layout="[[40,-20,40],[100]]"}
+![A](placeholder.png)
+
+![B](placeholder.png)
+
+![C](placeholder.png)
+:::
+
+::: {#aligned layout="[30,70]" layout-valign="bottom" layout-align="right"}
+![A](placeholder.png)
+
+![B](placeholder.png)
+:::
+
+## Cell contents
+
+::: {#bare layout-ncol=2}
+![](placeholder.png)
+
+| a | b |
+|---|---|
+| 1 | 2 |
+:::
+
+:::: {#divs layout-ncol=2}
+::: {.one}
+First.
+
+Still first.
+:::
+
+::: {.two}
+Second.
+:::
+::::
+
+## A figure with a caption
+
+::: {#fig-pair layout-ncol=2}
+![Left](placeholder.png)
+
+![Right](placeholder.png)
+
+Two figures
+:::
+
+## A code cell
+
+::: {.cell layout-ncol="2"}
+```{.r .cell-code}
+plot(1)
+```
+
+::: {.cell-output-display}
+![](placeholder.png)
+:::
+
+```{.r .cell-code}
+plot(2)
+```
+
+::: {.cell-output-display}
+![](placeholder.png)
+:::
+:::

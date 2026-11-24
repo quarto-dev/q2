@@ -93,6 +93,7 @@ mod footnotes_resolve;
 mod format_css;
 mod graphviz;
 mod heading_id;
+mod layout_panel;
 mod lightbox;
 mod link_external;
 mod link_resource_discovery;
@@ -211,6 +212,7 @@ pub use heading_id::{HeadingIdTransform, rederive_stale_heading_ids};
 pub use hephaestus::HephaestusRenderTransform;
 pub use html_columns::HtmlColumnsTransform;
 pub use image_alt_normalize::ImageAltNormalizeTransform;
+pub use layout_panel::LayoutPanelTransform;
 pub use lightbox::LightboxTransform;
 // Only `hephaestus-render` (native-only, see above) calls it.
 pub use image_dimensions::ImageDimensionsTransform;

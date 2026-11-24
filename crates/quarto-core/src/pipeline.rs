@@ -2923,6 +2923,15 @@ pub fn build_transform_pipeline(
     // dispatches on FloatRefTarget/Theorem/Proof), so the node survives to
     // here untouched.
     pipeline.push(Box::new(ExampleEmbedRenderTransform::new()));
+    // Layout panels (`layout-ncol`, `layout-nrow`, `layout`): arrange a
+    // Div's children in `quarto-layout-row` / `quarto-layout-cell` Divs
+    // (Q1 `layout/layout.lua` + `layout/html.lua`). After
+    // `CrossrefRenderTransform`, so a figure div is already its rendered
+    // `Div > Figure` shape and standalone figures have their
+    // `quarto-figure` wrapper; before the reveal transforms, so
+    // auto-stretch sees panel images nested in cells and leaves them
+    // alone. Self-gated to the HTML and reveal.js render profiles.
+    pipeline.push(Box::new(crate::transforms::LayoutPanelTransform::new()));
     // Format-specific presentation that consumes rendered crossref shapes:
     // revealjs auto-stretch. Runs *after* `CrossrefRenderTransform` (so a
     // single-image `![cap]{#fig-…}` figure is numbered/resolved/rendered to a
@@ -3197,6 +3206,13 @@ const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     // `graphviz-render` does the same for ```dot blocks; in preview
     // `GraphvizCodeBlock.tsx` draws the raw CodeBlock (bd-ijlapt70).
     "graphviz-render",
+    // `layout-panel` builds on the Div shapes `crossref-render` leaves
+    // (a figure div's `Div > Figure > Div`, the `quarto-figure` wrapper of
+    // a standalone figure), and `crossref-render` does not run here. The
+    // transform also gates itself to the two render profiles, so this entry
+    // only keeps the preview's transform list honest. The preview shows a
+    // panel's cells stacked, as before.
+    "layout-panel",
     // The tabset pair (bd-toc-tabset-titles-zq93gjvf) builds its nav
     // as *split* RawInlines (`<ul…>`, `<li…><a…>`, title inlines,
     // `</a></li>`, `</ul>`) — correct for the string-concatenating
@@ -3248,6 +3264,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     // shapes — HTML-only rendering of custom nodes and HTML decoration.
     "table-float-class-forward",
     "crossref-render",
+    "layout-panel",
     "mermaid-render",
     "graphviz-render",
     "code-block-render",
@@ -3527,6 +3544,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // `table-bootstrap-class` to normalize (bd-hfghrqvh).
     ("table-float-class-forward", Bucket::B4),
     ("crossref-render", Bucket::B4),
+    // Rows and cells for `layout-ncol` / `layout` Divs. HTML presentation;
+    // the Pandoc formats lay panels out with the vendored Q1 Lua filters.
+    ("layout-panel", Bucket::B4),
     ("mermaid-render", Bucket::B4),
     ("graphviz-render", Bucket::B4),
     ("code-block-render", Bucket::B4),
@@ -7347,6 +7367,7 @@ mod tests {
                 "lightbox",
                 "crossref-render",
                 "example-embed-render",
+                "layout-panel",
                 "mermaid-render",
                 "graphviz-render",
                 "code-block-render",
@@ -7454,6 +7475,7 @@ mod tests {
                 "lightbox",
                 "crossref-render",
                 "example-embed-render",
+                "layout-panel",
                 "reveal-auto-stretch",
                 "mermaid-render",
                 "graphviz-render",

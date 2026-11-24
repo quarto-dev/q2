@@ -578,12 +578,99 @@ section.has-dark-background {
 }
 
 // --- figure captions ---------------------------------------------------------
-.reveal .slide {
+// Quarto 1 selects `.reveal .slide`. A q2 slide is a `<section class="section">`
+// with no `slide` class, so that selector matched nothing and captions kept
+// the body font size.
+.reveal .slides section {
   figure > figcaption,
   img.stretch + p.caption,
   img.r-stretch + p.caption {
     font-size: #{$presentation-font-smaller}em;
   }
+}
+
+// --- layout panels ----------------------------------------------------------
+// Rows and cells for `layout-ncol` / `layout-nrow` / `layout` Divs, as
+// `LayoutPanelTransform` writes them (`quarto-layout-panel` >
+// `quarto-layout-row` > `quarto-layout-cell`). Each cell's width is an inline
+// `flex-basis`. Ported from Quarto 1 `formats/html/_quarto-rules.scss`
+// (lines 38-103), part of bd-9fz5fweg.
+// Quarto 1 compiles the same rules into the reveal theme.
+.quarto-layout-panel {
+  margin-bottom: 1em;
+}
+
+.quarto-layout-panel > figure {
+  width: 100%;
+}
+
+.quarto-layout-panel > figure > figcaption,
+.quarto-layout-panel > .panel-caption {
+  margin-top: 10pt;
+}
+
+.quarto-layout-panel > .table-caption {
+  margin-top: 0px;
+}
+
+.quarto-layout-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.quarto-layout-valign-top {
+  align-items: flex-start;
+}
+
+.quarto-layout-valign-bottom {
+  align-items: flex-end;
+}
+
+.quarto-layout-valign-center {
+  align-items: center;
+}
+
+.quarto-layout-cell {
+  position: relative;
+  margin-right: 20px;
+}
+
+.quarto-layout-cell:last-child {
+  margin-right: 0;
+}
+
+.quarto-layout-cell figure,
+.quarto-layout-cell > p {
+  margin: 0.2em;
+}
+
+.quarto-layout-cell img {
+  max-width: 100%;
+}
+
+.quarto-layout-cell .html-widget {
+  width: 100% !important;
+}
+
+.quarto-layout-cell div figure p {
+  margin: 0;
+}
+
+.quarto-layout-cell figure {
+  display: block;
+  margin-inline-start: 0;
+  margin-inline-end: 0;
+}
+
+.quarto-layout-cell table {
+  display: inline-table;
+}
+
+.quarto-layout-cell-subref figcaption,
+figure .quarto-layout-row figure figcaption {
+  text-align: center;
+  font-style: italic;
 }
 
 // --- diagram alignment ------------------------------------------------------
