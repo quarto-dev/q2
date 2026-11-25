@@ -25,6 +25,5 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
           div.cell-output-display.html-fill-container.html-fill-item
             img.img-fluid.quarto-dashboard-img-contain
           div.cell-output.cell-output-error.html-fill-container.html-fill-item
-            div.code-copy-outer-scaffold.html-fill-container.html-fill-item
         bslib-tooltip
           span.badge.bslib-full-screen-enter.rounded-pill

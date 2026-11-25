@@ -268,7 +268,7 @@ note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 path = "q1/1-card-cell-options-execute.qmd"
 requires = ["knitr"]
 status = "divergence"
-note = "Accepted: q2's writer-generated code block wrapper (no fill classes, no cb1 id), and q2's copy button on the output block (bd-xaaucvfz)"
+note = "Accepted: q2's writer-generated code block wrapper (no fill classes, no cb1 id). The output block no longer gets a copy button (bd-xaaucvfz fixed)"
 
 [[fixture]]
 path = "q1/1-card-cell-options.qmd"

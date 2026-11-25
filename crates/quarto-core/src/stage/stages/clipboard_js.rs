@@ -83,6 +83,16 @@ pub(crate) const CODE_COPY_INIT_JS: &[u8] =
 
 /// Filename used for the on-disk JS asset and as the leaf of the
 /// artifact path.
+/// Runtime for code annotations (line highlight on click, popovers in
+/// `hover` / `select` modes). Registered by this stage because it is the
+/// one that ships the code-block scripts; it does not depend on
+/// clipboard.js. Source: `resources/js/code-annotations/`.
+pub(crate) const CODE_ANNOTATIONS_JS: &[u8] =
+    include_bytes!("../../../../../resources/js/code-annotations/code-annotations.js");
+
+const CODE_ANNOTATIONS_FILENAME: &str = "code-annotations.js";
+const CODE_ANNOTATIONS_KEY: &str = "js:code-annotations";
+
 const CLIPBOARD_JS_FILENAME: &str = "clipboard.min.js";
 const CODE_COPY_INIT_FILENAME: &str = "code-copy-init.js";
 
@@ -160,6 +170,30 @@ impl PipelineStage for ClipboardJsStage {
             );
             return Ok(PipelineData::DocumentAst(doc));
         }
+        let asset_path = |filename: &str| {
+            if ctx.project.is_single_file {
+                PathBuf::from(filename)
+            } else {
+                PathBuf::from(format!("quarto/{}", filename))
+            }
+        };
+
+        // Code annotations script: independent of `code-copy`. Skipped
+        // only when annotations are off (`false`) or stripped (`none`),
+        // the two modes that leave nothing for it to do.
+        let annotations_off = doc.ast.meta.get("code-annotations").is_some_and(|v| {
+            v.as_bool() == Some(false)
+                || matches!(v.as_plain_text().as_deref(), Some("false" | "none"))
+        });
+        if !annotations_off {
+            ctx.artifacts.store(
+                CODE_ANNOTATIONS_KEY,
+                Artifact::from_bytes(CODE_ANNOTATIONS_JS.to_vec(), "text/javascript")
+                    .with_path(asset_path(CODE_ANNOTATIONS_FILENAME))
+                    .with_scope(ArtifactScope::Project),
+            );
+        }
+
         if matches!(resolve_default_copy_mode(&doc.ast.meta), CopyMode::Off) {
             trace_event!(
                 ctx,
@@ -168,14 +202,6 @@ impl PipelineStage for ClipboardJsStage {
             );
             return Ok(PipelineData::DocumentAst(doc));
         }
-
-        let asset_path = |filename: &str| {
-            if ctx.project.is_single_file {
-                PathBuf::from(filename)
-            } else {
-                PathBuf::from(format!("quarto/{}", filename))
-            }
-        };
 
         ctx.artifacts.store(
             CLIPBOARD_JS_KEY,

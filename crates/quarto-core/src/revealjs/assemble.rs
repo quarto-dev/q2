@@ -33,6 +33,14 @@ const THEME_WHITE_CSS: &str = include_str!("../../../../resources/revealjs/theme
 /// Quarto's reveal layer (columns, …) — shared with the preview, which imports
 /// the same file. Keep render/preview in sync by editing only the one file.
 const QUARTO_REVEAL_CSS: &str = include_str!("../../../../resources/revealjs/quarto-reveal.css");
+/// Quarto 1's line-highlight reveal plugin (`code-line-numbers="1,3"` and
+/// stepped `"|1|2-3"`), vendored unchanged; see `resources/revealjs/README.md`.
+const LINE_HIGHLIGHT_JS: &str =
+    include_str!("../../../../resources/revealjs/plugins/line-highlight/line-highlight.js");
+const CODE_ANNOTATIONS_JS: &str =
+    include_str!("../../../../resources/js/code-annotations/code-annotations.js");
+const LINE_HIGHLIGHT_CSS: &str =
+    include_str!("../../../../resources/revealjs/plugins/line-highlight/line-highlight.css");
 
 /// Default reveal theme when `theme:` is absent. The reveal theme *resolver*
 /// (`crate::revealjs::theme`) defaults to this; `white` aliases to it.
@@ -130,6 +138,36 @@ pub fn reveal_assets(compiled_theme_css: Option<&str>) -> Vec<RevealAsset> {
             content: Cow::Borrowed(QUARTO_REVEAL_CSS),
             content_type: "text/css",
             kind: RevealAssetKind::Css,
+        },
+        // After the quarto overrides, as in Quarto 1 (plugin stylesheets
+        // load last).
+        RevealAsset {
+            key_suffix: "5-line-highlight".to_string(),
+            filename: "line-highlight.css".to_string(),
+            content: Cow::Borrowed(LINE_HIGHLIGHT_CSS),
+            content_type: "text/css",
+            kind: RevealAssetKind::Css,
+        },
+        // Defines `window.QuartoLineHighlight`; the init script passes it
+        // to `Reveal.initialize` as a plugin. Script keys load in sorted
+        // order, so this runs before `reveal`, which is fine: it only
+        // defines the factory.
+        RevealAsset {
+            key_suffix: "line-highlight".to_string(),
+            filename: "line-highlight.js".to_string(),
+            content: Cow::Borrowed(LINE_HIGHLIGHT_JS),
+            content_type: "application/javascript",
+            kind: RevealAssetKind::Js,
+        },
+        // Code annotation runtime (click a number to highlight its
+        // lines). Self-contained; without Bootstrap it shows `hover` /
+        // `select` annotations as a list under the code.
+        RevealAsset {
+            key_suffix: "code-annotations".to_string(),
+            filename: "code-annotations.js".to_string(),
+            content: Cow::Borrowed(CODE_ANNOTATIONS_JS),
+            content_type: "application/javascript",
+            kind: RevealAssetKind::Js,
         },
         RevealAsset {
             key_suffix: "reveal".to_string(),
@@ -447,6 +485,11 @@ pub fn render_revealjs_document(
         .unwrap_or_default();
     let after_body_block = includes_block(meta, "after-body");
 
+    // The init call keeps the literal shape `Reveal.initialize({{…}})`:
+    // Quarto Hub's printable-deck export rewrites it by string
+    // (`revealPrintMode.ts`). The line-highlight plugin is therefore
+    // registered beforehand; reveal queues `registerPlugin` calls made
+    // before `initialize`.
     format!(
         r#"<!DOCTYPE html>
 <html lang="{lang}"{dir_attr}>
@@ -464,6 +507,7 @@ pub fn render_revealjs_document(
 </div>
 {scripts}
 <script>
+if (window.QuartoLineHighlight) Reveal.registerPlugin(window.QuartoLineHighlight);
 Reveal.initialize({config});
 </script>{after_body_block}
 </body>
@@ -811,6 +855,7 @@ mod tests {
                 "css:revealjs:2-reveal",
                 theme_key.as_str(),
                 "css:revealjs:4-quarto-reveal",
+                "css:revealjs:5-line-highlight",
             ]
         );
 
@@ -828,7 +873,9 @@ mod tests {
             js,
             vec![
                 "js:revealjs:clipboard",
+                "js:revealjs:code-annotations",
                 "js:revealjs:code-copy-init",
+                "js:revealjs:line-highlight",
                 "js:revealjs:reveal",
             ]
         );

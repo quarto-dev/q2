@@ -147,22 +147,70 @@ session can pick it up without re-auditing Q1.
   Browser e2e: hover shows icon, click swaps to checkmark + shows
   tooltip, state reverts after 1s. See Phase 3 hand-off below.)*
 
-- [ ] **Phase 3 — Code folding.** `code-fold: true|show`. Render
+- [x] **Phase 3 — Code folding.** `code-fold: true|show`. Render
   `<details class="code-fold" [open]><summary>…</summary>…</details>`
   *outside* the filename wrapper (Q1's DecoratedCodeBlock
-  composition pattern — see audit notes).
+  composition pattern — see audit notes). *(Done 2026-11-24. Per-cell
+  option, document default and `code-summary`; executed cells only, as
+  in Q1. The `<details>` open and close tags are sibling `RawBlock`s
+  so `details` is a direct child of `div.cell`. Not done: markdown in
+  the summary text, and the q2-preview React renderer, which skips the
+  fold layer because split raw HTML cannot enclose content there. Same
+  change: the `filename` cell option, no copy button on class-less
+  blocks (bd-xaaucvfz), `code-overflow`.)*
 
 ---
 
 *Phases 4 – 6 are deferred to separate sessions. Notes below kept for
 continuity; do not implement in the current iteration.*
 
-- [ ] **Phase 4 — Line numbers.** *(Deferred.)* Annotate `CodeBlock`
+- [x] **Phase 4 — Line numbers.** *(Done 2026-11-24 for HTML:
+  `code-line-numbers` and `.number-lines` / `.numberLines` with
+  `startFrom`. The HTML writer emits Pandoc's per-line spans for
+  numbered blocks only, and `highlight.scss` carries Pandoc's
+  `pre.numberSource` rules. Reveal line highlighting from a line spec
+  is still open. Original note follows.)* Annotate `CodeBlock`
   with Pandoc's `.number-lines` class. For Reveal.js/Docusaurus,
   stash the line range in a kv attribute (Q1 uses
   `kCodeLineNumbers`). Pandoc's syntax highlighter renders the
   gutter; ensure our highlighter matches. (May require coordinating
   with `quarto-highlight` crate.)
+
+- [x] **Phase 6 — Code annotations.** *(Done 2026-11-24, ahead of
+  Phase 5.)* `code-annotations: below | hover | select | none | false`
+  for HTML, RevealJS and Dashboard. The pass lives in
+  `crates/quarto-core/src/transforms/code_annotations.rs` and is called
+  from `CodeBlockGenerateTransform`; it ports Q1's
+  `quarto-pre/code-annotation.lua` and the DOM step
+  `processCodeAnnotations` (`format-html.ts`). Anchor positions travel
+  to the HTML writer in two consumed `CodeBlock` attributes. Runtime:
+  `resources/js/code-annotations/code-annotations.js`, which uses
+  Bootstrap's Popover where Q1 uses tippy.js. Not done: the q2-preview
+  React renderer (markers stay visible there), the warning Q1 prints
+  for a list item with no marker, and numbered lines on annotated
+  blocks in decks.
+
+- [x] **Code tools.** *(Done 2026-11-24; not a numbered phase of the
+  original plan.)* `code-tools: true | { source, toggle, caption }`
+  for `format: html`: the title-block button, its Show All Code / Hide
+  All Code / View Source menu and the source modal.
+  `crates/quarto-core/src/transforms/code_tools.rs`, called from
+  `CodeBlockGenerateTransform`; the title-block partial places
+  `rendered.code-tools` beside the `<h1>`. Not done: markdown
+  highlighting of the source in the modal, the toggle for cells hidden
+  with the `hidden` class, localized labels.
+
+- [x] **Quarto Hub / q2 preview.** *(Done 2026-11-24.)* Folding, line
+  numbers and code annotations in the React renderer. The fold and the
+  annotation list reach the preview as `Div`s (`Div.code-fold`,
+  `Div.code-annotation-container-grid`, `Div.code-annotation-item`)
+  because that renderer cannot enclose content between two `RawBlock`s;
+  `Div.tsx` renders them as `details` and `dl`. `CodeBlock.tsx` emits
+  the per-line spans, anchors and gutter. `utils/codeAnnotations.ts`
+  is the delegated click handler for the highlight band. The notes
+  above that say the preview is not covered predate this. Still open
+  in the preview: `hover` / `select` popovers (shown as `below`),
+  `code-tools`, and reveal line highlighting.
 
 - [ ] **Phase 5 — Code preview iframe.** *(Deferred.)* In Q1 the
   attribute is `code-preview="examples/foo.qmd"` and a TS
