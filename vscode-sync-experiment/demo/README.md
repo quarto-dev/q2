@@ -44,15 +44,17 @@ npm run demo -w quarto-hub-vscode -- --preset <preset> [options]
 |---|---|
 | `hub-browser` (default) | Myra edits in a browser on a tracking hub; Maurice joins from his own terminal with the join string her `--share` hub prints, and follows in another browser. The full story: edit, commit, switch branch, reset, rebase with a conflict. |
 | `hub-vscode-host` | Myra edits in an editor-only VS Code window on the hub's own folder; Maurice joins with her join string, as in `hub-browser`, and follows in a browser. |
-| `hub-vscode-clone` | Myra uses a browser on the hub; Maurice has his own VS Code clone with its own terminal. |
+| `hub-vscode-clone` | Myra uses a browser on a `--share` hub; Maurice has his own VS Code clone with its own terminal, and joins by pasting her join string into the Join Session command. |
 | `vscode-share` | A standalone `q2 hub` with no git tracking: Myra shares from VS Code (the dialog is on camera), and Maurice joins with the copied command. (Formerly `hubless`.) |
 
-In `hub-browser` and `hub-vscode-host` the hub runs with `--share`, so Myra and Maurice are on different machines as far
-as the demo is concerned: Myra reads the `q2 preview --join q2preview…` string the hub printed, and Maurice pastes it
-into his own terminal. His browser opens his local proxy, not her hub's URL. Everything between them crosses an
-encrypted iroh tunnel (on one laptop it is a direct connection, so the demo shows no relay or NAT traversal).
-`hub-vscode-clone` cannot do this yet: Maurice's clone attaches to the hub's websocket by project id, and `--join` has
-no local project. In `vscode-share` both sides already connect to a standalone server.
+In `hub-browser`, `hub-vscode-host` and `hub-vscode-clone` the hub runs with `--share`, so Myra and Maurice are on
+different machines as far as the demo is concerned: Myra reads the `q2 preview --join q2preview…` string the hub
+printed, and Maurice uses it. Everything between them crosses an encrypted iroh tunnel (on one laptop it is a direct
+connection, so the demo shows no relay or NAT traversal). In `hub-browser` and `hub-vscode-host` Maurice pastes the
+string into his own terminal, and his browser opens his local proxy, not her hub's URL. In `hub-vscode-clone` he pastes
+it into VS Code's Join Session command: the extension starts that proxy, and his clone attaches to her session through
+it (it needs `quartoHub.q2Path` to point at the `q2` under test, which the demo sets). In `vscode-share` both sides
+already connect to a standalone server, which has no `--share`.
 
 Without `--play` the demo starts in **free play**: the windows open, the hub runs, and you type in the terminal window
 as Myra (or Maurice, in the presets that have his terminal). With `--play` it runs the preset's **scripted story**.

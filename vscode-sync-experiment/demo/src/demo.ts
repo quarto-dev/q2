@@ -17,7 +17,7 @@ import { missingToolAdvice, setupCommands } from './setup';
 import { startTerminalServer, type TerminalServer } from './terminal-server';
 import { terminalAssets, terminalPageHtml, STRIP_LINES } from './terminal-page';
 import { launchVscode, type RunningVscode } from '../../e2e/helpers/launch';
-import { HeadlessPeer, ensureWasm } from '../../e2e/helpers/hub';
+import { ensureWasm } from '../../e2e/helpers/hub';
 import { bindFolder, deriveWsUrl } from '../../src/core/join';
 import { activeEditorText, openFile as openVscodeFile } from '../../e2e/helpers/palette';
 import net from 'node:net';
@@ -254,7 +254,7 @@ export class Demo {
     });
     if (this.hasGuestTerminal) {
       // Maurice's clone, or (vscode-share, shared) an empty directory: his only tool there is the pasted `q2 preview` command.
-      if (this.o.preset === 'vscode-share' || this.shares) {
+      if (this.o.preset === 'vscode-share' || (this.shares && this.o.preset !== 'hub-vscode-clone')) {
         mkdirSync(this.guestDir, { recursive: true });
         if (this.o.preset === 'vscode-share') this.qhubPort = await Demo.freePort();
       }
@@ -333,11 +333,13 @@ export class Demo {
   // ---- the hub -------------------------------------------------------------------------------------------------
 
   /**
-   * Myra shares her preview over iroh and Maurice joins with the ticket from another terminal, as two machines would
-   * (`hub-browser`, `hub-vscode-host`). The guest has no clone: `q2 preview --join` runs a proxy to her session.
+   * Myra shares her preview over iroh and Maurice joins with the ticket, as two machines would (`hub-browser`,
+   * `hub-vscode-host`, `hub-vscode-clone`). In the first two the guest has no clone: `q2 preview --join` runs a proxy to
+   * her session in his terminal. In `hub-vscode-clone` he pastes the ticket into Join Session, and the extension runs
+   * that proxy and attaches his clone through it.
    */
   get shares(): boolean {
-    return this.o.preset === 'hub-browser' || this.o.preset === 'hub-vscode-host';
+    return this.o.preset === 'hub-browser' || this.o.preset === 'hub-vscode-host' || this.o.preset === 'hub-vscode-clone';
   }
 
   /** Presets where Maurice has a terminal of his own. */
@@ -738,7 +740,7 @@ export class Demo {
     } else {
       await this.openVscodeHost();
     }
-    if (this.shares) {
+    if (this.shares && this.o.preset !== 'hub-vscode-clone') {
       // The story has Maurice join with the ticket; free play and reset do it for him.
       if (!this.o.typedHub) await this.joinGuestFromLauncher();
     } else if (this.kinds.guest === 'browser') {
@@ -751,7 +753,8 @@ export class Demo {
       this.guestEditor = guest;
       this.markEditorUp();
       await this.openProject(guest.page, PY_PAPER);
-    } else {
+    } else if (!(this.o.typedHub && this.o.preset === 'hub-vscode-clone')) {
+      // In the typed clone story Maurice joins at his own step, once Myra has sent him the ticket.
       await this.openVscodeGuest();
     }
   }
@@ -810,15 +813,23 @@ export class Demo {
   }
 
   /** The guest's VS Code: a clone of the journal attached to the project, with Maurice's terminal beside it. */
-  private async openVscodeGuest(): Promise<void> {
+  async openVscodeGuest(): Promise<void> {
     await ensureWasm();
-    const peer = await HeadlessPeer.joinAsClone(this.guestDir, this.wsUrl, this.projectId);
-    await peer.stop();
-    const v = await launchVscode({ workspace: this.guestDir, settings: vscodeSettings('guest') });
+    // Maurice opens his own clone, not yet attached to anything, and joins Myra's session the way a user would:
+    // Join Session from the palette, the ticket she sent him, and the default offer (attach this folder).
+    const v = await launchVscode({ workspace: this.guestDir, settings: { ...vscodeSettings('guest'), 'quartoHub.q2Path': Q2_BINARY } });
     this.vscode.guest = v;
     this.markEditorUp();
     await this.placeVscode(v, this.layout.guestEditor);
-    await v.page.locator('.statusbar').getByText('Quarto Hub: clone').waitFor({ timeout: 60_000 });
+    const page = v.page;
+    await this.paletteCommand(page, 'Quarto Hub: Join Session');
+    await this.pasteInput(page, this.joinCommand.split(' ').pop()!); // the ticket Myra sent him
+    const offer = page.locator('.quick-input-list .monaco-list-row').first();
+    await offer.waitFor({ timeout: 60_000 });
+    await offer.getByText('Attach this folder').waitFor({ timeout: 10_000 });
+    await this.pause(2000);
+    await page.keyboard.press('Enter'); // the default offer: attach this folder
+    await page.locator('.statusbar').getByText('Quarto Hub: clone').waitFor({ timeout: 60_000 });
     await openVscodeFile(v.page, PY_PAPER);
   }
 
@@ -1277,9 +1288,10 @@ export class Demo {
         navigateBrowsers: async () => {
           if (this.o.preset === 'vscode-share') return;
           if (this.shares) {
-            // The new hub printed a new ticket: Maurice joins again, and his old proxy is gone.
+            // The new hub printed a new ticket: Maurice joins again, and his old proxy is gone. A VS Code guest rejoins in
+            // `rejoinVscode`, through Join Session.
             if (this.hostEditor) await this.openProject(this.hostEditor.page, PY_PAPER);
-            await this.joinGuestFromLauncher();
+            if (this.kinds.guest === 'browser') await this.joinGuestFromLauncher();
             return;
           }
           for (const w of [this.hostEditor, this.guestEditor]) {

@@ -204,18 +204,22 @@ export function hubStory(d: Demo): Step[] {
 }
 
 /** `--share`: Myra reads the join string the hub printed and sends it; Maurice pastes it into his own terminal. */
+export function shareTicketStep(d: Demo): Step {
+  return {
+    id: 'share-ticket',
+    caption: 'The hub prints a join string for the shared session. Myra copies it and sends it to Maurice.',
+    command: () => d.joinStringCommandLine(),
+    check: async () => {
+      expect(d.joinCommand).toMatch(/^q2 preview --join q2preview[a-z0-9]+$/);
+      // Long enough that the echoed grep pattern cannot match.
+      await d.waitOutput(/q2preview[a-z0-9]{40,}/, 'host', 15_000);
+    },
+  };
+}
+
 function shareSteps(d: Demo): Step[] {
   return [
-    {
-      id: 'share-ticket',
-      caption: 'The hub prints a join string for the shared session. Myra copies it and sends it to Maurice.',
-      command: () => d.joinStringCommandLine(),
-      check: async () => {
-        expect(d.joinCommand).toMatch(/^q2 preview --join q2preview[a-z0-9]+$/);
-        // Long enough that the echoed grep pattern cannot match.
-        await d.waitOutput(/q2preview[a-z0-9]{40,}/, 'host', 15_000);
-      },
-    },
+    shareTicketStep(d),
     {
       id: 'guest-join',
       caption: 'Maurice pastes it into his terminal. His preview is a local proxy to her session, over an encrypted peer-to-peer tunnel.',

@@ -8,7 +8,7 @@ import { expect } from '@playwright/test';
 import type { Step } from '../src/driver';
 import { Demo, PY_PAPER } from '../src/demo';
 import { EDITS } from '../src/journal-content';
-import { disk, diskFlat, shows, showsNear, until } from './hub';
+import { disk, diskFlat, shareTicketStep, shows, showsNear, until } from './hub';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -20,7 +20,7 @@ export function hubCloneStory(d: Demo): Step[] {
   return [
     {
       id: 'start-hub',
-      caption: 'Myra starts the hub on her journal, following git. Maurice has his own clone, in VS Code.',
+      caption: 'Myra starts the hub on her journal, following git, and shares it. Maurice has his own clone, in VS Code.',
       command: d.o.typedHub ? d.hubCommandLine() : undefined,
       action: async () => {
         if (d.o.typedHub) {
@@ -30,10 +30,25 @@ export function hubCloneStory(d: Demo): Step[] {
       },
       check: async () => {
         await shows(d, 'host', 'Fusion spectra');
-        await shows(d, 'guest', 'Fusion spectra');
+        // In the typed story Maurice has not joined yet: he needs the join string first.
+        if (!d.o.typedHub) await shows(d, 'guest', 'Fusion spectra');
         expect((await gitStatus(d.hubHttp)).tracking).toBe(d.o.hubGit === 'track');
       },
     },
+    // Typed story only: with the editors already up (free play, reset) Maurice has joined before the story starts.
+    ...(d.o.typedHub
+      ? [
+          shareTicketStep(d),
+          {
+            id: 'clone-join',
+            caption: 'Maurice opens his clone in VS Code, runs Join Session, and pastes the join string. His clone attaches to her session.',
+            action: () => d.openVscodeGuest(),
+            check: async () => {
+              await shows(d, 'guest', 'Fusion spectra');
+            },
+          } satisfies Step,
+        ]
+      : []),
     {
       id: 'maurice-types',
       caption: "Maurice types in his clone: the edit reaches Myra's disk.",
