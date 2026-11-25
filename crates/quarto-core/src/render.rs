@@ -569,6 +569,12 @@ pub struct RenderContext<'a> {
     /// rather than silently dropping its references from the merged
     /// bibliography. Output-only, like `execution_skipped`.
     pub citeproc_filter_in_post: bool,
+
+    /// The chapter title `BookChapterTitleTransform` moved out of this
+    /// page's body into its title block, if it did. `CrossrefIndexTransform`
+    /// reads it in the same transform run: the chapter heading it used to
+    /// number from, and register `@sec-` from, is no longer in the body.
+    pub lifted_chapter_title: Option<crate::transforms::LiftedChapterTitle>,
 }
 
 /// Seed for a book chapter's section numbering: render this document as if
@@ -655,6 +661,7 @@ impl<'a> RenderContext<'a> {
             citation_manifest: None,
             suppress_book_bibliography: false,
             citeproc_filter_in_post: false,
+            lifted_chapter_title: None,
         }
     }
 

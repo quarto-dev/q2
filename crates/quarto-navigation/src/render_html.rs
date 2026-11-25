@@ -31,7 +31,7 @@ use crate::footer::{FooterBorder, FooterRegion, PageFooter};
 use crate::item::{NavigationItem, is_blank_text};
 use crate::navbar::{LogoVariant, Navbar, NavbarTitle};
 use crate::page_nav::PageNavigation;
-use crate::sidebar::{Crumb, Sidebar, SidebarEntry, SidebarStyle, SidebarTitle};
+use crate::sidebar::{Crumb, Sidebar, SidebarEntry, SidebarStyle, SidebarTitle, SidebarTool};
 
 /// Render a complete navbar element.
 ///
@@ -657,6 +657,76 @@ pub struct SidebarSearch<'a> {
 }
 
 /// [`sidebar_to_html`] with page context passed via [`SidebarRenderOptions`].
+/// The sidebar's `tools:` as HTML: one icon link per tool, or an icon
+/// button opening a dropdown for a tool with a `menu`. Port of Q1's
+/// `navtools.ejs` (the `tools` loop). Empty when there are no tools.
+///
+/// More than two tools get `tools-wide`, which Q1 uses to let the row
+/// drop under the title. A menu's trigger is a `<button>` here (Q1 uses
+/// `<a href="" role="link">`): it opens a menu and goes nowhere.
+fn sidebar_tools_html(tools: &[SidebarTool]) -> String {
+    if tools.is_empty() {
+        return String::new();
+    }
+    let icon = |tool: &SidebarTool, extra: &str| match tool.icon.as_deref() {
+        Some(name) if !name.is_empty() => format!(
+            "<i class=\"bi bi-{}{extra}\" aria-hidden=\"true\"></i>",
+            escape_attr(name)
+        ),
+        _ => String::new(),
+    };
+    let link_attrs = |tool: &SidebarTool| {
+        let mut attrs = String::new();
+        if let Some(target) = &tool.target {
+            attrs.push_str(&format!(" target=\"{}\"", escape_attr(target)));
+        }
+        if let Some(rel) = &tool.rel {
+            attrs.push_str(&format!(" rel=\"{}\"", escape_attr(rel)));
+        }
+        attrs
+    };
+
+    let wide = if tools.len() > 2 { " tools-wide" } else { "" };
+    let mut html = format!("\n      <div class=\"sidebar-tools-main{wide}\">\n");
+    let mut dropdowns = 0;
+    for tool in tools {
+        let label = escape_attr(&tool.text);
+        if tool.menu.is_empty() {
+            html.push_str(&format!(
+                "        <a href=\"{}\" title=\"{label}\" aria-label=\"{label}\" \
+                 class=\"quarto-navigation-tool px-1\"{}>{}</a>\n",
+                escape_attr(tool.href.as_deref().unwrap_or("")),
+                link_attrs(tool),
+                icon(tool, "")
+            ));
+            continue;
+        }
+        let id = format!("quarto-navigation-tool-dropdown-{dropdowns}");
+        dropdowns += 1;
+        html.push_str(&format!(
+            "        <div class=\"dropdown\">\n          \
+             <button type=\"button\" id=\"{id}\" title=\"{label}\" aria-label=\"{label}\" \
+             class=\"quarto-navigation-tool dropdown-toggle px-1\" \
+             data-bs-toggle=\"dropdown\" aria-expanded=\"false\">{}</button>\n          \
+             <ul class=\"dropdown-menu\" aria-labelledby=\"{id}\">\n",
+            icon(tool, "")
+        ));
+        for item in &tool.menu {
+            html.push_str(&format!(
+                "            <li><a class=\"dropdown-item sidebar-tools-main-item\" \
+                 href=\"{}\"{}>{}{}</a></li>\n",
+                escape_attr(item.href.as_deref().unwrap_or("")),
+                link_attrs(item),
+                icon(item, " pe-1"),
+                escape_html(&item.text)
+            ));
+        }
+        html.push_str("          </ul>\n        </div>\n");
+    }
+    html.push_str("      </div>\n    ");
+    html
+}
+
 pub fn sidebar_to_html_with_options(sidebar: &Sidebar, opts: &SidebarRenderOptions) -> String {
     let home_url = opts.home_url;
     let appended_html = opts.appended_html;
@@ -731,12 +801,19 @@ pub fn sidebar_to_html_with_options(sidebar: &Sidebar, opts: &SidebarRenderOptio
         && !opts.has_navbar
     {
         html.push_str("  <div class=\"sidebar-header pt-lg-2 mt-2 text-left\">\n");
+        // The tools sit inside the title element, after the home link
+        // (Q1 `sidebar.ejs`, `toolsLocation === "title"`).
         html.push_str(&format!(
-            "    <div class=\"sidebar-title mb-0 py-0\"><a href=\"{}\">{}</a></div>\n",
+            "    <div class=\"sidebar-title mb-0 py-0\"><a href=\"{}\">{}</a>{}</div>\n",
             escape_attr(home_url),
-            render_text(title_cv)
+            render_text(title_cv),
+            sidebar_tools_html(&sidebar.tools)
         ));
         html.push_str("  </div>\n");
+    } else {
+        // No title to sit beside (a navbar is present, or the title is
+        // off): the tools take a line of their own above the search box.
+        html.push_str(&sidebar_tools_html(&sidebar.tools));
     }
 
     // Search box (bd-6cme). Textbox: Q1 `sidebar.ejs:68-75`. Overlay:
@@ -3347,6 +3424,89 @@ mod tests {
                 landmark_labels: &LandmarkLabels::default(),
             },
         )
+    }
+
+    fn tool(icon: &str, text: &str, href: &str) -> SidebarTool {
+        SidebarTool {
+            icon: Some(icon.to_string()),
+            text: text.to_string(),
+            href: Some(href.to_string()),
+            ..Default::default()
+        }
+    }
+
+    /// bd-fod3: `tools:` render inside the sidebar title, after the home
+    /// link: an icon link per tool, and an icon button with a dropdown
+    /// for a tool that has a menu. Three tools get `tools-wide`.
+    #[test]
+    fn sidebar_tools_render_beside_the_title() {
+        let mut sb = Sidebar::with_defaults();
+        sb.title = SidebarTitle::Text(ConfigValue::new_string("My Book", SourceInfo::for_test()));
+        sb.tools = vec![
+            tool("github", "Source Code", "https://github.com/example/book"),
+            tool("journal", "Download ePub", "My-Book.epub"),
+            SidebarTool {
+                icon: Some("share".to_string()),
+                text: "Share".to_string(),
+                menu: vec![tool(
+                    "twitter",
+                    "Twitter",
+                    "https://twitter.com/intent/tweet?url=|url|",
+                )],
+                ..Default::default()
+            },
+        ];
+        let html = sidebar_to_html(&sb, "./");
+
+        let title = html.find("sidebar-title").unwrap();
+        let tools = html.find("sidebar-tools-main tools-wide").unwrap();
+        let menu = html.find("sidebar-menu-container").unwrap_or(html.len());
+        assert!(
+            title < tools && tools < menu,
+            "tools sit in the title header: {html}"
+        );
+        assert!(
+            html.contains(
+                "<a href=\"https://github.com/example/book\" title=\"Source Code\" \
+                 aria-label=\"Source Code\" class=\"quarto-navigation-tool px-1\">\
+                 <i class=\"bi bi-github\" aria-hidden=\"true\"></i></a>"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains("href=\"My-Book.epub\" title=\"Download ePub\""),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "<button type=\"button\" id=\"quarto-navigation-tool-dropdown-0\" \
+                 title=\"Share\" aria-label=\"Share\" \
+                 class=\"quarto-navigation-tool dropdown-toggle px-1\" \
+                 data-bs-toggle=\"dropdown\" aria-expanded=\"false\">"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "<li><a class=\"dropdown-item sidebar-tools-main-item\" \
+                 href=\"https://twitter.com/intent/tweet?url=|url|\">\
+                 <i class=\"bi bi-twitter pe-1\" aria-hidden=\"true\"></i>Twitter</a></li>"
+            ),
+            "{html}"
+        );
+    }
+
+    /// No tools, no tools container: existing sidebars are unchanged.
+    #[test]
+    fn sidebar_without_tools_has_no_tools_container() {
+        let mut sb = Sidebar::with_defaults();
+        sb.title = SidebarTitle::Text(ConfigValue::new_string("Site", SourceInfo::for_test()));
+        let html = sidebar_to_html(&sb, "./");
+        assert!(!html.contains("sidebar-tools-main"), "{html}");
+        assert!(
+            html.contains("<div class=\"sidebar-title mb-0 py-0\"><a href=\"./\">Site</a></div>"),
+            "{html}"
+        );
     }
 
     /// A linked section keeps its `<a>` header and gets a separate

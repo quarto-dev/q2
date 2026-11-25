@@ -46,5 +46,6 @@ pub use repo_actions::{
 };
 pub use sidebar::{
     AutoSpec, Crumb, SectionTextConflict, Sidebar, SidebarEntry, SidebarStyle, SidebarTitle,
-    breadcrumb_trail, resolve_active_state, section_text_conflicts_per_sidebar, sidebar_for_page,
+    SidebarTool, breadcrumb_trail, resolve_active_state, section_text_conflicts_per_sidebar,
+    sidebar_for_page,
 };

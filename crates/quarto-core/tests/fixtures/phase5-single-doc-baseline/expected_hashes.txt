@@ -533,9 +533,4 @@
 # stylesheet from `main`). doc.html hash
 # unchanged: the fixture has no columns.
 doc.html cb911871a3a0f9328ae6a32df4e2d72da647ff8696169aec56c01d66984cd8ef
-# Re-captured 2026-11-24 (bd-sehm2rha, GH #1296): doc_files/styles.css
-# gained the Mermaid theming block, a single
-# `:where(:root){--mermaid-*: ...}` rule. Verified the only delta: deleting
-# that rule from the new stylesheet hashes back to the previous value
-# (9daec3e3...). doc.html hash unchanged: the fixture has no diagram.
-doc_files/styles.css d83400ef04e5ec698b30a022783fda31dfbb4f0ee51afcac0243e5fa35f6b8fc
+doc_files/styles.css a71822c3aff00cfa0ea7d956b93e92d36b5121ecd655998b939e97794d9d09fc

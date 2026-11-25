@@ -408,6 +408,76 @@ impl SidebarEntry {
 /// `!navbar && sidebar.title` title block) into one only because there
 /// is no `logo`. See the FORWARD NOTE at that gate
 /// (bd-sidebar-title-with-navbar-82wxow6m).
+/// One entry of a sidebar's `tools:` list: an icon link beside the
+/// sidebar title, or (with `menu`) an icon that opens a dropdown of
+/// links. Q1's `navtools.ejs`.
+///
+/// A book fills this list from `book.repo-url`, `book.downloads` and
+/// `book.sharing`; a website author can write it by hand.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SidebarTool {
+    /// Bootstrap Icons name without the `bi-` prefix (`github`).
+    pub icon: Option<String>,
+    /// Tooltip and accessible name of an icon link; the visible label of
+    /// a menu item.
+    pub text: String,
+    /// Link target. A share link keeps Q1's `|url|` placeholder, which
+    /// `quarto-nav.js` replaces with the page's address.
+    pub href: Option<String>,
+    pub target: Option<String>,
+    pub rel: Option<String>,
+    /// Dropdown items. Empty for a plain icon link.
+    pub menu: Vec<SidebarTool>,
+}
+
+impl SidebarTool {
+    /// Parse one `tools:` entry. Q1 writes the link of a share item under
+    /// `url` and of every other item under `href`; both are accepted.
+    pub fn from_config_value(cv: &ConfigValue) -> Option<Self> {
+        cv.as_map_entries()?;
+        let text = |key: &str| cv.get(key).and_then(|v| v.as_plain_text());
+        Some(Self {
+            icon: text("icon"),
+            text: text("text").unwrap_or_default(),
+            href: text("href").or_else(|| text("url")),
+            target: text("target"),
+            rel: text("rel"),
+            menu: cv
+                .get("menu")
+                .and_then(|m| m.as_array())
+                .map(|items| items.iter().filter_map(Self::from_config_value).collect())
+                .unwrap_or_default(),
+        })
+    }
+
+    pub fn to_config_value(&self) -> ConfigValue {
+        let info = SourceInfo::generated(By::programmatic_config());
+        let mut entries: Vec<ConfigMapEntry> = Vec::new();
+        if let Some(ref icon) = self.icon {
+            entries.push(string_entry("icon", icon, &info));
+        }
+        entries.push(string_entry("text", &self.text, &info));
+        if let Some(ref href) = self.href {
+            entries.push(string_entry("href", href, &info));
+        }
+        if let Some(ref target) = self.target {
+            entries.push(string_entry("target", target, &info));
+        }
+        if let Some(ref rel) = self.rel {
+            entries.push(string_entry("rel", rel, &info));
+        }
+        if !self.menu.is_empty() {
+            let items = self.menu.iter().map(Self::to_config_value).collect();
+            entries.push(cv_entry(
+                "menu",
+                ConfigValue::new_array(items, info.clone()),
+                &info,
+            ));
+        }
+        ConfigValue::new_map(entries, info)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sidebar {
     pub id: Option<String>,
@@ -433,6 +503,9 @@ pub struct Sidebar {
     /// it, explicit `true` forces a textbox, unset follows search's
     /// `location`.
     pub search: Option<bool>,
+    /// `sidebar.tools:` icon links and dropdown menus, shown beside the
+    /// sidebar title (bd-fod3).
+    pub tools: Vec<SidebarTool>,
 }
 
 impl Default for Sidebar {
@@ -454,6 +527,7 @@ impl Sidebar {
             contents: Vec::new(),
             pinned: false,
             search: None,
+            tools: Vec::new(),
         }
     }
 
@@ -490,6 +564,16 @@ impl Sidebar {
             sb.collapse_level = u;
         }
         sb.contents = parse_contents(cv.get("contents"));
+        sb.tools = cv
+            .get("tools")
+            .and_then(|t| t.as_array())
+            .map(|tools| {
+                tools
+                    .iter()
+                    .filter_map(SidebarTool::from_config_value)
+                    .collect()
+            })
+            .unwrap_or_default();
         sb
     }
 
@@ -550,6 +634,18 @@ impl Sidebar {
         }
         if let Some(search) = self.search {
             entries.push(bool_entry("search", search, &info));
+        }
+        if !self.tools.is_empty() {
+            let values = self
+                .tools
+                .iter()
+                .map(SidebarTool::to_config_value)
+                .collect();
+            entries.push(cv_entry(
+                "tools",
+                ConfigValue::new_array(values, info.clone()),
+                &info,
+            ));
         }
         if !self.contents.is_empty() {
             let values: Vec<ConfigValue> = self
@@ -1087,6 +1183,47 @@ mod tests {
         ConfigValue::new_array(items, SourceInfo::for_test())
     }
 
+    /// `tools:` parses icon links and menus, takes a share item's link
+    /// from `url` as well as `href` (Q1 writes both), and survives the
+    /// generate-to-render round trip through config.
+    #[test]
+    fn tools_parse_and_round_trip() {
+        let cv = map(vec![(
+            "tools",
+            arr(vec![
+                map(vec![
+                    ("icon", s("github")),
+                    ("text", s("Source Code")),
+                    ("href", s("https://github.com/example/book")),
+                ]),
+                map(vec![
+                    ("icon", s("share")),
+                    ("text", s("Share")),
+                    (
+                        "menu",
+                        arr(vec![map(vec![
+                            ("icon", s("twitter")),
+                            ("text", s("Twitter")),
+                            ("url", s("https://twitter.com/intent/tweet?url=|url|")),
+                        ])]),
+                    ),
+                ]),
+            ]),
+        )]);
+        let sidebar = Sidebar::from_config_value(&cv);
+        assert_eq!(sidebar.tools.len(), 2);
+        assert_eq!(sidebar.tools[0].icon.as_deref(), Some("github"));
+        assert_eq!(sidebar.tools[0].text, "Source Code");
+        assert!(sidebar.tools[0].menu.is_empty());
+        assert_eq!(
+            sidebar.tools[1].menu[0].href.as_deref(),
+            Some("https://twitter.com/intent/tweet?url=|url|")
+        );
+
+        let again = Sidebar::from_config_value(&sidebar.to_config_value());
+        assert_eq!(again.tools, sidebar.tools);
+    }
+
     /// Test 1 — single object form with leaf links.
     #[test]
     fn parse_sidebar_single_object() {
@@ -1224,6 +1361,7 @@ mod tests {
             style: SidebarStyle::Docked,
             collapse_level: 3,
             search: Some(true),
+            tools: Vec::new(),
             background: Some("light".to_string()),
             border: Some(true),
             pinned: true,

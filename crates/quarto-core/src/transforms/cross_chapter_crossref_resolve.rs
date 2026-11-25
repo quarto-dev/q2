@@ -105,6 +105,11 @@ impl AstTransform for CrossChapterCrossrefResolveTransform {
                 None => href.to_string(),
             }
         };
+        // Ids no chapter defines. The chapter's own pass warned for every
+        // id it could not resolve locally, and the book orchestrator
+        // dropped those warnings; this pass is the first that can tell a
+        // cross-chapter reference from a missing target.
+        let mut still_unresolved: Vec<String> = Vec::new();
         for_each_inline_mut(&mut ast.blocks, &mut |inline| {
             let Inline::Custom(node) = inline else {
                 return;
@@ -122,18 +127,26 @@ impl AstTransform for CrossChapterCrossrefResolveTransform {
             {
                 return;
             }
-            let Some(entry) = node
+            let identifier = node
                 .plain_data
                 .get("identifier")
                 .and_then(|v| v.as_str())
+                .map(str::to_string);
+            let Some(entry) = identifier
+                .as_deref()
                 .and_then(|id| registry.entries.get(id))
             else {
                 // Unknown id: left untouched — the P4 `?id?` placeholder
                 // contract still applies.
+                still_unresolved.extend(identifier);
                 return;
             };
             resolve_node(node, entry, &target_base);
         });
+        for id in still_unresolved {
+            ctx.diagnostics
+                .push(crate::transforms::crossref_resolve::unresolved_crossref_warning(&id));
+        }
         Ok(())
     }
 }
