@@ -21,7 +21,7 @@
 //! [`ProjectSource`] decides what happens to a *project* path that neither
 //! layer has. With [`ProjectSource::Disk`] it falls through to the inner
 //! runtime: the base holds the files the hub's classification knows about,
-//! and anything else in the directory (a `.bib`, a data file) is read from
+//! and anything else in the directory (a `.csv` data file, say) is read from
 //! disk. With [`ProjectSource::Attached`] it does not exist: the sync
 //! server is the only truth for project files, as it is for a preview in the
 //! browser. Paths outside the project root always go to the inner runtime.

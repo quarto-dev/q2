@@ -81,18 +81,18 @@ fn buffer_wins_over_base_which_is_a_snapshot_of_disk() {
 fn disk_mode_reads_unclassified_project_files_through_to_disk() {
     let (_tmp, root) = project_dir();
     std::fs::write(root.join("doc.qmd"), "x").unwrap();
-    std::fs::write(root.join("refs.bib"), "@book{a,}").unwrap();
+    std::fs::write(root.join("data.csv"), "a,b\n1,2\n").unwrap();
     let base = VfsBaseLayer::load_from_disk(&root).unwrap();
     assert!(
-        base.entry(Path::new("refs.bib")).is_none(),
-        "the hub classification leaves .bib out of the base"
+        base.entry(Path::new("data.csv")).is_none(),
+        "the hub classification leaves .csv out of the base"
     );
     let rt = runtime(&root, ProjectSource::Disk, EditorLayer::new(), base);
-    let bib = root.join("refs.bib");
-    assert_eq!(rt.file_read_string(&bib).unwrap(), "@book{a,}");
+    let csv = root.join("data.csv");
+    assert_eq!(rt.file_read_string(&csv).unwrap(), "a,b\n1,2\n");
     assert_eq!(
-        rt.reads().get(Path::new("refs.bib")),
-        Some(&VersionKey::content_of(b"@book{a,}"))
+        rt.reads().get(Path::new("data.csv")),
+        Some(&VersionKey::content_of(b"a,b\n1,2\n"))
     );
     // Missing project files are recorded as absent: one appearing later
     // must invalidate whatever looked for it.
@@ -102,7 +102,7 @@ fn disk_mode_reads_unclassified_project_files_through_to_disk() {
         Some(&VersionKey::Absent)
     );
     let listing = rt.dir_list(&root).unwrap();
-    assert!(listing.contains(&root.join("refs.bib")), "{listing:?}");
+    assert!(listing.contains(&root.join("data.csv")), "{listing:?}");
     assert!(listing.contains(&root.join("doc.qmd")), "{listing:?}");
 }
 
@@ -220,7 +220,7 @@ fn an_unsaved_new_file_is_listed_and_readable() {
 fn still_matches_validates_every_kind_of_read() {
     let (_tmp, root) = project_dir();
     std::fs::write(root.join("a.qmd"), "base").unwrap();
-    std::fs::write(root.join("refs.bib"), "@a").unwrap();
+    std::fs::write(root.join("data.csv"), "@a").unwrap();
     let base = Arc::new(VfsBaseLayer::load_from_disk(&root).unwrap());
     let mut editor = EditorLayer::new();
     editor.set("open.qmd", b"buffer".to_vec(), 2);
@@ -237,7 +237,7 @@ fn still_matches_validates_every_kind_of_read() {
 
     let first = rt(editor.clone());
     first.file_read(&root.join("a.qmd")).unwrap();
-    first.file_read(&root.join("refs.bib")).unwrap();
+    first.file_read(&root.join("data.csv")).unwrap();
     first.file_read(&root.join("open.qmd")).unwrap();
     assert!(!first.is_file(&root.join("later.yml")).unwrap());
     let reads = first.reads();
@@ -259,10 +259,10 @@ fn still_matches_validates_every_kind_of_read() {
     let after_open = rt(Arc::new(shadowing));
     assert!(!after_open.still_matches(Path::new("a.qmd"), &reads[Path::new("a.qmd")]));
 
-    std::fs::write(root.join("refs.bib"), "@b").unwrap();
+    std::fs::write(root.join("data.csv"), "@b").unwrap();
     std::fs::write(root.join("later.yml"), "x: 1").unwrap();
     let after_disk = rt(editor.clone());
-    assert!(!after_disk.still_matches(Path::new("refs.bib"), &reads[Path::new("refs.bib")]));
+    assert!(!after_disk.still_matches(Path::new("data.csv"), &reads[Path::new("data.csv")]));
     assert!(!after_disk.still_matches(Path::new("later.yml"), &reads[Path::new("later.yml")]));
     // The base is a snapshot: a disk edit to a base file is not seen until
     // the feeder reports it.

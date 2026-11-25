@@ -290,7 +290,7 @@ impl VfsBaseLayer {
     /// holds exactly the file set a preview of this directory would. Text
     /// files are loaded; binaries are entered by metadata only.
     ///
-    /// Files the classification leaves out (a `.bib`, a data file) are not
+    /// Files the classification leaves out (a `.csv` data file, say) are not
     /// in the layer; in disk mode the runtime reads them through to disk.
     pub fn load_from_disk(root: &Path) -> std::io::Result<Self> {
         let files = quarto_project_files::ProjectFiles::discover(root);
