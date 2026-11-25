@@ -795,8 +795,8 @@ fn task_item_to_ascii(item: &[Block]) -> Option<Vec<Block>> {
 /// between the items would read back as `[[BulletList ..], [Para]]`.
 /// (pandoc's markdown writer looks only at each item's first block and does
 /// lose that shape; the qmd writer round-trips it.)
-fn list_is_tight(items: &[Vec<Block>]) -> bool {
-    !items.iter().any(|item| {
+fn list_is_tight<'a>(mut items: impl Iterator<Item = &'a [Block]>) -> bool {
+    !items.any(|item| {
         item.iter()
             .any(|block| matches!(block, Block::Paragraph(_)))
     })
@@ -847,7 +847,7 @@ fn write_bulletlist(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    let is_tight = list_is_tight(&bulletlist.content);
+    let is_tight = list_is_tight(bulletlist.content.iter().map(Vec::as_slice));
 
     // Read before the items are written: nested lists reset the context field.
     let marker = ctx.bullet_marker;
@@ -910,7 +910,7 @@ fn write_orderedlist(
 ) -> std::io::Result<()> {
     let (start_num, number_style, delimiter) = &orderedlist.attr;
 
-    let is_tight = list_is_tight(&orderedlist.content);
+    let is_tight = list_is_tight(orderedlist.content.iter().map(Vec::as_slice));
 
     for (i, item) in orderedlist.content.iter().enumerate() {
         if i > 0 && !is_tight {
@@ -1602,10 +1602,17 @@ fn write_list_table(
     // Write each row as a bullet list item containing a nested bullet list of cells
     for row in all_rows {
         // Each row is "* - cell1\n  - cell2\n..."
+        // A row's cells are one inner list, so its looseness decides whether
+        // a cell's text reads as Para or Plain. A loose row gets a blank line
+        // between its cells, as in write_bulletlist (GH #1158).
+        let row_is_tight = list_is_tight(row.cells.iter().map(|c| c.content.as_slice()));
         for (cell_idx, cell) in row.cells.iter().enumerate() {
             if cell_idx == 0 {
                 write!(buf, "* ")?;
             } else {
+                if !row_is_tight {
+                    writeln!(buf)?;
+                }
                 write!(buf, "  ")?;
             }
             write!(buf, "- ")?;
