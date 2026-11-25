@@ -18,11 +18,13 @@ import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { startHubServer, type HubServerHandle } from '../e2e/helpers/syncServer';
 
 /** Well-known path where runtime info is written for test workers. */
-export const AUTHOR_E2E_INFO_PATH = '/tmp/hub-author-e2e.json';
+// os.tmpdir(), not a literal /tmp: on Windows '/tmp' is <drive>:\tmp, which does not exist.
+export const AUTHOR_E2E_INFO_PATH = join(tmpdir(), 'hub-author-e2e.json');
 
 export interface AuthorE2EUser {
   /** Google-style ID token (works as a Bearer on the hub's HTTP/WS APIs). */
