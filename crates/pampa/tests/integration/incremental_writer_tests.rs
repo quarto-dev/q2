@@ -337,6 +337,32 @@ fn idempotent_empty_document() {
 }
 
 #[test]
+fn idempotent_trailing_blank_lines() {
+    // GH #963: bytes after the last block must be copied verbatim.
+    assert_idempotent("First paragraph.\n\nLast paragraph.\n\n\n");
+}
+
+#[test]
+fn idempotent_front_matter_only() {
+    // GH #963: a document with no body blocks keeps its front matter.
+    assert_idempotent("---\ntitle: Only front matter\n---\n");
+}
+
+#[test]
+fn trailing_blank_lines_preserved_when_last_block_rewritten() {
+    // GH #963: the epilogue is anchored to the end of the original's last
+    // block, so it survives an edit to that block.
+    let original_qmd = "First paragraph.\n\nLast paragraph.\n\n\n";
+    let original_ast = parse_qmd(original_qmd);
+    let new_ast = parse_qmd("First paragraph.\n\nEdited paragraph.\n");
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+    let result =
+        writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
+            .expect("incremental_write failed");
+    assert_eq!(result, "First paragraph.\n\nEdited paragraph.\n\n\n");
+}
+
+#[test]
 fn idempotent_single_header_no_trailing_newline() {
     // Some documents might not have trailing newlines after the last block
     // but the parser requires them, so test with trailing newline

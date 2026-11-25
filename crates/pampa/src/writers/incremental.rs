@@ -352,6 +352,20 @@ fn assemble(
         prev_entry = Some(entry);
     }
 
+    // 2d. Epilogue: copy the bytes after the original's last block (e.g.
+    // trailing blank lines) verbatim, mirroring the metadata prefix. It is
+    // anchored to the original's last block, not the last coarsened entry,
+    // so it survives edits to that block (GH #963).
+    if prev_entry.is_some()
+        && let Some(last_span) = original_ast
+            .blocks
+            .last()
+            .and_then(|b| b.source_info().preimage_in(target_file_id))
+        && let Some(epilogue) = original_qmd.get(last_span.end..)
+    {
+        result.push_str(epilogue);
+    }
+
     Ok(result)
 }
 
