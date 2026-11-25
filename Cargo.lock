@@ -7087,6 +7087,8 @@ name = "quarto-build-support"
 version = "0.47.0"
 dependencies = [
  "filetime",
+ "serde_json",
+ "sha2 0.11.0",
  "tempfile",
 ]
 
@@ -12292,6 +12294,7 @@ dependencies = [
  "insta",
  "nodejs-semver",
  "proc-macro2",
+ "quarto-build-support",
  "quarto-math",
  "quarto-output-extract",
  "quarto-pandoc-recording",
