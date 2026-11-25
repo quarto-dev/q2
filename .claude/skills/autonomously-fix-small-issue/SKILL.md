@@ -46,6 +46,13 @@ not yours.
   and every check you did *not* run go in the PR body.
 - **No scope creep.** Incidental problems you notice become their own braid
   strands (`--deps discovered-from:<id>`), not extra commits in this PR.
+- **Label AI-written GitHub comments.** Every issue or PR comment you post
+  goes out under the user's credentials, so its first visible line must be
+  `Authored by <model name> 🤖`, using whatever name you know yourself by
+  (e.g. "Claude Opus 5.5"; any recognizable form is fine). It comes right
+  after the machine-readable marker, if the comment has one, and before
+  everything else. PR descriptions carry the attribution footer from the
+  session's system reminder instead.
 
 ## 1. Read the issue
 
@@ -108,6 +115,8 @@ parses, so keep it verbatim:
 ```bash
 gh issue comment <N> --repo quarto-dev/q2 --body-file - <<'MARKER'
 <!-- q2-autofix gate v=1 verdict=fail checks=<comma-separated slugs> -->
+Authored by <model name> 🤖
+
 **Automated triage:** this issue isn't a candidate for an unattended fix yet.
 
 - *<Check name>:* <one sentence, specific to this issue>
@@ -317,6 +326,8 @@ looks at it again.
 
    ```text
    <!-- q2-autofix repair n=<K> -->
+   Authored by <model name> 🤖
+
    **Autofix repair <K>/3:** <what failed, and what you changed or why you changed nothing>
    ```
 
