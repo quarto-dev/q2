@@ -2172,6 +2172,21 @@ fn write_table_row<W: Write>(
         write_blocks(&cell.content, ctx)?;
         writeln!(ctx, "</{}>", tag)?;
     }
+    // GH #1337: pad a short row with empty cells up to the column count,
+    // as Pandoc does, skipping columns a rowspan still covers. Each
+    // padded cell takes its column's alignment.
+    let tag = if is_header { "th" } else { "td" };
+    for (c, spec) in colspec.iter().enumerate().skip(col) {
+        if pending.get(c).is_some_and(|&n| n > 0) {
+            continue;
+        }
+        match spec.0 {
+            Alignment::Left => writeln!(ctx, "<{tag} style=\"text-align: left;\"></{tag}>")?,
+            Alignment::Right => writeln!(ctx, "<{tag} style=\"text-align: right;\"></{tag}>")?,
+            Alignment::Center => writeln!(ctx, "<{tag} style=\"text-align: center;\"></{tag}>")?,
+            Alignment::Default => writeln!(ctx, "<{tag}></{tag}>")?,
+        }
+    }
     writeln!(ctx, "</tr>")?;
     for p in pending.iter_mut() {
         *p = p.saturating_sub(1);
@@ -3930,6 +3945,53 @@ mod tests {
         ] {
             assert!(html.contains(expected), "missing `{expected}` in:\n{html}");
         }
+    }
+
+    /// GH #1337: a row with fewer cells than the table has columns is
+    /// padded with empty cells, as Pandoc does. Padding counts `colspan`
+    /// and columns still covered by a `rowspan`, and each padded cell
+    /// takes its column's alignment.
+    #[test]
+    fn short_rows_are_padded_with_empty_cells() {
+        use crate::pandoc::table::{Alignment as A, ColWidth};
+        let d = |t: &str, rs: usize, cs: usize| align_test_cell(t, A::Default, rs, cs);
+        let block = align_test_table(
+            vec![
+                (A::Default, ColWidth::Default),
+                (A::Default, ColWidth::Default),
+                (A::Right, ColWidth::Default),
+            ],
+            vec![vec![d("H", 1, 1)]],
+            vec![
+                // One cell: pad columns 1 and 2.
+                vec![d("a", 1, 1)],
+                // Spans columns 0-1: pad column 2 only.
+                vec![d("b", 1, 2)],
+                // Column 1 covered for the next row too: pad column 2.
+                vec![d("c", 1, 1), d("e", 2, 1)],
+                // Column 1 is still covered by "e": pad column 2 only.
+                vec![d("f", 1, 1)],
+                // Full row: no padding.
+                vec![d("g", 1, 1), d("h", 1, 1), d("i", 1, 1)],
+            ],
+        );
+        let html = render_block_to_html(block);
+        let rows: Vec<&str> = html.split("</tr>").collect();
+        let count = |row: &str, tag: &str| row.matches(&format!("</{tag}>")).count();
+        assert_eq!(count(rows[0], "th"), 3, "header row:\n{html}");
+        assert!(
+            rows[0].contains("<th></th>\n<th style=\"text-align: right;\"></th>"),
+            "header padding should use <th> and column alignment:\n{html}"
+        );
+        assert_eq!(count(rows[1], "td"), 3, "row a:\n{html}");
+        assert!(
+            rows[1].contains("<td></td>\n<td style=\"text-align: right;\"></td>"),
+            "padded cells should take column alignment:\n{html}"
+        );
+        assert_eq!(count(rows[2], "td"), 2, "row b:\n{html}");
+        assert_eq!(count(rows[3], "td"), 3, "row c:\n{html}");
+        assert_eq!(count(rows[4], "td"), 2, "row f:\n{html}");
+        assert_eq!(count(rows[5], "td"), 3, "row g:\n{html}");
     }
 
     /// GH #1327: a cell's own `style` attribute is kept, with the
