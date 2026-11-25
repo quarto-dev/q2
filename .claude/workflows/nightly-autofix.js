@@ -17,7 +17,7 @@ const GATE_VERSION = 1
 const A = args || {}
 const ROOT = A.root
 if (!ROOT) throw new Error('args.root (absolute path of the main q2 checkout) is required')
-const MAX_FIXES = A.maxFixes ?? 5
+const MAX_FIXES = A.maxFixes ?? 15
 const MAX_ATTEMPTS = A.maxAttempts ?? 3
 const DRY = !!A.dryRun
 const WT = `${ROOT}/.worktrees/autofix`

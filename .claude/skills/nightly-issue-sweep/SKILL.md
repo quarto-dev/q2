@@ -13,7 +13,7 @@ the deterministic parts live in `scripts/`:
 
 | Script | Does |
 |---|---|
-| `select_candidates.py` | Lists open issues and drops those that are assigned, labelled question/wontfix/duplicate/invalid/cannot-repro, closed by an open PR, cited by a non-closed braid strand, or carrying a current gate marker with no human activity since. |
+| `select_candidates.py` | Lists open issues and drops those that are on the local skip list, assigned, labelled question/wontfix/duplicate/invalid/cannot-repro, closed by an open PR, cited by a non-closed braid strand, or carrying a current gate marker with no human activity since. |
 | `pr_status.py` | Sorts open `autofix` PRs into needs_repair / blocked_shared / pending / green / needs_human, counting `<!-- q2-autofix repair n=K -->` markers. With `--shared` (which the workflow always passes) it also runs `ci_failures.py`. |
 | `ci_failures.py` | Detects **shared failures**: CI failures that are the test's fault, not the PR's. It samples finished failed runs from the autofix PRs, a few other recent PRs, and the last few `main` commits, then parses the failing nextest tests (or job/step for other jobs) from `--log-failed`. A failure is *suspect* when it fails on `main` and on a PR, or on 2 or more PRs that don't touch the test's crate (3 or more PRs for coarse job/step keys). `test_ci_failures.py` checks the classification. |
 | `housekeeping.sh` | Resets `.worktrees/autofix` to a fresh detached `origin/main` (stashing orphaned changes, never discarding them), prunes branches of merged autofix PRs, runs `cargo clean` there when disk is low, and says when to abort. It never cleans the main checkout or other worktrees; it only reports their sizes. |
@@ -44,13 +44,19 @@ attempts and can't succeed. So before each repair pass:
   agent comments on an existing non-closed strand if it finds one, and
   otherwise creates a `testing` bug.
 
+- **Locally**, `<main checkout>/.worktrees/autofix-skip.txt` (gitignored,
+  never published) lists issues to leave alone without posting anything:
+  one number per line, with an optional `# reason`. Use it for issues
+  someone else is handling. Remove the line to make the issue eligible
+  again.
+
 To re-gate everything after changing the gate checklist, bump the gate
 version in `autonomously-fix-small-issue/SKILL.md` (§ Recording a gate
 failure) and `GATE_VERSION` in the workflow script, together.
 
 ## Steps
 
-1. **Parse arguments.** The defaults are `maxFixes=5`, no dry-run, and all
+1. **Parse arguments.** The defaults are `maxFixes=15`, no dry-run, and all
    issues. `issues=` restricts the run to those numbers (useful for
    trials). `gate-limit=` caps how many candidates are gated.
    Disk thresholds can be overridden with `soft-floor-gb=`,
@@ -70,7 +76,7 @@ failure) and `GATE_VERSION` in the workflow script, together.
    Workflow({ name: "nightly-autofix", args: {
      root: "<abs path of the main checkout>",
      date: "<YYYY-MM-DD>",
-     maxFixes: 5, dryRun: false, issues: [], gateLimit: 0 } })
+     maxFixes: 15, dryRun: false, issues: [], gateLimit: 0 } })
    ```
 
    `root` is `$(cd "$(git rev-parse --git-common-dir)/.." && pwd)`. Wait
@@ -99,7 +105,11 @@ failure) and `GATE_VERSION` in the workflow script, together.
 
 ## Tuning maxFixes
 
-Start at 5. Before raising it, look at how previous nights' PRs did:
+The default is 15: at about 10 minutes per fix, that fits in a night with
+room to spare (it was 5 for the first runs). The
+goal is a steady state where each night handles the new issues plus the
+passes left over from the night before. Before raising it further, look at
+how previous nights' PRs did:
 
 ```bash
 gh pr list --repo quarto-dev/q2 --label autofix --state all --limit 100 \

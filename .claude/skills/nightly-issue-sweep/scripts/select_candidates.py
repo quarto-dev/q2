@@ -11,7 +11,7 @@ judgement happens here. Prints one JSON object on stdout:
 `reason` on a candidate says why it is (re-)eligible: "never gated",
 "activity since gate marker", or "gate version bumped".
 
-An issue is skipped when it is assigned, carries an excluded label,
+An issue is skipped when it is listed in the local skip file, assigned, carries an excluded label,
 has an open PR that closes it, has a non-closed braid strand that
 references it, or carries a current gate marker comment with no human
 activity after it. The marker is written by autonomously-fix-small-issue
@@ -19,11 +19,17 @@ activity after it. The marker is written by autonomously-fix-small-issue
 
     <!-- q2-autofix gate v=<N> verdict=fail checks=a,b -->
 
+The local skip file, `<main checkout>/.worktrees/autofix-skip.txt`
+(gitignored, never published), holds one issue number per line with an
+optional `# reason`, e.g. `1346  # deferred to a colleague's PRs`. Use it
+for issues the sweep should leave alone without posting anything.
+
 Usage: select_candidates.py --gate-version N [--limit K]
 """
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -88,8 +94,24 @@ def strand_refs():
     return refs
 
 
-def classify(issue, gate_version, refs):
+def local_skips():
+    """Map issue number -> reason, from .worktrees/autofix-skip.txt."""
+    common = run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"]).strip()
+    path = os.path.join(os.path.dirname(common), ".worktrees", "autofix-skip.txt")
+    skips = {}
+    if os.path.exists(path):
+        with open(path) as f:
+            for line in f:
+                num, _, reason = line.partition("#")
+                if num.strip():
+                    skips[int(num)] = reason.strip() or "no reason given"
+    return skips
+
+
+def classify(issue, gate_version, refs, skips):
     """Return (eligible, reason)."""
+    if issue["number"] in skips:
+        return False, "local skip list: " + skips[issue["number"]]
     if issue["assignees"]["nodes"]:
         return False, "assigned"
     labels = {l["name"] for l in issue["labels"]["nodes"]}
@@ -129,9 +151,10 @@ def main():
     args = ap.parse_args()
 
     refs = strand_refs()
+    skips = local_skips()
     out = {"gate_version": args.gate_version, "candidates": [], "skipped": []}
     for issue in fetch_issues():
-        ok, reason = classify(issue, args.gate_version, refs)
+        ok, reason = classify(issue, args.gate_version, refs, skips)
         entry = {"number": issue["number"], "title": issue["title"], "reason": reason}
         if ok:
             out["candidates"].append({**entry, "url": issue["url"]})
