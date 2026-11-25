@@ -3582,6 +3582,27 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             if (((lexer->lookahead == '\n' || lexer->lookahead == '\r') ||
                  next_line_is_fenced_div_marker) &&
                 valid_symbols[PIPE_TABLE_LINE_ENDING]) {
+                if (next_line_is_fenced_div_marker &&
+                    s->open_blocks.size > 0 &&
+                    s->open_blocks.items[s->open_blocks.size - 1] !=
+                        FENCED_DIV) {
+                    // GH #1333: this is an early exit from the LINE_ENDING
+                    // path at the bottom of this function, which skips that
+                    // path's switch to matching mode. When the table sits
+                    // directly in a div (#206), the div is the innermost open
+                    // block and the parser takes FENCED_DIV_END straight
+                    // away, so nothing needs re-matching. When another block
+                    // (e.g. a list item) sits between the table and the div,
+                    // it has to be re-matched against the `:::` line, or it
+                    // stays open and swallows the `:::` as its own content.
+                    // So do the bottom path's bookkeeping in that case.
+                    s->indentation = 0;
+                    s->column = 0;
+                    s->matched = 0;
+                    s->state |= STATE_MATCHING;
+                    s->state &= (~STATE_WAS_SOFT_LINE_BREAK);
+                    s->state &= (~STATE_INSIDE_ATX);
+                }
                 EMIT_TOKEN(LINE_ENDING);
             }
 
