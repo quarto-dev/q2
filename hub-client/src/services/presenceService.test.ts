@@ -602,6 +602,91 @@ describe('presenceService — Automerge cursor wire format', () => {
 });
 
 // ===========================================================================
+// Heartbeat (GH #1262)
+//
+// Presence is otherwise broadcast only on cursor/selection changes, and every
+// receiver drops a peer it hasn't heard from in `staleThresholdMs`. The
+// heartbeat re-broadcasts the last state so an idle collaborator stays visible.
+// ===========================================================================
+
+describe('presenceService — heartbeat', () => {
+  beforeEach(() => {
+    _resetForTesting();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    cleanupPresence();
+    vi.useRealTimers();
+  });
+
+  it('defaults to a heartbeat interval shorter than the stale threshold', async () => {
+    await initPresence();
+    const { config } = _getStateForTesting();
+    expect(config.heartbeatIntervalMs).toBeLessThan(config.staleThresholdMs);
+  });
+
+  it('re-broadcasts the last presence state while idle', async () => {
+    await initPresence({ heartbeatIntervalMs: 1000 });
+    const doc = A.from({ text: 'hello world' });
+    const handle = installHandle(createStubHandle(doc));
+
+    updatePresence(5, null);
+    flushBroadcast();
+    expect(handle.broadcast).toHaveBeenCalledTimes(1);
+
+    // No further cursor movement: the heartbeat keeps sending.
+    vi.advanceTimersByTime(3000);
+    expect(handle.broadcast.mock.calls.length).toBeGreaterThanOrEqual(3);
+    const last = handle.broadcast.mock.calls.at(-1)![0] as { type: string; cursor: string | null };
+    expect(last.type).toBe('presence');
+    expect(A.getCursorPosition(doc, ['text'], last.cursor!)).toBe(5);
+  });
+
+  it('with the default config, an idle peer never goes quiet for a stale threshold', async () => {
+    await initPresence();
+    const { config } = _getStateForTesting();
+    const sentAt: number[] = [];
+    const handle = installHandle({
+      broadcast: vi.fn(() => sentAt.push(Date.now())),
+      doc: () => A.from({ text: 'hello' }),
+    });
+    updatePresence(1, null);
+    flushBroadcast();
+    expect(handle.broadcast).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(30_000);
+    const gaps = sentAt.slice(1).map((t, i) => t - sentAt[i]);
+    expect(gaps.length).toBeGreaterThan(0);
+    expect(Math.max(...gaps)).toBeLessThan(config.staleThresholdMs);
+  });
+
+  it('does not broadcast without an open file', async () => {
+    await initPresence({ heartbeatIntervalMs: 1000 });
+    const doc = A.from({ text: 'hello' });
+    const handle = createStubHandle(doc);
+    // Handle exists but is not installed as the current file.
+    vi.advanceTimersByTime(5000);
+    expect(handle.broadcast).not.toHaveBeenCalled();
+    expect(_getStateForTesting().currentHandle).toBeNull();
+  });
+
+  it('stops the heartbeat on cleanup', async () => {
+    await initPresence({ heartbeatIntervalMs: 1000 });
+    const doc = A.from({ text: 'hello' });
+    const handle = installHandle(createStubHandle(doc));
+    updatePresence(1, null);
+    flushBroadcast();
+
+    cleanupPresence();
+    expect(_getStateForTesting().heartbeatInterval).toBeNull();
+    handle.broadcast.mockClear();
+    vi.advanceTimersByTime(5000);
+    expect(handle.broadcast).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
 // Visibility gating
 //
 // Backgrounded tabs queue ephemeral presence messages. On refocus they drain

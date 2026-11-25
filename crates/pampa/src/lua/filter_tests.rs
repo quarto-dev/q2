@@ -8451,3 +8451,49 @@ fn test_closest_handler_name_declines_when_nothing_is_close() {
         None
     );
 }
+
+/// GH #1012: native filters get the `debug` library, and the filter chunk
+/// is named `@<path>`, so `debug.getinfo(1, "S").source` is the standard
+/// `@`-prefixed path that extensions use to find their own directory.
+#[tokio::test]
+async fn test_debug_getinfo_source_is_at_filter_path() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("debug_source.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Pandoc()
+    return pandoc.Pandoc(pandoc.Para(pandoc.Str(debug.getinfo(1, "S").source)))
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![],
+    };
+    let context = ASTContext::new();
+
+    let filtered = apply_lua_filter(
+        &pandoc,
+        &context,
+        &filter_path,
+        "html",
+        native_runtime(),
+        None,
+    )
+    .await
+    .unwrap()
+    .pandoc;
+
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Str(s) => {
+                assert_eq!(s.text, format!("@{}", filter_path.to_string_lossy()));
+            }
+            other => panic!("Expected Str inline, got {other:?}"),
+        },
+        other => panic!("Expected Paragraph block, got {other:?}"),
+    }
+}
