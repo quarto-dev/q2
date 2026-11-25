@@ -368,6 +368,28 @@ at, not the commit they were first copied from.
 '''
 
 [[asset]]
+id = "revealjs-line-highlight"
+title = "Quarto 1's reveal.js line-highlight plugin (QuartoLineHighlight)"
+paths = ["resources/revealjs/plugins/line-highlight"]
+policy = "track"
+group = "quarto-cli"
+version = "703927316dcecea438ac3569fb3b70bc401ac441"
+version_sources = [{ kind = "file-contains", file = "resources/revealjs/README.md" }]
+upstream = { kind = "git", repo = "https://github.com/quarto-dev/quarto-cli", track = "tags", tag_prefix = "v", paths = [
+  "src/resources/formats/revealjs/plugins/line-highlight",
+] }
+guards = ["quarto-core revealjs assemble asset-list test (emission only)"]
+procedure = "resources/revealjs/README.md"
+license = "MIT"
+last_reviewed = "2026-11-25"
+notes = '''
+Byte-identical copies. `version` is the quarto-cli commit both files were
+verified identical at. The plugin reads `data-code-line-numbers` from
+`div.sourceCode` and needs Pandoc's per-line spans, which the pampa HTML
+writer emits for numbered blocks.
+'''
+
+[[asset]]
 id = "algolia-autocomplete"
 title = "Algolia Autocomplete UMD bundles and logo (website search)"
 paths = [
@@ -1133,6 +1155,7 @@ title = "Repo-owned JS (Quarto 1 ports that have diverged)"
 paths = [
   "resources/js/README.md",
   "resources/js/clipboard/code-copy-init.js",
+  "resources/js/code-annotations",
   "resources/js/quarto-components",
   "resources/js/quarto-nav",
   "resources/js/quarto-toc",
