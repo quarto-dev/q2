@@ -517,6 +517,13 @@ fn biblatex_entry_to_reference(
                 .filter(|value| !value.is_empty())
         })
     };
+    // biblatex's default (useprefix=false) treats the von-part as a
+    // dropping particle; the entry's `options` field can opt into keeping
+    // it with the family name, as pandoc does.
+    let useprefix = entry
+        .get("options")
+        .map(ChunksExt::format_verbatim)
+        .is_some_and(|options| bibtex_option_enabled(&options, "useprefix"));
     let parse_people = |key: &str| -> Result<Option<Vec<Name>>, String> {
         entry
             .get(key)
@@ -537,8 +544,9 @@ fn biblatex_entry_to_reference(
                         Name {
                             family: (!literal).then_some(person.name.clone()),
                             given: (!person.given_name.is_empty()).then_some(person.given_name),
-                            dropping_particle: None,
-                            non_dropping_particle: (!person.prefix.is_empty())
+                            dropping_particle: (!useprefix && !person.prefix.is_empty())
+                                .then(|| person.prefix.clone()),
+                            non_dropping_particle: (useprefix && !person.prefix.is_empty())
                                 .then_some(person.prefix),
                             suffix: (!person.suffix.is_empty()).then_some(person.suffix),
                             comma_suffix: None,
@@ -622,7 +630,10 @@ fn biblatex_entry_to_reference(
         EntryType::Software => "software",
         EntryType::Dataset => "dataset",
         EntryType::SuppPeriodical => "article-journal",
-        EntryType::Misc | EntryType::Set | EntryType::XData | EntryType::Unknown(_) => "article",
+        // Pandoc gives these no CSL type (`-t csljson` writes `"type": ""`),
+        // so styles render them as generic documents rather than as an
+        // `article` ("Preprint", quoted title; issue #1311).
+        EntryType::Misc | EntryType::Set | EntryType::XData | EntryType::Unknown(_) => "",
     };
 
     let mut reference = Reference {
@@ -683,6 +694,18 @@ fn biblatex_entry_to_reference(
     };
     reference.extract_all_particles();
     Ok(reference)
+}
+
+/// Whether a biblatex `options` field (e.g. `maxnames=3, useprefix`) turns
+/// on the boolean option `key`. Like pandoc, a bare key or `key=true`
+/// (case-insensitive, whitespace around `=` ignored) enables it.
+fn bibtex_option_enabled(options: &str, key: &str) -> bool {
+    options.split(',').any(|option| {
+        let (name, value) = option.split_once('=').unwrap_or((option, ""));
+        let value = value.trim();
+        name.trim().eq_ignore_ascii_case(key)
+            && (value.is_empty() || value.eq_ignore_ascii_case("true"))
+    })
 }
 
 /// Whether a BibTeX language (a BCP 47 tag such as `en-US`, or a babel
@@ -4381,6 +4404,77 @@ mod tests {
 
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
+    fn test_load_bibtex_von_part_particle_follows_useprefix() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("references.bib"),
+            r#"@article{default,
+  author = {de Vries, Anna and van der Berg, Klaas},
+  title = {Default},
+  year = {2019}
+}
+@article{useprefix,
+  author = {de Vries, Anna},
+  title = {Useprefix},
+  year = {2019},
+  options = {useprefix}
+}
+@article{useprefixtrue,
+  author = {de Vries, Anna},
+  title = {Useprefix true},
+  year = {2019},
+  options = {maxnames=3, useprefix = true}
+}
+@article{useprefixfalse,
+  author = {de Vries, Anna},
+  title = {Useprefix false},
+  year = {2019},
+  options = {useprefix=false}
+}"#,
+        )
+        .unwrap();
+
+        let references =
+            load_bibliography("references.bib", dir.path(), &NativeRuntime::new(), None).unwrap();
+        let particles = |id: &str| -> Vec<(Option<String>, Option<String>, Option<String>)> {
+            references
+                .iter()
+                .find(|reference| reference.id == id)
+                .unwrap()
+                .author
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|name| {
+                    (
+                        name.family.clone(),
+                        name.dropping_particle.clone(),
+                        name.non_dropping_particle.clone(),
+                    )
+                })
+                .collect()
+        };
+        let s = |value: &str| Some(value.to_string());
+
+        // biblatex's default (useprefix=false): the von-part drops.
+        assert_eq!(
+            particles("default"),
+            vec![(s("Vries"), s("de"), None), (s("Berg"), s("van der"), None),]
+        );
+        assert_eq!(
+            particles("useprefixfalse"),
+            vec![(s("Vries"), s("de"), None)]
+        );
+        // useprefix: the von-part is kept with the family name.
+        assert_eq!(particles("useprefix"), vec![(s("Vries"), None, s("de"))]);
+        assert_eq!(
+            particles("useprefixtrue"),
+            vec![(s("Vries"), None, s("de"))]
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
     fn test_load_bibtex_macros_crossrefs_and_types() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
@@ -4486,14 +4580,14 @@ mod tests {
             Some("Master’s thesis")
         );
         assert_eq!(by_id("report2023").ref_type, "report");
-        assert_eq!(by_id("misc2025").ref_type, "article");
+        assert_eq!(by_id("misc2025").ref_type, "");
         assert_eq!(
             by_id("misc2025").author.as_ref().unwrap()[0]
                 .literal
                 .as_deref(),
             Some("World Health Organization")
         );
-        assert_eq!(by_id("unknown2026").ref_type, "article");
+        assert_eq!(by_id("unknown2026").ref_type, "");
         assert_eq!(
             by_id("macro2025").container_title.as_deref(),
             Some("Journal of testing")
@@ -5027,6 +5121,32 @@ mod tests {
         let mut out = Vec::new();
         walk(&pandoc.blocks, &mut out);
         out
+    }
+
+    /// A BibTeX `@misc` entry has no CSL type, as in Pandoc, so the
+    /// default style renders it as a generic document: no quoted title,
+    /// no "Preprint" (issue #1311).
+    #[test]
+    fn bibtex_misc_renders_as_generic_document() {
+        let bib = "@misc{m, author={Doe, Jane}, title={A web page}, year={2023}, \
+                   url={https://example.org}}";
+        let rt = MemRuntime::new(&[("/mem/misc.bib", bib)]);
+        let pandoc = Pandoc {
+            meta: meta_map(vec![
+                ("bibliography", meta_string("misc.bib")),
+                ("nocite", meta_string("@m")),
+            ]),
+            blocks: vec![],
+        };
+        let (out, _, _, _) =
+            apply_citeproc_filter(pandoc, ASTContext::new(), "html", Path::new("/mem"), &rt)
+                .unwrap();
+        let entries = bibliography_entries(&out);
+        assert_eq!(entries.len(), 1, "{entries:?}");
+        let text = &entries[0].1;
+        assert!(!text.contains("Preprint"), "{text}");
+        assert!(!text.contains('\u{201C}'), "{text}");
+        assert!(text.contains("A Web Page"), "{text}");
     }
 
     fn entry_ids(pandoc: &Pandoc) -> Vec<String> {
