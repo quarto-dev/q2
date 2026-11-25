@@ -5,6 +5,7 @@ import { runStory, StoryFailure, type DriverEnv } from './driver';
 import { storyFor } from '../stories';
 import { endPlan } from './ending';
 import { parseLauncherArgs } from './launcher-args';
+import { timeoutDue } from './timeout';
 
 const USAGE = `usage: npm run demo -w quarto-hub-vscode -- [options]
   --preset hub-browser|hub-vscode-host|hub-vscode-clone|vscode-share   (default hub-browser)
@@ -18,6 +19,8 @@ const USAGE = `usage: npm run demo -w quarto-hub-vscode -- [options]
   --exit                 end the run when the story ends instead of staying up for free play (exit code 0, or 1 if a
                          step failed), so stories can run one after another without Ctrl-C
   --linger <ms>          with --exit: how long to leave the windows up first (default 5000)
+  --timeout <seconds>    end the run this long after the first editor window is up, whatever the story is doing
+                         (teardown as usual, exit code 0): a quick boot-look-quit cycle for repeating a run
   --screen <n>           monitor to place windows on (default 0)
   --seed <n>             seed of the typing tempo (default 1); one seed repeats a recorded run
   --root <dir>           demo root directory
@@ -60,6 +63,17 @@ async function main() {
       }
     }
     d.startObserver();
+    if (a.timeoutSeconds !== undefined) {
+      const secs = a.timeoutSeconds;
+      const timer = setInterval(() => {
+        if (!timeoutDue(d.editorUpAt, Date.now(), secs)) return;
+        clearInterval(timer);
+        d.record('demo', 'timeout', `--timeout ${secs}s reached: ending the run`);
+        console.log(`--timeout ${secs}s reached: ending the run`);
+        void d.stop().finally(() => process.exit(0));
+      }, 250);
+      timer.unref();
+    }
     console.log(`demo root: ${d.root}\nevent log: ${d.logs}/events.jsonl\nhub: ${d.hubUrl || '(started by the story)'}`);
     if (play) {
       await playStory(d);

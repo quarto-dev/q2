@@ -14,6 +14,8 @@ export interface LauncherArgs {
   exit: boolean;
   /** `--linger <ms>`, as typed; read by `endPlan`. */
   linger?: string;
+  /** `--timeout <seconds>`: end the run this long after the first editor window is up. Off by default. */
+  timeoutSeconds?: number;
   /** What `Demo.create` takes (through `defaultOptions`). */
   options: Partial<DemoOptions>;
 }
@@ -37,6 +39,7 @@ export function parseLauncherArgs(argv: string[]): LauncherArgs {
       headless: { type: 'boolean' },
       exit: { type: 'boolean' },
       linger: { type: 'string' },
+      timeout: { type: 'string' },
       screen: { type: 'string' },
       seed: { type: 'string' },
       root: { type: 'string' },
@@ -46,12 +49,18 @@ export function parseLauncherArgs(argv: string[]): LauncherArgs {
   const preset = (v.preset ?? 'hub-browser') as Preset;
   if (!PRESET_NAMES.includes(preset)) throw new Error(`preset ${preset} is not built yet`);
   const play = !!v.play || !!v.fast;
+  let timeoutSeconds: number | undefined;
+  if (v.timeout !== undefined) {
+    timeoutSeconds = Number(v.timeout);
+    if (v.timeout.trim() === '' || !Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) throw new Error(`--timeout needs a positive number of seconds, not '${v.timeout}'`);
+  }
   return {
     help: !!v.help,
     preset,
     play,
     exit: !!v.exit,
     linger: v.linger,
+    timeoutSeconds,
     options: {
       preset,
       fast: !!v.fast,

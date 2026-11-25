@@ -70,6 +70,7 @@ as Myra (or Maurice, in the presets that have his terminal). With `--play` it ru
 | `--headless` | Do not show the browser windows (the editors and the terminals). For unattended runs; the tests always use it. Combine with `--fast` for the quickest unattended run. VS Code windows cannot be hidden. |
 | `--exit` | End the run when the story ends, instead of staying up for free play until Ctrl-C. The exit code is 0, or 1 if a step failed. Use it to run stories one after another. |
 | `--linger <ms>` | With `--exit`: how long to leave the windows up before ending (default 5000). `--fast` never lingers. |
+| `--timeout <seconds>` | End the run this many seconds after the first editor window (browser or VS Code) is created, whatever the story is doing: it records a `timeout` event, tears down as usual, and exits 0. Setup time before the window does not count. Use it to repeat a short boot-and-look cycle; a story cut off this way logs a failed step, so judge such runs by what the check you care about recorded, not by the story's result. |
 | `--seed <n>` | Seed of the typing tempo (default 1). One seed gives the same rhythm every run. |
 | `--screen <n>` | The monitor to place windows on (default 0, the main one). |
 | `--root <dir>` | The demo root (default a fresh temporary directory). |

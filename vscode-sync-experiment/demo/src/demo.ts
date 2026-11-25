@@ -164,6 +164,8 @@ export class Demo {
   readonly events: { time: string; source: string; kind: string; summary: string; details: unknown }[] = [];
   private hubProc?: ChildProcess;
   private pollTimer?: NodeJS.Timeout;
+  /** When the first editor window (browser or VS Code) was created; `--timeout` counts from here. */
+  editorUpAt?: number;
   /** Console and network of every browser page, from the moment it opened (see `preview-probe.ts`). */
   private pageLogs = new Map<Page, PageLog>();
   /** Per browser page: when its preview was first seen unstyled, and whether that has been confirmed as lasting. */
@@ -513,6 +515,7 @@ export class Demo {
     if (!this.vscode.host) {
       const v = await launchVscode({ workspace: this.journal, env: { QUARTO_HUB_TEST_SYNC_SERVER: this.qhubWs }, settings: vscodeSettings('host') });
       this.vscode.host = v;
+      this.markEditorUp();
       this.computeLayout();
       await this.placeVscode(v, this.layout.hostEditor);
     }
@@ -618,6 +621,7 @@ export class Demo {
       const guest = await this.window();
       await this.place(guest, this.layout.guestEditor);
       this.guestEditor = guest;
+      this.markEditorUp();
     }
     const { openProject, openFile } = await import('../../../q2-preview-spa/e2e/helpers/editor');
     await openProject(this.guestEditor.page, this.named(url, 'guest'));
@@ -729,6 +733,7 @@ export class Demo {
       const host = await this.window();
       await this.place(host, this.layout.hostEditor);
       this.hostEditor = host;
+      this.markEditorUp();
       await this.openProject(host.page, PY_PAPER);
     } else {
       await this.openVscodeHost();
@@ -744,6 +749,7 @@ export class Demo {
       const guest = await this.window();
       await this.place(guest, this.layout.guestEditor);
       this.guestEditor = guest;
+      this.markEditorUp();
       await this.openProject(guest.page, PY_PAPER);
     } else {
       await this.openVscodeGuest();
@@ -767,6 +773,7 @@ export class Demo {
     // In `vscode-share` the window is the originator: it shares through the standalone hub, whose address it is launched with.
     const v = await launchVscode({ workspace: this.journal, env: viaQhub ? { QUARTO_HUB_TEST_SYNC_SERVER: this.qhubWs } : undefined, settings: vscodeSettings('host') });
     this.vscode.host = v;
+    this.markEditorUp();
     await this.placeVscode(v, this.layout.hostEditor);
     await openVscodeFile(v.page, viaQhub ? R_PAPER : PY_PAPER);
   }
@@ -796,6 +803,7 @@ export class Demo {
     await bindFolder({ root: this.journal, indexDocId: this.projectId, syncServer: this.wsUrl, mode: 'editor-only' });
     const v = await launchVscode({ workspace: this.journal, settings: vscodeSettings('host') });
     this.vscode.host = v;
+    this.markEditorUp();
     await this.placeVscode(v, this.layout.hostEditor);
     await v.page.locator('.statusbar').getByText('Quarto Hub: editor only').waitFor({ timeout: 60_000 });
     await openVscodeFile(v.page, PY_PAPER);
@@ -808,6 +816,7 @@ export class Demo {
     await peer.stop();
     const v = await launchVscode({ workspace: this.guestDir, settings: vscodeSettings('guest') });
     this.vscode.guest = v;
+    this.markEditorUp();
     await this.placeVscode(v, this.layout.guestEditor);
     await v.page.locator('.statusbar').getByText('Quarto Hub: clone').waitFor({ timeout: 60_000 });
     await openVscodeFile(v.page, PY_PAPER);
@@ -1019,6 +1028,10 @@ export class Demo {
     };
     walk(this.journal);
     return out.sort();
+  }
+
+  markEditorUp(): void {
+    this.editorUpAt ??= Date.now();
   }
 
   startObserver(): void {
