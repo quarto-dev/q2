@@ -64,12 +64,20 @@ const FIX = {
   },
   required: ['status', 'summary'],
 }
-const PRLIST = { type: 'array', items: { type: 'object', properties: { number: { type: 'integer' }, title: { type: 'string' }, head: { type: 'string' }, state: { type: 'string' }, attempts: { type: 'integer' } } } }
+const PRLIST = { type: 'array', items: { type: 'object', properties: { number: { type: 'integer' }, title: { type: 'string' }, head: { type: 'string' }, state: { type: 'string' }, attempts: { type: 'integer' }, ignore_failures: { type: 'array', items: { type: 'string' } } } } }
+const SHARED = { type: 'array', items: { type: 'object', properties: {
+  key: { type: 'string' }, kind: { type: 'string' }, prs: { type: 'array', items: { type: 'integer' } },
+  autofix_prs: { type: 'array', items: { type: 'integer' } }, untouched_prs: { type: 'array', items: { type: 'integer' } },
+  on_main: { type: 'boolean' } }, required: ['key', 'prs', 'on_main'] } }
 const PRS = {
   type: 'object',
-  properties: { needs_repair: PRLIST, pending: PRLIST, green: PRLIST, needs_human: PRLIST },
-  required: ['needs_repair', 'pending', 'green', 'needs_human'],
+  properties: { needs_repair: PRLIST, blocked_shared: PRLIST, pending: PRLIST, green: PRLIST, needs_human: PRLIST,
+    shared_failures: SHARED, ci_notes: { type: 'array', items: { type: 'string' } } },
+  required: ['needs_repair', 'blocked_shared', 'pending', 'green', 'needs_human', 'shared_failures'],
 }
+const STRANDS = { type: 'object', properties: { strands: { type: 'array', items: { type: 'object', properties: {
+  key: { type: 'string' }, strand: { type: 'string' }, action: { type: 'string', enum: ['created', 'commented', 'failed'] } },
+  required: ['key', 'action'] } } }, required: ['strands'] }
 const REPAIR = {
   type: 'object',
   properties: {
@@ -80,7 +88,9 @@ const REPAIR = {
 }
 
 // ---------- steps ----------
-const report = { gateVersion: GATE_VERSION, dryRun: DRY, housekeeping: [], repairs: [], gates: [], fixes: [], skipped: [], notes: [] }
+const report = { gateVersion: GATE_VERSION, dryRun: DRY, sharedFailures: [], housekeeping: [], repairs: [], gates: [], fixes: [], skipped: [], notes: [] }
+// Latest shared-failure analysis, keyed by failure key (later passes overwrite earlier ones).
+const shared = new Map()
 let hkCount = 0
 
 async function housekeeping(reportOthers) {
@@ -98,10 +108,29 @@ It can take several minutes when it runs cargo clean (use a long timeout). If it
 }
 
 async function prStatus(label) {
-  return agent(`${COMMON}
-Run exactly this and return its JSON output as structured data, unchanged:
-  cd ${ROOT} && python3 -I ${SCRIPTS}/pr_status.py --max-attempts ${MAX_ATTEMPTS}`,
+  const st = await agent(`${COMMON}
+Run exactly this and return its JSON output as structured data, unchanged (it reads CI logs when a PR is red, so allow several minutes):
+  cd ${ROOT} && python3 -I -B ${SCRIPTS}/pr_status.py --max-attempts ${MAX_ATTEMPTS} --shared`,
     { label, phase: 'Repair', schema: PRS, effort: 'low' })
+  for (const f of (st && st.shared_failures) || []) shared.set(f.key, f)
+  if (st && st.blocked_shared.length) log(`blocked by shared failures (not repaired): ${st.blocked_shared.map(p => '#' + p.number).join(', ')}`)
+  return st
+}
+
+// One braid strand per shared failure: comment on an existing one, else create it.
+async function fileSharedStrands() {
+  if (!shared.size) return
+  const list = [...shared.values()].map(f => `- \`${f.key}\`: PRs ${f.prs.map(n => '#' + n).join(', ') || '(none)'}${f.on_main ? '; also fails on main' : ''}`).join('\n')
+  const r = await agent(`${COMMON}
+These CI failures were found on several unrelated PRs and/or on main tonight (${A.date || 'date unknown'}), so they are most likely a broken or flaky test, not the PRs' fault:
+${list}
+For each one: search braid for a non-closed strand about that test. Search for the last path segment of the test name (e.g. \`braid search marimo_place_of_record\`); for job/step keys, search the step name. Also check \`gh issue list --repo quarto-dev/q2 --search "<test name>"\` and mention any matching GitHub issue.
+- If a strand exists: \`braid comment <id> "Shared CI failure on <date>: PRs ..., main: yes/no"\`.
+- Otherwise: \`braid create "CI: shared failure in <short test name>" -t bug -p 1 -l testing -d "<key>. Failed on PRs ... (unrelated changes)<, and on main>. Found by the nightly autofix sweep; see the sweep report for <date>."\`
+Do not try to fix the tests.`,
+    { label: 'shared-failure strands', phase: 'Repair', schema: STRANDS, effort: 'low' })
+  const ids = new Map(((r && r.strands) || []).map(x => [x.key, x]))
+  report.sharedFailures = [...shared.values()].map(f => ({ ...f, strand: ids.get(f.key)?.strand, strand_action: ids.get(f.key)?.action || 'failed' }))
 }
 
 // One attempt per PR that needs it. Returns false if housekeeping says stop.
@@ -114,7 +143,8 @@ async function repairPass(tag) {
     if (hk.abort) return false
     const r = await agent(`${COMMON}
 Mode: **repair**. Read ${SKILL} and follow its "Repair mode" section for PR #${pr.number} ("${pr.title}", head branch ${pr.head}, current state: ${pr.state}). Previous repair attempts: ${pr.attempts}, so this is attempt ${pr.attempts + 1} of ${MAX_ATTEMPTS}.
-Work only in ${WT} (housekeeping just reset it to a detached origin/main). Make exactly one attempt, then return. Do not wait for CI.`,
+Work only in ${WT} (housekeeping just reset it to a detached origin/main). Make exactly one attempt, then return. Do not wait for CI.${pr.ignore_failures && pr.ignore_failures.length ? `
+These failures also break other, unrelated PRs and/or main, so they are not this PR's fault. Leave them alone (no fix, no rerun) and fix only the rest: ${pr.ignore_failures.map(k => '`' + k + '`').join(', ')}` : ''}`,
       { label: `repair #${pr.number}`, phase: 'Repair', schema: REPAIR })
     report.repairs.push({ pr: pr.number, title: pr.title, attempt: pr.attempts + 1, ...(r || { outcome: 'needs_human', summary: 'repair agent died' }) })
   }
@@ -194,4 +224,5 @@ Return status=stopped (with the reason) if you hit a §5 failure you caused and 
 phase('Repair')
 if (alive) await repairPass('end')
 report.finalPrs = await prStatus('pr status (final)')
+await fileSharedStrands()
 return report

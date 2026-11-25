@@ -3,8 +3,10 @@
 
 Prints one JSON object:
 
-    {"needs_repair": [{"number", "title", "url", "head", "state", "attempts"}],
-     "pending": [...], "green": [...], "needs_human": [...]}
+    {"needs_repair": [{"number", "title", "url", "head", "state", "attempts",
+                       "ignore_failures"}],
+     "blocked_shared": [...], "pending": [...], "green": [...], "needs_human": [...],
+     "shared_failures": [...], "ci_notes": [...]}
 
 `state` is one of: pending, green, red, conflicting. A PR needs repair
 when it is red or conflicting, has fewer than MAX_ATTEMPTS repair markers,
@@ -13,14 +15,25 @@ comment per attempt on the PR:
 
     <!-- q2-autofix repair n=<K> -->
 
-Usage: pr_status.py [--max-attempts 3]
+With --shared, CI failures are also compared across PRs and `main`
+(ci_failures.py). `shared_failures` lists the suspect failures. A red PR
+whose failures are *all* shared goes to `blocked_shared` instead: repairing
+it can't help, and it doesn't use up an attempt. A red PR with some shared
+failures gets them in `ignore_failures`, so the repair agent leaves them
+alone.
+
+Usage: pr_status.py [--max-attempts 3] [--shared]
 """
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ci_failures  # noqa: E402
 
 REPO = "quarto-dev/q2"
 REPAIR_RE = re.compile(r"<!--\s*q2-autofix repair n=(\d+)")
@@ -57,13 +70,23 @@ def check_state(rollup):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-attempts", type=int, default=3)
+    ap.add_argument("--shared", action="store_true",
+                    help="detect failures shared across PRs and main (slower: reads CI logs)")
     args = ap.parse_args()
 
     prs = json.loads(run([
         "gh", "pr", "list", "--repo", REPO, "--state", "open", "--label", "autofix",
         "--limit", "100", "--json",
         "number,title,url,headRefName,labels,mergeable,statusCheckRollup,comments"]))
-    out = {"needs_repair": [], "pending": [], "green": [], "needs_human": []}
+    out = {"needs_repair": [], "blocked_shared": [], "pending": [], "green": [],
+           "needs_human": [], "shared_failures": [], "ci_notes": []}
+    shared = {}
+    if args.shared and any(check_state(p["statusCheckRollup"]) == "red" for p in prs):
+        root = run(["git", "rev-parse", "--show-toplevel"]).strip()
+        analysis = ci_failures.collect(root)
+        out["shared_failures"] = analysis["suspects"]
+        out["ci_notes"] = analysis["notes"]
+        shared = analysis["prs"]
     for pr in prs:
         labels = {l["name"] for l in pr["labels"]}
         attempts = max([int(m) for c in pr["comments"]
@@ -78,7 +101,12 @@ def main():
         if "autofix:needs-human" in labels:
             out["needs_human"].append(entry)
         elif state in ("red", "conflicting"):
-            if attempts >= args.max_attempts:
+            ci = shared.get(str(pr["number"]), {})
+            if ci.get("shared"):
+                entry["ignore_failures"] = ci["shared"]
+            if state == "red" and ci.get("shared") and not ci.get("own"):
+                out["blocked_shared"].append(entry)
+            elif attempts >= args.max_attempts:
                 out["needs_human"].append({**entry, "note": "attempt cap reached"})
             else:
                 out["needs_repair"].append(entry)
