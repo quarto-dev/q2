@@ -101,10 +101,11 @@ pub fn incremental_write(
     // Step 2: Assemble the result string
     let mut result = assemble(qmd, original_ast, new_ast, &coarsened)?;
 
-    // If we padded the input, strip the trailing '\n' from the result so that
-    // the output preserves the original document's trailing-newline convention.
-    if did_pad && result.ends_with('\n') {
-        result.pop();
+    // If we padded the input, strip the trailing newline from the result so
+    // that the output preserves the original document's trailing-newline
+    // convention. A rewritten last block in a CRLF document ends with `\r\n`.
+    if did_pad {
+        strip_trailing_newline(&mut result);
     }
 
     Ok(result)
@@ -134,9 +135,7 @@ pub fn compute_incremental_edits(
             if edit.range.end > original_qmd.len() {
                 edit.range.end = original_qmd.len();
             }
-            if edit.replacement.ends_with('\n') {
-                edit.replacement.pop();
-            }
+            strip_trailing_newline(&mut edit.replacement);
         }
     }
 
@@ -309,6 +308,9 @@ fn assemble(
     coarsened: &[CoarsenedEntry],
 ) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
     let target_file_id = derive_target_file_id(&original_ast.blocks);
+    // Text the standard writer generates uses `\n`; in a CRLF document,
+    // rewritten blocks and synthesized separators must use `\r\n` (GH #966).
+    let crlf = original_qmd.contains("\r\n");
     let mut result = String::new();
 
     // 2a. Metadata prefix
@@ -332,6 +334,7 @@ fn assemble(
                 entry,
                 prev_block_text.as_deref(),
                 target_file_id,
+                crlf,
             );
             result.push_str(separator);
         }
@@ -342,7 +345,8 @@ fn assemble(
                 original_qmd[byte_range.clone()].to_string()
             }
             CoarsenedEntry::Rewrite { new_idx } => {
-                write_block_to_string(&new_ast.blocks[*new_idx])?
+                let text = write_block_to_string(&new_ast.blocks[*new_idx])?;
+                if crlf { lf_to_crlf(&text) } else { text }
             }
             CoarsenedEntry::InlineSplice { block_text, .. } => block_text.clone(),
         };
@@ -427,7 +431,8 @@ fn find_metadata_trailing_gap(original_qmd: &str, first_block_start: usize) -> &
 ///
 /// For consecutive Verbatim blocks from consecutive original positions, use the
 /// original gap verbatim (preserves exact whitespace for idempotence).
-/// Otherwise, use "\n" unless the previous block already ends with "\n\n".
+/// Otherwise, use "\n" unless the previous block already ends with "\n\n"
+/// (or "\r\n" and "\r\n\r\n" when `crlf` is set).
 fn compute_separator<'a>(
     original_qmd: &'a str,
     original_ast: &Pandoc,
@@ -435,6 +440,7 @@ fn compute_separator<'a>(
     curr_entry: &CoarsenedEntry,
     prev_block_text: Option<&str>,
     target_file_id: FileId,
+    crlf: bool,
 ) -> &'a str {
     // Try to use original gap for consecutive blocks that preserve original positions
     let prev_orig_idx = match prev_entry {
@@ -467,12 +473,12 @@ fn compute_separator<'a>(
 
     // Standard separator — but check if previous block already ends with \n\n
     if let Some(text) = prev_block_text
-        && text.ends_with("\n\n")
+        && (text.ends_with("\n\n") || text.ends_with("\r\n\r\n"))
     {
         return "";
     }
 
-    "\n"
+    if crlf { "\r\n" } else { "\n" }
 }
 
 // =============================================================================
@@ -529,6 +535,29 @@ fn ensure_trailing_newline<'a>(
         *storage = Some(padded);
         (storage.as_ref().unwrap().as_str(), true)
     }
+}
+
+/// Remove one trailing `\r\n` or `\n` from `s`, if present.
+fn strip_trailing_newline(s: &mut String) {
+    if s.ends_with("\r\n") {
+        s.truncate(s.len() - 2);
+    } else if s.ends_with('\n') {
+        s.pop();
+    }
+}
+
+/// Convert every bare `\n` in `text` to `\r\n`, leaving existing `\r\n` alone.
+fn lf_to_crlf(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + text.len() / 16);
+    let mut prev = '\0';
+    for c in text.chars() {
+        if c == '\n' && prev != '\r' {
+            out.push('\r');
+        }
+        out.push(c);
+        prev = c;
+    }
+    out
 }
 
 /// Extract the byte range (start..end) from a Block's source_info.
