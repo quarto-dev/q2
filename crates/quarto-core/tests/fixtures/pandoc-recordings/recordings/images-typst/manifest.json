@@ -11,8 +11,8 @@
   },
   {
     "path": "env.json",
-    "size": 18072,
-    "sha256": "a448cccd36527b5202ff18470f0df4d42dcf5ae4387a6664fba6afb3c29fc6b6"
+    "size": 18336,
+    "sha256": "ce3bf190dbafaa34278be8090e8381b3a59349ace21780ce7958895c3e0e3058"
   },
   {
     "path": "fs/__q2_doc__/images.qmd",
@@ -32,7 +32,7 @@
   {
     "path": "fs/__q2_tmp__/pandoc-input.json",
     "size": 24287,
-    "sha256": "fe5043f2675cf92631243995cc068f021de5e566e891009683e959407e67057a"
+    "sha256": "209a2e0c66707134d01cb97f147a6310795acb536413b542298d8c143b28e35c"
   },
   {
     "path": "fs/__q2_tmp__/pandoc-typst-template/biblio.typ",

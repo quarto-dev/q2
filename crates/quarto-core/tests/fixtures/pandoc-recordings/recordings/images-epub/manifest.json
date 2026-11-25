@@ -6,13 +6,13 @@
   },
   {
     "path": "capture/images.epub",
-    "size": 25430,
-    "sha256": "31dbbc6b43a4547112d1e79ccb43260dedf052d717386daacfd6669251b38691"
+    "size": 25427,
+    "sha256": "a2bf018da21a0a966b13b5e5019a77aab8ca6d821f8169ae382cbe646b60c62a"
   },
   {
     "path": "env.json",
-    "size": 9016,
-    "sha256": "ae1c8c0f55a875e66b3935156cea867916eca995fa795e9544137656c50f68d5"
+    "size": 9356,
+    "sha256": "01f5588358be64c51a19841307d9906d8be36957fe125cd4d2ea0182e44ed5fc"
   },
   {
     "path": "fs/__q2_doc__/images.qmd",
@@ -42,7 +42,7 @@
   {
     "path": "fs/__q2_tmp__/pandoc-input.json",
     "size": 24286,
-    "sha256": "51ac2a8f038c351dc4bbfe763ef2606aec9a89a3f40308194757bf36601a5d35"
+    "sha256": "c5814effc746aff731360cb4f4d777e7ada90267bed5a7bc1dcf488128f0629e"
   },
   {
     "path": "meta.json",
@@ -51,7 +51,7 @@
   },
   {
     "path": "reference/images.epub",
-    "size": 25429,
-    "sha256": "5702f24df6524b9ea1ffe6fbb1c540201d32add2f90db32b66fa6c62009bb872"
+    "size": 25428,
+    "sha256": "f43fcbd406f17a1ac79053418d93925a93c84597b0f050f75973b0303d7e74b7"
   }
 ]

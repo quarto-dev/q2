@@ -887,6 +887,13 @@ impl PandocWriteStage {
         let language = LanguageTerms::from_meta(&doc.ast.meta)
             .unwrap_or_else(|| crate::language::resolve_language("en", &[]));
 
+        // GH #1315: pandoc's docx writer titles its TOC from `toc-title`
+        // metadata, else its own English default. Q1's `pandoc.ts` fills
+        // a missing `toc-title` from the localized `toc-title-document`.
+        if ctx.format.identifier == FormatIdentifier::Docx {
+            insert_default_toc_title(&mut doc.ast.meta, &language);
+        }
+
         // T9.5: the serialized JSON lives inside the per-render temp root,
         // not beside the output file or the process cwd. The share tree
         // sits at `<temp_root>/pandoc-share`; the callout icon paths in
@@ -1878,6 +1885,25 @@ fn insert_typst_section_numbering(meta: &mut quarto_pandoc_types::ConfigValue) {
     }
 }
 
+/// Set `toc-title` to the localized `toc-title-document` term when `toc`
+/// is on and the author gave no `toc-title` (Q1 `pandoc.ts`).
+fn insert_default_toc_title(meta: &mut quarto_pandoc_types::ConfigValue, language: &LanguageTerms) {
+    if meta.get("toc").and_then(|v| v.as_bool()) != Some(true) || meta.get("toc-title").is_some() {
+        return;
+    }
+    if let Some(title) = language.get("toc-title-document") {
+        meta.insert_path(
+            &["toc-title"],
+            quarto_pandoc_types::ConfigValue::new_string(
+                title,
+                quarto_source_map::SourceInfo::generated(
+                    quarto_source_map::By::programmatic_config(),
+                ),
+            ),
+        );
+    }
+}
+
 /// Q1's `shortcodeUnescapePostprocessor` (`format-markdown.ts:21-22`):
 /// replace pandoc's writer-escaped shortcode delimiters `{{\<` / `\>}}`
 /// with the literal `{{<` / `>}}` the source's escaped shortcode
@@ -2152,6 +2178,53 @@ mod tests {
                 meta.get("section-numbering").is_none(),
                 "expected no section-numbering key for number-sections={value:?}"
             );
+        }
+    }
+
+    fn meta_with_toc(toc: Option<bool>, toc_title: Option<&str>) -> ConfigValue {
+        let mut meta = ConfigValue::new_map(vec![], SourceInfo::for_test());
+        if let Some(v) = toc {
+            meta.insert_path(&["toc"], ConfigValue::new_bool(v, SourceInfo::for_test()));
+        }
+        if let Some(t) = toc_title {
+            meta.insert_path(
+                &["toc-title"],
+                ConfigValue::new_string(t, SourceInfo::for_test()),
+            );
+        }
+        meta
+    }
+
+    /// GH #1315: with `toc: true` and no `toc-title`, the docx TOC title
+    /// comes from the document language.
+    ///
+    /// Revert hunk: emptying `insert_default_toc_title`'s body makes this
+    /// RED (key stays absent).
+    #[test]
+    fn test_default_toc_title_is_localized() {
+        let language = crate::language::resolve_language("nl", &[]);
+        let mut meta = meta_with_toc(Some(true), None);
+        insert_default_toc_title(&mut meta, &language);
+        assert_eq!(
+            meta.get("toc-title").and_then(|v| v.as_plain_text()),
+            Some("Inhoudsopgave".to_string())
+        );
+    }
+
+    /// An author's `toc-title` wins, and no title is added without `toc`.
+    #[test]
+    fn test_default_toc_title_respects_author_and_toc_off() {
+        let language = crate::language::resolve_language("nl", &[]);
+        let mut meta = meta_with_toc(Some(true), Some("Mine"));
+        insert_default_toc_title(&mut meta, &language);
+        assert_eq!(
+            meta.get("toc-title").and_then(|v| v.as_plain_text()),
+            Some("Mine".to_string())
+        );
+        for toc in [Some(false), None] {
+            let mut meta = meta_with_toc(toc, None);
+            insert_default_toc_title(&mut meta, &language);
+            assert!(meta.get("toc-title").is_none(), "toc={toc:?}");
         }
     }
 

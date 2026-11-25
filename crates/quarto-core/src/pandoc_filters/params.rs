@@ -288,12 +288,28 @@ fn insert_project_keys(blob: &mut Map<String, Value>, project: &ProjectContext) 
 /// unconditionally at construction time). Q2 already vendors the full
 /// upstream locale set (`resources/language/_language*.yml`), so
 /// [`LanguageTerms`] needs no new data; see Findings for Gordon, item 1.
+///
+/// Also emits Q1's `languageFilterParams` (`filters.ts`) at the top level:
+/// `code-summary`, `toc-title-document` and every `callout-*` term. The
+/// vendored filters read those as plain `param(key)` calls, not through
+/// `language` (`modules/callouts.lua`'s `param("callout-<type>-title")`,
+/// `foldcode.lua`'s `param("code-summary")`, `crossref/meta.lua`'s
+/// `param("toc-title-document")`), so without them a docx callout title
+/// falls back to the English default whatever `lang` says (GH #1315).
 fn insert_language(blob: &mut Map<String, Value>, language: &LanguageTerms) {
     let mut obj = Map::new();
     for (key, entry) in language.iter() {
         obj.insert(key.to_string(), json!(entry.value));
+        if is_top_level_language_param(key) {
+            blob.insert(key.to_string(), json!(entry.value));
+        }
     }
     blob.insert("language".to_string(), Value::Object(obj));
+}
+
+/// The language terms Q1's `languageFilterParams` copies to the top level.
+fn is_top_level_language_param(key: &str) -> bool {
+    key == "code-summary" || key == "toc-title-document" || key.starts_with("callout-")
 }
 
 /// `number-sections`, `number-offset`, `number-depth` — required for API
@@ -578,6 +594,28 @@ mod tests {
         );
         assert!(lang_obj.contains_key("source-notebooks-prefix"));
         assert!(lang_obj.contains_key("title-block-author-single"));
+    }
+
+    /// GH #1315: the callout titles, `code-summary` and
+    /// `toc-title-document` are also top-level params, localized, because
+    /// the vendored filters read them with `param(key)`.
+    ///
+    /// Revert hunk: dropping the top-level insert in `insert_language`
+    /// makes this RED (keys absent).
+    #[test]
+    fn test_language_filter_params_are_top_level() {
+        let format = Format::docx();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = resolve_language("nl", &[]);
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+
+        assert_eq!(blob["callout-note-title"], json!("Opmerking"));
+        assert_eq!(blob["callout-warning-title"], json!("Waarschuwing"));
+        assert_eq!(blob["toc-title-document"], json!("Inhoudsopgave"));
+        assert_eq!(blob["code-summary"], json!("Code"));
+        // Only Q1's set is copied, not the whole bag.
+        assert!(blob.get("toc-title-website").is_none());
     }
 
     /// T4.8: keys deferred to P7 or later are not stubbed out early.

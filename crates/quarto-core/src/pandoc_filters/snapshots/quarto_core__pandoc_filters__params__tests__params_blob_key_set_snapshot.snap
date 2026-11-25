@@ -4,6 +4,12 @@ expression: keys
 ---
 [
     "active-filters",
+    "callout-caution-title",
+    "callout-important-title",
+    "callout-note-title",
+    "callout-tip-title",
+    "callout-warning-title",
+    "code-summary",
     "crossref-apx-prefix",
     "crossref-apx-title",
     "crossref-cau-prefix",
@@ -64,4 +70,5 @@ expression: keys
     "quarto-environment",
     "quarto-filters",
     "results-file",
+    "toc-title-document",
 ]
