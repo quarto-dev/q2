@@ -38,7 +38,7 @@ failure) and `GATE_VERSION` in the workflow script, together.
    issues. `issues=` restricts the run to those numbers (useful for
    trials). `gate-limit=` caps how many candidates are gated.
    Disk thresholds can be overridden with `soft-floor-gb=`,
-   `hard-floor-gb=`, and `max-target-gb=` (defaults 150 / 50 / 60).
+   `hard-floor-gb=`, and `max-target-gb=` (defaults 150 / 50 / 120).
 2. **Keep the machine awake.** Start `caffeinate -i -t 43200` with
    `run_in_background`. Tell the user the laptop must be on AC power with
    the lid open (or in clamshell mode with a display), since `caffeinate`

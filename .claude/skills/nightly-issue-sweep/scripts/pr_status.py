@@ -46,11 +46,12 @@ def check_state(rollup):
             states.append("fail")
         else:
             states.append("ok")  # SUCCESS, NEUTRAL, SKIPPED
-    if "fail" in states:
-        return "red"     # act on a failure without waiting for the rest
+    # Wait for every check to finish before calling a PR red: repair needs
+    # `gh run rerun --failed` and `--log-failed`, which only work on a
+    # finished run, and a merge-and-push mid-run wastes an attempt.
     if "run" in states:
         return "pending"
-    return "green"
+    return "red" if "fail" in states else "green"
 
 
 def main():

@@ -12,16 +12,17 @@
 #   3. Detach at a freshly fetched origin/main, so every task starts clean.
 #   4. Delete local braid/* branches whose autofix PR has merged.
 #   5. `cargo clean` in the autofix worktree when free space < --soft-floor-gb
-#      or its target/ > --max-target-gb.
+#      or its target/ > --max-target-gb. (A full workspace test build alone is
+#      ~60 GB, so a lower cap cleans between every fix.)
 #   6. abort=true when free space is still < --hard-floor-gb.
 #   With --report-others, also lists target/ sizes of the main checkout and
 #   other worktrees (slow: du over 100+ GB). It never cleans those.
 #
 # Usage: housekeeping.sh [--soft-floor-gb 150] [--hard-floor-gb 50]
-#                        [--max-target-gb 60] [--report-others]
+#                        [--max-target-gb 120] [--report-others]
 set -euo pipefail
 
-SOFT=150 HARD=50 MAXT=60 OTHERS=0
+SOFT=150 HARD=50 MAXT=120 OTHERS=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --soft-floor-gb) SOFT=$2; shift 2 ;;
