@@ -793,6 +793,19 @@ mod tests {
         l
     }
 
+    /// A listing that sets `categories: true`, which (as in Q1) adds
+    /// `categories` to the defaulted default/grid field set.
+    fn make_listing_with_categories(kind: ListingType) -> Listing {
+        let mut l = Listing {
+            id: "main-listing".to_string(),
+            kind,
+            categories: crate::project::listing::config::ListingCategoriesMode::Default,
+            ..Listing::default()
+        };
+        apply_type_defaults(&mut l);
+        l
+    }
+
     /// Run the transform with a host page rooted at a caller-supplied
     /// project directory. Used by custom-template tests that need to
     /// place a real `<host-dir>/<template>.template` file on disk.
@@ -2047,10 +2060,12 @@ mod tests {
     }
 
     /// bd-p80b9jy9: without `fields:`, the defaulted field set keeps
-    /// every block, including the image and the placeholder for an
-    /// image-less item (Q1 parity).
+    /// every block it names, including the image and the placeholder
+    /// for an image-less item (Q1 parity). GH #1031: that set is Q1's,
+    /// so categories and reading time stay out, and so does the grid
+    /// subtitle (`kDefaultGridFields` has none).
     #[tokio::test]
-    async fn grid_and_default_render_every_field_by_default() {
+    async fn grid_and_default_render_q1_default_fields() {
         for kind in [ListingType::Grid, ListingType::Default] {
             let listing = make_listing(kind);
             let items = vec![
@@ -2064,10 +2079,7 @@ mod tests {
             for present in [
                 "IMG-a",
                 "listing-item-img-placeholder",
-                "SUB-a",
                 "AUTH-a",
-                "CAT-a",
-                "listing-reading-time",
                 "listing-title",
                 "listing-date",
                 "listing-description",
@@ -2077,6 +2089,19 @@ mod tests {
                     "{kind:?}: `{present}` missing:\n{rendered}"
                 );
             }
+            // Quoted: the metadata attrs still carry
+            // `data-listing-reading-time-sort`.
+            for absent in ["CAT-a", "\"listing-reading-time\""] {
+                assert!(
+                    !rendered.contains(absent),
+                    "{kind:?}: `{absent}` rendered by default:\n{rendered}"
+                );
+            }
+            assert_eq!(
+                rendered.contains("SUB-a"),
+                kind == ListingType::Default,
+                "{kind:?}: subtitle\n{rendered}"
+            );
         }
     }
 
@@ -2089,9 +2114,9 @@ mod tests {
     // L5 plan §"Tests" #26
     #[tokio::test]
     async fn item_default_renders_category_chips_when_categories_field_enabled() {
-        let listing = make_listing(ListingType::Default);
-        // `categories` is in the default `Default`-type fields list,
-        // so `show.categories` is truthy by default.
+        // `categories: true` adds `categories` to the defaulted
+        // fields, so `show.categories` is truthy.
+        let listing = make_listing_with_categories(ListingType::Default);
         assert!(listing.fields.iter().any(|f| f == "categories"));
         let items = vec![item_with_categories("a", &["rust", "design"])];
         let resolved = vec![ResolvedListing { listing, items }];
@@ -2110,7 +2135,7 @@ mod tests {
     // L5 plan §"Tests" #27
     #[tokio::test]
     async fn item_default_omits_category_chips_when_field_disabled() {
-        let mut listing = make_listing(ListingType::Default);
+        let mut listing = make_listing_with_categories(ListingType::Default);
         listing.fields.retain(|f| f != "categories");
         assert!(!listing.fields.iter().any(|f| f == "categories"));
         let items = vec![item_with_categories("a", &["rust", "design"])];
@@ -2127,7 +2152,7 @@ mod tests {
     // L5 plan §"Tests" #28
     #[tokio::test]
     async fn item_grid_renders_category_chips() {
-        let listing = make_listing(ListingType::Grid);
+        let listing = make_listing_with_categories(ListingType::Grid);
         assert!(listing.fields.iter().any(|f| f == "categories"));
         let items = vec![item_with_categories("a", &["rust", "design"])];
         let resolved = vec![ResolvedListing { listing, items }];

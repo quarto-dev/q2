@@ -369,13 +369,15 @@ fn record_path_in_front_matter_resolves_against_host_dir_not_project_root() {
 /// A `type: grid` listing of a link-only record (no `path:`): title,
 /// subtitle, thumbnail and description must all render unlinked —
 /// their card classes intact, no anchor wrapping any of them.
+/// `fields:` names the subtitle, which Q1's grid default set leaves
+/// out.
 #[test]
 fn grid_type_renders_unlinked_subtitle_thumbnail_and_description() {
     let (_dir, outputs) = render_project(|p| {
         write(&p.join("_quarto.yml"), PROJECT);
         write(
             &p.join("index.qmd"),
-            "---\ntitle: Home\nlisting:\n  id: cards\n  type: grid\n  contents:\n    - title: \"Card Title\"\n      subtitle: \"Card Subtitle\"\n      description: \"Card description text\"\n      image: \"https://example.com/thumb.png\"\n---\n",
+            "---\ntitle: Home\nlisting:\n  id: cards\n  type: grid\n  fields: [title, subtitle, image, description]\n  contents:\n    - title: \"Card Title\"\n      subtitle: \"Card Subtitle\"\n      description: \"Card description text\"\n      image: \"https://example.com/thumb.png\"\n---\n",
         );
     });
     let host = html_for(&outputs, "index.html");
