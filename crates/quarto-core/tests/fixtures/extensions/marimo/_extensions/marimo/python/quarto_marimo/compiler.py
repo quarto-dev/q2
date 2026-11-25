@@ -589,6 +589,29 @@ def render_stub(
         raise
 
 
+def drop_error_tracebacks(stubs: list[Any]) -> None:
+    """Strip formatted tracebacks from exception outputs.
+
+    marimo 0.26 attaches a highlighted traceback to exception outputs whenever
+    the kernel runs in edit mode, which publishing builds do. The traceback
+    names the per-process temp file (``marimo_<pid>/__marimo__cell_*.py``) and
+    the build machine's site-packages paths, so it would make published output
+    differ on every run and leak local paths. The message and exception type
+    stay, matching the output of marimo releases before 0.26.
+    """
+    for stub in stubs:
+        # ``stub.output`` caches the session's output on the stub, so every
+        # later render of this stub sees the edited errors.
+        output = stub.output
+        if output is None or str(output.mimetype) not in ERROR_MIMETYPES:
+            continue
+        if not isinstance(output.data, list):
+            continue
+        for error in output.data:
+            if getattr(error, "traceback", None) is not None:
+                error.traceback = None
+
+
 def has_error_output(stub: Any) -> bool:
     output = stub.output
     return output is not None and str(output.mimetype) in ERROR_MIMETYPES
@@ -679,6 +702,7 @@ async def compile_page(
 
     if stubs:
         await build_generator(generator)
+        drop_error_tracebacks(stubs)
 
     for plan, stub in zip(
         request.setup_cells,
