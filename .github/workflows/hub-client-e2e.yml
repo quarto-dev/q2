@@ -144,12 +144,6 @@ jobs:
           node-version: '24'
           cache: 'npm'
 
-      # npm runs package scripts under cmd.exe on Windows, which rejects the
-      # `VAR=value cmd` form several scripts use. Run them under Git Bash.
-      - name: Use bash for npm scripts (Windows)
-        if: runner.os == 'Windows'
-        run: echo 'npm_config_script_shell=C:\Program Files\Git\bin\bash.exe' >> "$GITHUB_ENV"
-
       - name: Install npm dependencies
         run: npm ci
 
@@ -203,6 +197,9 @@ jobs:
           # (playwright.config.ts webServer.env.VITE_HUB_SERVER). Mirrors
           # the test:e2e script in hub-client/package.json.
           VITE_DEFAULT_SYNC_SERVER: '/ws'
+          # This step runs under Git Bash on Windows, which rewrites a
+          # leading-`/` env value into a Windows path for child processes.
+          MSYS2_ENV_CONV_EXCL: VITE_DEFAULT_SYNC_SERVER
           # Point the sandboxed-preview iframe at the freshly built
           # same-origin copy in public/ (built by build:sandboxed below)
           # instead of the GitHub Pages deployment — PR CI must test this
