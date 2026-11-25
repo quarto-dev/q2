@@ -10,6 +10,12 @@ name: q2-preview-spa E2E (browser trial)
 
 on:
   workflow_dispatch:
+    inputs:
+      runners:
+        description: 'JSON array of runner labels. Add "windows-latest" to run on Windows; push, PR and scheduled runs use the default.'
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
   pull_request:
     paths:
       - '.github/workflows/q2-preview-spa-e2e.yml'
@@ -41,21 +47,23 @@ concurrency:
 
 jobs:
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    # Windows runs bash too, so the run: blocks below stay POSIX. Other runners
+    # keep GitHub's default shell (`bash -e {0}`) unchanged.
+    defaults:
+      run:
+        shell: ${{ contains(matrix.os, 'windows') && 'bash' || 'bash -e {0}' }}
     name: q2-preview-spa E2E
     if: github.repository == 'quarto-dev/q2'
     timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
-        # `project` is the Playwright project; `embed` is Chromium driving `q2 preview --ui editor`.
-        include:
-          - project: chromium
-            browser: chromium
-          - project: firefox
-            browser: firefox
-          - project: embed
-            browser: chromium
+        os: ${{ fromJSON(inputs.runners || '["ubuntu-latest"]') }}
+        # `project` is the Playwright project; `embed` is Chromium driving
+        # `q2 preview --ui editor`. The browser to install is derived from it
+        # (not an `include` list, which would clash with the `os` axis).
+        project: [chromium, firefox, embed]
     continue-on-error: true
 
     steps:
@@ -84,18 +92,33 @@ jobs:
           VERSION=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/version = |"/, ""); print; exit}' Cargo.lock)
           cargo install -f wasm-bindgen-cli --version "$VERSION"
 
-      - name: Set up tree-sitter CLI
+      - name: Set up tree-sitter CLI (Linux)
+        if: runner.os == 'Linux'
         run: |
           curl -LO https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-linux-x86.gz
           gunzip tree-sitter-linux-x86.gz
           chmod +x tree-sitter-linux-x86
           sudo mv tree-sitter-linux-x86 /usr/local/bin/tree-sitter
 
+      - name: Set up tree-sitter CLI (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -fsSL -o ts.gz https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-windows-x64.gz
+          mkdir -p "$RUNNER_TEMP/tree-sitter"
+          gunzip -c ts.gz > "$RUNNER_TEMP/tree-sitter/tree-sitter.exe"
+          echo "$RUNNER_TEMP/tree-sitter" >> "$GITHUB_PATH"
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: npm
+
+      # npm runs package scripts under cmd.exe on Windows, which rejects the
+      # `VAR=value cmd` form several scripts use. Run them under Git Bash.
+      - name: Use bash for npm scripts (Windows)
+        if: runner.os == 'Windows'
+        run: echo 'npm_config_script_shell=C:\Program Files\Git\bin\bash.exe' >> "$GITHUB_ENV"
 
       - run: npm ci
 
@@ -129,19 +152,35 @@ jobs:
         run: cargo build --bin q2
 
       # The typst-pdf preview spec compiles with native typst and renders through native pandoc.
-      - name: Set up Pandoc
+      - name: Set up Pandoc (Linux)
+        if: runner.os == 'Linux'
         run: |
           curl -LO "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-amd64.deb"
           sudo dpkg -i "pandoc-${PANDOC_VERSION}-1-amd64.deb"
 
-      - name: Set up Typst
+      - name: Set up Pandoc (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -fsSL -o pandoc.zip "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-windows-x86_64.zip"
+          7z x pandoc.zip -o"$RUNNER_TEMP/pandoc" -y
+          echo "$RUNNER_TEMP/pandoc/pandoc-${PANDOC_VERSION}" >> "$GITHUB_PATH"
+
+      - name: Set up Typst (Linux)
+        if: runner.os == 'Linux'
         run: |
           curl -LO "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz"
           tar -xf "typst-x86_64-unknown-linux-musl.tar.xz"
           sudo mv "typst-x86_64-unknown-linux-musl/typst" /usr/local/bin/typst
 
+      - name: Set up Typst (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -fsSL -o typst.zip "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-pc-windows-msvc.zip"
+          7z x typst.zip -o"$RUNNER_TEMP/typst" -y
+          echo "$RUNNER_TEMP/typst/typst-x86_64-pc-windows-msvc" >> "$GITHUB_PATH"
+
       - name: Install Playwright
-        run: npx playwright install --with-deps ${{ matrix.browser }}
+        run: npx playwright install --with-deps ${{ matrix.project == 'firefox' && 'firefox' || 'chromium' }}
         working-directory: q2-preview-spa
 
       - name: Run E2E tests
@@ -152,7 +191,7 @@ jobs:
         uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
-          name: q2-preview-spa-results-${{ matrix.project }}
+          name: q2-preview-spa-results-${{ matrix.project }}-${{ matrix.os }}
           path: |
             q2-preview-spa/test-results/
             q2-preview-spa/playwright-report/
