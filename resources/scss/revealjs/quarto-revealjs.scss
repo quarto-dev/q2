@@ -589,6 +589,38 @@ section.has-dark-background {
   }
 }
 
+// --- figure alignment --------------------------------------------------------
+// Quarto 1 aligns a figure's content with
+// `.quarto-figure-<align> > figure > p, ... > figure > div { text-align }`.
+// The `> div` half is ported as is: a crossref float keeps its content in
+// that `<div>`. The `> p` half has nothing to match in q2, which writes a
+// captioned image as `figure > img` with no paragraph (bd-9fz5fweg), so the
+// image sat at the left. Setting `text-align` on the figure would also move
+// the caption, which Quarto 1 leaves alone. Lay such a figure out as a
+// column and align the image box itself; a flex item keeps its own margins,
+// where `display: block` on the image would collapse them into the figure.
+.reveal .quarto-figure-left > figure > div {
+  text-align: left;
+}
+.reveal .quarto-figure-center > figure > div {
+  text-align: center;
+}
+.reveal .quarto-figure-right > figure > div {
+  text-align: right;
+}
+
+.reveal .quarto-figure-center > figure:has(> img),
+.reveal .quarto-figure-right > figure:has(> img) {
+  display: flex;
+  flex-direction: column;
+}
+.reveal .quarto-figure-center > figure > img {
+  align-self: center;
+}
+.reveal .quarto-figure-right > figure > img {
+  align-self: flex-end;
+}
+
 // --- layout panels ----------------------------------------------------------
 // Rows and cells for `layout-ncol` / `layout-nrow` / `layout` Divs, as
 // `LayoutPanelTransform` writes them (`quarto-layout-panel` >
