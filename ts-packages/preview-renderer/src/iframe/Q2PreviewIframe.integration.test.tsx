@@ -246,9 +246,10 @@ describe('Q2PreviewIframe theme transport', () => {
         expect(revokeUrlSpy).not.toHaveBeenCalled();
     });
 
-    test('UPDATE_AST payload contains assetManifest derived from the AST', () => {
-        // Image AST. The walker mints a blob URL for each unique image
-        // and includes the user-written URL string in the manifest.
+    test('UPDATE_AST payload carries each image as a Blob, and the parent mints no URL', () => {
+        // Image AST. The walker reads each unique image's bytes and posts
+        // them as a Blob under the user-written URL string; the iframe
+        // mints the blob URL, for the same reason as the theme.
         const PNG_BYTES_B64 = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64');
         mockBinaryByPath.set('test/hero.png', PNG_BYTES_B64);
 
@@ -305,19 +306,18 @@ describe('Q2PreviewIframe theme transport', () => {
             astJson,
             currentFilePath: '/test/index.qmd',
         });
-        expect(astPosts[0].payload.assetManifest).toBeDefined();
-        expect(astPosts[0].payload.assetManifest['hero.png']).toMatch(/^blob:/);
+        const entry = astPosts[0].payload.assetManifest['hero.png'];
+        expect(entry.key).toMatch(/^asset-/);
+        expect(entry.blob).toBeInstanceOf(Blob);
+        expect(createUrlSpy).not.toHaveBeenCalled();
 
-        // Unmount revokes the asset blob URL.
-        const beforeRevokes = revokeUrlSpy.mock.calls.length;
         utils.unmount();
-        expect(revokeUrlSpy.mock.calls.length).toBeGreaterThan(beforeRevokes);
+        expect(revokeUrlSpy).not.toHaveBeenCalled();
     });
 
-    test('StrictMode remount does not leave the manifest pointing at revoked blob URLs', () => {
-        // StrictMode runs the cleanup effect (which revokes + clears the
-        // asset cache) and re-runs it, but keeps the useMemo result. The
-        // manifest must be rebuilt so every URL it ships is still live.
+    test('StrictMode remount still posts every image', () => {
+        // StrictMode runs effects twice but keeps the useMemo result; the
+        // manifest holds Blobs, not URLs a cleanup could have revoked.
         mockBinaryByPath.set('test/hero.png', Buffer.from([0x89, 0x50]).toString('base64'));
         const astJson = JSON.stringify({
             'pandoc-api-version': [1, 23, 0],
@@ -343,9 +343,9 @@ describe('Q2PreviewIframe theme transport', () => {
         });
 
         const posts = postMessage.mock.calls.map((c) => c[0]).filter((m) => m?.type === 'UPDATE_AST');
-        const url = posts[posts.length - 1].payload.assetManifest['hero.png'];
-        expect(url).toMatch(/^blob:/);
-        expect(revokeUrlSpy).not.toHaveBeenCalledWith(url);
+        const entry = posts[posts.length - 1].payload.assetManifest['hero.png'];
+        expect(entry.blob).toBeInstanceOf(Blob);
+        expect(createUrlSpy).not.toHaveBeenCalled();
         utils.unmount();
     });
 });
