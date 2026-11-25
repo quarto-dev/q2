@@ -8,7 +8,7 @@ import { expect } from '@playwright/test';
 import type { Step } from '../src/driver';
 import { Demo, PY_PAPER } from '../src/demo';
 import { EDITS } from '../src/journal-content';
-import { disk, diskFlat, shows, until } from './hub';
+import { disk, diskFlat, shows, showsNear, until } from './hub';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -102,7 +102,8 @@ export function hubCloneStory(d: Demo): Step[] {
       caption: "Both are on main again. Myra types a reply. Maurice pulls her commit while she types, and her words reach him live.",
       action: async () => {
         // Maurice takes a little while, then pulls in his own terminal; Myra is still typing.
-        const typing = d.typeUnder('host', 'Introduction', EDITS.myra);
+        // After the Introduction's last paragraph: she scrolls down to the end of it and continues from there.
+        const typing = d.typeAfterRow('host', EDITS.introEnd, EDITS.myra);
         await new Promise((r) => setTimeout(r, 4000));
         await d.type('git pull -q', 'guest');
         await typing;
@@ -110,8 +111,8 @@ export function hubCloneStory(d: Demo): Step[] {
       check: async () => {
         await until("Maurice's clone holds Myra's commit", () => cloneDisk(d, PY_PAPER).replace(/\s+/g, ' ').includes(EDITS.mauriceNeedle));
         await until("the hub wrote Myra's text", () => diskFlat(d, PY_PAPER).includes(EDITS.myraNeedle));
-        await shows(d, 'guest', EDITS.myraNeedle);
-        await shows(d, 'host', EDITS.myraNeedle);
+        await showsNear(d, 'guest', EDITS.introEnd, EDITS.myraNeedle);
+        await showsNear(d, 'host', EDITS.introEnd, EDITS.myraNeedle);
       },
     },
     {
@@ -122,10 +123,10 @@ export function hubCloneStory(d: Demo): Step[] {
       },
       check: async () => {
         await until("the hub wrote Maurice's reply", () => diskFlat(d, PY_PAPER).includes(EDITS.mauriceReplyNeedle));
-        await shows(d, 'host', EDITS.mauriceReplyNeedle);
-        await shows(d, 'guest', EDITS.mauriceReplyNeedle);
+        await showsNear(d, 'host', EDITS.introEnd, EDITS.mauriceReplyNeedle);
+        await showsNear(d, 'guest', EDITS.introEnd, EDITS.mauriceReplyNeedle);
         // Both directions in the one file: Myra's reply is still there beside it.
-        await shows(d, 'guest', EDITS.myraNeedle);
+        await showsNear(d, 'guest', EDITS.introEnd, EDITS.myraNeedle);
       },
     },
   ];

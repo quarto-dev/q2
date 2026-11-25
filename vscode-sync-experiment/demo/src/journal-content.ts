@@ -33,8 +33,9 @@ export const EDITS = {
   copyLead: 'Growth at the hyphal tip',
   copyNeedle: 'Growth at the hyphal tip remains poorly characterized',
   /**
-   * The last word of the last paragraph of the Introduction on `main`: the final replies of the vscode-share story are
-   * typed after it, so the text continues forward instead of landing above what is already written.
+   * The last word of the last paragraph of the Introduction on `main`, the same in every paper (they share one template).
+   * The final replies of every story are typed after it, so the text continues forward instead of landing above what is
+   * already written.
    */
   introEnd: 'humidity.',
   /** Maurice's reply to the copy edit in the vscode-share story, typed in the browser. */

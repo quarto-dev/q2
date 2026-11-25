@@ -8,16 +8,7 @@ import { expect } from '@playwright/test';
 import type { Step } from '../src/driver';
 import { Demo, R_PAPER, lastRowNeedle } from '../src/demo';
 import { EDITS } from '../src/journal-content';
-import { diskFlat, disk, shows, until } from './hub';
-
-/**
- * `shows`, after scrolling that editor to the row holding `anchor`: text lower in the paper is rendered only while in view.
- * Use an anchor that stays on the page, such as the end of the paragraph the edit joined.
- */
-async function showsNear(d: Demo, who: 'host' | 'guest', anchor: string, needle: string): Promise<void> {
-  await d.scrollToRow(who, anchor);
-  await shows(d, who, needle);
-}
+import { diskFlat, disk, shows, showsNear, until } from './hub';
 
 /** Myra saves in VS Code, over and over, until her file on disk holds every needle (VS Code writes only on save). */
 async function saveHostUntil(d: Demo, ...needles: string[]): Promise<void> {

@@ -19,6 +19,16 @@ export async function until(what: string, f: () => boolean | Promise<boolean>, t
   await expect.poll(async () => f(), { timeout, message: what }).toBe(true);
 }
 
+/**
+ * `shows`, after bringing the row holding `anchor` into view: text lower in a long paper is rendered only while in view, and
+ * the editor scrolls only if it has to (`Demo.scrollToRow`). Use an anchor that stays on the page, such as the end of the
+ * paragraph an edit joined.
+ */
+export async function showsNear(d: Demo, who: 'host' | 'guest', anchor: string, needle: string): Promise<void> {
+  await d.scrollToRow(who, anchor);
+  await shows(d, who, needle);
+}
+
 /** Wait for an editor to show (or stop showing) `needle`. Monaco renders only the visible lines: needles are near the top. */
 export async function shows(d: Demo, who: 'host' | 'guest', needle: string | RegExp, present = true): Promise<void> {
   let last = '';
@@ -165,12 +175,13 @@ export function hubStory(d: Demo): Step[] {
       id: 'maurice-retypes',
       caption: 'The rebase is over and sync is back: Maurice retypes the thought he lost, in different words, and it reaches Myra.',
       action: async () => {
-        await d.typeUnder(guest, 'Introduction', EDITS.ideaAgain);
+        // After the Introduction's last paragraph: he scrolls down to the end of it and continues from there.
+        await d.typeAfterRow(guest, EDITS.introEnd, EDITS.ideaAgain);
       },
       check: async () => {
         await until("the hub wrote Maurice's retyped thought", () => diskFlat(d, PY_PAPER).includes(EDITS.ideaAgainNeedle));
-        await shows(d, 'host', EDITS.ideaAgainNeedle);
-        await shows(d, guest, EDITS.ideaAgainNeedle);
+        await showsNear(d, 'host', EDITS.introEnd, EDITS.ideaAgainNeedle);
+        await showsNear(d, guest, EDITS.introEnd, EDITS.ideaAgainNeedle);
         // The wording that was discarded stays gone.
         expect(diskFlat(d, PY_PAPER)).not.toContain(EDITS.ideaNeedle);
       },
@@ -183,10 +194,10 @@ export function hubStory(d: Demo): Step[] {
       },
       check: async () => {
         await until("the hub wrote Myra's reply", () => diskFlat(d, PY_PAPER).includes(EDITS.myraReplyNeedle));
-        await shows(d, 'host', EDITS.myraReplyNeedle);
-        await shows(d, guest, EDITS.myraReplyNeedle);
+        await showsNear(d, 'host', EDITS.introEnd, EDITS.myraReplyNeedle);
+        await showsNear(d, guest, EDITS.introEnd, EDITS.myraReplyNeedle);
         // Both directions in the one file: Maurice's retyped question is still there beside it.
-        await shows(d, guest, EDITS.ideaAgainNeedle);
+        await showsNear(d, guest, EDITS.introEnd, EDITS.ideaAgainNeedle);
       },
     },
   ];
