@@ -4,9 +4,10 @@
 //! defects fixed rather than carried over. See
 //! `claude-notes/plans/2026-07-28-q2-use-brand-command.md` §"Quarto 1
 //! defects we are deliberately not porting" for the full analysis; the
-//! short version is that Q1 hardcodes `main` as the default branch, and
-//! *predicts* the name of the directory inside a GitHub archive from
-//! the ref string — a prediction that is wrong for refs containing `/`
+//! short version is that Q1 hardcodes `main` as the default branch
+//! (we fetch `archive/HEAD`, which is the default branch whatever its
+//! name), and *predicts* the name of the directory inside a GitHub
+//! archive from the ref string — a prediction that is wrong for refs containing `/`
 //! and for tags beginning with `v`.
 //!
 //! This module does not predict anything. It produces candidate URLs;
@@ -55,14 +56,17 @@ pub struct RemoteTarget {
 /// user-supplied URLs and local files.
 const GITHUB_ARCHIVE_EXT: &str = ".tar.gz";
 
-/// Branches probed, in order, when the user gives no `@ref`.
+/// The archive path for a repository's default branch, used when the
+/// user gives no `@ref`.
 ///
 /// Quarto 1 hardcodes `main` and reports "not found" for a repository
 /// whose default branch is `master` — a message that points at the
-/// wrong problem. Probing both costs one extra request in the rare
-/// case and, more importantly, lets the failure message name the real
-/// problem when neither exists.
-const DEFAULT_BRANCHES: [&str; 2] = ["main", "master"];
+/// wrong problem. Guessing a list of branch names is no better: a
+/// repository whose default is `develop` but which keeps an old `main`
+/// installs the stale `main` (#1179). GitHub resolves `HEAD` to the
+/// default branch, whatever it is called, in one request with no API
+/// call or token, and redirects to an archive of that exact commit.
+const DEFAULT_BRANCH_ARCHIVE: &str = "HEAD";
 
 /// Resolve user input into a fetchable target.
 ///
@@ -170,10 +174,9 @@ fn parse_github(input: &str) -> Result<RemoteTarget, FetchError> {
             github_archive_url(org, repo, "heads", r),
             format!("https://github.com/{org}/{repo}/archive/{r}{GITHUB_ARCHIVE_EXT}"),
         ],
-        None => DEFAULT_BRANCHES
-            .iter()
-            .map(|branch| github_archive_url(org, repo, "heads", branch))
-            .collect(),
+        None => vec![format!(
+            "https://github.com/{org}/{repo}/archive/{DEFAULT_BRANCH_ARCHIVE}{GITHUB_ARCHIVE_EXT}"
+        )],
     };
 
     let description = match git_ref {
@@ -288,16 +291,16 @@ mod tests {
     }
 
     #[test]
-    fn bare_org_repo_probes_main_then_master() {
+    fn bare_org_repo_fetches_the_default_branch_through_archive_head() {
         // Quarto 1 probes only `main`, so a master-default repository
-        // reports "not found" (extension-host.ts:114).
+        // reports "not found" (extension-host.ts:114). Guessing branch
+        // names also installs a stale `main` from a repository whose
+        // default is something else (#1179); `archive/HEAD` is whatever
+        // the default branch is.
         let r = remote("posit-dev/brand");
         assert_eq!(
             r.candidates,
-            [
-                "https://github.com/posit-dev/brand/archive/refs/heads/main.tar.gz",
-                "https://github.com/posit-dev/brand/archive/refs/heads/master.tar.gz",
-            ]
+            ["https://github.com/posit-dev/brand/archive/HEAD.tar.gz"]
         );
         assert_eq!(
             r.learn_more.as_deref(),
