@@ -318,7 +318,9 @@ looks at it again.
    failing check"). The run has finished, so `--log-failed` works.
 3. Apply §7's limits as written: pre-existing or flaky failures get one
    `gh run rerun <run-id> --failed` and a strand, not a fix. Stay inside
-   the gated scope.
+   the gated scope. If the workflow lists failures to ignore (failures it
+   found on other, unrelated PRs or on `main`), don't fix or rerun them.
+   The workflow tracks them separately.
 4. Re-run the §5 checks your fix affects, commit, push with the refspec,
    and confirm with `git ls-remote`.
 5. Post one PR comment that starts with the attempt marker. K is the

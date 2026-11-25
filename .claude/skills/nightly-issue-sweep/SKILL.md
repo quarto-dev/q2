@@ -14,7 +14,8 @@ the deterministic parts live in `scripts/`:
 | Script | Does |
 |---|---|
 | `select_candidates.py` | Lists open issues and drops those that are assigned, labelled question/wontfix/duplicate/invalid/cannot-repro, closed by an open PR, cited by a non-closed braid strand, or carrying a current gate marker with no human activity since. |
-| `pr_status.py` | Sorts open `autofix` PRs into needs_repair / pending / green / needs_human, counting `<!-- q2-autofix repair n=K -->` markers. |
+| `pr_status.py` | Sorts open `autofix` PRs into needs_repair / blocked_shared / pending / green / needs_human, counting `<!-- q2-autofix repair n=K -->` markers. With `--shared` (which the workflow always passes) it also runs `ci_failures.py`. |
+| `ci_failures.py` | Detects **shared failures**: CI failures that are the test's fault, not the PR's. It samples finished failed runs from the autofix PRs, a few other recent PRs, and the last few `main` commits, then parses the failing nextest tests (or job/step for other jobs) from `--log-failed`. A failure is *suspect* when it fails on `main` and on a PR, or on 2 or more PRs that don't touch the test's crate (3 or more PRs for coarse job/step keys). `test_ci_failures.py` checks the classification. |
 | `housekeeping.sh` | Resets `.worktrees/autofix` to a fresh detached `origin/main` (stashing orphaned changes, never discarding them), prunes branches of merged autofix PRs, runs `cargo clean` there when disk is low, and says when to abort. It never cleans the main checkout or other worktrees; it only reports their sizes. |
 
 ## Markers (the "don't repeat" mechanism)
@@ -27,6 +28,21 @@ the deterministic parts live in `scripts/`:
 - **On the PR**, the `autofix` label, plus one repair marker per attempt.
   After 3 attempts, or a fix that would go outside the gated scope, the PR
   gets `autofix:needs-human` and the sweep leaves it alone.
+
+## Shared failures
+
+When one bad test breaks many PRs, repairing the PRs one by one wastes
+attempts and can't succeed. So before each repair pass:
+
+- A red PR whose failures are **all** shared is `blocked_shared`. It isn't
+  repaired and doesn't use up an attempt. Once the test is fixed on `main`,
+  the PR's next red run (or a merge of `main`) puts it back in the normal
+  flow.
+- A red PR with **some** shared failures is repaired, and the agent is told
+  to ignore those failures.
+- At the end of the night, each shared failure gets one braid strand. The
+  agent comments on an existing non-closed strand if it finds one, and
+  otherwise creates a `testing` bug.
 
 To re-gate everything after changing the gate checklist, bump the gate
 version in `autonomously-fix-small-issue/SKILL.md` (§ Recording a gate
@@ -62,6 +78,11 @@ failure) and `GATE_VERSION` in the workflow script, together.
 5. **Write the report** to
    `<root>/.worktrees/autofix-reports/<date>.md` (the directory is
    gitignored; create it with the Write tool). Sections:
+   - **Shared failures** (first, because one item here can explain many red
+     PRs): for each entry in `sharedFailures`, the test or job/step, which
+     PRs it broke (and how many are autofix PRs), whether it also fails on
+     `main`, and its strand id (created or commented). Then list the PRs
+     in `finalPrs.blocked_shared`.
    - **PRs opened tonight:** link, issue, one-line behaviour change.
    - **Repairs:** PR, attempt, outcome.
    - **Needs human:** PRs labelled `autofix:needs-human`, with why.
