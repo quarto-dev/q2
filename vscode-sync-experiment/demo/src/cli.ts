@@ -4,6 +4,7 @@ import { createInterface } from 'node:readline';
 import { Demo, defaultOptions, type Preset } from './demo';
 import { runStory, StoryFailure, type DriverEnv } from './driver';
 import { storyFor } from '../stories';
+import { endPlan } from './ending';
 import type { Where } from './captions';
 
 const USAGE = `usage: npm run demo -w quarto-hub-vscode -- [options]
@@ -14,6 +15,9 @@ const USAGE = `usage: npm run demo -w quarto-hub-vscode -- [options]
   --captions inline|strip|both|off   (default inline)
   --narration inline|strip|both|off  (default strip)
   --fast                 headless, no pacing, every check (implies --play)
+  --exit                 end the run when the story ends instead of staying up for free play (exit code 0, or 1 if a
+                         step failed), so stories can run one after another without Ctrl-C
+  --linger <ms>          with --exit: how long to leave the windows up first (default 5000)
   --screen <n>           monitor to place windows on (default 0)
   --seed <n>             seed of the typing tempo (default 1); one seed repeats a recorded run
   --root <dir>           demo root directory
@@ -47,6 +51,8 @@ async function main() {
       captions: { type: 'string' },
       narration: { type: 'string' },
       fast: { type: 'boolean' },
+      exit: { type: 'boolean' },
+      linger: { type: 'string' },
       screen: { type: 'string' },
       seed: { type: 'string' },
       root: { type: 'string' },
@@ -91,7 +97,12 @@ async function main() {
       await d.recordFinalState();
       console.log('story finished');
     }
-    if (!v.fast) {
+    const end = endPlan({ play, fast: !!v.fast, exit: !!v.exit, linger: v.linger });
+    if (end.lingerMs > 0) {
+      console.log(`leaving the windows up for ${Math.round(end.lingerMs / 1000)} s, then ending`);
+      await new Promise((r) => setTimeout(r, end.lingerMs));
+    }
+    if (end.hold) {
       console.log('running; type reset and Enter to restore the starting state, Ctrl-C to stop');
       const rl = createInterface({ input: process.stdin });
       rl.on('line', (line) => {

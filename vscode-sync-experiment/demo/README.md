@@ -67,9 +67,19 @@ as Myra (or Maurice, in the presets that have his terminal). With `--play` it ru
 | `--captions inline\|strip\|both\|off` | Where the story's narration captions go (default `inline`, in italics in the terminal). |
 | `--narration inline\|strip\|both\|off` | Where the observer's one-line descriptions of what the hub did go (default `strip`). Warnings ignore `off`. |
 | `--fast` | Headless, no pacing, no captions; runs every check. This is what the tests use, and it implies `--play`. |
+| `--exit` | End the run when the story ends, instead of staying up for free play until Ctrl-C. The exit code is 0, or 1 if a step failed. Use it to run stories one after another. |
+| `--linger <ms>` | With `--exit`: how long to leave the windows up before ending (default 5000). `--fast` never lingers. |
 | `--seed <n>` | Seed of the typing tempo (default 1). One seed gives the same rhythm every run. |
 | `--screen <n>` | The monitor to place windows on (default 0, the main one). |
 | `--root <dir>` | The demo root (default a fresh temporary directory). |
+
+To run the stories one after another with no Ctrl-C, add `--exit`; the first failed story stops the loop:
+
+```bash
+for p in hub-browser hub-vscode-clone vscode-share; do
+  npm run demo -w quarto-hub-vscode -- --preset "$p" --play --exit || break
+done
+```
 
 The typed commands and the editor text appear the way a person types them (`demo/src/typing.ts`, seeded by `--seed`):
 a base of 40 ms per character; longer pauses at the start of a word and after `&&`, `|`, or `;`; alternating-hand keys
