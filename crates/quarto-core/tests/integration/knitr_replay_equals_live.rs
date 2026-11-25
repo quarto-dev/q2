@@ -277,12 +277,10 @@ fn r_has(packages: &[&str]) -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
-/// A `{sql}` chunk with `#|` options: knitr reads those, but Quarto's scanner reads `--|` for
-/// SQL. The unit-id line sent to knitr has to use the author\'s prefix, or `connection` is cut
-/// off from the options and the recorded run aborts (found by the corpus case
-/// `s5/01_odd_chunks`; it failed the same way before the flip).
+/// A `{sql}` chunk with `--|` options records as it runs live, and the id line
+/// `insert_unit_ids` adds uses the same `--|` prefix.
 #[test]
-fn a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live() {
+fn a_sql_chunk_with_dash_pipe_options_records_as_it_runs_live() {
     if !r_has(&["DBI", "RSQLite"]) {
         return;
     }
@@ -290,7 +288,7 @@ fn a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live() {
         "```{r}\n#| include: false\n\
          con <- DBI::dbConnect(RSQLite::SQLite(), ':memory:')\n\
          DBI::dbWriteTable(con, 't', data.frame(a = 1:2, b = c('x', 'y')))\n```\n\n\
-         ```{sql}\n#| connection: con\nSELECT * FROM t\n```\n",
+         ```{sql}\n--| connection: con\nSELECT * FROM t\n```\n",
         &[],
         &["knitsql-table"],
     );
