@@ -2272,3 +2272,71 @@ fn new_strong_two_levels_inside_kept_emphasis_keeps_structure() {
         "Intro text here. **a *b c __d__ e* f** outro text.\n"
     );
 }
+
+// =============================================================================
+// CRLF documents: rewritten blocks and synthesized separators (GH #966)
+//
+// A block the incremental writer rewrites from scratch comes from the standard
+// writer, which always emits `\n`; so does the separator it synthesizes next
+// to a rewrite. In a CRLF document both must use `\r\n` instead.
+// =============================================================================
+
+/// Assert that every `\n` in `s` is preceded by `\r`.
+fn assert_all_crlf(s: &str) {
+    let bytes = s.as_bytes();
+    for (i, b) in bytes.iter().enumerate() {
+        if *b == b'\n' {
+            assert!(
+                i > 0 && bytes[i - 1] == b'\r',
+                "bare LF at byte {i} in {s:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn crlf_appended_paragraph_uses_crlf() {
+    let original = "First paragraph.\r\n\r\nLast paragraph.\r\n";
+    let edited = parse_qmd("First paragraph.\n\nLast paragraph.\n\nNew paragraph.\n");
+    let result = incremental_write_via_json_roundtrip(original, &edited);
+    assert_eq!(
+        result,
+        "First paragraph.\r\n\r\nLast paragraph.\r\n\r\nNew paragraph.\r\n"
+    );
+}
+
+#[test]
+fn crlf_rewritten_multiline_block_uses_crlf() {
+    // Replacing a paragraph with a bullet list forces a block rewrite whose
+    // text spans several lines.
+    let original = "First paragraph.\r\n\r\nSecond paragraph.\r\n\r\nLast paragraph.\r\n";
+    let edited = parse_qmd("First paragraph.\n\n* one\n* two\n\nLast paragraph.\n");
+    let result = incremental_write_via_json_roundtrip(original, &edited);
+    assert_all_crlf(&result);
+    assert_eq!(
+        write_qmd(&parse_qmd(&result)),
+        write_qmd(&edited),
+        "incremental write changed the document: {result:?}"
+    );
+}
+
+#[test]
+fn crlf_without_trailing_newline_rewrite_of_last_block() {
+    // The writer pads a missing trailing newline; stripping it again must
+    // remove the whole `\r\n`, not leave a stray `\r`.
+    let original = "First paragraph.\r\n\r\nLast paragraph.";
+    let edited = parse_qmd("First paragraph.\n\n* one\n* two\n");
+    let result = incremental_write_via_json_roundtrip(original, &edited);
+    assert_eq!(result, "First paragraph.\r\n\r\n* one\r\n* two");
+}
+
+#[test]
+fn lf_appended_paragraph_stays_lf() {
+    let original = "First paragraph.\n\nLast paragraph.\n";
+    let edited = parse_qmd("First paragraph.\n\nLast paragraph.\n\nNew paragraph.\n");
+    let result = incremental_write_via_json_roundtrip(original, &edited);
+    assert_eq!(
+        result,
+        "First paragraph.\n\nLast paragraph.\n\nNew paragraph.\n"
+    );
+}
