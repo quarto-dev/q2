@@ -607,7 +607,10 @@ fn biblatex_entry_to_reference(entry: &biblatex::Entry) -> Result<Reference, Str
         EntryType::Software => "software",
         EntryType::Dataset => "dataset",
         EntryType::SuppPeriodical => "article-journal",
-        EntryType::Misc | EntryType::Set | EntryType::XData | EntryType::Unknown(_) => "article",
+        // Pandoc gives these no CSL type (`-t csljson` writes `"type": ""`),
+        // so styles render them as generic documents rather than as an
+        // `article` ("Preprint", quoted title; issue #1311).
+        EntryType::Misc | EntryType::Set | EntryType::XData | EntryType::Unknown(_) => "",
     };
 
     let mut reference = Reference {
@@ -4441,14 +4444,14 @@ mod tests {
             Some("Master’s thesis")
         );
         assert_eq!(by_id("report2023").ref_type, "report");
-        assert_eq!(by_id("misc2025").ref_type, "article");
+        assert_eq!(by_id("misc2025").ref_type, "");
         assert_eq!(
             by_id("misc2025").author.as_ref().unwrap()[0]
                 .literal
                 .as_deref(),
             Some("World Health Organization")
         );
-        assert_eq!(by_id("unknown2026").ref_type, "article");
+        assert_eq!(by_id("unknown2026").ref_type, "");
         assert_eq!(
             by_id("macro2025").container_title.as_deref(),
             Some("Journal of testing")
@@ -4911,6 +4914,32 @@ mod tests {
         let mut out = Vec::new();
         walk(&pandoc.blocks, &mut out);
         out
+    }
+
+    /// A BibTeX `@misc` entry has no CSL type, as in Pandoc, so the
+    /// default style renders it as a generic document: no quoted title,
+    /// no "Preprint" (issue #1311).
+    #[test]
+    fn bibtex_misc_renders_as_generic_document() {
+        let bib = "@misc{m, author={Doe, Jane}, title={A web page}, year={2023}, \
+                   url={https://example.org}}";
+        let rt = MemRuntime::new(&[("/mem/misc.bib", bib)]);
+        let pandoc = Pandoc {
+            meta: meta_map(vec![
+                ("bibliography", meta_string("misc.bib")),
+                ("nocite", meta_string("@m")),
+            ]),
+            blocks: vec![],
+        };
+        let (out, _, _, _) =
+            apply_citeproc_filter(pandoc, ASTContext::new(), "html", Path::new("/mem"), &rt)
+                .unwrap();
+        let entries = bibliography_entries(&out);
+        assert_eq!(entries.len(), 1, "{entries:?}");
+        let text = &entries[0].1;
+        assert!(!text.contains("Preprint"), "{text}");
+        assert!(!text.contains('\u{201C}'), "{text}");
+        assert!(text.contains("A Web Page"), "{text}");
     }
 
     fn entry_ids(pandoc: &Pandoc) -> Vec<String> {
