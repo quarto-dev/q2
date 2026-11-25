@@ -312,7 +312,7 @@ fn a_sql_chunk_with_dash_pipe_options_records_as_it_runs_live() {
 /// whichever knitr is installed.
 #[test]
 fn a_sql_chunk_with_hash_pipe_options_fails_or_renders_alike_live_and_recorded() {
-    if !r_has(&["DBI", "RSQLite"]) {
+    if !r_available() || !r_has(&["DBI", "RSQLite"]) {
         return;
     }
     let (live, recorded, live_dir, rec_dir) = execute_live_and_recorded(

@@ -126,8 +126,9 @@ pub(super) fn insert_unit_ids(
 
 /// Whether the chunk's option block sets [`UNIT_ID_OPTION`].
 ///
-/// The option block is the run of lines right after the opener that start with `#|` (knitr
-/// accepts it in every chunk) or the language's comment prefix followed by `|`.
+/// The option block is the run of lines right after the opener that start with `#|` or the
+/// language's comment prefix followed by `|`. Both are checked because knitr below 1.51, or
+/// outside Quarto mode, reads `#|` in any chunk.
 fn sets_reserved_key(
     text: &str,
     cell: &crate::engine::units::CellUnit,
