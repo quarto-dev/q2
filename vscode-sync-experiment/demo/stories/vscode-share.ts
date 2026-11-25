@@ -261,13 +261,14 @@ export function vscodeShareStory(d: Demo): Step[] {
     },
     {
       id: 'maurice-replies',
-      caption: 'Back on main, Maurice answers her copy edit in the browser, and it appears in her editor.',
+      caption: 'Back on main, Maurice answers her copy edit in the browser, in a new paragraph at the end of the Introduction, and it appears in her editor.',
       action: async () => {
-        await d.typeUnder('guest', 'Introduction', EDITS.tipReply);
+        // After the Introduction's last paragraph: he scrolls down to the end of it and continues from there.
+        await d.typeAfterRow('guest', EDITS.introEnd, EDITS.tipReply);
       },
       check: async () => {
-        await shows(d, 'guest', EDITS.tipReplyNeedle);
-        await shows(d, 'host', EDITS.tipReplyNeedle);
+        await showsNear(d, 'guest', EDITS.introEnd, EDITS.tipReplyNeedle);
+        await showsNear(d, 'host', EDITS.introEnd, EDITS.tipReplyNeedle);
       },
     },
     {
@@ -277,10 +278,10 @@ export function vscodeShareStory(d: Demo): Step[] {
         await d.typeAfter('host', EDITS.tipReply, EDITS.tipAnswer);
       },
       check: async () => {
-        await shows(d, 'host', EDITS.tipAnswerNeedle);
-        await shows(d, 'guest', EDITS.tipAnswerNeedle);
+        await showsNear(d, 'host', EDITS.introEnd, EDITS.tipAnswerNeedle);
+        await showsNear(d, 'guest', EDITS.introEnd, EDITS.tipAnswerNeedle);
         // Both directions in the one file: Maurice's reply is still there beside it.
-        await shows(d, 'guest', EDITS.tipReplyNeedle);
+        await showsNear(d, 'guest', EDITS.introEnd, EDITS.tipReplyNeedle);
       },
     },
   ];

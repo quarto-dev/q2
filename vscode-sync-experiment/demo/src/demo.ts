@@ -835,7 +835,15 @@ export class Demo {
    * paragraph's text as it was typed: the new one goes after its last hard-wrapped line.
    */
   async typeAfter(who: 'host' | 'guest', previous: string, text: string): Promise<void> {
-    await this.typeParagraphAt(who, lastRowNeedle(previous), text);
+    await this.typeParagraphAt(who, lastRowNeedle(previous), text, 'row');
+  }
+
+  /**
+   * Type a new paragraph after the row holding `rowNeedle`, wherever in the paper that is: the editor scrolls there first if
+   * it has to. For text that continues forward from what is already written, such as a paragraph after the last one of a section.
+   */
+  async typeAfterRow(who: 'host' | 'guest', rowNeedle: string, text: string): Promise<void> {
+    await this.typeParagraphAt(who, rowNeedle, text, 'row');
   }
 
   /**
@@ -869,11 +877,13 @@ export class Demo {
   }
 
   /** Click the first line containing `lineNeedle`, open a blank-line-separated paragraph below it, and type `text`. */
-  private async typeParagraphAt(who: 'host' | 'guest', lineNeedle: string, text: string): Promise<void> {
+  private async typeParagraphAt(who: 'host' | 'guest', lineNeedle: string, text: string, scroll: 'top' | 'row' = 'top'): Promise<void> {
     const page = this.editorPage(who);
     const vs = this.kinds[who] === 'vscode';
-    // Monaco renders only the visible lines, and a synced preview may have scrolled this editor away from the heading.
-    await this.scrollTop(who);
+    // Monaco renders only the visible lines. A heading near the top is reached by going to the top (a synced preview may
+    // have scrolled this editor away from it); a row further down by scrolling to it, only if it is not already in view.
+    if (scroll === 'top') await this.scrollTop(who);
+    else await this.scrollToRow(who, lineNeedle);
     await page.locator(vs ? '.editor-instance .view-line' : '.monaco-editor .view-line', { hasText: lineNeedle }).first().click();
     await page.keyboard.press('End');
     await page.keyboard.press('Enter');

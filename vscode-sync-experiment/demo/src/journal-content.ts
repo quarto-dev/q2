@@ -32,6 +32,11 @@ export const EDITS = {
   copyLine: 'remains poorly characterized',
   copyLead: 'Growth at the hyphal tip',
   copyNeedle: 'Growth at the hyphal tip remains poorly characterized',
+  /**
+   * The last word of the last paragraph of the Introduction on `main`: the final replies of the vscode-share story are
+   * typed after it, so the text continues forward instead of landing above what is already written.
+   */
+  introEnd: 'humidity.',
   /** Maurice's reply to the copy edit in the vscode-share story, typed in the browser. */
   tipReply:
     'Turgor lagging the humidity schedule predicts a phase offset between the humidity series and the extension rate, which a cross-correlation would estimate directly.',
