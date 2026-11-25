@@ -24,6 +24,8 @@ import net from 'node:net';
 import { createTypist, type PasteMode, type Typist } from './typing';
 import { connectDocReader, type DocReader } from './doc-reader';
 import { scrollDelta, wheelBursts } from './scroll';
+import { collectPreviewFacts, frameHead, PageLog } from './preview-probe';
+import { judgePreviewStyle } from './preview-style';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..', '..');
@@ -162,6 +164,11 @@ export class Demo {
   readonly events: { time: string; source: string; kind: string; summary: string; details: unknown }[] = [];
   private hubProc?: ChildProcess;
   private pollTimer?: NodeJS.Timeout;
+  /** Console and network of every browser page, from the moment it opened (see `preview-probe.ts`). */
+  private pageLogs = new Map<Page, PageLog>();
+  /** Per browser page: when its preview was first seen unstyled, and whether that has been confirmed as lasting. */
+  private unstyledSince = new Map<Page, { since: number; persisted: boolean }>();
+  private factsLogged = new Set<Page>();
   private prevStatus: StatusBody | null = null;
   private prevFiles: string[] | undefined;
   private lastActivity = 0;
@@ -659,7 +666,10 @@ export class Demo {
   private async window(): Promise<{ context: BrowserContext; page: Page }> {
     this.browser ??= await chromium.launch({ headless: this.headless, args: this.headless ? [] : ['--window-size=960,600'] });
     const context = await this.browser.newContext({ viewport: this.headless ? { width: 960, height: 938 } : null });
-    return { context, page: await context.newPage() };
+    const page = await context.newPage();
+    // Before any navigation: a bad first render must leave its console and network behind.
+    this.pageLogs.set(page, new PageLog(page));
+    return { context, page };
   }
 
   private async place(w: { context: BrowserContext; page: Page }, r: Rect | undefined): Promise<void> {
@@ -1012,7 +1022,55 @@ export class Demo {
   }
 
   startObserver(): void {
-    this.pollTimer = setInterval(() => void this.poll().catch(() => {}), this.o.pollMs);
+    this.pollTimer = setInterval(() => {
+      void this.poll().catch(() => {});
+      void this.checkPreviews().catch(() => {});
+    }, this.o.pollMs);
+  }
+
+  /**
+   * Is each browser editor's visible preview styled? A preview with no CSS is recorded once, with evidence, when first
+   * seen, and again as `unstyled-persisted` if it is still bare two seconds later (a flash is not the same defect).
+   */
+  private async checkPreviews(): Promise<void> {
+    for (const who of ['host', 'guest'] as const) {
+      const w = who === 'host' ? this.hostEditor : this.guestEditor;
+      if (!w || this.kinds[who] !== 'browser' || w.page.isClosed()) continue;
+      for (const frame of w.page.frames()) {
+        const facts = await collectPreviewFacts(frame);
+        if (!facts || !facts.hasContent) continue;
+        if (!this.factsLogged.has(w.page)) {
+          this.factsLogged.add(w.page);
+          this.record('preview', 'facts', `${who}: first preview facts`, { who, frameUrl: frame.url().slice(0, 200), frames: w.page.frames().length, facts });
+        }
+        const v = judgePreviewStyle(facts);
+        const prev = this.unstyledSince.get(w.page);
+        if (v.styled) {
+          if (prev) this.record('preview', 'restyled', `${who}: preview is styled again`, { who, afterMs: Date.now() - prev.since });
+          this.unstyledSince.delete(w.page);
+        } else if (!prev) {
+          this.unstyledSince.set(w.page, { since: Date.now(), persisted: false });
+          const evidence = await this.captureUnstyledEvidence(who, w.page, frame, facts);
+          this.record('preview', 'unstyled', `${who}: preview has no CSS (${v.reasons.join(', ')})`, { who, reasons: v.reasons, facts, evidence });
+          this.say('warning', `preview unstyled (${who}): ${v.reasons.join(', ')}`);
+        } else if (!prev.persisted && Date.now() - prev.since >= 2000) {
+          prev.persisted = true;
+          this.record('preview', 'unstyled-persisted', `${who}: preview still has no CSS after 2 s`, { who, reasons: v.reasons, facts });
+        }
+        break;
+      }
+    }
+  }
+
+  /** Screenshot, iframe head, console, and network of a page whose preview is bare, into `<root>/logs`. */
+  private async captureUnstyledEvidence(who: string, page: Page, frame: import('@playwright/test').Frame, facts: unknown): Promise<Record<string, string>> {
+    const stamp = `${who}-${Date.now()}`;
+    const files = { screenshot: `preview-unstyled-${stamp}.png`, head: `preview-unstyled-${stamp}.head.html`, log: `preview-unstyled-${stamp}.json` };
+    await page.screenshot({ path: path.join(this.logs, files.screenshot) }).catch(() => {});
+    writeFileSync(path.join(this.logs, files.head), await frameHead(frame));
+    const log = this.pageLogs.get(page);
+    writeFileSync(path.join(this.logs, files.log), JSON.stringify({ url: page.url(), frameUrl: frame.url().slice(0, 300), facts, console: log?.console ?? [], network: log?.net ?? [] }, null, 2));
+    return files;
   }
 
   stopObserver(): void {

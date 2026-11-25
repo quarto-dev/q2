@@ -99,6 +99,7 @@
     "test:e2e:timing": "node e2e/run.mjs --timing",
     "demo": "node demo/launch.mjs",
     "demo:all": "node demo/run-all.mjs",
+    "demo:style-loop": "node demo/style-loop.mjs",
     "test:demo": "node demo/run-tests.mjs"
   },
   "dependencies": {
