@@ -100,6 +100,7 @@ pub mod test_figure_figcaption_synthesis;
 pub mod test_flanking_delimiters;
 pub mod test_frontmatter_delimiters;
 pub mod test_frontmatter_yaml_syntax_error;
+pub mod test_glr_fork_dedup;
 pub mod test_grid_table_error;
 pub mod test_hard_soft_break;
 pub mod test_heading_auto_id;

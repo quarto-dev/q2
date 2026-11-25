@@ -9,9 +9,10 @@
 //! parse state, enabling high-quality error message generation.
 
 // `processes` is iterated by `produce_diagnostic_messages` to extract per-GLR-version
-// error states, and a downstream `(row, column)` dedupe means whichever version is
-// visited first wins. A plain `HashMap` with default `RandomState` randomized that
-// order per process — see GitHub issue #222 / bd-hwdlq. `LinkedHashMap` preserves
+// error states, and a downstream `(row, column)` dedupe keeps the first version
+// visited whose state has a corpus entry (or the first version, if none has; GitHub
+// issue #230). A plain `HashMap` with default `RandomState` randomized that order
+// per process — see GitHub issue #222 / bd-hwdlq. `LinkedHashMap` preserves
 // insertion order (tree-sitter inserts version 0 first), which keeps the diagnostic
 // output deterministic across runs.
 use hashlink::LinkedHashMap as HashMap;
