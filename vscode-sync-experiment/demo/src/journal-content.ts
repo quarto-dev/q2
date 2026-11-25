@@ -53,10 +53,11 @@ export const EDITS = {
     'I recorded the echo as well: it persisted for nine cycles, with a period slightly longer than ours, as if the message were being repeated more slowly for our benefit.',
   echoMauriceNeedle: 'persisted for nine cycles',
   /**
-   * Myra commits because git will not let her leave the branch otherwise. Calm and about the observation, not about the
-   * night it was made on; the only sign she is frightened is the last sentence.
+   * Myra commits because git will not let her leave the branch otherwise. Dense, calm, and about the observation, not the
+   * night it was made on; the only sign she is frightened is the last sentence. The misspelling of "mechanism" is
+   * deliberate (she is in a hurry), and nothing in the story calls attention to it.
    */
-  telepathyCommit: 'Echo in chamber two: pulse train repeated at 7.3 s lag, persisting after the stimulus ends. Second probe agrees. No mechanism proposed.',
+  telepathyCommit: 'Chamber two echoes pulse train at 7.3 s lag, persists after stimulus. Second probe agrees. No mechansim proposed.',
 } as const;
 
 export const GITIGNORE = '.venv/\n__pycache__/\n.quarto/\n*_files/\n_site/\n';

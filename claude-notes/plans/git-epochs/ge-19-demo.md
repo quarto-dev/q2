@@ -616,7 +616,14 @@ seed 1, clone runs only. Keep it separate from this fix.
 - `hub-browser` and `hub-vscode-host` end with `maurice-retypes` (Maurice to Myra) and a new `myra-replies` (Myra to Maurice).
 - `vscode-share` still ends on a commit; its converged step is pending.
 
-Known intermittent defect, not fixed here: when Maurice's typing crosses a hard wrap, the space at the wrap can vanish (`at the drivingfrequency` in the hub's file). It appeared in one `--fast` run of `hub-vscode-clone` that ran in parallel with another demo, and the `maurice-types` needle then timed out. A solo rerun passed.
+The "vanishing newline or space at a hard wrap" defect is fixed (2026-11-25). It was never the typist: VS Code offers word
+completions while it is typed into, and Enter accepts an open suggestion instead of inserting a newline, so at each hard wrap
+the newline and the space were lost (`the secondanswered`, `andit kept`) and the paragraph became one long line that scrolled
+off the pane. A `--fast` run types too quickly for the suggestion list to open, which is why only paced runs showed it.
+`vscodeSettings` in `demo/src/demo.ts` now turns completion off (`editor.acceptSuggestionOnEnter`, `quickSuggestions`,
+`wordBasedSuggestions`, `suggestOnTriggerCharacters`, `inlineSuggest`) and turns word wrap on (the journal's own lines are
+about 118 columns). `demo/tests/e2e/vscode-typing.e2e.ts` types a hard-wrapped paragraph slowly into a VS Code window with
+the demo's settings; it failed with the old settings and passes with the new ones.
 
 ### Names on the cursors (2026-11-24)
 
@@ -626,3 +633,14 @@ Presence names came from three different places: VS Code used the `quartoHub.use
 - Demo: every browser page opens with `?as=Myra` (host) or `?as=Maurice` (guest), and every VS Code window launches with `quartoHub.userName` set the same way.
 - Checked by reading `window.quartoDebug.am.presence()` (enabled with `localStorage.quartoDebug = '1'`): browser to browser, VS Code clone guest seen from the browser host, and VS Code host seen from the browser guest each show "Myra" and "Maurice".
 - Not done: VS Code colors are still random per run (no color setting); a story step that asserts the names is not written.
+
+
+### Scrolling (2026-11-25)
+
+Monaco renders only the rows in view, so a check on text lower in a long paper cannot see it. `Demo.scrollToRow` scrolls an
+editor, as a reader would, until a row is in view, and scrolls only when it must: a row counts as in view when twelve rows fit
+below it (`scrollDelta` in `demo/src/scroll.ts`, 10 unit tests). The first version jumped to the top and scrolled down again on
+every call (eleven times for one section, six of them on Maurice's editor). A wheel event of any size moves Monaco by about
+40 px, so a long scroll is sent as one quick burst (`wheelBursts`). In `vscode-share`, Maurice scrolls to Myra's paragraph once,
+while she is still typing it. Scroll sync between the editor and the preview was suspected and ruled out: the failure was the
+same with it off. All typed text, in every story, goes through one helper (`typeAtCaret`) that hard-wraps at 64 columns.

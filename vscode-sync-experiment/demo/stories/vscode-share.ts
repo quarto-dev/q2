@@ -152,11 +152,15 @@ export function vscodeShareStory(d: Demo): Step[] {
       id: 'telepathy-myra',
       caption: 'Myra adds what the sealed chambers did last night to the paragraph about anticipation.',
       action: async () => {
-        await d.appendToParagraph('host', EDITS.echoEnd, EDITS.echoMyra);
+        const typing = d.appendToParagraph('host', EDITS.echoEnd, EDITS.echoMyra);
+        // Maurice sees her words begin to arrive and scrolls to them, once, while she is still typing.
+        await d.pause(3000);
+        await d.scrollToRow('guest', EDITS.echoEnd);
+        await typing;
       },
       check: async () => {
         await showsNear(d, 'host', EDITS.echoEnd, EDITS.echoMyraNeedle);
-        // Maurice scrolls to her paragraph once, and reads all of it before he types his own.
+        // He is already there, and reads all of it before he types his own.
         await showsNear(d, 'guest', EDITS.echoEnd, EDITS.echoMyraNeedle);
         await showsNear(d, 'guest', EDITS.echoEnd, lastRowNeedle(EDITS.echoMyra));
       },
@@ -198,7 +202,7 @@ export function vscodeShareStory(d: Demo): Step[] {
     },
     {
       id: 'telepathy-commit',
-      caption: 'In a fever, she commits it, misspelling and all.',
+      caption: 'She commits it, hurriedly.',
       command: `git commit -qam '${EDITS.telepathyCommit}'`,
       check: async () => {
         await until('the commit exists', () => d.git('log', '-1', '--format=%s').trim() === EDITS.telepathyCommit);
