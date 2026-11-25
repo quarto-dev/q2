@@ -3,9 +3,6 @@ import react from '@vitejs/plugin-react';
 import { cpSync, mkdirSync, readFileSync, rmSync } from 'fs';
 import { resolve } from 'path';
 
-// Build service worker or main app based on environment variable
-const isServiceWorkerBuild = process.env.BUILD_TARGET === 'service-worker';
-
 // The renderer is imported straight from `@quarto/preview-renderer`
 // *source* (this project is not an npm-workspace member, so the bare
 // specifier would not resolve on its own). The alias bypasses the
@@ -131,4 +128,8 @@ const mainConfig: UserConfig = {
 };
 
 // https://vite.dev/config/
-export default defineConfig(isServiceWorkerBuild ? serviceWorkerConfig : mainConfig);
+// `build:sw` passes `--mode service-worker` (a CLI flag, not a `VAR=value`
+// prefix, so the npm script also runs under Windows cmd.exe).
+export default defineConfig(({ mode }) =>
+  mode === 'service-worker' ? serviceWorkerConfig : mainConfig,
+);

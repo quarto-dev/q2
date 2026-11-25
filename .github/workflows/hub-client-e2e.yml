@@ -29,6 +29,11 @@ on:
         description: 'Playwright worker count for smoke-all (override; nightly default is 3)'
         type: string
         default: '3'
+      runners:
+        description: 'JSON array of runner labels. Add "windows-latest" to run on Windows; push, PR and scheduled runs use the default.'
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
   schedule:
     - cron: '0 7 * * *'  # 2am EST / 3am EDT, runs on main
   push:
@@ -44,8 +49,18 @@ concurrency:
 
 jobs:
   e2e-tests:
-    runs-on: ubuntu-latest
-    name: Hub-Client E2E Tests
+    runs-on: ${{ matrix.os }}
+    # Keeps the existing check name ("Hub-Client E2E Tests (chromium)") on the
+    # default runner; other runners append their label.
+    name: Hub-Client E2E Tests (${{ matrix.browser }}${{ matrix.os != 'ubuntu-latest' && format(', {0}', matrix.os) || '' }})
+    # Windows runs bash too, so the run: blocks below stay POSIX. Other runners
+    # keep GitHub's default shell (`bash -e {0}`) unchanged.
+    defaults:
+      run:
+        shell: ${{ contains(matrix.os, 'windows') && 'bash' || 'bash -e {0}' }}
+    env:
+      # One portable browser location for the cache step below.
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/ms-playwright-browsers
     if: github.repository == 'quarto-dev/q2'
 
     # One parallel leg per browser, so adding Firefox does not lengthen the
@@ -57,6 +72,7 @@ jobs:
       fail-fast: false
       matrix:
         browser: [chromium, firefox]
+        os: ${{ fromJSON(inputs.runners || '["ubuntu-latest"]') }}
     continue-on-error: ${{ matrix.browser == 'firefox' }}
 
     steps:
@@ -106,12 +122,21 @@ jobs:
           cargo install -f wasm-bindgen-cli --version "$VERSION"
 
       # tree-sitter for grammar builds
-      - name: Set up tree-sitter CLI
+      - name: Set up tree-sitter CLI (Linux)
+        if: runner.os == 'Linux'
         run: |
           curl -LO https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-linux-x86.gz
           gunzip tree-sitter-linux-x86.gz
           chmod +x tree-sitter-linux-x86
           sudo mv tree-sitter-linux-x86 /usr/local/bin/tree-sitter
+
+      - name: Set up tree-sitter CLI (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -fsSL -o ts.gz https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-windows-x64.gz
+          mkdir -p "$RUNNER_TEMP/tree-sitter"
+          gunzip -c ts.gz > "$RUNNER_TEMP/tree-sitter/tree-sitter.exe"
+          echo "$RUNNER_TEMP/tree-sitter" >> "$GITHUB_PATH"
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -172,6 +197,9 @@ jobs:
           # (playwright.config.ts webServer.env.VITE_HUB_SERVER). Mirrors
           # the test:e2e script in hub-client/package.json.
           VITE_DEFAULT_SYNC_SERVER: '/ws'
+          # This step runs under Git Bash on Windows, which rewrites a
+          # leading-`/` env value into a Windows path for child processes.
+          MSYS2_ENV_CONV_EXCL: VITE_DEFAULT_SYNC_SERVER
           # Point the sandboxed-preview iframe at the freshly built
           # same-origin copy in public/ (built by build:sandboxed below)
           # instead of the GitHub Pages deployment — PR CI must test this
@@ -207,7 +235,7 @@ jobs:
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
-          path: ~/.cache/ms-playwright
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: playwright-${{ runner.os }}-${{ steps.playwright_version.outputs.version }}-${{ matrix.browser }}
 
       # The pandoc.wasm parity net (hub-client/e2e/pandoc-parity.harness.spec.ts, host

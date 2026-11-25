@@ -1882,27 +1882,23 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
                 writeln!(ctx, "</caption>")?;
             }
 
-            // Column group (for alignment / width).
+            // Column group (for width).
             //
-            // bd-hixmy: suppress when every colspec entry is fully default.
-            // An all-default colspec carries no information, and emitting an
+            // bd-hixmy: suppress when every colspec width is default; an
             // empty colgroup of bare `<col />` elements diverges from
-            // Quarto 1 / Pandoc's reference HTML writer. Keep the colgroup
-            // whenever any column has a non-default alignment OR width.
-            let colgroup_meaningful = table.colspec.iter().any(|(align, width)| {
-                !matches!(align, crate::pandoc::table::Alignment::Default)
-                    || !matches!(width, crate::pandoc::table::ColWidth::Default)
-            });
+            // Quarto 1 / Pandoc's reference HTML writer. Column alignment
+            // is not written here: `<col align>` is obsolete in HTML5 and
+            // browsers ignore it, so `write_table_row` puts it on each cell
+            // as `text-align` instead (GH #1327). Width output itself is
+            // still TODO (GH #879).
+            let colgroup_meaningful = table
+                .colspec
+                .iter()
+                .any(|(_, width)| !matches!(width, crate::pandoc::table::ColWidth::Default));
             if colgroup_meaningful {
                 writeln!(ctx, "<colgroup>")?;
-                for colspec in &table.colspec {
-                    let align = match colspec.0 {
-                        crate::pandoc::table::Alignment::Left => " align=\"left\"",
-                        crate::pandoc::table::Alignment::Right => " align=\"right\"",
-                        crate::pandoc::table::Alignment::Center => " align=\"center\"",
-                        crate::pandoc::table::Alignment::Default => "",
-                    };
-                    writeln!(ctx, "<col{} />", align)?;
+                for _ in &table.colspec {
+                    writeln!(ctx, "<col />")?;
                 }
                 writeln!(ctx, "</colgroup>")?;
             }
@@ -1913,8 +1909,9 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             // / Pandoc's reference HTML writer.
             if !table.head.rows.is_empty() {
                 writeln!(ctx, "<thead>")?;
+                let mut pending = Vec::new();
                 for row in &table.head.rows {
-                    write_table_row(row, ctx, true, Some("header"))?;
+                    write_table_row(row, &table.colspec, &mut pending, ctx, true, Some("header"))?;
                 }
                 writeln!(ctx, "</thead>")?;
             }
@@ -1927,9 +1924,10 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             // the cycle from "odd").
             for body in &table.bodies {
                 writeln!(ctx, "<tbody>")?;
+                let mut pending = Vec::new();
                 for (i, row) in body.body.iter().enumerate() {
                     let cls = if i % 2 == 0 { "odd" } else { "even" };
-                    write_table_row(row, ctx, false, Some(cls))?;
+                    write_table_row(row, &table.colspec, &mut pending, ctx, false, Some(cls))?;
                 }
                 writeln!(ctx, "</tbody>")?;
             }
@@ -1942,8 +1940,9 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             // exercise tfoot, so we deliberately keep this minimal.
             if !table.foot.rows.is_empty() {
                 writeln!(ctx, "<tfoot>")?;
+                let mut pending = Vec::new();
                 for row in &table.foot.rows {
-                    write_table_row(row, ctx, false, None)?;
+                    write_table_row(row, &table.colspec, &mut pending, ctx, false, None)?;
                 }
                 writeln!(ctx, "</tfoot>")?;
             }
@@ -2098,41 +2097,99 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
 /// `<td>` (false). `row_class` is the value of the row's `class`
 /// attribute (e.g. `"header"`, `"odd"`, `"even"`); `None` emits a bare
 /// `<tr>`. Caller is responsible for the odd/even bookkeeping.
+///
+/// Each cell's alignment is written as `style="text-align: …;"` (GH
+/// #1327), as Pandoc does: the cell's own alignment, or else that of the
+/// column it starts in. `pending` tracks, per column, how many more rows
+/// of this table section a `rowspan` from an earlier row still covers;
+/// the caller passes a fresh one for each section.
 fn write_table_row<W: Write>(
     row: &crate::pandoc::table::Row,
+    colspec: &[crate::pandoc::table::ColSpec],
+    pending: &mut Vec<usize>,
     ctx: &mut HtmlWriterContext<'_, W>,
     is_header: bool,
     row_class: Option<&'static str>,
 ) -> std::io::Result<()> {
+    use crate::pandoc::table::Alignment;
     if let Some(cls) = row_class {
         writeln!(ctx, "<tr class=\"{}\">", cls)?;
     } else {
         writeln!(ctx, "<tr>")?;
     }
+    let mut col = 0;
     for cell in &row.cells {
+        // Skip columns still covered by a rowspan from an earlier row.
+        while pending.get(col).is_some_and(|&n| n > 0) {
+            col += 1;
+        }
+        let row_span = cell.row_span.max(1);
+        let col_span = cell.col_span.max(1);
+        if pending.len() < col + col_span {
+            pending.resize(col + col_span, 0);
+        }
+        for p in &mut pending[col..col + col_span] {
+            // This row counts as one of the spanned rows; the decrement
+            // below the loop takes it off again.
+            *p = row_span;
+        }
+        let alignment = match cell.alignment {
+            Alignment::Default => colspec.get(col).map_or(Alignment::Default, |c| c.0.clone()),
+            ref a => a.clone(),
+        };
+        col += col_span;
+
         let tag = if is_header { "th" } else { "td" };
         write!(ctx, "<{}", tag)?;
-        write_attr(&cell.attr, ctx)?;
-
-        if cell.row_span > 1 {
-            write!(ctx, " rowspan=\"{}\"", cell.row_span)?;
-        }
-        if cell.col_span > 1 {
-            write!(ctx, " colspan=\"{}\"", cell.col_span)?;
-        }
-
-        let align = match cell.alignment {
-            crate::pandoc::table::Alignment::Left => " align=\"left\"",
-            crate::pandoc::table::Alignment::Right => " align=\"right\"",
-            crate::pandoc::table::Alignment::Center => " align=\"center\"",
-            crate::pandoc::table::Alignment::Default => "",
+        let text_align = match alignment {
+            Alignment::Left => Some("left"),
+            Alignment::Right => Some("right"),
+            Alignment::Center => Some("center"),
+            Alignment::Default => None,
         };
-        write!(ctx, "{}>", align)?;
+        match text_align {
+            Some(a) => {
+                // Merge into the cell's own `style`, if any, so there is
+                // a single style attribute; the author's declarations
+                // come last and therefore win.
+                let mut attr = cell.attr.clone();
+                let style = match attr.2.get("style") {
+                    Some(existing) => format!("text-align: {}; {}", a, existing),
+                    None => format!("text-align: {};", a),
+                };
+                attr.2.remove("style");
+                write_attr(&attr, ctx)?;
+                write_cell_spans(cell, ctx)?;
+                write!(ctx, " style=\"{}\">", escape_html(&style))?;
+            }
+            None => {
+                write_attr(&cell.attr, ctx)?;
+                write_cell_spans(cell, ctx)?;
+                write!(ctx, ">")?;
+            }
+        }
 
         write_blocks(&cell.content, ctx)?;
         writeln!(ctx, "</{}>", tag)?;
     }
     writeln!(ctx, "</tr>")?;
+    for p in pending.iter_mut() {
+        *p = p.saturating_sub(1);
+    }
+    Ok(())
+}
+
+/// Write a table cell's `rowspan` / `colspan` attributes (when > 1).
+fn write_cell_spans<W: Write>(
+    cell: &crate::pandoc::table::Cell,
+    ctx: &mut HtmlWriterContext<'_, W>,
+) -> std::io::Result<()> {
+    if cell.row_span > 1 {
+        write!(ctx, " rowspan=\"{}\"", cell.row_span)?;
+    }
+    if cell.col_span > 1 {
+        write!(ctx, " colspan=\"{}\"", cell.col_span)?;
+    }
     Ok(())
 }
 
@@ -3655,10 +3712,12 @@ mod tests {
         );
     }
 
-    /// bd-hixmy: a non-default alignment must keep the colgroup so the
-    /// `<col align="...">` attributes carry through to the rendered HTML.
+    /// GH #1327: alignment is written on the cells (`text-align`), not
+    /// on `<col align>` (obsolete in HTML5, ignored by browsers). An
+    /// alignment-only colspec therefore needs no `<colgroup>`, matching
+    /// Pandoc's reference HTML writer, which keys the colgroup on widths.
     #[test]
-    fn colgroup_kept_when_any_alignment_set() {
+    fn colgroup_suppressed_when_only_alignment_set() {
         use crate::pandoc::table::{Alignment, ColWidth};
         let block = table_with_colspec(vec![
             (Alignment::Default, ColWidth::Default),
@@ -3666,12 +3725,16 @@ mod tests {
         ]);
         let html = render_block_to_html(block);
         assert!(
-            html.contains("<colgroup>"),
-            "non-default alignment must keep <colgroup>, got:\n{html}"
+            !html.contains("<colgroup>"),
+            "alignment-only colspec should not emit <colgroup>, got:\n{html}"
         );
         assert!(
-            html.contains("align=\"right\""),
-            "expected align=\"right\" on the second <col>, got:\n{html}"
+            !html.contains(" align="),
+            "obsolete align attribute must not be written, got:\n{html}"
+        );
+        assert!(
+            html.contains("<td style=\"text-align: right;\">"),
+            "expected the right-aligned column's cell to carry text-align, got:\n{html}"
         );
     }
 
@@ -3689,6 +3752,209 @@ mod tests {
         assert!(
             html.contains("<colgroup>"),
             "non-default width must keep <colgroup>, got:\n{html}"
+        );
+    }
+
+    /// GH #1327: build a table cell with the given alignment and spans.
+    fn align_test_cell(
+        text: &str,
+        alignment: crate::pandoc::table::Alignment,
+        row_span: usize,
+        col_span: usize,
+    ) -> crate::pandoc::table::Cell {
+        use crate::pandoc::block::Plain;
+        use hashlink::LinkedHashMap;
+        crate::pandoc::table::Cell {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
+            alignment,
+            row_span,
+            col_span,
+            content: vec![Block::Plain(Plain {
+                content: vec![Inline::Str(Str {
+                    text: text.to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        }
+    }
+
+    /// GH #1327: build a table from a colspec plus head and body rows.
+    fn align_test_table(
+        colspec: Vec<crate::pandoc::table::ColSpec>,
+        head: Vec<Vec<crate::pandoc::table::Cell>>,
+        body: Vec<Vec<crate::pandoc::table::Cell>>,
+    ) -> Block {
+        use crate::pandoc::table::{Row, Table, TableBody, TableFoot, TableHead};
+        use hashlink::LinkedHashMap;
+        let empty_attr = || (String::new(), Vec::new(), LinkedHashMap::new());
+        let mk_row = |cells: Vec<crate::pandoc::table::Cell>| Row {
+            attr: empty_attr().into(),
+            cells,
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        Block::Table(Box::new(Table {
+            attr: empty_attr().into(),
+            caption: quarto_pandoc_types::Caption {
+                short: None,
+                long: None,
+                source_info: dummy_source_info(),
+            },
+            colspec,
+            head: TableHead {
+                attr: empty_attr().into(),
+                rows: head.into_iter().map(mk_row).collect(),
+                source_info: dummy_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            bodies: vec![TableBody {
+                attr: empty_attr().into(),
+                rowhead_columns: 0,
+                head: vec![],
+                body: body.into_iter().map(mk_row).collect(),
+                source_info: dummy_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            }],
+            foot: TableFoot {
+                attr: empty_attr().into(),
+                rows: vec![],
+                source_info: dummy_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        }))
+    }
+
+    /// GH #1327: a pipe table (`|:--|:-:|--:|`) carries its alignment on
+    /// the colspec, with default-aligned cells. Every `<th>`/`<td>` must
+    /// get the column's alignment as `text-align`, as Pandoc writes it.
+    #[test]
+    fn pipe_table_column_alignment_on_cells() {
+        use crate::pandoc::table::{Alignment as A, ColWidth};
+        let d = |t: &str| align_test_cell(t, A::Default, 1, 1);
+        let block = align_test_table(
+            vec![
+                (A::Left, ColWidth::Default),
+                (A::Center, ColWidth::Default),
+                (A::Right, ColWidth::Default),
+                (A::Default, ColWidth::Default),
+            ],
+            vec![vec![d("L"), d("C"), d("R"), d("D")]],
+            vec![vec![d("a"), d("b"), d("c"), d("d")]],
+        );
+        let html = render_block_to_html(block);
+        for expected in [
+            "<th style=\"text-align: left;\">L",
+            "<th style=\"text-align: center;\">C",
+            "<th style=\"text-align: right;\">R",
+            "<th>D",
+            "<td style=\"text-align: left;\">a",
+            "<td style=\"text-align: center;\">b",
+            "<td style=\"text-align: right;\">c",
+            "<td>d",
+        ] {
+            assert!(html.contains(expected), "missing `{expected}` in:\n{html}");
+        }
+        assert!(
+            !html.contains(" align="),
+            "obsolete align attribute in:\n{html}"
+        );
+        assert!(
+            !html.contains("<colgroup>"),
+            "unexpected <colgroup> in:\n{html}"
+        );
+    }
+
+    /// GH #1327: a list table (`aligns="l,c,r"`, or a per-cell override)
+    /// can put alignment on the cell itself; it wins over the column's.
+    #[test]
+    fn cell_alignment_overrides_column_alignment() {
+        use crate::pandoc::table::{Alignment as A, ColWidth};
+        let block = align_test_table(
+            vec![
+                (A::Right, ColWidth::Default),
+                (A::Default, ColWidth::Default),
+            ],
+            vec![],
+            vec![vec![
+                align_test_cell("a", A::Center, 1, 1),
+                align_test_cell("b", A::Left, 1, 1),
+            ]],
+        );
+        let html = render_block_to_html(block);
+        assert!(
+            html.contains("<td style=\"text-align: center;\">a"),
+            "cell alignment should override column alignment, got:\n{html}"
+        );
+        assert!(
+            html.contains("<td style=\"text-align: left;\">b"),
+            "cell alignment should apply to a default column, got:\n{html}"
+        );
+    }
+
+    /// GH #1327: the column a cell falls back to accounts for `colspan`
+    /// in the same row and `rowspan` from earlier rows.
+    #[test]
+    fn column_alignment_fallback_tracks_spans() {
+        use crate::pandoc::table::{Alignment as A, ColWidth};
+        let d = |t: &str, rs: usize, cs: usize| align_test_cell(t, A::Default, rs, cs);
+        let block = align_test_table(
+            vec![
+                (A::Left, ColWidth::Default),
+                (A::Center, ColWidth::Default),
+                (A::Right, ColWidth::Default),
+            ],
+            vec![],
+            vec![
+                // "a" spans columns 0-1, so "b" is in column 2 (right).
+                vec![d("a", 1, 2), d("b", 1, 1)],
+                // "c" occupies column 0 for two rows.
+                vec![d("c", 2, 1), d("e", 1, 1), d("f", 1, 1)],
+                // Column 0 is taken by "c", so "g" is in column 1 (center).
+                vec![d("g", 1, 1), d("h", 1, 1)],
+            ],
+        );
+        let html = render_block_to_html(block);
+        for expected in [
+            "colspan=\"2\" style=\"text-align: left;\">a",
+            "<td style=\"text-align: right;\">b",
+            "rowspan=\"2\" style=\"text-align: left;\">c",
+            "<td style=\"text-align: center;\">e",
+            "<td style=\"text-align: right;\">f",
+            "<td style=\"text-align: center;\">g",
+            "<td style=\"text-align: right;\">h",
+        ] {
+            assert!(html.contains(expected), "missing `{expected}` in:\n{html}");
+        }
+    }
+
+    /// GH #1327: a cell's own `style` attribute is kept, with the
+    /// alignment merged into it rather than written as a second `style`.
+    #[test]
+    fn cell_alignment_merges_with_existing_style() {
+        use crate::pandoc::table::{Alignment as A, ColWidth};
+        let mut cell = align_test_cell("a", A::Default, 1, 1);
+        cell.attr
+            .2
+            .insert("style".to_string(), "color: red;".to_string());
+        let block = align_test_table(
+            vec![(A::Right, ColWidth::Default)],
+            vec![],
+            vec![vec![cell]],
+        );
+        let html = render_block_to_html(block);
+        assert!(
+            html.contains("<td style=\"text-align: right; color: red;\">a"),
+            "expected merged style, got:\n{html}"
+        );
+        assert_eq!(
+            html.matches("style=").count(),
+            1,
+            "one style attribute in:\n{html}"
         );
     }
 

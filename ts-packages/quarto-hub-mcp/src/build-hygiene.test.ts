@@ -11,7 +11,9 @@
  * assert it vanished) races vitest's parallel file execution — sibling
  * files spawn `dist/index.js` while the wipe is in flight. So the pin
  * is structural: the build script itself must rebuild `dist/` from a
- * clean slate. The bundle is unaffected either way (esbuild compiles
+ * clean slate. The wipe goes through `fs.rmSync` rather than `rm -rf`
+ * so the script also runs under cmd.exe, npm's default shell on Windows
+ * (bd-n396ghlv). The bundle is unaffected either way (esbuild compiles
  * from `src/` via the `source` condition and empties `dist-bundle/`
  * itself), so `dist/` has exactly one consumer class: tests and the
  * package `bin` — both served by a clean build.
@@ -29,6 +31,8 @@ describe('build hygiene (HY-3)', () => {
     const pkg = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8')) as {
       scripts: Record<string, string>;
     };
-    expect(pkg.scripts.build).toMatch(/^rm -rf dist && /);
+    expect(pkg.scripts.build).toMatch(
+      /^node -e "import\('node:fs'\)\.then\(fs => fs\.rmSync\('dist', \{ recursive: true, force: true \}\)\)" && /,
+    );
   });
 });

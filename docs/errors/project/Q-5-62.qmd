@@ -1,0 +1,51 @@
+---
+title: "Book Download Not Rendered"
+description: "`book.downloads` links to a file that an HTML render does not write and that is not in the output directory."
+code: Q-5-62
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+  - book
+---
+
+# `Q-5-62` — Book Download Not Rendered
+
+> `book.downloads` lists a format, so the book's sidebar links to its
+> file, but that file is not in the output directory.
+
+## What this means
+
+`downloads: [epub]` (or `pdf`, `docx`) adds a download link to the
+book's sidebar. The link points at a file in the book's output
+directory, such as `_book/My-Book.epub`.
+
+Quarto 2 renders one format per run. A plain `q2 render` of an HTML book
+writes the HTML pages and the link, but not the file the link points
+at. Until that file exists, a reader who clicks the link gets "not
+found". Quarto 1 writes every format in `format:` in one run, so a book
+moved from Quarto 1 does not expect this second step.
+
+The warning goes away once the file is in the output directory.
+
+## How to fix it
+
+Render the download's format as well. The warning names the command:
+
+```bash
+q2 render --to epub
+```
+
+For a `pdf` download the format is `typst`:
+
+```bash
+q2 render --to typst
+```
+
+Then publish the output directory as usual. To stop offering the
+download instead, remove the format from `book.downloads`.
+
+## Related
+
+- `Q-20-8`: several formats in `format:` are not rendered in one run.

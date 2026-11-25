@@ -2,7 +2,7 @@
 //!
 //! Checks for required tools and installs any that are missing.
 //! Uses `cargo-binstall` for faster installs when available,
-//! falling back to `cargo install --locked` otherwise.
+//! falling back to `cargo install` (`--locked` except for wasm-bindgen-cli) otherwise.
 
 use anyhow::{Context, Result, bail};
 use std::process::Command;
@@ -18,6 +18,8 @@ struct Tool {
     /// substring of its `--version` output).  A wrong version is treated the
     /// same as "not installed" and the pinned version is (re-)installed.
     required_version: Option<&'static str>,
+    /// Pass `--locked` to the `cargo install` fallback.
+    locked: bool,
 }
 
 const TOOLS: &[Tool] = &[
@@ -26,12 +28,14 @@ const TOOLS: &[Tool] = &[
         check_cmd: "cargo",
         check_args: &["nextest", "--version"],
         required_version: None,
+        locked: true,
     },
     Tool {
         package: "tree-sitter-cli",
         check_cmd: "tree-sitter",
         check_args: &["--version"],
         required_version: None,
+        locked: true,
     },
     // wasm-bindgen-cli must exactly match the wasm-bindgen crate version locked
     // in crates/wasm-quarto-hub-client/Cargo.lock.  A version mismatch produces
@@ -41,6 +45,8 @@ const TOOLS: &[Tool] = &[
         check_cmd: "wasm-bindgen",
         check_args: &["--version"],
         required_version: Some("0.2.108"),
+        // Unlocked on purpose: see `wasm_bindgen_cli_is_installed_without_locked`.
+        locked: false,
     },
 ];
 
@@ -78,6 +84,19 @@ fn has_binstall() -> bool {
         .is_ok_and(|s| s.success())
 }
 
+/// Arguments for the `cargo install` fallback.
+fn cargo_install_args(tool: &Tool) -> Vec<&'static str> {
+    let mut args = vec!["install"];
+    if tool.locked {
+        args.push("--locked");
+    }
+    if let Some(v) = tool.required_version {
+        args.extend(["--version", v]);
+    }
+    args.push(tool.package);
+    args
+}
+
 fn install(tool: &Tool, use_binstall: bool) -> Result<()> {
     let package = tool.package;
     // Build the versioned package spec, e.g. "wasm-bindgen-cli@0.2.108"
@@ -98,11 +117,7 @@ fn install(tool: &Tool, use_binstall: bool) -> Result<()> {
         println!("  binstall failed, falling back to cargo install...");
     }
 
-    let mut args = vec!["install", "--locked"];
-    if let Some(v) = tool.required_version {
-        args.extend(["--version", v]);
-    }
-    args.push(package);
+    let args = cargo_install_args(tool);
 
     println!("  Installing {versioned} via cargo install...");
     let status = Command::new("cargo")
@@ -380,6 +395,27 @@ const PANDOC_VERSION_PARSE_CASES: &[(&str, (u32, u32))] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tool(package: &str) -> &'static Tool {
+        TOOLS.iter().find(|t| t.package == package).unwrap()
+    }
+
+    #[test]
+    fn wasm_bindgen_cli_is_installed_without_locked() {
+        // `--locked` pins the CLI's own dependencies from its published
+        // Cargo.lock; with walrus 0.24.4 the externref transform emits wasm
+        // that `wasm-opt -Oz` rejects ("call param types must match ...
+        // __wbindgen_object_drop_ref"). CI installs unlocked and gets 0.24.5.
+        let args = cargo_install_args(tool("wasm-bindgen-cli"));
+        assert!(!args.contains(&"--locked"), "{args:?}");
+        assert_eq!(args[..3], ["install", "--version", "0.2.108"]);
+    }
+
+    #[test]
+    fn other_tools_are_installed_locked() {
+        let args = cargo_install_args(tool("cargo-nextest"));
+        assert_eq!(args, ["install", "--locked", "cargo-nextest"]);
+    }
 
     #[test]
     fn test_parse_pandoc_version_cases() {

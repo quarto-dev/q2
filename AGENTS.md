@@ -473,6 +473,29 @@ For the deeper context (which crate produces which artifact, why the
 chain doesn't auto-fire, how to diagnose stale-WASM symptoms) see
 `claude-notes/instructions/preview-spa-rebuild.md`.
 
+## Verifying hub-client changes in `q2 preview --ui editor`
+
+Same trap, third artifact: `--ui editor` serves the bundle at
+`hub-client/dist-preview-embed/` (not the viewer SPA in
+`q2-preview-spa/dist/`), embedded by `quarto-preview`'s build.rs. A plain
+`cargo build --bin q2` embeds whatever was built last, so the editor
+silently runs old hub-client code (a stale bundle once showed a
+`format: pdf` project as HTML). After changing `hub-client/src` or the
+`ts-packages` it bundles, run:
+
+```bash
+cargo xtask build-hub-client-embed    # rebuild dist-preview-embed/ and stamp it
+cargo build --bin q2                  # re-embed via include_dir!
+```
+
+The xtask writes `dist-preview-embed/build-info.json`, a fingerprint of
+the bundle's sources (`quarto_build_support::embed_stamp`). The build
+script compares it with the sources and `q2 preview --ui editor` prints a
+warning at startup when the bundle is stale or unstamped. The render WASM
+is not covered: it is shared with the viewer SPA (see the previous
+section). Restart any running preview after rebuilding, since it serves
+the bundle embedded in the old binary.
+
 ## Verifying TypeScript changes in `q2 mcp`
 
 Same trap, different artifact: `q2 mcp` embeds the esbuild bundle at

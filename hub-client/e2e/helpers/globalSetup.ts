@@ -10,10 +10,13 @@
  */
 
 import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { startHubServer } from './syncServer';
 
 /** Well-known path where server info is written for test workers */
-export const SERVER_INFO_PATH = '/tmp/hub-e2e-server.json';
+// os.tmpdir(), not a literal /tmp: on Windows '/tmp' is <drive>:\tmp, which does not exist.
+export const SERVER_INFO_PATH = join(tmpdir(), 'hub-e2e-server.json');
 
 export interface ServerInfo {
   url: string;

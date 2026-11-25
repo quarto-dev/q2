@@ -17,7 +17,12 @@ import { access } from 'node:fs/promises';
 import path from 'node:path';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
-const Q2_BINARY = path.join(REPO_ROOT, 'target', 'debug', 'q2');
+const Q2_BINARY = path.join(
+  REPO_ROOT,
+  'target',
+  'debug',
+  process.platform === 'win32' ? 'q2.exe' : 'q2',
+);
 
 export default async function globalSetup() {
   try {

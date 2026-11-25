@@ -539,6 +539,39 @@ nav.sidebar.sidebar-navigation:not(.rollup) {
   text-decoration: none;
 }
 
+// Sidebar tools: the icon links and dropdown menus beside the sidebar
+// title (`sidebar.tools`; a book's repository, download and share
+// tools). from quarto-nav.scss:294-296, 323-345. The dropdown trigger is
+// a `<button>` in q2, so it also drops the button chrome.
+.sidebar-title .sidebar-tools-main {
+  margin-top: -6px;
+}
+
+.sidebar-navigation .quarto-navigation-tool {
+  opacity: 0.7;
+  font-size: 0.875rem;
+}
+
+.sidebar-navigation button.quarto-navigation-tool {
+  background: none;
+  border: 0;
+  color: inherit;
+}
+
+.sidebar-tools-main {
+  display: inline-flex;
+  margin-left: 0px;
+  order: 2;
+}
+
+.sidebar-tools-main:not(.tools-wide) {
+  vertical-align: middle;
+}
+
+.sidebar-navigation .quarto-navigation-tool.dropdown-toggle::after {
+  display: none;
+}
+
 // Sidebar item layout (vertical rhythm and section indent).
 $sidebar-items-gap-spacing: 0.2em !default;
 $sidebar-section-indent: 0.5em !default;
@@ -1449,6 +1482,22 @@ details > summary > p:only-child {
 // so this loudly flags a missing reference — matching TS's failure signal.
 .quarto-unresolved-ref {
   font-weight: 600;
+}
+
+// q2 renders the prev/next strip inside `main` (Q1 gives it a grid row of
+// its own after `main`), so it must clear anything floated in the page
+// body. A book's home page floats its cover image; without this the
+// strip sits beside the cover instead of under it.
+main .page-navigation {
+  clear: both;
+}
+
+// A book's cover image on its home page (transforms/book_cover_image.rs
+// emits `<img class="quarto-cover-image">`). from _quarto-rules.scss:370-375.
+.quarto-cover-image {
+  max-width: 35%;
+  float: right;
+  margin-left: 30px;
 }
 
 // from _quarto-rules.scss:436-438.

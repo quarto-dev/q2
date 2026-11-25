@@ -132,6 +132,22 @@ impl AppendixStructureTransform {
             .unwrap_or_default()
     }
 
+    /// Whether this is a page of a multi-file HTML book. Quarto 1 leaves
+    /// such a page's footnotes and its `#refs` div where they are, with no
+    /// appendix container and no "Footnotes" / "References" headings.
+    /// (A book *project* carries `book` as a map, which
+    /// [`Self::is_book_format`]'s boolean read never matches. The
+    /// single-file Typst and EPUB book paths keep their appendix
+    /// handling.)
+    fn is_html_book_page(ctx: &RenderContext) -> bool {
+        use crate::format::PipelineProfile;
+        ctx.project.project_kind() == crate::project::ProjectKind::Book
+            && matches!(
+                PipelineProfile::from_format(&ctx.format.target_format),
+                PipelineProfile::HtmlRender | PipelineProfile::HtmlPreview
+            )
+    }
+
     /// Check if this is a book format (appendix processing is skipped for books).
     fn is_book_format(meta: &ConfigValue) -> bool {
         meta.get("book").and_then(|v| v.as_bool()).unwrap_or(false)
@@ -154,13 +170,16 @@ impl AstTransform for AppendixStructureTransform {
         TransformPhase::Finalization
     }
 
-    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
         let meta = &ast.meta;
         let appendix_style = Self::get_appendix_style(meta);
         let reference_location = Self::get_reference_location(meta);
 
         // Skip appendix processing if disabled or book format
-        if !appendix_style.is_enabled() || Self::is_book_format(meta) {
+        if !appendix_style.is_enabled()
+            || Self::is_book_format(meta)
+            || Self::is_html_book_page(ctx)
+        {
             return Ok(());
         }
 

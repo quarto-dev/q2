@@ -1,6 +1,17 @@
 name: Test Suite
 on:
   workflow_dispatch:
+    inputs:
+      runners:
+        description: 'JSON array of runner labels. Add "windows-latest" to run the suite on Windows; push and PR runs always use the default.'
+        required: false
+        type: string
+        default: '["ubuntu-latest", "macos-latest"]'
+      filter:
+        description: "nextest filter expression (e.g. 'package(pampa)'); empty runs everything"
+        required: false
+        type: string
+        default: ""
   push:
     branches:
       - main
@@ -27,10 +38,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # Push/PR runs have no inputs and get the default; a manual run can pick
+        # any runner set, e.g. '["windows-latest"]'.
+        os: ${{ fromJSON(inputs.runners || '["ubuntu-latest", "macos-latest"]') }}
     runs-on: ${{ matrix.os }}
-    
-    name: Run test suite
+
+    name: Run test suite (${{ matrix.os }})
     if: github.repository == 'quarto-dev/q2'
     
     steps:
@@ -107,6 +120,14 @@ jobs:
           sudo installer -pkg "pandoc-${PANDOC_VERSION}-arm64-macOS.pkg" -target /
         shell: bash
 
+      - name: Set up Pandoc (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -fsSL -o pandoc.zip "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-windows-x86_64.zip"
+          7z x pandoc.zip -o"$RUNNER_TEMP/pandoc" -y
+          echo "$RUNNER_TEMP/pandoc/pandoc-${PANDOC_VERSION}" >> "$GITHUB_PATH"
+        shell: bash
+
       # Typst setup — the docx/pptx Pandoc-hybrid leg also has a typst
       # backend whose `L`-tier tests require a real binary (see TYPST_VERSION above).
       - name: Set up Typst (Linux)
@@ -120,6 +141,14 @@ jobs:
       - name: Set up Typst (macOS)
         if: runner.os == 'macOS'
         run: brew install typst
+        shell: bash
+
+      - name: Set up Typst (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -fsSL -o typst.zip "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-pc-windows-msvc.zip"
+          7z x typst.zip -o"$RUNNER_TEMP/typst" -y
+          echo "$RUNNER_TEMP/typst/typst-x86_64-pc-windows-msvc" >> "$GITHUB_PATH"
         shell: bash
 
       # tree-sitter setup
@@ -136,6 +165,15 @@ jobs:
       - name: Set up tree-sitter CLI (macOS)
         if: runner.os == 'macOS'
         run: brew install tree-sitter-cli
+
+      - name: Set up tree-sitter CLI (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          curl -fsSL -o ts.gz https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-windows-x64.gz
+          mkdir -p "$RUNNER_TEMP/tree-sitter"
+          gunzip -c ts.gz > "$RUNNER_TEMP/tree-sitter/tree-sitter.exe"
+          echo "$RUNNER_TEMP/tree-sitter" >> "$GITHUB_PATH"
 
       # The installer test suite (crates/quarto/tests/integration/
       # bootstrap_sh.rs) REQUIRES minisign — signature verification is
@@ -236,7 +274,10 @@ jobs:
       # epic (claude-notes/plans/2026-11-02-widget-epic.md). The venv's bin
       # goes on PATH so `jupyter` is found; the kernelspec is installed
       # per-user so list_kernelspecs() sees it.
+      # POSIX venv layout (bin/); skipped on Windows, where jupyter-gated tests
+      # skip as they do with no kernelspec.
       - name: Install uv
+        if: runner.os != 'Windows'
         uses: astral-sh/setup-uv@v6
         with:
           # Pinned so setup-uv downloads this release directly instead of
@@ -245,6 +286,7 @@ jobs:
           version: "0.13.7"
 
       - name: Set up Jupyter kernel and widget packages
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           uv venv "$RUNNER_TEMP/jupyter-venv" --python 3.12
@@ -262,8 +304,11 @@ jobs:
       # See claude-notes/2026-04-28-ci-disk-space-and-profile-ci.md.
       - name: Test Rust code
         shell: bash
-        run: cargo nextest run --tests --cargo-profile ci
+        run: cargo nextest run --tests --cargo-profile ci ${NO_FAIL_FAST} ${FILTER:+-E "$FILTER"}
         env:
+          FILTER: ${{ inputs.filter }}
+          # A Windows run is for surveying: report every failure, not the first few.
+          NO_FAIL_FAST: ${{ runner.os == 'Windows' && '--no-fail-fast' || '' }}
           RUSTFLAGS: "-D warnings"
           # Turns the silent Node-skip in node_available_when_quarto_ci (and the
           # node_available_for_tests() gates) into a hard failure if the

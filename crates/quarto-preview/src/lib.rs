@@ -930,6 +930,58 @@ pub fn embedded_editor_index_html() -> Option<&'static str> {
         .and_then(|bytes| std::str::from_utf8(bytes).ok())
 }
 
+/// Whether the embedded hub-client editor bundle matches its sources,
+/// judged at the last build of this crate (`build.rs`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditorEmbedStatus {
+    /// Built from the sources as they were when this binary was built.
+    Fresh,
+    /// The sources changed after the bundle was built.
+    Stale,
+    /// The bundle has no build stamp (built by hand, or by an older xtask).
+    Unstamped,
+    /// The stamp exists but is not a valid stamp.
+    Unreadable,
+    /// No real bundle is embedded (fresh clone), or the check could not
+    /// run. The placeholder page already names the fix.
+    Placeholder,
+}
+
+impl EditorEmbedStatus {
+    /// Parse the `QUARTO_EDITOR_EMBED_STATUS` value `build.rs` emits.
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "fresh" => Self::Fresh,
+            "stale" => Self::Stale,
+            "unstamped" => Self::Unstamped,
+            "unreadable" => Self::Unreadable,
+            _ => Self::Placeholder,
+        }
+    }
+
+    /// The warning `q2 preview --ui editor` prints at startup, or
+    /// `None` when there is nothing to say.
+    pub fn warning(self) -> Option<String> {
+        const FIX: &str = "cargo xtask build-hub-client-embed && cargo build --bin q2";
+        let problem = match self {
+            Self::Fresh | Self::Placeholder => return None,
+            Self::Stale => "was built from older hub-client sources than this checkout has",
+            Self::Unstamped | Self::Unreadable => {
+                "has no valid build stamp, so it cannot be checked against the sources"
+            }
+        };
+        Some(format!(
+            "warning: the embedded editor UI {problem}; it may not match this \
+             binary. Rebuild it with:\n    {FIX}"
+        ))
+    }
+}
+
+/// The embedded editor bundle's status. See [`EditorEmbedStatus`].
+pub fn editor_embed_status() -> EditorEmbedStatus {
+    EditorEmbedStatus::parse(env!("QUARTO_EDITOR_EMBED_STATUS"))
+}
+
 /// The note announced when `--ui editor` runs without `--allow-edit`
 /// (the sandbox composition): session edits sync live to every
 /// connected client, but the host's disk stays authoritative — a
@@ -1719,5 +1771,29 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn editor_embed_warning_names_the_fix_only_when_there_is_a_problem() {
+        use super::EditorEmbedStatus as S;
+        assert_eq!(S::Fresh.warning(), None);
+        assert_eq!(S::Placeholder.warning(), None);
+        for bad in [S::Stale, S::Unstamped, S::Unreadable] {
+            let w = bad.warning().expect("a problem status warns");
+            assert!(w.contains("cargo xtask build-hub-client-embed"), "{w}");
+            assert!(w.contains("cargo build --bin q2"), "{w}");
+        }
+        assert!(S::Stale.warning().unwrap().contains("older"));
+    }
+
+    #[test]
+    fn editor_embed_status_parses_what_build_rs_emits() {
+        use super::EditorEmbedStatus as S;
+        assert_eq!(S::parse("fresh"), S::Fresh);
+        assert_eq!(S::parse("stale"), S::Stale);
+        assert_eq!(S::parse("unstamped"), S::Unstamped);
+        assert_eq!(S::parse("unreadable"), S::Unreadable);
+        assert_eq!(S::parse("placeholder"), S::Placeholder);
+        assert_eq!(S::parse("garbage"), S::Placeholder);
     }
 }

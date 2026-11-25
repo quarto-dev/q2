@@ -582,7 +582,7 @@ Knuth wrote it /[1/].
 
 = Chapter Two
 <chapter-two>
-Doe and Knuth  /[1/], /[2/].
+Doe and Knuth /[1/], /[2/].
 
 #block[
 == References

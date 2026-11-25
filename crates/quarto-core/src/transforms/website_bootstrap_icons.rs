@@ -16,7 +16,7 @@
 //! template loop for fonts — the CSS references the woff by relative
 //! path, so the file just needs to be on disk next to the CSS.
 //!
-//! The icons are shipped unconditionally for websites — same approach
+//! The icons are shipped unconditionally for websites and books — same approach
 //! Quarto 1 takes — because navbars, sidebars, callouts, and the
 //! prev/next page-nav strip all rely on `bi-*` classes; gating the
 //! ship on any individual feature would mean re-checking every time a
@@ -90,10 +90,13 @@ impl AstTransform for WebsiteBootstrapIconsTransform {
     }
 }
 
-/// Websites always ship the icons; other projects only for a named
-/// `link-external-icon`.
+/// Websites and books always ship the icons; other projects only for a
+/// named `link-external-icon`. A book page has the same chrome as a
+/// website page: the sidebar's section chevrons, the prev/next arrows and
+/// the repository icon are all `bi-*` classes.
 fn needs_bootstrap_icons(kind: ProjectKind, meta: &ConfigValue) -> bool {
-    kind == ProjectKind::Website || matches!(external_icon(meta), Some(ExternalIcon::Named(_)))
+    matches!(kind, ProjectKind::Website | ProjectKind::Book)
+        || matches!(external_icon(meta), Some(ExternalIcon::Named(_)))
 }
 
 /// Idempotently store the CSS + woff as Project-scope artifacts.
@@ -184,6 +187,7 @@ mod tests {
         ));
         let class = meta_icon(ConfigValue::new_bool(true, SourceInfo::for_test()));
         assert!(needs_bootstrap_icons(ProjectKind::Website, &empty));
+        assert!(needs_bootstrap_icons(ProjectKind::Book, &empty));
         assert!(needs_bootstrap_icons(ProjectKind::Default, &named));
         assert!(!needs_bootstrap_icons(ProjectKind::Default, &empty));
         // `true` draws the icon from the SCSS layer's data-URI SVG; no font needed.

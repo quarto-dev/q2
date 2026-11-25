@@ -532,13 +532,7 @@
 # in the compiled CSS is those two rules (a rule-by-rule diff against the
 # stylesheet from `main`). doc.html hash
 # unchanged: the fixture has no columns.
-doc.html 7dac003e14b3363ead191dcf0fd224e3070a94c884147c9ec69725a6c93eea04
-# Re-captured 2026-11-24 (bd-sehm2rha, GH #1296): doc_files/styles.css
-# gained the Mermaid theming block, a single
-# `:where(:root){--mermaid-*: ...}` rule. Verified the only delta: deleting
-# that rule from the new stylesheet hashes back to the previous value
-# (9daec3e3...). doc.html hash unchanged: the fixture has no diagram.
-# Re-captured 2026-11-24 (code-block features, bd-1tl09 phases 3, 4 and 6
+# Re-captured 2026-11-25 (code-block features, bd-1tl09 phases 3, 4 and 6
 # plus code-tools). doc.html changed because the page now links
 # `code-annotations.js` (one more `<script>` tag; the script ships unless
 # `code-annotations` is `false` or `none`). doc_files/styles.css changed for:
@@ -548,4 +542,5 @@ doc.html 7dac003e14b3363ead191dcf0fd224e3070a94c884147c9ec69725a6c93eea04
 # blocks); and the four `#title-block-header .quarto-title-block > div` rules
 # that lay the code-tools button out beside the title. The fixture has no
 # folded, numbered, annotated or overflow-classed block and no `code-tools`.
-doc_files/styles.css 6626017d4d1ee67f17d2b662233728fcf48d03ef14b3a409e67f5fde2ed4b141
+doc.html 7dac003e14b3363ead191dcf0fd224e3070a94c884147c9ec69725a6c93eea04
+doc_files/styles.css b1a8c809499731e662c53b84d854b5e665d70f987a9329691acd3cda3ae41b15

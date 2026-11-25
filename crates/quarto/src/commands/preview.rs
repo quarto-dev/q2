@@ -398,6 +398,9 @@ async fn run(args: PreviewArgs) -> Result<()> {
             info!("starting q2 preview server (editor UI)");
             println!();
             println!("  q2 preview — editor UI");
+            if let Some(warning) = quarto_preview::editor_embed_status().warning() {
+                eprintln!("{warning}");
+            }
             if let Some(up) = &upstream {
                 println!("  {}", mirror_note(up, args.allow_edit));
             } else if let Some(note) = quarto_preview::editor_ephemeral_note(args.allow_edit) {

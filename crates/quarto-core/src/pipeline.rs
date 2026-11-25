@@ -2534,6 +2534,10 @@ pub fn build_transform_pipeline(
     // transform's metadata walk — registered immediately after — sees
     // live Shortcode/RawInline nodes instead of literal scalars
     // (bd-shortcodes-in-metadata-bp06aub8).
+    // A book's home page opens with the book's own title block
+    // (bd-tqeeqx1c): copy `book.*` into the page metadata before dates
+    // are formatted (inside shortcode-resolve) and metadata is normalized.
+    pipeline.push(Box::new(crate::transforms::BookHomeMetaTransform::new()));
     pipeline.push(Box::new(crate::transforms::ConfigMarkdownTransform::new()));
     pipeline.push(Box::new(ShortcodeResolveTransform::with_lua_support(
         shortcode_paths,
@@ -2548,6 +2552,14 @@ pub fn build_transform_pipeline(
     // heading text after the reader derived ids from it (bd-2wv8431v,
     // bd-lmd-exploration-jqv2nbl4 spike 5). Before sectionize and the TOC.
     pipeline.push(Box::new(crate::transforms::HeadingIdTransform::new()));
+    // A book chapter's title moves into the title block, numbered, as in
+    // Quarto 1 (bd-jib92bnc). After heading ids are final, and before the
+    // metadata is normalized so `pagetitle` derives from the new title.
+    // Render only: `q2 preview` draws its own title block from the
+    // chapter heading and its number kv, and keeps doing so.
+    if matches!(pipeline_profile, crate::format::PipelineProfile::HtmlRender) {
+        pipeline.push(Box::new(crate::transforms::BookChapterTitleTransform::new()));
+    }
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     // Author/label normalization (bd-gx9cic8z P1): derives `by-author`,
     // `labels`, and `rendered.has-title-block` from raw metadata for
@@ -2575,6 +2587,9 @@ pub fn build_transform_pipeline(
     // in the future; today they're independent.
     // See `claude-notes/plans/2026-04-27-websites-phase-7.md`
     // §Decision 3.
+    // A book chapter page is titled with its numbered chapter title
+    // (bd-jib92bnc); set before the generic prefix, which then leaves it.
+    pipeline.push(Box::new(crate::transforms::BookPageMetaTransform::new()));
     // Decks put the site title first (`Site – Deck`), as Quarto 1 does.
     pipeline.push(Box::new(if is_revealjs {
         WebsiteTitlePrefixTransform::site_first()
@@ -3262,6 +3277,9 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "sectionize",
     "html-columns",
     "title-banner",
+    "book-chapter-title",
+    "book-home-meta",
+    "book-page-meta",
     "website-title-prefix",
     "website-favicon",
     "website-bootstrap-icons",
@@ -3426,6 +3444,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     ("example-embed-render", Bucket::B1),
     // --- B2: format-family scaffolding ------------------------------------
     ("title-banner", Bucket::B2),
+    ("book-chapter-title", Bucket::B2),
+    ("book-home-meta", Bucket::B2),
+    ("book-page-meta", Bucket::B2),
     ("website-title-prefix", Bucket::B2),
     ("website-favicon", Bucket::B2),
     ("website-bootstrap-icons", Bucket::B2),
@@ -7285,13 +7306,16 @@ mod tests {
                 "callout",
                 "panel-tabset",
                 "panel-tabset-resolve",
+                "book-home-meta",
                 "config-markdown",
                 "shortcode-resolve",
                 "heading-id",
+                "book-chapter-title",
                 "metadata-normalize",
                 "authors-normalize",
                 "title-banner",
                 "code-block-generate",
+                "book-page-meta",
                 "website-title-prefix",
                 "website-favicon",
                 "website-bootstrap-icons",
@@ -7391,6 +7415,7 @@ mod tests {
                 "callout",
                 "panel-tabset",
                 "panel-tabset-resolve",
+                "book-home-meta",
                 "config-markdown",
                 "shortcode-resolve",
                 "heading-id",
@@ -7398,6 +7423,7 @@ mod tests {
                 "authors-normalize",
                 "title-banner",
                 "code-block-generate",
+                "book-page-meta",
                 "website-title-prefix",
                 "website-favicon",
                 "website-bootstrap-icons",
@@ -7781,6 +7807,7 @@ mod tests {
                 "reference-link-diagnostics",
                 "brace-diagram-cell-diagnostics",
                 "callout",
+                "book-home-meta",
                 "config-markdown",
                 "shortcode-resolve",
                 "heading-id",
@@ -7788,6 +7815,7 @@ mod tests {
                 "authors-normalize",
                 "title-banner",
                 "code-block-generate",
+                "book-page-meta",
                 "website-title-prefix",
                 "website-favicon",
                 "website-bootstrap-icons",

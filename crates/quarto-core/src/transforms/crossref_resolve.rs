@@ -244,6 +244,26 @@ fn resolve_inline(
     }
 }
 
+/// How every "unresolved crossref" warning starts; see
+/// [`is_unresolved_crossref_warning`].
+const UNRESOLVED_CROSSREF_PREFIX: &str = "unresolved crossref `@";
+
+/// The warning for a crossref whose target was not found.
+pub(crate) fn unresolved_crossref_warning(id: &str) -> DiagnosticMessage {
+    DiagnosticMessage::warning(format!(
+        "{UNRESOLVED_CROSSREF_PREFIX}{id}`: no target with this identifier was found."
+    ))
+}
+
+/// Whether `diagnostic` is an [`unresolved_crossref_warning`].
+///
+/// A multi-file HTML book uses this to drop the warnings a chapter's own
+/// pass raises: that pass sees only the chapter's own targets, and the
+/// book-wide pass that follows warns again for what is still unresolved.
+pub(crate) fn is_unresolved_crossref_warning(diagnostic: &DiagnosticMessage) -> bool {
+    diagnostic.code.is_none() && diagnostic.title.starts_with(UNRESOLVED_CROSSREF_PREFIX)
+}
+
 /// If `cite`'s first citation is classified as a crossref, produce the
 /// replacement custom node. Emits diagnostics for mixed-citation bundles
 /// and unresolved crossrefs.
@@ -316,10 +336,7 @@ fn classify_cite(
     };
 
     if !resolved {
-        diags.push(DiagnosticMessage::warning(format!(
-            "unresolved crossref `@{id}`: no target with this identifier was found.",
-            id = first.id,
-        )));
+        diags.push(unresolved_crossref_warning(&first.id));
     }
 
     Some(build_resolved_ref(
