@@ -118,7 +118,7 @@ impl LuaShortcodeEngine {
             lua
         };
         #[cfg(not(target_arch = "wasm32"))]
-        let lua = Lua::new();
+        let lua = super::native_lua_state();
 
         // os.exit raises instead of exiting the process (GH #941); a
         // handler that calls it fails like one that calls error().
@@ -222,7 +222,7 @@ impl LuaShortcodeEngine {
         let chunk = self
             .lua
             .load(&script_source)
-            .set_name(script_path.to_string_lossy())
+            .set_name(format!("@{}", script_path.to_string_lossy()))
             .set_environment(env.clone());
 
         let ret: Value = chunk
@@ -1532,6 +1532,39 @@ return {
                 assert_eq!(s, expected);
             }
             other => panic!("Expected Text with resolved path, got {:?}", other),
+        }
+    }
+
+    /// GH #1012: native shortcode handlers get the `debug` library, and the
+    /// script chunk is named `@<path>`, as in standard Lua.
+    #[tokio::test]
+    async fn test_shortcode_debug_getinfo_source() {
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "dbg.lua",
+            r#"
+return {
+    dbg = function(args, kwargs, meta, raw_args, context)
+        return debug.getinfo(1, "S").source
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).await.unwrap();
+
+        let result = engine
+            .call("dbg", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => {
+                assert_eq!(s, format!("@{}", script.to_string_lossy()));
+            }
+            other => panic!("Expected Text with the script source, got {:?}", other),
         }
     }
 

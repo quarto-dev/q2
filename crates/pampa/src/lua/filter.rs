@@ -176,7 +176,8 @@ pub fn create_filter_environment_with(
 ) -> FilterResult<Lua> {
     // Create Lua state
     // On WASM, we can't load all libraries (no package/io/os/debug support),
-    // so use a restricted set. On native, load everything for full compatibility.
+    // so use a restricted set. On native, load everything for full compatibility,
+    // including `debug`, which pandoc exposes and `Lua::new()` skips (GH #1012).
     #[cfg(target_arch = "wasm32")]
     let lua = {
         use mlua::StdLib;
@@ -189,7 +190,7 @@ pub fn create_filter_environment_with(
         lua
     };
     #[cfg(not(target_arch = "wasm32"))]
-    let lua = Lua::new();
+    let lua = super::native_lua_state();
 
     // os.exit fails the document, not the process (GH #941). On native this
     // replaces the stdlib's libc exit; on WASM it extends the synthetic os.
@@ -382,7 +383,9 @@ async fn apply_lua_filter_inner(
     // must behave differently (globals vs. error).
     let returned: mlua::MultiValue = lua
         .load(&filter_source)
-        .set_name(filter_path.to_string_lossy())
+        // `@path` is Lua's file-chunk convention: `debug.getinfo().source`
+        // and error messages carry the path rather than `[string "..."]`.
+        .set_name(format!("@{}", filter_path.to_string_lossy()))
         .call_async(())
         .await?;
 
