@@ -156,7 +156,9 @@ export function vscodeShareStory(d: Demo): Step[] {
       },
       check: async () => {
         await showsNear(d, 'host', EDITS.echoEnd, EDITS.echoMyraNeedle);
+        // Maurice scrolls to her paragraph once, and reads all of it before he types his own.
         await showsNear(d, 'guest', EDITS.echoEnd, EDITS.echoMyraNeedle);
+        await showsNear(d, 'guest', EDITS.echoEnd, lastRowNeedle(EDITS.echoMyra));
       },
     },
     {
@@ -210,6 +212,8 @@ export function vscodeShareStory(d: Demo): Step[] {
       caption: 'Now git lets her go back to main. The speculation stays on its branch, and the two are on main together.',
       command: 'git switch main',
       check: async () => {
+        // The swap replaced both documents: each reader starts again from the top.
+        await d.scrollTop('host');
         await d.scrollTop('guest');
         for (const who of ['host', 'guest'] as const) {
           await shows(d, who, 'After reanalysis', false);

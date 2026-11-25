@@ -23,6 +23,7 @@ import { activeEditorText, openFile as openVscodeFile } from '../../e2e/helpers/
 import net from 'node:net';
 import { createTypist, type PasteMode, type Typist } from './typing';
 import { connectDocReader, type DocReader } from './doc-reader';
+import { scrollDelta, wheelBursts } from './scroll';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..', '..');
@@ -101,13 +102,27 @@ export const defaultOptions = (over: Partial<DemoOptions> = {}): DemoOptions => 
  * default) an editor-only window on the hub's own folder wrote the old text of the open paper over the hub's disk after a
  * flip (found in GE-19; see the plan's notes), so `git switch` back was refused as a dirty tree.
  */
-const VSCODE_SETTINGS = { 'files.autoSave': 'off' };
+/**
+ * User settings of every VS Code window the demo opens. Completion is off because the demo types at a human pace: VS Code
+ * offers word completions while it is typed into, and Enter accepts an open suggestion instead of inserting a newline, so
+ * at each hard wrap the newline and the space were lost (`the secondanswered`). Word wrap is on because the journal's own
+ * lines are about 118 columns, wider than a half-screen editor, and would otherwise run off the pane.
+ */
+const VSCODE_SETTINGS = {
+  'files.autoSave': 'off',
+  'editor.acceptSuggestionOnEnter': 'off',
+  'editor.quickSuggestions': { other: false, comments: false, strings: false },
+  'editor.suggestOnTriggerCharacters': false,
+  'editor.wordBasedSuggestions': 'off',
+  'editor.inlineSuggest.enabled': false,
+  'editor.wordWrap': 'on',
+};
 
 /** Who sits at each side in every preset: cursors and the status show these names, never a random or machine name. */
 const PERSON = { host: 'Myra', guest: 'Maurice' } as const;
 
 /** VS Code's user settings for one side's window: the shared ones, and `quartoHub.userName` for the cursor label. */
-const vscodeSettings = (who: 'host' | 'guest') => ({ ...VSCODE_SETTINGS, 'quartoHub.userName': PERSON[who] });
+export const vscodeSettings = (who: 'host' | 'guest') => ({ ...VSCODE_SETTINGS, 'quartoHub.userName': PERSON[who] });
 
 export const R_PAPER = 'celia-2026-tip-extension-lmm.qmd';
 export const PY_PAPER = 'morel-2026-fusion-spectra.qmd';
@@ -800,15 +815,7 @@ export class Demo {
     const page = this.kinds[who] === 'vscode' ? this.vscode[who]!.page : (who === 'host' ? this.hostEditor : this.guestEditor)!.page;
     await page.locator(this.kinds[who] === 'vscode' ? '.editor-instance .view-lines' : '.monaco-editor .view-lines').first().click();
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
-    const plan = this.typist.plan(text, { paste: 'none' });
-    const wait = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
-    await wait(plan.lead);
-    for (const step of plan.steps) {
-      await wait(step.wait);
-      if (step.backspace) await page.keyboard.press('Backspace');
-      else if (step.paste) await page.keyboard.insertText(step.text ?? '');
-      else await page.keyboard.type(step.text ?? '');
-    }
+    await this.typeAtCaret(page, text);
   }
 
   private editorPage(who: 'host' | 'guest'): Page {
@@ -842,6 +849,14 @@ export class Demo {
     await page.locator(vs ? '.editor-instance .view-line' : '.monaco-editor .view-line', { hasText: endNeedle }).first().click();
     await page.keyboard.press('End');
     await page.keyboard.press('Enter');
+    await this.typeAtCaret(page, text);
+  }
+
+  /**
+   * Type `text` at the caret of an editor page at a human tempo, hard-wrapped at 64 columns as an author's editor would:
+   * a long unbroken line runs off the pane. Every edit the stories type goes through here, so none can skip the wrapping.
+   */
+  private async typeAtCaret(page: Page, text: string): Promise<void> {
     const plan = this.typist.plan(wrapText(text, 64), { paste: 'none' });
     const wait = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
     await wait(plan.lead);
@@ -863,16 +878,7 @@ export class Demo {
     await page.keyboard.press('End');
     await page.keyboard.press('Enter');
     await page.keyboard.press('Enter');
-    // Hard-wrapped, as an author's editor would: a long unbroken line runs off the pane in VS Code.
-    const plan = this.typist.plan(wrapText(text, 64), { paste: 'none' });
-    const wait = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
-    await wait(plan.lead);
-    for (const step of plan.steps) {
-      await wait(step.wait);
-      if (step.backspace) await page.keyboard.press('Backspace');
-      else if (step.paste) await page.keyboard.insertText(step.text ?? '');
-      else await page.keyboard.type(step.text ?? '');
-    }
+    await this.typeAtCaret(page, text);
   }
 
   /** Record what each editor window shows right now (the story's end state), for the event log. */
@@ -904,15 +910,7 @@ export class Demo {
       if (!this.o.fast) await new Promise((r) => setTimeout(r, 350));
     }
     if (!this.o.fast) await new Promise((r) => setTimeout(r, 800)); // the selection is visible before it is replaced
-    const plan = this.typist.plan(text, { paste: 'none' });
-    const wait = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
-    await wait(plan.lead);
-    for (const step of plan.steps) {
-      await wait(step.wait);
-      if (step.backspace) await page.keyboard.press('Backspace');
-      else if (step.paste) await page.keyboard.insertText(step.text ?? '');
-      else await page.keyboard.type(step.text ?? '');
-    }
+    await this.typeAtCaret(page, text);
   }
 
   /** Open a file in an editor window (the host or guest follows along in the same document). */
@@ -930,33 +928,41 @@ export class Demo {
   }
 
   /**
-   * Scroll an editor, as a reader would with the wheel, until the row holding `needle` is on screen and well clear of the
-   * bottom edge. Monaco renders only the rows in view, so text lower in a long paper cannot be read or clicked until then.
+   * Bring the row holding `needle` into view, as a reader would with the wheel, and leave the editor alone if it already is.
+   * Monaco renders only the rows in view, so text lower in a long paper cannot be read or clicked until then. It scrolls
+   * only when it must (see `scrollDelta`): an editor that jumps to the top and back down on every call is distracting.
    */
   async scrollToRow(who: 'host' | 'guest', needle: string): Promise<void> {
     const page = this.editorPage(who);
     const vs = this.kinds[who] === 'vscode';
-    const rowSel = vs ? '.editor-instance .view-line' : '.monaco-editor .view-line';
-    const rows = page.locator(rowSel, { hasText: needle });
+    const rows = page.locator(vs ? '.editor-instance .view-line' : '.monaco-editor .view-line', { hasText: needle });
     const lines = page.locator(vs ? '.editor-instance .view-lines' : '.monaco-editor .view-lines').first();
     // The visible pane, not `.view-lines` (whose box can span the whole content).
     const pane = page.locator(vs ? '.editor-instance .monaco-editor' : '.monaco-editor').first();
-    await this.scrollTop(who);
-    await lines.hover();
-    for (let i = 0; i < 40 && (await rows.count()) === 0; i++) {
-      await page.mouse.wheel(0, 160);
-      await new Promise((r) => setTimeout(r, 120));
+    const wheel = async (dy: number) => {
+      await lines.hover();
+      // One gesture: a burst of small events, as a hand on a wheel makes it (see `wheelBursts`).
+      for (const step of wheelBursts(dy)) {
+        await page.mouse.wheel(0, step);
+        await new Promise((r) => setTimeout(r, 12));
+      }
+      this.record('demo', 'scroll', `${who} scrolled ${dy > 0 ? 'down' : 'up'} to ${JSON.stringify(needle)}`, { who, dy });
+      await new Promise((r) => setTimeout(r, 400)); // Monaco animates wheel scrolling
+    };
+    // The text may only just have synced: give it a moment before concluding it is far off screen.
+    for (let i = 0; i < 10 && (await rows.count()) === 0; i++) await new Promise((r) => setTimeout(r, 200));
+    if ((await rows.count()) === 0) {
+      // Not rendered, so far from the view: start from the top and go down, a pane at a time, until it is drawn.
+      await this.scrollTop(who);
+      const step = Math.max(160, Math.round(((await pane.boundingBox())?.height ?? 600) * 0.8));
+      for (let i = 0; i < 40 && (await rows.count()) === 0; i++) await wheel(step);
+      if ((await rows.count()) === 0) throw new Error(`${who} editor: no row holding ${JSON.stringify(needle)} after scrolling`);
     }
-    if ((await rows.count()) === 0) throw new Error(`${who} editor: no row holding ${JSON.stringify(needle)} after scrolling`);
-    // Found, but perhaps at the bottom edge or only in Monaco's overscan: bring it to about a third of the way down so
-    // the lines after it show too. Wheel scrolling animates, so measure again after each move.
+    // Drawn, but perhaps only in Monaco's overscan or at the bottom edge: move it only if it is not comfortably in view.
     for (let i = 0; i < 8; i++) {
-      await new Promise((r) => setTimeout(r, 500));
-      const [row, box] = [await rows.first().boundingBox(), await pane.boundingBox()];
-      if (!row || !box) continue;
-      const want = box.y + box.height * 0.35;
-      if (row.y >= box.y + box.height * 0.1 && row.y <= box.y + box.height * 0.5) return;
-      await page.mouse.wheel(0, Math.round(row.y - want));
+      const delta = scrollDelta(await rows.first().boundingBox(), (await pane.boundingBox()) ?? { y: 0, height: 0 });
+      if (delta === 0) return;
+      await wheel(delta);
     }
   }
 
