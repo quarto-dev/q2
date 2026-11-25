@@ -33,7 +33,8 @@ pub struct ProjectFiles {
     /// All text files discovered inside `_extensions/` directories (paths relative to project root)
     pub extension_files: Vec<PathBuf>,
 
-    /// Other text source files (currently `.tsx` and `.scss`, paths relative to project root)
+    /// Other text source files (currently `.tsx`, `.scss`, `.bib` and `.csl`,
+    /// paths relative to project root)
     pub source_files: Vec<PathBuf>,
 
     /// Resources-scoped `.html` files — e.g. embedded example decks
@@ -256,7 +257,7 @@ pub enum FileClass {
     ExtensionText,
     /// A binary file under `_extensions/` (goes to [`ProjectFiles::binary_files`]).
     ExtensionBinary,
-    /// `.tsx` / `.scss` ([`ProjectFiles::source_files`]).
+    /// `.tsx` / `.scss` / `.bib` / `.csl` ([`ProjectFiles::source_files`]).
     TextSource,
     /// A binary resource by extension ([`ProjectFiles::binary_files`]).
     Binary,
@@ -338,7 +339,9 @@ pub fn classify(rel: &Path) -> Option<FileClass> {
     match ext {
         // Source files (.qmd, .md — see module docs re D10)
         Some("qmd" | "md") => Some(FileClass::Source),
-        Some("tsx" | "scss") => Some(FileClass::TextSource),
+        // Bibliographies and citation styles are read at render time by
+        // `bibliography:` / `csl:`, so they must reach the VFS (GH #1103).
+        Some("tsx" | "scss" | "bib" | "csl") => Some(FileClass::TextSource),
         Some(e) if is_binary_extension(e) => Some(FileClass::Binary),
         _ => None,
     }
@@ -385,7 +388,9 @@ mod tests {
             c("_extensions/x/logo.png"),
             Some(FileClass::ExtensionBinary)
         );
-        assert_eq!(c("refs.bib"), None, "not synced");
+        assert_eq!(c("refs.bib"), Some(FileClass::TextSource));
+        assert_eq!(c("styles/apa.csl"), Some(FileClass::TextSource));
+        assert_eq!(c("data.csv"), None, "not synced");
         assert_eq!(c(".git/config.qmd"), None, "hidden directory");
         assert_eq!(c("_site/index.qmd"), None, "output directory");
         assert_eq!(c("a/node_modules/b.md"), None);
@@ -409,6 +414,7 @@ mod tests {
             "_extensions/e/_extension.yml",
             "_extensions/e/font.woff2",
             "refs.bib",
+            "apa.csl",
             "_site/out.qmd",
             ".quarto/cache.qmd",
         ] {
@@ -426,6 +432,9 @@ mod tests {
             .filter(|rel| classify(rel).is_some())
             .collect();
         assert_eq!(walked, classified);
+        // Bibliographies and citation styles ride the text sync path (GH #1103).
+        assert!(walked.contains(&PathBuf::from("refs.bib")));
+        assert!(walked.contains(&PathBuf::from("apa.csl")));
     }
 
     #[test]
