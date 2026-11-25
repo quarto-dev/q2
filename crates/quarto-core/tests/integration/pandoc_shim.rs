@@ -2980,13 +2980,11 @@ assert(explicit_true == "true", "expected \"true\" for collapse=true/starts_coll
 /// contractually AST-free) for exactly this case; `ref-figure-with-prefix.qmd`
 /// (`[see @fig-x].`) reproduces it.
 ///
-/// Asserts the resolved reference's own text is `"see \u{a0}1"` --
-/// measured: Pandoc's own citation-prefix parsing includes the trailing
-/// space before `@` in the prefix Inlines (`[Str "see", Space]`), so the
-/// inlined `add_ref_prefix` then appends the nbsp *after* that already-
-/// present space, exactly matching what Q1's own `add_ref_prefix(ref,
-/// type, cite.prefix)` would do with the same prefix Inlines -- not
-/// `"see\u{a0}1"` (no space) as first assumed before measuring. Q1's own
+/// Asserts the resolved reference's own text is `"see\u{a0}1"`. The
+/// citation prefix is trimmed to `[Str "see"]`, as Pandoc's reader does
+/// (issue #1313), so the inlined `add_ref_prefix` appends the nbsp right
+/// after it, exactly matching what Q1's own `add_ref_prefix(ref, type,
+/// cite.prefix)` does with Pandoc's prefix Inlines. Q1's own
 /// `refs.lua:54-55` REPLACES the category prefix ("Figure") with the
 /// cite's own prefix text entirely, it does not combine the two.
 ///
@@ -3014,7 +3012,7 @@ fn test_resolved_ref_uses_cite_prefix() {
     let link = find_node_with_class(&captured_ast, "Link", "quarto-xref")
         .expect("expected a Link with class \"quarto-xref\"");
     let text = stringify_node_content(&captured_ast, link);
-    assert_eq!(text, "see \u{a0}1");
+    assert_eq!(text, "see\u{a0}1");
 }
 
 /// L-TIER
