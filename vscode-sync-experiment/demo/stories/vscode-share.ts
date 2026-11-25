@@ -135,7 +135,7 @@ export function vscodeShareStory(d: Demo): Step[] {
     },
     {
       id: 'switch-telepathy',
-      caption: 'Myra has a wild idea. She switches to a branch for it, hyphal-telepathy, and the guest follows.',
+      caption: 'Myra remembers something.',
       command: 'git switch hyphal-telepathy',
       check: async () => {
         await d.scrollTop('guest');
