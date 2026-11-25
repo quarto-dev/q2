@@ -37,18 +37,27 @@ pub fn produce_diagnostic_messages(
     assert!(tree_sitter_log.had_errors());
     assert!(!tree_sitter_log.parses.is_empty());
 
+    // One diagnostic per source position. When GLR has forked, several
+    // versions can fail at the same (row, column) with different lookahead
+    // symbols, and only some of those (state, sym) pairs have a corpus
+    // entry (GH #230). Keep the first version whose state the corpus
+    // recognises, and fall back to the generic "Parse error" only when
+    // none of them does. Versions are visited in insertion order (see
+    // `tree_sitter_log`), so the choice is deterministic.
     let mut result: Vec<(quarto_error_reporting::DiagnosticMessage, bool)> = vec![];
-    let mut seen_errors: std::collections::HashSet<(usize, usize)> =
-        std::collections::HashSet::new();
+    // (row, column) -> (index into `result`, whether that entry is the fallback)
+    let mut seen_errors: std::collections::HashMap<(usize, usize), (usize, bool)> =
+        std::collections::HashMap::new();
 
     for parse in &tree_sitter_log.parses {
         for process_log in parse.processes.values() {
             for state in process_log.error_states.iter() {
-                if seen_errors.contains(&(state.row, state.column)) {
+                let key = (state.row, state.column);
+                let previous = seen_errors.get(&key).copied();
+                if let Some((_, false)) = previous {
                     continue;
                 }
-                seen_errors.insert((state.row, state.column));
-                let diagnostic = error_diagnostic_from_parse_state(
+                let specific = error_diagnostic_from_parse_state(
                     input_bytes,
                     state,
                     &parse.consumed_tokens,
@@ -57,7 +66,24 @@ pub fn produce_diagnostic_messages(
                     filename,
                     source_context,
                 );
-                result.push(diagnostic);
+                match (specific, previous) {
+                    (Some(diagnostic), Some((index, true))) => {
+                        result[index] = diagnostic;
+                        seen_errors.insert(key, (index, false));
+                    }
+                    (Some(diagnostic), None) => {
+                        seen_errors.insert(key, (result.len(), false));
+                        result.push(diagnostic);
+                    }
+                    (None, None) => {
+                        seen_errors.insert(key, (result.len(), true));
+                        result.push(generic_parse_error(input_bytes, state));
+                    }
+                    // No entry here either; keep the fallback already in
+                    // place. (A specific entry already in place was
+                    // skipped above.)
+                    (None, Some(_)) | (Some(_), Some((_, false))) => {}
+                }
             }
         }
     }
@@ -141,6 +167,8 @@ pub fn diagnostic_score(diag: &DiagnosticMessage) -> usize {
 
 /// Convert a parse state error into a structured DiagnosticMessage,
 /// paired with whether the matched entry declares itself desynchronising.
+/// Returns `None` when no error table entry applies to the state; the
+/// caller then uses [`generic_parse_error`].
 fn error_diagnostic_from_parse_state(
     input_bytes: &[u8],
     parse_state: &crate::tree_sitter_log::ProcessMessage,
@@ -149,19 +177,10 @@ fn error_diagnostic_from_parse_state(
     error_table: &[ErrorTableEntry],
     _filename: &str,
     _source_context: &quarto_source_map::SourceContext,
-) -> (quarto_error_reporting::DiagnosticMessage, bool) {
+) -> Option<(quarto_error_reporting::DiagnosticMessage, bool)> {
     use quarto_error_reporting::DiagnosticMessageBuilder;
 
-    // All offset arithmetic operates on `input_bytes` directly.
-    // Tree-sitter reports `parse_state.row` / `parse_state.column` as
-    // byte counts in the source it was given, which agrees with
-    // `input_bytes`. Mixing in a `String::from_utf8_lossy(input_bytes)`
-    // shifts offsets whenever the input has invalid UTF-8 (each bad
-    // byte expands to a 3-byte `U+FFFD`), and slicing at a tree-sitter
-    // offset then panics on a non-char-boundary (bd-6qbto).
-
     let byte_offset = calculate_byte_offset(input_bytes, parse_state.row, parse_state.column);
-    let span_end = advance_chars(input_bytes, byte_offset, parse_state.size.max(1));
 
     // Look up the error entry from the table. Entries may discriminate on
     // the source text at the error position when the parser state alone
@@ -169,28 +188,7 @@ fn error_diagnostic_from_parse_state(
     let error_text = source_text_at_error(input_bytes, byte_offset);
     let error_entry = lookup_error_entry(error_table, parse_state, &error_text);
 
-    let start_location =
-        offset_to_location_bytes(input_bytes, byte_offset).unwrap_or(quarto_source_map::Location {
-            offset: byte_offset,
-            row: parse_state.row,
-            column: parse_state.column,
-        });
-    let end_location =
-        offset_to_location_bytes(input_bytes, span_end).unwrap_or(quarto_source_map::Location {
-            offset: span_end,
-            row: parse_state.row,
-            column: parse_state.column + parse_state.size.max(1),
-        });
-
-    // Create SourceInfo for the error location
-    let range = quarto_source_map::Range {
-        start: start_location,
-        end: end_location,
-    };
-    let source_info = quarto_source_map::SourceInfo::from_range(
-        quarto_source_map::FileId(0), // File ID 0 (set up in ASTContext)
-        range,
-    );
+    let source_info = error_source_info(input_bytes, parse_state);
 
     error_entry
         .into_iter()
@@ -306,16 +304,58 @@ fn error_diagnostic_from_parse_state(
             Some((builder.build(), entry.error_info.desynchronizes))
         })
         .max_by(|(diag1, _), (diag2, _)| diagnostic_score(diag1).cmp(&diagnostic_score(diag2)))
-        .unwrap_or_else(|| {
-            // Fallback for errors not in the table
-            (
-                DiagnosticMessageBuilder::error("Parse error")
-                    .with_location(source_info)
-                    .problem("unexpected character or token here")
-                    .build(),
-                false,
-            )
-        })
+}
+
+/// The source span a parse state's error is reported at.
+fn error_source_info(
+    input_bytes: &[u8],
+    parse_state: &crate::tree_sitter_log::ProcessMessage,
+) -> quarto_source_map::SourceInfo {
+    // All offset arithmetic operates on `input_bytes` directly.
+    // Tree-sitter reports `parse_state.row` / `parse_state.column` as
+    // byte counts in the source it was given, which agrees with
+    // `input_bytes`. Mixing in a `String::from_utf8_lossy(input_bytes)`
+    // shifts offsets whenever the input has invalid UTF-8 (each bad
+    // byte expands to a 3-byte `U+FFFD`), and slicing at a tree-sitter
+    // offset then panics on a non-char-boundary (bd-6qbto).
+
+    let byte_offset = calculate_byte_offset(input_bytes, parse_state.row, parse_state.column);
+    let span_end = advance_chars(input_bytes, byte_offset, parse_state.size.max(1));
+
+    let start_location =
+        offset_to_location_bytes(input_bytes, byte_offset).unwrap_or(quarto_source_map::Location {
+            offset: byte_offset,
+            row: parse_state.row,
+            column: parse_state.column,
+        });
+    let end_location =
+        offset_to_location_bytes(input_bytes, span_end).unwrap_or(quarto_source_map::Location {
+            offset: span_end,
+            row: parse_state.row,
+            column: parse_state.column + parse_state.size.max(1),
+        });
+
+    quarto_source_map::SourceInfo::from_range(
+        quarto_source_map::FileId(0), // File ID 0 (set up in ASTContext)
+        quarto_source_map::Range {
+            start: start_location,
+            end: end_location,
+        },
+    )
+}
+
+/// The diagnostic for a parse state the error table has no entry for.
+fn generic_parse_error(
+    input_bytes: &[u8],
+    parse_state: &crate::tree_sitter_log::ProcessMessage,
+) -> (quarto_error_reporting::DiagnosticMessage, bool) {
+    (
+        quarto_error_reporting::DiagnosticMessageBuilder::error("Parse error")
+            .with_location(error_source_info(input_bytes, parse_state))
+            .problem("unexpected character or token here")
+            .build(),
+        false,
+    )
 }
 
 /// The source text a guard is matched against: from the error position
@@ -1065,6 +1105,121 @@ mod tests {
             !diagnostics.is_empty(),
             "fallback diagnostic should be produced for unrecognized parse state",
         );
+    }
+
+    /// An observer whose single parse has one GLR version per `(state, sym)`
+    /// in `versions`, every one failing at the same (row, column). This is
+    /// the shape GH #230 produced: two versions forked by an earlier error
+    /// reach the same mistake with different lookahead symbols.
+    fn observer_with_forked_errors(
+        row: usize,
+        column: usize,
+        versions: &[(usize, &str)],
+    ) -> TreeSitterLogObserver {
+        let mut processes = HashMap::new();
+        for (version, (state, sym)) in versions.iter().enumerate() {
+            processes.insert(
+                version,
+                TreeSitterProcessLog {
+                    found_accept: false,
+                    found_bad_message: false,
+                    error_states: vec![ProcessMessage {
+                        version,
+                        state: *state,
+                        row,
+                        column,
+                        sym: sym.to_string(),
+                        size: 1,
+                    }],
+                    current_message: None,
+                },
+            );
+        }
+        let mut observer = TreeSitterLogObserver::default();
+        observer.parses.push(TreeSitterParseLog {
+            messages: vec![],
+            current_process: None,
+            current_lookahead: None,
+            processes,
+            all_tokens: vec![],
+            consumed_tokens: vec![],
+        });
+        observer
+    }
+
+    fn table_entry(state: usize, sym: &'static str, code: &'static str) -> ErrorTableEntry {
+        ErrorTableEntry {
+            state,
+            sym,
+            row: 0,
+            column: 0,
+            error_info: crate::error_table::ErrorInfo {
+                code: Some(code),
+                title: "Test Error",
+                message: "test message",
+                captures: &[],
+                notes: &[],
+                hints: &[],
+                guard: None,
+                desynchronizes: false,
+                suggestion: None,
+            },
+            name: "test_case",
+        }
+    }
+
+    /// GH #230: when the first GLR version to fail at a position has no
+    /// corpus entry but a later one does, the later one's diagnostic is
+    /// reported instead of the generic "Parse error".
+    #[test]
+    fn forked_versions_at_one_position_prefer_the_corpus_match() {
+        let input_bytes = b"Second *bad paragraph.\n";
+        let observer =
+            observer_with_forked_errors(0, 22, &[(1922, "unmatched_sym"), (1922, "_close_block")]);
+        let table = vec![table_entry(1922, "_close_block", "Q-TEST-1")];
+        let source_context = quarto_source_map::SourceContext::new();
+
+        let diagnostics =
+            produce_diagnostic_messages(input_bytes, &observer, &table, "x.qmd", &source_context);
+
+        assert_eq!(diagnostics.len(), 1, "one diagnostic per position");
+        assert_eq!(diagnostics[0].code.as_deref(), Some("Q-TEST-1"));
+    }
+
+    /// When several versions at one position all have corpus entries, the
+    /// first one visited wins, and none of them is reported twice.
+    #[test]
+    fn forked_versions_at_one_position_keep_the_first_corpus_match() {
+        let input_bytes = b"Second *bad paragraph.\n";
+        let observer = observer_with_forked_errors(0, 22, &[(1922, "sym_a"), (1922, "sym_b")]);
+        let table = vec![
+            table_entry(1922, "sym_a", "Q-TEST-A"),
+            table_entry(1922, "sym_b", "Q-TEST-B"),
+        ];
+        let source_context = quarto_source_map::SourceContext::new();
+
+        let diagnostics =
+            produce_diagnostic_messages(input_bytes, &observer, &table, "x.qmd", &source_context);
+
+        assert_eq!(diagnostics.len(), 1, "one diagnostic per position");
+        assert_eq!(diagnostics[0].code.as_deref(), Some("Q-TEST-A"));
+    }
+
+    /// When no version at a position has a corpus entry, exactly one
+    /// generic "Parse error" is reported for it.
+    #[test]
+    fn forked_versions_without_corpus_match_report_one_generic_error() {
+        let input_bytes = b"Second *bad paragraph.\n";
+        let observer = observer_with_forked_errors(0, 22, &[(1922, "sym_a"), (1922, "sym_b")]);
+        let table: Vec<ErrorTableEntry> = Vec::new();
+        let source_context = quarto_source_map::SourceContext::new();
+
+        let diagnostics =
+            produce_diagnostic_messages(input_bytes, &observer, &table, "x.qmd", &source_context);
+
+        assert_eq!(diagnostics.len(), 1, "one diagnostic per position");
+        assert_eq!(diagnostics[0].title, "Parse error");
+        assert_eq!(diagnostics[0].code, None);
     }
 
     /// Regression guard for the common case: on valid UTF-8, the
