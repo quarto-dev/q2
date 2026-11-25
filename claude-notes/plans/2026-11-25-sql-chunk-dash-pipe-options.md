@@ -1,4 +1,11 @@
-# SQL chunk options under knitr strict mode Implementation Plan
+---
+title: 'SQL chunk options under knitr strict mode (bd-lnu81d4a)'
+date: 2026-11-25
+description: 'Test the `--|` option syntax that knitr 1.51 strict mode requires in a `sql` chunk, and pin that a `#|` `sql` chunk fails or renders alike in live and recorded runs.'
+status: in-progress  # tests committed; strand closes after review
+braid:
+  strand: bd-lnu81d4a
+---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -200,7 +207,7 @@ Committed as `d67e93a44`.
 
 - [x] File the follow-up strand for approach C (q2 diagnostic for `#|` option lines in a chunk whose prefix is not `#`), `discovered-from` bd-lnu81d4a. Filed as bd-46dq7sgo.
 - [x] `braid comment bd-lnu81d4a` with the two commit hashes and the knitr/q2 findings above. Close the strand only after Chris reviews.
-- [x] Check the boxes in this plan, then check it renders: `cargo run --bin q2 -- render --strict claude-notes/plans/2026-11-25-sql-chunk-dash-pipe-options.md` (no warnings). Commit the plan on its own, after the steps above, since it records the Task 1 and Task 2 hashes.
+- [x] Check the boxes in this plan, then check it renders: `cargo run --bin q2 -- render --strict claude-notes/plans/2026-11-25-sql-chunk-dash-pipe-options.md`. The note raises no diagnostics of its own; the command still exits 1 on Q-12-13 fallbacks for other plans in the listing (bd-qpnuafn0). Commit the plan on its own, after the steps above, since it records the Task 1 and Task 2 hashes.
 
 ## Dev workflow
 
