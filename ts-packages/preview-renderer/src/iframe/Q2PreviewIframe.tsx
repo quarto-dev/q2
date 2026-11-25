@@ -208,6 +208,9 @@ export function Q2PreviewIframe({
 }: Q2PreviewIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
+  // Counts every IFRAME_READY. `iframeReady` stays true when the iframe document reloads, so an effect that must run
+  // again for the fresh, blank document depends on this count as well.
+  const [iframeReadyEpoch, setIframeReadyEpoch] = useState(0);
 
   // Last slide index posted to the iframe, so we dedupe SET_SLIDE sends
   // and don't echo a slide back to the deck it just reported (which would
@@ -323,6 +326,7 @@ export function Q2PreviewIframe({
       // In production, verify event.origin for security
       if (event.data.type === 'IFRAME_READY') {
         setIframeReady(true);
+        setIframeReadyEpoch((n) => n + 1);
         // Iframe restart — invalidate dedup state.
         lastSentThemeFingerprintRef.current = undefined;
         lastSentSlideRef.current = undefined;
@@ -469,7 +473,7 @@ export function Q2PreviewIframe({
       '*',
     );
     lastSentThemeFingerprintRef.current = themeFingerprint;
-  }, [iframeReady, themeFingerprint]);
+  }, [iframeReady, iframeReadyEpoch, themeFingerprint]);
 
   return (
     <iframe

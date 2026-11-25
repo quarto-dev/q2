@@ -191,6 +191,26 @@ function themePosts(postMessage: ReturnType<typeof vi.fn>) {
 }
 
 describe('Q2PreviewIframe theme transport', () => {
+    // The preview document can reload while this component stays mounted (a second IFRAME_READY, observed 32 ms after the
+    // first in a real run). The reloaded document is blank, with no theme. `iframeReady` is already true, so only the
+    // reload itself can re-trigger the theme post; without it the preview stays unstyled for good while content (whose
+    // effect keeps getting new dependencies) still paints.
+    test('re-posts the theme when the iframe document reloads (a second IFRAME_READY)', () => {
+        mockBytes = 'A';
+        const { cw, postMessage } = (() => {
+            const m = mountIframe({ themeFingerprint: 'abc' });
+            dispatchIframeReady(m.cw);
+            return m;
+        })();
+        expect(themePosts(postMessage)).toHaveLength(1);
+
+        dispatchIframeReady(cw); // the document reloaded
+
+        const posts = themePosts(postMessage);
+        expect(posts).toHaveLength(2);
+        expect(posts[1]).toEqual({ type: 'UPDATE_THEME', cssText: 'A', fingerprint: 'abc' });
+    });
+
     // The theme travels as CSS text, not a parent-minted blob URL: a
     // `blob:` URL only loads in the origin that minted it, and when the
     // host frames the preview with `sandbox="allow-scripts"` (no
