@@ -64,9 +64,9 @@ export interface DemoOptions {
   narration: Where;
   pace: 'auto' | 'key';
   dwellMs: number;
-  /** Headless, no pacing, no captions: the rot check. */
+  /** No pacing, no typing delay, no captions: every check, quickly. It does not hide any window (see `headless`). */
   fast: boolean;
-  /** No visible windows and no placement (default: the value of `fast`). Captions and narration still work. */
+  /** The browser windows are not shown and not placed (default false, even in a fast run). Captions and narration still work. */
   headless?: boolean;
   /** Start the hub with `--git <value>` (E8 uses `ignore`). */
   hubGit: 'track' | 'ignore';
@@ -653,7 +653,7 @@ export class Demo {
   // ---- windows -------------------------------------------------------------------------------------------------
 
   get headless(): boolean {
-    return this.o.headless ?? this.o.fast;
+    return this.o.headless ?? false;
   }
 
   private async window(): Promise<{ context: BrowserContext; page: Page }> {

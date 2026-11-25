@@ -66,7 +66,8 @@ as Myra (or Maurice, in the presets that have his terminal). With `--play` it ru
 | `--dwell <ms>` | The dwell of `auto` (default 2500). |
 | `--captions inline\|strip\|both\|off` | Where the story's narration captions go (default `inline`, in italics in the terminal). |
 | `--narration inline\|strip\|both\|off` | Where the observer's one-line descriptions of what the hub did go (default `strip`). Warnings ignore `off`. |
-| `--fast` | Headless, no pacing, no captions; runs every check. This is what the tests use, and it implies `--play`. |
+| `--fast` | No pacing, no typing delay, no captions; runs every check, quickly. It implies `--play`. Every window is still shown. |
+| `--headless` | Do not show the browser windows (the editors and the terminals). For unattended runs; the tests always use it. Combine with `--fast` for the quickest unattended run. VS Code windows cannot be hidden. |
 | `--exit` | End the run when the story ends, instead of staying up for free play until Ctrl-C. The exit code is 0, or 1 if a step failed. Use it to run stories one after another. |
 | `--linger <ms>` | With `--exit`: how long to leave the windows up before ending (default 5000). `--fast` never lingers. |
 | `--seed <n>` | Seed of the typing tempo (default 1). One seed gives the same rhythm every run. |
@@ -79,7 +80,8 @@ the total time:
 
 ```bash
 npm run demo:all -w quarto-hub-vscode                                    # the three stories, paced
-npm run demo:all -w quarto-hub-vscode -- --fast                          # the same, headless and quick
+npm run demo:all -w quarto-hub-vscode -- --fast                          # the same, quick, with every window shown
+npm run demo:all -w quarto-hub-vscode -- --fast --headless                # quick and unattended: no browser windows
 npm run demo:all -w quarto-hub-vscode -- --presets vscode-share,hub-browser   # another list or order
 ```
 
@@ -89,7 +91,7 @@ npm run demo:all -w quarto-hub-vscode -- --presets vscode-share,hub-browser   # 
 | `--keep-going` | Play the remaining stories after one fails. By default the first failure stops the list. |
 | `--root <dir>` | A parent directory: each story gets `<dir>/<preset>`. |
 
-Every other option (`--fast`, `--dwell`, `--linger`, `--seed`, `--screen`, and so on) goes to each launcher run. Ctrl-C stops
+Every other option (`--fast`, `--headless`, `--dwell`, `--linger`, `--seed`, `--screen`, and so on) goes to each launcher run. Ctrl-C stops
 the story that is running and the rest of the list. The exit code is 0 when every story passed, and 1 otherwise.
 
 The typed commands and the editor text appear the way a person types them (`demo/src/typing.ts`, seeded by `--seed`):
@@ -98,7 +100,7 @@ and common letter pairs faster, same-finger repeats slower; capitals, digits, an
 word to word; an occasional hesitation. A long token (24 or more characters, such as a URL or a project id) is pasted
 at once after a pause, and a command the story says was copied is pasted whole. Very occasionally (at most once per
 command) a key lands next to the right one; the typist keeps going for a letter or two, notices, backspaces, and
-retypes. `--fast` turns all of this off.
+retypes. `--fast` turns all of this off, and `--headless` is separate: it only hides the browser windows.
 
 ## Free play and reset
 

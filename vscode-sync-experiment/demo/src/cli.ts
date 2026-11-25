@@ -1,11 +1,10 @@
 /** The launcher (`npm run demo -w quarto-hub-vscode -- --preset hub-browser [options]`). */
-import { parseArgs } from 'node:util';
 import { createInterface } from 'node:readline';
-import { Demo, defaultOptions, type Preset } from './demo';
+import { Demo, defaultOptions } from './demo';
 import { runStory, StoryFailure, type DriverEnv } from './driver';
 import { storyFor } from '../stories';
 import { endPlan } from './ending';
-import type { Where } from './captions';
+import { parseLauncherArgs } from './launcher-args';
 
 const USAGE = `usage: npm run demo -w quarto-hub-vscode -- [options]
   --preset hub-browser|hub-vscode-host|hub-vscode-clone|vscode-share   (default hub-browser)
@@ -14,7 +13,8 @@ const USAGE = `usage: npm run demo -w quarto-hub-vscode -- [options]
   --dwell <ms>           dwell in auto pace (default 2500)
   --captions inline|strip|both|off   (default inline)
   --narration inline|strip|both|off  (default strip)
-  --fast                 headless, no pacing, every check (implies --play)
+  --fast                 no pacing, no captions, every check (implies --play); every window is still shown
+  --headless             do not show the browser windows (unattended runs; the tests always use it)
   --exit                 end the run when the story ends instead of staying up for free play (exit code 0, or 1 if a
                          step failed), so stories can run one after another without Ctrl-C
   --linger <ms>          with --exit: how long to leave the windows up first (default 5000)
@@ -42,41 +42,10 @@ export async function playStory(d: Demo): Promise<void> {
 }
 
 async function main() {
-  const { values: v } = parseArgs({
-    options: {
-      preset: { type: 'string' },
-      play: { type: 'boolean' },
-      pace: { type: 'string' },
-      dwell: { type: 'string' },
-      captions: { type: 'string' },
-      narration: { type: 'string' },
-      fast: { type: 'boolean' },
-      exit: { type: 'boolean' },
-      linger: { type: 'string' },
-      screen: { type: 'string' },
-      seed: { type: 'string' },
-      root: { type: 'string' },
-      help: { type: 'boolean' },
-    },
-  });
-  if (v.help) return void console.log(USAGE);
-  const preset = (v.preset ?? 'hub-browser') as Preset;
-  if (!['hub-browser', 'hub-vscode-host', 'hub-vscode-clone', 'vscode-share'].includes(preset)) throw new Error(`preset ${preset} is not built yet`);
-  const play = !!v.play || !!v.fast;
-  const d = await Demo.create(
-    defaultOptions({
-      preset,
-      fast: !!v.fast,
-      pace: (v.pace as 'auto' | 'key') ?? 'auto',
-      dwellMs: v.dwell ? Number(v.dwell) : 2500,
-      captions: (v.captions as Where) ?? 'inline',
-      narration: (v.narration as Where) ?? 'strip',
-      screen: v.screen ? Number(v.screen) : 0,
-      seed: v.seed ? Number(v.seed) : 1,
-      root: v.root,
-      typedHub: play,
-    }),
-  );
+  const a = parseLauncherArgs(process.argv.slice(2));
+  if (a.help) return void console.log(USAGE);
+  const { preset, play } = a;
+  const d = await Demo.create(defaultOptions(a.options));
   let code = 0;
   try {
     await d.openHostTerminal();
@@ -97,7 +66,7 @@ async function main() {
       await d.recordFinalState();
       console.log('story finished');
     }
-    const end = endPlan({ play, fast: !!v.fast, exit: !!v.exit, linger: v.linger });
+    const end = endPlan({ play, fast: !!a.options.fast, exit: a.exit, linger: a.linger });
     if (end.lingerMs > 0) {
       console.log(`leaving the windows up for ${Math.round(end.lingerMs / 1000)} s, then ending`);
       await new Promise((r) => setTimeout(r, end.lingerMs));
