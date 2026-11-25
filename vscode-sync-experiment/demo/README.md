@@ -73,13 +73,24 @@ as Myra (or Maurice, in the presets that have his terminal). With `--play` it ru
 | `--screen <n>` | The monitor to place windows on (default 0, the main one). |
 | `--root <dir>` | The demo root (default a fresh temporary directory). |
 
-To run the stories one after another with no Ctrl-C, add `--exit`; the first failed story stops the loop:
+To run several stories one after another with no Ctrl-C, use `demo:all`. It plays each story in its own launcher process
+with `--play --exit`, in the order hub-vscode-clone, hub-browser, vscode-share, and ends with a summary of each story and
+the total time:
 
 ```bash
-for p in hub-browser hub-vscode-clone vscode-share; do
-  npm run demo -w quarto-hub-vscode -- --preset "$p" --play --exit || break
-done
+npm run demo:all -w quarto-hub-vscode                                    # the three stories, paced
+npm run demo:all -w quarto-hub-vscode -- --fast                          # the same, headless and quick
+npm run demo:all -w quarto-hub-vscode -- --presets vscode-share,hub-browser   # another list or order
 ```
+
+| Option | Meaning |
+|---|---|
+| `--presets a,b,c` | The stories to play, in order (default `hub-vscode-clone,hub-browser,vscode-share`). Any preset works, including `hub-vscode-host`. |
+| `--keep-going` | Play the remaining stories after one fails. By default the first failure stops the list. |
+| `--root <dir>` | A parent directory: each story gets `<dir>/<preset>`. |
+
+Every other option (`--fast`, `--dwell`, `--linger`, `--seed`, `--screen`, and so on) goes to each launcher run. Ctrl-C stops
+the story that is running and the rest of the list. The exit code is 0 when every story passed, and 1 otherwise.
 
 The typed commands and the editor text appear the way a person types them (`demo/src/typing.ts`, seeded by `--seed`):
 a base of 40 ms per character; longer pauses at the start of a word and after `&&`, `|`, or `;`; alternating-hand keys
