@@ -1,6 +1,6 @@
 ---
 name: autonomously-fix-small-issue
-description: Take a small, unambiguous GitHub issue from report to a green, mergeable PR without further user input — braid strand, plan doc, topic branch, fix with tests, PR, then watch CI and fix failures and merge conflicts until the checks pass. User-invoked only (/autonomously-fix-small-issue <N or issue URL>). Starts with a scope gate that stops and hands off to /triage when the issue is not small, not unambiguous, or needs a product decision. Never merges, never closes the issue or the strand.
+description: Take a small, unambiguous GitHub issue from report to a green, mergeable PR without further user input — braid strand, plan doc, topic branch, fix with tests, PR, then watch CI and fix failures and merge conflicts until the checks pass. User-invoked only (/autonomously-fix-small-issue <N or issue URL>). Starts with a scope gate that stops, records the reason as a marked comment on the issue, and hands off to /triage when the issue is not small, not unambiguous, or needs a product decision. Also has gate-only, sweep, and repair modes used by the nightly-autofix workflow (/nightly-issue-sweep). Never merges, never closes the issue or the strand.
 disable-model-invocation: true
 ---
 
@@ -14,10 +14,29 @@ When in doubt, fail the gate.
 Reference run: GH #930 → PR #934 (hub-client tab-title order; one helper,
 one call site, unit tests, ~20 minutes).
 
+## Modes
+
+The default is the **interactive** mode, which is everything below. The
+nightly-autofix workflow (`/nightly-issue-sweep`) runs the skill in one of
+three other modes, and its prompt names the mode:
+
+- **gate-only**: §1, §2, and § Recording a gate failure. Then stop and
+  return the verdict. No strand, no branch.
+- **sweep**: like interactive, but work in the shared
+  `.worktrees/autofix` checkout (§3), label the PR `autofix` (§6), and
+  **skip §7**. Stop once the PR is open and the push is confirmed. The
+  workflow's repair pass deals with CI later, so don't wait for it.
+- **repair**: § Repair mode only, for one existing `autofix` PR.
+
+In every mode other than interactive, ignore the `# Task Context` block in
+the main checkout's `CLAUDE.local.md`. It describes the user's own work,
+not yours.
+
 ## Invariants
 
 - **Stop at a green PR.** Open the PR, then watch CI and fix what breaks
-  (§ 7) until every check passes and the PR is mergeable. Never merge, never
+  (§ 7) until every check passes and the PR is mergeable. (In sweep mode,
+  stop at an open PR. See § Modes.) Never merge, never
   close the GH issue, never close the braid strand. `Closes #N` in the PR
   body is enough; the strand stays `in_progress` until the PR merges.
 - **Never touch the user's in-flight work.** No stashes left behind, no
@@ -39,9 +58,9 @@ enough to know the size of the change, not more.
 
 ## 2. Scope gate
 
-Proceed only if **all** of these hold. Otherwise stop, tell the user which
-check failed and why, and suggest `/triage <N>`. Do not create a strand or a
-branch on a failed gate.
+Proceed only if **all** of these hold. Otherwise stop, record the failure
+(§ Recording a gate failure), tell the user which check failed and why, and
+suggest `/triage <N>`. Do not create a strand or a branch on a failed gate.
 
 - [ ] **One request.** The issue asks for one thing (not a list of bugs).
 - [ ] **Unambiguous.** The desired behaviour is stated, or there is exactly
@@ -55,10 +74,54 @@ branch on a failed gate.
       fails before the fix and passes after (or, for docs-only changes, the
       docs build). If the only verification is "look at it in a browser",
       fail the gate.
-- [ ] **Clean start.** `git status` is clean (see § 3 if it isn't).
+- [ ] **Clean start.** `git status` is clean (see § 3 if it isn't). In
+      sweep mode this is the `.worktrees/autofix` checkout, which the
+      workflow's housekeeping step has already reset.
 
 Before you continue, tell the user in one or two sentences that the gate
 passed and what you're about to change.
+
+### Recording a gate failure
+
+**Gate version: 1.** Bump it here (and in the marker below, and in
+`GATE_VERSION` in `.claude/workflows/nightly-autofix.js`) when you change
+the checklist above in a way that should re-evaluate issues already
+rejected. The nightly selector re-gates any issue whose last marker is
+older.
+
+First, sort each failed check:
+
+- **Intrinsic:** the failure is a property of the issue: more than one
+  request, ambiguous, needs a product decision, too large, not testable.
+  This doesn't change until someone edits or comments on the issue.
+- **Environment:** the failure is a property of this run: a dirty tree,
+  red HEAD, a missing toolchain, a network failure, or code you couldn't
+  find because the checkout is broken.
+
+**Record only intrinsic failures.** An environment failure gets no
+comment, so the issue is retried on the next run. When at least one
+intrinsic check failed, post exactly one comment. Its first line is a
+machine-readable marker that the nightly selector
+(`.claude/skills/nightly-issue-sweep/scripts/select_candidates.py`)
+parses, so keep it verbatim:
+
+```bash
+gh issue comment <N> --repo quarto-dev/q2 --body-file - <<'MARKER'
+<!-- q2-autofix gate v=1 verdict=fail checks=<comma-separated slugs> -->
+**Automated triage:** this issue isn't a candidate for an unattended fix yet.
+
+- *<Check name>:* <one sentence, specific to this issue>
+- ...
+
+Editing the issue or adding a comment (for example, splitting it into separate issues, or settling the open question) makes it eligible for another look.
+MARKER
+```
+
+Check slugs: `one-request`, `unambiguous`, `no-product-decision`, `small`,
+`testable`. The reporter reads this comment, so keep each reason concrete,
+neutral, and short. Point at the part of the issue that causes the
+failure, and don't speculate about the fix. When the workflow says
+`dry-run`, don't post the comment; return its text instead.
 
 ## 3. Strand, branch, plan
 
@@ -68,6 +131,14 @@ braid create "<area>: <headline>" -t bug|feature|task -p <0-4> -l <area> \
 ```
 
 Branch per `.claude/rules/worktrees.md` § Branch naming (`braid/<id>-<slug>`):
+
+- **Sweep mode:** always work in `<repo-root>/.worktrees/autofix`, which
+  the workflow leaves detached at a fresh `origin/main`:
+  `git -C <repo-root>/.worktrees/autofix switch -c braid/<id>-<slug>`.
+  Run every command from there (`cd <abs-path> && ...`, since a subagent's
+  working directory may not persist between commands), and run `npm
+  install` there if hub-client is in scope. Don't use `create-worktree` or
+  `switch-task`.
 
 - **Main checkout, clean, on `main`:** branch in place —
   `git switch main && git pull --ff-only && git switch -c braid/<id>-<slug>`.
@@ -150,6 +221,11 @@ don't silence the push's output, and confirm it landed with `git ls-remote
 origin <remote-branch>` against `git rev-parse HEAD` before you say it's
 pushed. See `.claude/rules/worktrees.md` § Pushing for PR.
 
+In sweep mode, add `--label autofix` to `gh pr create`. If the label
+doesn't exist yet, create it first: `gh label create autofix --repo
+quarto-dev/q2 --color 0E8A16 --description "PR opened by the nightly
+autofix sweep"`. Open the PR ready for review, not as a draft, so CI runs.
+
 PR body: `Closes #<N>.`, the behaviour change in one or two sentences, what
 changed (files/functions), **Testing** (each check and its result,
 pre-existing failures called out, anything not verified, e.g. "not checked in
@@ -216,6 +292,37 @@ three fix attempts haven't turned it green, stop and report to the user.
 When everything is green and the PR is mergeable, update the PR body if the
 fixes changed what it says (files, testing notes), and add a braid comment
 summarizing what CI caught and how you fixed it.
+
+## Repair mode
+
+Repair mode is a single pass over one `autofix` PR whose CI has finished
+red or which conflicts with `main`. Fix it once, push, and leave. Don't
+start a monitor or wait for the new run, because the next repair pass
+looks at it again.
+
+1. In `<repo-root>/.worktrees/autofix`, check out the PR branch and merge
+   `origin/main`: `git switch braid/<leaf>` (or `git switch -c
+   braid/<leaf> origin/<head>` if the local branch is gone; `<leaf>` is
+   the remote head name without its `feature/` or `bugfix/` prefix), then
+   `git merge origin/main`. Never rebase or force-push.
+2. Resolve conflicts and/or diagnose the failed checks as in §7 ("A
+   failing check"). The run has finished, so `--log-failed` works.
+3. Apply §7's limits as written: pre-existing or flaky failures get one
+   `gh run rerun <run-id> --failed` and a strand, not a fix. Stay inside
+   the gated scope.
+4. Re-run the §5 checks your fix affects, commit, push with the refspec,
+   and confirm with `git ls-remote`.
+5. Post one PR comment that starts with the attempt marker. K is the
+   previous attempt count, which the workflow passes, plus 1:
+
+   ```text
+   <!-- q2-autofix repair n=<K> -->
+   **Autofix repair <K>/3:** <what failed, and what you changed or why you changed nothing>
+   ```
+
+6. If the fix needs work outside the gated scope, or this was attempt 3
+   and the PR still isn't clean, add the `autofix:needs-human` label
+   (create it if needed) and add a braid comment on the strand saying why.
 
 ## 8. Report back
 
