@@ -56,11 +56,17 @@ fn collect_text(inlines: &Inlines, result: &mut String) {
             // text. pampa only populates `content` for author-in-text
             // citations; for the bracketed form it leaves `content` empty and
             // keeps everything in `citations`, so reconstruct from those.
-            // Prefix and suffix already carry their own spacing (including
-            // the separator before a second citation in `[@a; @b]`).
+            // Prefixes are trimmed (as in Pandoc), so put back the space
+            // after a prefix and the one between citations in `[@a; @b]`.
             Inline::Cite(c) if c.content.is_empty() => {
-                for citation in &c.citations {
+                for (i, citation) in c.citations.iter().enumerate() {
+                    if i > 0 {
+                        result.push(' ');
+                    }
                     collect_text(&citation.prefix, result);
+                    if !citation.prefix.is_empty() {
+                        result.push(' ');
+                    }
                     result.push_str(&citation.id);
                     collect_text(&citation.suffix, result);
                 }

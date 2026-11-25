@@ -628,7 +628,7 @@ pub fn make_cite_inline(
                     // a compound cite
                     citation.mode = CitationMode::NormalCitation;
                 }
-                citation.prefix = prefix;
+                citation.prefix = trim_space_inlines(prefix);
                 citation.suffix = suffix;
                 vec![citation]
             } else {
@@ -645,6 +645,7 @@ pub fn make_cite_inline(
                         new_prefix.extend(citation.prefix.clone());
                         citation.prefix = new_prefix;
                     }
+                    citation.prefix = trim_space_inlines(std::mem::take(&mut citation.prefix));
                     if i == num_citations - 1 {
                         // Append suffix to the last citation's suffix
                         citation.suffix.extend(suffix.clone());
@@ -660,6 +661,21 @@ pub fn make_cite_inline(
         content: vec![],
         source_info,
     }))
+}
+
+/// Drop leading and trailing `Space`/`SoftBreak` inlines, as Pandoc's
+/// markdown reader does for a citation prefix (`trimInlines`). The space
+/// after `;` in `[@a; @b]` would otherwise start `@b`'s prefix, and show
+/// up in the output when a CSL style sorts `@b` first (issue #1313).
+/// Consumers add their own separator after a non-empty prefix.
+fn trim_space_inlines(mut inlines: Inlines) -> Inlines {
+    let is_space = |inline: &Inline| matches!(inline, Inline::Space(_) | Inline::SoftBreak(_));
+    while inlines.last().is_some_and(is_space) {
+        inlines.pop();
+    }
+    let leading = inlines.iter().take_while(|i| is_space(i)).count();
+    inlines.drain(..leading);
+    inlines
 }
 
 /// Split a string into Inlines, matching Pandoc's `B.text` from pandoc-types Builder.hs.
@@ -820,17 +836,18 @@ mod tests {
                 // Should have 2 citations
                 assert_eq!(cite.citations.len(), 2);
 
-                // First citation should have the prefix "see " prepended
+                // First citation should have the prefix "see" prepended
+                // (the trailing space is trimmed, as in Pandoc)
                 assert_eq!(cite.citations[0].id, "knuth1984");
-                assert_eq!(cite.citations[0].prefix.len(), 2);
+                assert_eq!(cite.citations[0].prefix.len(), 1);
                 match &cite.citations[0].prefix[0] {
                     Inline::Str(s) => assert_eq!(s.text, "see"),
                     _ => panic!("Expected Str"),
                 }
 
-                // Second citation should have its original prefix intact
+                // Second citation keeps its prefix text, trimmed to "also"
                 assert_eq!(cite.citations[1].id, "wickham2015");
-                assert_eq!(cite.citations[1].prefix.len(), 3);
+                assert_eq!(cite.citations[1].prefix.len(), 1);
             }
             _ => panic!("Expected Cite inline, got: {:?}", result),
         }
@@ -867,8 +884,8 @@ mod tests {
             Inline::Cite(cite) => {
                 assert_eq!(cite.citations.len(), 1);
                 assert_eq!(cite.citations[0].id, "knuth1984");
-                // Prefix should be "see "
-                assert_eq!(cite.citations[0].prefix.len(), 2);
+                // Prefix should be "see" (trailing space trimmed)
+                assert_eq!(cite.citations[0].prefix.len(), 1);
                 // Suffix should be ", pp. 33"
                 assert_eq!(cite.citations[0].suffix.len(), 3);
             }
@@ -1104,6 +1121,81 @@ mod tests {
             }
             _ => panic!("Expected Span inline"),
         }
+    }
+
+    // === citation prefix trimming (issue #1313) ===
+
+    fn single_cite(id: &str) -> Inline {
+        Inline::Cite(Box::new(Cite {
+            citations: vec![make_citation(id, vec![], vec![])],
+            content: vec![],
+            source_info: dummy_source_info(),
+        }))
+    }
+
+    fn make_compound_cite(content: Inlines) -> Vec<Citation> {
+        match make_cite_inline(
+            (String::new(), vec![], LinkedHashMap::new()).into(),
+            (String::new(), String::new()),
+            content,
+            dummy_source_info(),
+            AttrSourceInfo::empty(),
+            TargetSourceInfo::empty(),
+        ) {
+            Inline::Cite(cite) => cite.citations,
+            other => panic!("Expected Cite inline, got: {:?}", other),
+        }
+    }
+
+    fn texts(inlines: &Inlines) -> Vec<String> {
+        inlines
+            .iter()
+            .map(|i| match i {
+                Inline::Str(s) => s.text.clone(),
+                Inline::Space(_) => " ".to_string(),
+                Inline::SoftBreak(_) => "\n".to_string(),
+                other => panic!("unexpected inline {:?}", other),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_make_cite_inline_trims_space_after_semicolon() {
+        // `[@a; @b]`: the space after `;` must not become `@b`'s prefix.
+        let citations = make_compound_cite(vec![
+            single_cite("a"),
+            make_str(";"),
+            make_space(),
+            single_cite("b"),
+        ]);
+        assert_eq!(citations.len(), 2);
+        assert!(citations[0].prefix.is_empty());
+        assert!(citations[1].prefix.is_empty(), "{:?}", citations[1].prefix);
+    }
+
+    #[test]
+    fn test_make_cite_inline_trims_prefixes() {
+        // `[see @x2, p. 3; also @x]` → prefixes `see` and `also`, as in Pandoc.
+        let citations = make_compound_cite(vec![
+            make_str("see"),
+            make_space(),
+            single_cite("x2"),
+            make_str(","),
+            make_space(),
+            make_str("p. 3"),
+            make_str(";"),
+            make_space(),
+            make_str("also"),
+            Inline::SoftBreak(SoftBreak {
+                source_info: dummy_source_info(),
+            }),
+            single_cite("x"),
+        ]);
+        assert_eq!(citations.len(), 2);
+        assert_eq!(texts(&citations[0].prefix), vec!["see"]);
+        // The suffix keeps its inner spacing.
+        assert_eq!(texts(&citations[0].suffix), vec![",", " ", "p. 3"]);
+        assert_eq!(texts(&citations[1].prefix), vec!["also"]);
     }
 
     // === make_cite_inline with non-cite content tests ===
