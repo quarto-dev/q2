@@ -222,6 +222,16 @@ jobs:
             tar xz -C "$RUNNER_TEMP/rig"
           echo "$RUNNER_TEMP/rig/bin" >> "$GITHUB_PATH"
 
+      # R's svg() device needs libXrender from XQuartz for cairo; without it
+      # knitr fails the typst figure fixtures. Same install as quarto-cli's
+      # test-smokes.yml.
+      - name: Install XQuartz (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install --cask xquartz
+
       - name: Install rig (macOS)
         if: runner.os == 'macOS'
         shell: bash
