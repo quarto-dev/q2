@@ -153,7 +153,7 @@ pub fn apply_citeproc_filter(
         .cloned()
         .collect();
     for bib_path in &config.bibliography {
-        let references = load_bibliography(bib_path, base_dir, runtime)?;
+        let references = load_bibliography(bib_path, base_dir, runtime, config.lang.as_deref())?;
         loaded.extend(references.into_iter().filter(|r| scope.includes(&r.id)));
     }
     let loaded_ids: Vec<String> = loaded.iter().map(|r| r.id.clone()).collect();
@@ -322,7 +322,7 @@ pub fn check_citation_keys(
     }
     let mut known: HashSet<String> = config.references.iter().map(|r| r.id.clone()).collect();
     for bib_path in &config.bibliography {
-        match load_bibliography(bib_path, base_dir, runtime) {
+        match load_bibliography(bib_path, base_dir, runtime, config.lang.as_deref()) {
             Ok(references) => known.extend(references.into_iter().map(|r| r.id)),
             Err(_) => return (pandoc, vec![]),
         }
@@ -437,10 +437,15 @@ pub fn load_csl_style(
 }
 
 /// Load bibliography references from a CSL-JSON or BibTeX file.
+///
+/// `document_lang` is the document's `lang`. A BibTeX entry without its own
+/// language falls back to it when deciding whether its titles are English
+/// (see [`is_english_language`]).
 fn load_bibliography(
     path: &str,
     base_dir: &Path,
     runtime: &dyn SystemRuntime,
+    document_lang: Option<&str>,
 ) -> Result<Vec<Reference>, CiteprocFilterError> {
     let path = resolve_against_base(base_dir, path);
     let content = runtime
@@ -463,7 +468,7 @@ fn load_bibliography(
         })?;
         bibliography
             .iter()
-            .map(biblatex_entry_to_reference)
+            .map(|entry| biblatex_entry_to_reference(entry, document_lang))
             .collect::<Result<_, _>>()
             .map_err(|error| CiteprocFilterError::BibliographyParseError(path, error))
     } else {
@@ -475,7 +480,10 @@ fn load_bibliography(
     }
 }
 
-fn biblatex_entry_to_reference(entry: &biblatex::Entry) -> Result<Reference, String> {
+fn biblatex_entry_to_reference(
+    entry: &biblatex::Entry,
+    document_lang: Option<&str>,
+) -> Result<Reference, String> {
     use quarto_citeproc::reference::{DateVariable, Name, StringOrNumber};
 
     let get_text = |keys: &[&str]| {
@@ -494,11 +502,18 @@ fn biblatex_entry_to_reference(entry: &biblatex::Entry) -> Result<Reference, Str
                 .filter(|value| !value.is_empty())
         })
     };
+    // As in Pandoc's BibTeX reader, only English titles are converted to
+    // sentence case: the entry's own language decides, then the document
+    // `lang`, then English (issue #1306).
+    let english = get_verbatim(&["langid", "hyphenation", "language"])
+        .as_deref()
+        .or(document_lang)
+        .is_none_or(is_english_language);
     let get_title_text = |keys: &[&str]| {
         keys.iter().find_map(|key| {
             entry
                 .get(key)
-                .map(format_bibtex_title_case)
+                .map(|chunks| format_bibtex_title_case(chunks, english))
                 .filter(|value| !value.is_empty())
         })
     };
@@ -693,7 +708,33 @@ fn bibtex_option_enabled(options: &str, key: &str) -> bool {
     })
 }
 
-fn format_bibtex_title_case(chunks: &[biblatex::Spanned<biblatex::Chunk>]) -> String {
+/// Whether a BibTeX language (a BCP 47 tag such as `en-US`, or a babel
+/// name such as `english` or `british`) is English.
+fn is_english_language(lang: &str) -> bool {
+    let lang = lang.trim().to_ascii_lowercase();
+    lang == "en"
+        || lang.starts_with("en-")
+        || lang.starts_with("en_")
+        || matches!(
+            lang.as_str(),
+            "english"
+                | "american"
+                | "british"
+                | "usenglish"
+                | "ukenglish"
+                | "canadian"
+                | "australian"
+                | "newzealand"
+        )
+}
+
+/// Format a BibTeX title. Braced text becomes a `nocase` span. For English
+/// titles, the other words are converted to sentence case; for any other
+/// language they keep their case, as in Pandoc.
+fn format_bibtex_title_case(
+    chunks: &[biblatex::Spanned<biblatex::Chunk>],
+    english: bool,
+) -> String {
     use std::fmt::Write as _;
 
     let mut result = String::new();
@@ -731,7 +772,11 @@ fn format_bibtex_title_case(chunks: &[biblatex::Spanned<biblatex::Chunk>]) -> St
             if word.is_empty() {
                 return;
             }
-            output.push_str(&format_bibtex_word(word, *first, *capitalize_next));
+            if english {
+                output.push_str(&format_bibtex_word(word, *first, *capitalize_next));
+            } else {
+                output.push_str(word);
+            }
             *first = false;
             *capitalize_next = false;
             word.clear();
@@ -4319,7 +4364,7 @@ mod tests {
         .unwrap();
 
         let references =
-            load_bibliography("references.bib", dir.path(), &NativeRuntime::new()).unwrap();
+            load_bibliography("references.bib", dir.path(), &NativeRuntime::new(), None).unwrap();
         assert_eq!(references.len(), 1);
 
         let reference = &references[0];
@@ -4390,7 +4435,7 @@ mod tests {
         .unwrap();
 
         let references =
-            load_bibliography("references.bib", dir.path(), &NativeRuntime::new()).unwrap();
+            load_bibliography("references.bib", dir.path(), &NativeRuntime::new(), None).unwrap();
         let particles = |id: &str| -> Vec<(Option<String>, Option<String>, Option<String>)> {
             references
                 .iter()
@@ -4491,7 +4536,7 @@ mod tests {
         .unwrap();
 
         let references =
-            load_bibliography("references.bib", dir.path(), &NativeRuntime::new()).unwrap();
+            load_bibliography("references.bib", dir.path(), &NativeRuntime::new(), None).unwrap();
         let by_id = |id: &str| {
             references
                 .iter()
@@ -4566,7 +4611,7 @@ mod tests {
         .unwrap();
 
         let references =
-            load_bibliography("references.bib", dir.path(), &NativeRuntime::new()).unwrap();
+            load_bibliography("references.bib", dir.path(), &NativeRuntime::new(), None).unwrap();
         assert_eq!(
             references[0].title.as_deref(),
             Some(
@@ -4586,6 +4631,77 @@ mod tests {
 
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
+    fn test_load_bibtex_non_english_keeps_title_case() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("references.bib"),
+            r#"@article{nl,
+  title = {Onderweg in Nederland {CBS} 2025},
+  journal = {Tijdschrift voor Vervoerswetenschap}
+}
+@article{langid,
+  title = {Onderweg in Nederland},
+  langid = {dutch}
+}
+@article{english,
+  title = {Travel in The Netherlands},
+  langid = {british}
+}"#,
+        )
+        .unwrap();
+        let by_id = |references: &[Reference], id: &str| {
+            references.iter().find(|r| r.id == id).cloned().unwrap()
+        };
+
+        // The document `lang` applies to entries without their own language.
+        let references = load_bibliography(
+            "references.bib",
+            dir.path(),
+            &NativeRuntime::new(),
+            Some("nl"),
+        )
+        .unwrap();
+        let nl = by_id(&references, "nl");
+        assert_eq!(
+            nl.title.as_deref(),
+            Some("Onderweg in Nederland <span class=\"nocase\">CBS</span> 2025")
+        );
+        assert_eq!(
+            nl.container_title.as_deref(),
+            Some("Tijdschrift voor Vervoerswetenschap")
+        );
+        // An entry's own `langid` wins over the document `lang`.
+        assert_eq!(
+            by_id(&references, "english").title.as_deref(),
+            Some("Travel in the netherlands")
+        );
+
+        // Without a document `lang`, English is assumed unless `langid` says
+        // otherwise.
+        let references =
+            load_bibliography("references.bib", dir.path(), &NativeRuntime::new(), None).unwrap();
+        assert_eq!(
+            by_id(&references, "nl").title.as_deref(),
+            Some("Onderweg in nederland <span class=\"nocase\">CBS</span> 2025")
+        );
+        assert_eq!(
+            by_id(&references, "langid").title.as_deref(),
+            Some("Onderweg in Nederland")
+        );
+    }
+
+    #[test]
+    fn test_is_english_language() {
+        for lang in ["en", "en-US", "EN-gb", "english", "British", "american"] {
+            assert!(is_english_language(lang), "{lang}");
+        }
+        for lang in ["nl", "nl-NL", "dutch", "de", "german", "fr-CA"] {
+            assert!(!is_english_language(lang), "{lang}");
+        }
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
     fn test_load_bibtex_malformed_file_returns_parse_error() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
@@ -4595,7 +4711,7 @@ mod tests {
         .unwrap();
 
         assert!(matches!(
-            load_bibliography("malformed.bib", dir.path(), &NativeRuntime::new()),
+            load_bibliography("malformed.bib", dir.path(), &NativeRuntime::new(), None),
             Err(CiteprocFilterError::BibliographyParseError(_, _))
         ));
     }
@@ -4853,7 +4969,7 @@ mod tests {
     #[test]
     fn bibliography_is_read_through_the_runtime() {
         let rt = MemRuntime::new(&[("/mem/refs.bib", MEM_BIB)]);
-        let refs = load_bibliography("refs.bib", Path::new("/mem"), &rt).unwrap();
+        let refs = load_bibliography("refs.bib", Path::new("/mem"), &rt, None).unwrap();
         assert_eq!(refs.len(), 1);
         assert_eq!(refs[0].id, "knuth1984");
     }
