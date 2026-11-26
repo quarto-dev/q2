@@ -127,6 +127,20 @@ impl AstTransform for ResourceCollectorTransform {
         for block in &ast.blocks {
             collector.visit_block(block);
         }
+        // GH #1011: `typst compile` reads the `bibliography`/`csl` files
+        // itself, relative to the `.typ` in the output directory. Beside
+        // the source they are already there.
+        if ctx.format.identifier == crate::format::FormatIdentifier::Typst
+            && quarto_util::normalize_lexically(&page_dir)
+                != quarto_util::normalize_lexically(input_dir)
+        {
+            let path_ctx = crate::config_paths::PathCtx::for_document(
+                ctx.source_context,
+                &ctx.project.dir,
+                &ctx.document.input,
+            );
+            collector.collect_typst_compile_files(&ast.meta, &path_ctx);
+        }
 
         let count = collector.copies.len();
         ctx.resource_copies.extend(collector.copies);
@@ -464,6 +478,54 @@ impl<'a> ResourceVisitor<'a> {
                     }
                 }
                 _ => {}
+            }
+        }
+    }
+
+    /// Queue copies of the metadata files `typst compile` reads
+    /// (`biblio.typ`'s `#bibliography(...)` and `style:`), so each
+    /// relative path, as the `.typ` spells it, resolves in the output
+    /// tree. A leading `/` is project-root-relative for typst (`--root`
+    /// is the project directory), so those and absolute paths already
+    /// resolve; a destination outside the output root is skipped rather
+    /// than written into the source tree.
+    fn collect_typst_compile_files(
+        &mut self,
+        meta: &quarto_pandoc_types::ConfigValue,
+        path_ctx: &crate::config_paths::PathCtx<'_>,
+    ) {
+        for key in ["bibliography", "csl"] {
+            let Some(value) = meta.get(key) else {
+                continue;
+            };
+            let entries: Vec<_> = match value.as_array() {
+                Some(items) => items.iter().collect(),
+                None => vec![value],
+            };
+            for entry in entries {
+                let Some(written) = entry.as_plain_text() else {
+                    continue;
+                };
+                // lint:allow(config-path-base) — the source side is resolved below; here the string is classified as the `.typ` spells it
+                let rooted = quarto_util::is_rooted(Path::new(&written));
+                if written.is_empty() || quarto_util::is_external_url(&written) || rooted {
+                    continue;
+                }
+                let Some(src) = crate::config_paths::resolve_config_path(entry, path_ctx)
+                    .and_then(|r| r.file())
+                else {
+                    continue;
+                };
+                // lint:allow(config-path-base) — destination side: typst resolves the string as written against the `.typ`'s directory, the output page dir
+                let dest = quarto_util::normalize_lexically(&self.output_dir.join(&written));
+                if !dest.starts_with(self.root_output_dir) || !self.seen_urls.insert(written) {
+                    continue;
+                }
+                self.copies.push(crate::render::ResourceCopyIntent {
+                    src,
+                    dest,
+                    origin: entry.source_info.clone(),
+                });
             }
         }
     }
