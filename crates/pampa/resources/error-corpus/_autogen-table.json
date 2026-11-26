@@ -23174,6 +23174,63 @@
     "name": "Q-2-60/table-body-cell-unquoted-title"
   },
   {
+    "column": 24,
+    "row": 0,
+    "state": 2950,
+    "sym": "pandoc_str_token1",
+    "errorInfo": {
+      "code": "Q-2-61",
+      "title": "Unquoted attribute value containing a comma",
+      "message": "Attribute values containing `,` must be quoted. Write `widths=\"1,3\"` rather than `widths=1,3`.",
+      "captures": [],
+      "notes": [],
+      "hints": [
+        "Some extension READMEs (for example pandoc-ext/list-table's `aligns=l,c`) write these values unquoted; add the quotes when copying them."
+      ],
+      "guard": "^[^\\s}]*,",
+      "desynchronizes": true
+    },
+    "name": "Q-2-61/div"
+  },
+  {
+    "column": 13,
+    "row": 0,
+    "state": 2950,
+    "sym": "pandoc_str_token1",
+    "errorInfo": {
+      "code": "Q-2-61",
+      "title": "Unquoted attribute value containing a comma",
+      "message": "Attribute values containing `,` must be quoted. Write `widths=\"1,3\"` rather than `widths=1,3`.",
+      "captures": [],
+      "notes": [],
+      "hints": [
+        "Some extension READMEs (for example pandoc-ext/list-table's `aligns=l,c`) write these values unquoted; add the quotes when copying them."
+      ],
+      "guard": "^[^\\s}]*,",
+      "desynchronizes": true
+    },
+    "name": "Q-2-61/span"
+  },
+  {
+    "column": 19,
+    "row": 0,
+    "state": 2950,
+    "sym": "pandoc_str_token1",
+    "errorInfo": {
+      "code": "Q-2-61",
+      "title": "Unquoted attribute value containing a comma",
+      "message": "Attribute values containing `,` must be quoted. Write `widths=\"1,3\"` rather than `widths=1,3`.",
+      "captures": [],
+      "notes": [],
+      "hints": [
+        "Some extension READMEs (for example pandoc-ext/list-table's `aligns=l,c`) write these values unquoted; add the quotes when copying them."
+      ],
+      "guard": "^[^\\s}]*,",
+      "desynchronizes": true
+    },
+    "name": "Q-2-61/heading"
+  },
+  {
     "column": 1,
     "row": 0,
     "state": 785,
