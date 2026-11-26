@@ -76,6 +76,7 @@ pub mod test_apostrophe_after_word;
 pub mod test_attr_key_colon;
 pub mod test_attr_source_parsing;
 pub mod test_attr_source_structure;
+pub mod test_attr_unquoted_comma_value;
 pub mod test_attribute_order_contexts;
 pub mod test_bare_at_str;
 pub mod test_bare_lt_str;

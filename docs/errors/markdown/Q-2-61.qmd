@@ -1,0 +1,57 @@
+---
+title: "Unquoted attribute value containing a comma"
+description: "An attribute value containing a comma was written without quotes."
+code: Q-2-61
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-61` — Unquoted attribute value containing a comma
+
+> Attribute values containing `,` must be quoted. Write `widths="1,3"`
+> rather than `widths=1,3`.
+
+## What this means
+
+In an attribute block such as `{.class key=value}`, an unquoted value
+may only contain characters that cannot be confused with the rest of
+the attribute syntax. A comma is not one of them, so a value that
+contains one has to be wrapped in quotes.
+
+## Why this happens
+
+Comma-separated settings copied from an extension's documentation, for
+example a list table's column widths or alignments:
+
+```markdown
+::: {.list-table widths=1,3 aligns=l,c}
+- - A
+  - B
+:::
+```
+
+The same applies to attribute blocks on spans, images, inline code and
+headings.
+
+Because the parser cannot tell where the attribute block ends, it
+cannot reliably read the rest of the file either, so Quarto reports
+only this error and none that come after it.
+
+## How to fix
+
+Quote the value:
+
+```markdown
+::: {.list-table widths="1,3" aligns="l,c"}
+- - A
+  - B
+:::
+```
+
+## Related errors
+
+- [`Q-2-3`](Q-2-3.qmd) — a key-value pair before a class in an
+  attribute block.

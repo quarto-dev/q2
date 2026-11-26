@@ -1686,6 +1686,13 @@
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-60",
     "since_version": "99.9.9"
   },
+  "Q-2-61": {
+    "subsystem": "markdown",
+    "title": "Unquoted attribute value containing a comma",
+    "message_template": "Attribute values containing `,` must be quoted. Write `widths=\"1,3\"` rather than `widths=1,3`.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-61",
+    "since_version": "99.9.9"
+  },
   "Q-5-27": {
     "subsystem": "project",
     "title": "Invalid `diagnostics:` Entry",

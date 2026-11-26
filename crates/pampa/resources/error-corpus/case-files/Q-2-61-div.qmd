@@ -1,0 +1,4 @@
+::: {.list-table widths=1,3}
+- - A
+  - B
+:::

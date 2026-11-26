@@ -1,0 +1,33 @@
+{
+  "code": "Q-2-61",
+  "title": "Unquoted attribute value containing a comma",
+  "message": "Attribute values containing `,` must be quoted. Write `widths=\"1,3\"` rather than `widths=1,3`.",
+  "notes": [],
+  "hints": [
+    "Some extension READMEs (for example pandoc-ext/list-table's `aligns=l,c`) write these values unquoted; add the quotes when copying them."
+  ],
+  "desynchronizes": true,
+  "cases": [
+    {
+      "name": "div",
+      "description": "A comma-separated value on a fenced div, as in pandoc-ext/list-table's `widths=1,3`. Recovery consumes the div, so its closing `:::` and every later fence used to be reported as further parse errors; `desynchronizes` drops them. Every unquoted value with a character the attribute lexer rejects (`,`, `;`, `(`, `<`, ...) fails in this one state, so the case is guarded on a comma appearing in the value: the others keep the generic error rather than a message about commas.",
+      "content": "::: {.list-table widths=1,3}\n- - A\n  - B\n:::\n",
+      "captures": [],
+      "guard": "^[^\\s}]*,"
+    },
+    {
+      "name": "span",
+      "description": "The same value on a bracketed span. Attribute specifiers on spans, images, inline code and headings all reach the div's state; this case and the heading case document that rather than claiming anything new.",
+      "content": "A [x]{aligns=l,c} b\n",
+      "captures": [],
+      "guard": "^[^\\s}]*,"
+    },
+    {
+      "name": "heading",
+      "description": "The same value on a heading attribute.",
+      "content": "## Heading {widths=1,3}\n",
+      "captures": [],
+      "guard": "^[^\\s}]*,"
+    }
+  ]
+}
