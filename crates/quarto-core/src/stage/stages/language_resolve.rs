@@ -17,6 +17,7 @@
 //!    `_language.yml` (+ `_language-<tag>.yml` siblings, projects only),
 //!    and the user `language:` value (inline map, or a path to a YAML file
 //!    resolved against the document directory, then the project root);
+//!    then, on top, the `crossref.<type>-title` / `-prefix` options;
 //! 3. injects the resolved table into `doc.ast.meta` at **`quarto.language`**
 //!    as literal string scalars.
 //!
@@ -33,9 +34,10 @@ use pampa::utils::diagnostic_collector::DiagnosticCollector;
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
 use quarto_source_map::{By, SourceInfo};
+use yaml_rust2::Yaml;
 
 use crate::language::{
-    LanguageTerms, StructuredTermLayer, language_subtag_prefixes, parse_language_file,
+    LanguageTerms, StructuredTermLayer, TermEntry, language_subtag_prefixes, parse_language_file,
     parse_term_file, resolve_language, structured_layer_from_config,
 };
 use crate::stage::{PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext};
@@ -123,12 +125,62 @@ impl PipelineStage for LanguageResolveStage {
             }
         }
 
+        // `crossref.<type>-title` / `crossref.<type>-prefix` options: top
+        // precedence, as in Quarto 1 where the crossref option overrides the
+        // language default (GH #1317).
+        if let Some(layer) = doc
+            .ast
+            .meta
+            .get("crossref")
+            .and_then(crossref_options_layer)
+        {
+            layers.push(layer);
+        }
+
         let terms = resolve_language(&lang, &layers);
         inject_quarto_language(&mut doc.ast.meta, &terms);
 
         ctx.diagnostics.extend(collector.into_diagnostics());
         Ok(PipelineData::DocumentAst(doc))
     }
+}
+
+/// Maps the `crossref:` options `<type>-title` and `<type>-prefix` to the
+/// `crossref-<type>-title` / `crossref-<type>-prefix` terms. Non-string
+/// values are skipped (schema validation reports them); a YAML empty string
+/// (parsed as Null) is an empty term, so `fig-prefix: ""` suppresses the
+/// prefix.
+fn crossref_options_layer(crossref: &ConfigValue) -> Option<StructuredTermLayer> {
+    let ConfigValueKind::Map(entries) = &crossref.value else {
+        return None;
+    };
+    let mut layer = StructuredTermLayer::default();
+    for entry in entries {
+        if !(entry.key.ends_with("-title") || entry.key.ends_with("-prefix")) {
+            continue;
+        }
+        let text = if matches!(
+            entry.value.value,
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Null,
+                ..
+            }
+        ) {
+            Some(String::new())
+        } else {
+            entry.value.as_plain_text()
+        };
+        if let Some(value) = text {
+            layer.terms.insert(
+                format!("crossref-{}", entry.key),
+                TermEntry {
+                    value,
+                    source: entry.value.source_info.clone(),
+                },
+            );
+        }
+    }
+    (!layer.terms.is_empty()).then_some(layer)
 }
 
 /// Loads the project-root `_language.yml` (plus `_language-<prefix>.yml`
