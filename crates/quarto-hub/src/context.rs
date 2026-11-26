@@ -1030,7 +1030,8 @@ async fn reconcile_files_with_index(
 
     // Reconcile text files (config + qmd)
     for file_path in project_files.text_files() {
-        let path_str = file_path.to_string_lossy();
+        // Index keys are `/`-separated on every platform (GH #1349).
+        let path_str = quarto_util::to_forward_slashes(file_path);
 
         // Skip if already in index
         if index.has_file(&path_str) {
@@ -1077,7 +1078,8 @@ async fn reconcile_files_with_index(
 
     // Reconcile binary files
     for file_path in &project_files.binary_files {
-        let path_str = file_path.to_string_lossy();
+        // Index keys are `/`-separated on every platform (GH #1349).
+        let path_str = quarto_util::to_forward_slashes(file_path);
 
         // Skip if already in index
         if index.has_file(&path_str) {
@@ -1179,6 +1181,43 @@ mod tests {
         // sync_all should be a no-op
         let result = ctx.sync_all().await;
         assert_eq!(result.total_synced(), 0);
+    }
+
+    /// GH #1349: discovery keyed nested files with the native path, so on Windows the index held
+    /// `posts\\_metadata.yml` and a lookup by `posts/_metadata.yml` missed. Keys must be
+    /// `/`-separated on every platform. On a POSIX host a backslash in a file name stands in for
+    /// the Windows separator: it is the same string `to_string_lossy` gives there.
+    #[tokio::test]
+    async fn discovery_indexes_nested_files_with_forward_slash_keys() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path().join("project");
+        std::fs::create_dir(&project_root).unwrap();
+        std::fs::write(project_root.join("index.qmd"), "# Hello").unwrap();
+        // The `\` is a file-name character on Unix (a stand-in for the Windows
+        // separator) and a real separator on Windows, where `d00` must exist.
+        for name in ["d00\\f0000.qmd", "d00\\img.png"] {
+            std::fs::create_dir_all(project_root.join(name).parent().unwrap()).unwrap();
+        }
+        std::fs::write(project_root.join("d00\\f0000.qmd"), "# Nested").unwrap();
+        std::fs::write(
+            project_root.join("d00\\img.png"),
+            [0x89, b'P', b'N', b'G', 0, 1, 2],
+        )
+        .unwrap();
+
+        let storage = StorageManager::new(&project_root).unwrap();
+        let ctx = HubContext::new(storage, HubConfig::default())
+            .await
+            .unwrap();
+
+        let mut keys: Vec<String> = ctx.index().get_all_files().into_keys().collect();
+        keys.sort();
+        assert!(
+            keys.iter().all(|k| !k.contains('\\')),
+            "index keys must use `/`, saw {keys:?}"
+        );
+        assert!(keys.contains(&"d00/f0000.qmd".to_string()), "{keys:?}");
+        assert!(keys.contains(&"d00/img.png".to_string()), "{keys:?}");
     }
 
     #[tokio::test]
