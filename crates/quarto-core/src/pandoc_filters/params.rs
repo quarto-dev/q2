@@ -290,12 +290,16 @@ fn insert_project_keys(blob: &mut Map<String, Value>, project: &ProjectContext) 
 /// [`LanguageTerms`] needs no new data; see Findings for Gordon, item 1.
 ///
 /// Also emits Q1's `languageFilterParams` (`filters.ts`) at the top level:
-/// `code-summary`, `toc-title-document` and every `callout-*` term. The
-/// vendored filters read those as plain `param(key)` calls, not through
-/// `language` (`modules/callouts.lua`'s `param("callout-<type>-title")`,
-/// `foldcode.lua`'s `param("code-summary")`, `crossref/meta.lua`'s
-/// `param("toc-title-document")`), so without them a docx callout title
-/// falls back to the English default whatever `lang` says (GH #1315).
+/// `code-summary`, `toc-title-document`, and every `callout-*` and
+/// `environment-*` term. The vendored filters read those as plain
+/// `param(key)` calls, not through `language` (`modules/callouts.lua`'s
+/// `param("callout-<type>-title")`, `crossref/format.lua`'s
+/// `param("environment-<type>-title")`, `foldcode.lua`'s
+/// `param("code-summary")`, `crossref/meta.lua`'s
+/// `param("toc-title-document")`), so without them a docx callout or proof
+/// title falls back to the English default whatever `lang` says (GH #1315).
+/// The `crossref-*` terms Q1 also copies come from `RefTypeRegistry`
+/// instead (`crossref_params::insert_crossref_title_prefix_family`).
 fn insert_language(blob: &mut Map<String, Value>, language: &LanguageTerms) {
     let mut obj = Map::new();
     for (key, entry) in language.iter() {
@@ -309,7 +313,10 @@ fn insert_language(blob: &mut Map<String, Value>, language: &LanguageTerms) {
 
 /// The language terms Q1's `languageFilterParams` copies to the top level.
 fn is_top_level_language_param(key: &str) -> bool {
-    key == "code-summary" || key == "toc-title-document" || key.starts_with("callout-")
+    key == "code-summary"
+        || key == "toc-title-document"
+        || key.starts_with("callout-")
+        || key.starts_with("environment-")
 }
 
 /// `number-sections`, `number-offset`, `number-depth` — required for API
@@ -614,6 +621,7 @@ mod tests {
         assert_eq!(blob["callout-warning-title"], json!("Waarschuwing"));
         assert_eq!(blob["toc-title-document"], json!("Inhoudsopgave"));
         assert_eq!(blob["code-summary"], json!("Code"));
+        assert_eq!(blob["environment-proof-title"], json!("Bewijs"));
         // Only Q1's set is copied, not the whole bag.
         assert!(blob.get("toc-title-website").is_none());
     }

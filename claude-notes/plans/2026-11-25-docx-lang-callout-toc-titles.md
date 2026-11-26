@@ -16,7 +16,10 @@ TOC title ("Table of Contents"), while HTML localized both.
   under `language`. `insert_language` in
   `crates/quarto-core/src/pandoc_filters/params.rs` now also copies Q1's
   `languageFilterParams` set (`code-summary`, `toc-title-document`, every
-  `callout-*` term) to the top level.
+  `callout-*` and `environment-*` term) to the top level. The
+  `environment-*` terms were added in review: `crossref/format.lua` reads
+  `param("environment-<type>-title")`, so proof, remark and solution titles
+  were English too.
 - Pandoc's docx writer titles the TOC from `toc-title` metadata.
   `PandocWriteStage::prepare` (`crates/quarto-core/src/stage/stages/pandoc_write.rs`)
   now fills a missing `toc-title` from `toc-title-document` for docx when
@@ -28,3 +31,7 @@ TOC title ("Table of Contents"), while HTML localized both.
 - [x] Default docx `toc-title`, with unit tests
 - [x] Repro render: docx shows "Inhoudsopgave" and "Opmerking"
 - [x] Verification (nextest, clippy, Windows cross clippy, xtask lint, notes render)
+- [x] Review: `environment-*` terms; re-recorded the pandoc recordings and
+  regenerated `crates/quarto-core/schemas/pandoc-request.golden.json`
+  (`Q2_REGENERATE_GOLDEN=1`), whose stale filter params had failed the
+  hub-client `pandocRequest.wasm.test.ts` vitest

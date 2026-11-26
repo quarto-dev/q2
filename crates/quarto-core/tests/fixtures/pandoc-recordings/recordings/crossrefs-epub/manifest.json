@@ -6,13 +6,13 @@
   },
   {
     "path": "capture/all-docx.epub",
-    "size": 159766,
-    "sha256": "d9901679606dc941e75416edc15fa3f4e501d4566299f79f23b3e20d85d0a6cc"
+    "size": 159772,
+    "sha256": "b5d5db2db33847484eebc1786c3b9befae30e840873a6935e6ffad6fe8176d1b"
   },
   {
     "path": "env.json",
-    "size": 9356,
-    "sha256": "cb9e02094e66234f846bfb4bf4306aed0d6a2543191e1bbe489d7cd0ea59dce9"
+    "size": 9504,
+    "sha256": "9b8d195fe25fe98440133e71f00fbe60481edea4df73571e528dc00b4878a98e"
   },
   {
     "path": "fs/__q2_doc__/all-docx.qmd",
@@ -52,6 +52,6 @@
   {
     "path": "reference/all-docx.epub",
     "size": 159768,
-    "sha256": "95b010d4d01f07dac0a94a4331aa43addf14f26134c0eb6ca18693e5d79717de"
+    "sha256": "7c385e3c16d7f151b15721945bff820b6440145b595a05e9f8d16aee3fde0645"
   }
 ]

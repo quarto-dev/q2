@@ -6,13 +6,13 @@
   },
   {
     "path": "capture/callouts.epub",
-    "size": 26005,
-    "sha256": "90d50221b8a8e3208df6bfc126d911042018734934626b955107f621b2ca48b1"
+    "size": 26003,
+    "sha256": "1ad98f5d00ddc37d355a0f5c08e325d00bb52b591bb26c3dc004b8bdbee4c92a"
   },
   {
     "path": "env.json",
-    "size": 9356,
-    "sha256": "05e86c2b7df125c537853be9d507c816a7b7158e58d0c0fe8bdd0438cb90c55f"
+    "size": 9504,
+    "sha256": "78a0bb18b5a4f172701b3c187438d94788bf15125996fb1b6edf9571fb574a8e"
   },
   {
     "path": "fs/__q2_doc__/callouts.qmd",
@@ -47,6 +47,6 @@
   {
     "path": "reference/callouts.epub",
     "size": 26003,
-    "sha256": "f82fef0c86383118309d43f416328e8ea79141d7ddf95b93d6fc17374378f58f"
+    "sha256": "fa69a7669b5cdfa84215707253777f75e63b90715798d7c46ec1e9c8c4f05cf0"
   }
 ]
