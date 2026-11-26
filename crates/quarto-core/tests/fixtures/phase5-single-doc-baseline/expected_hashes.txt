@@ -543,4 +543,9 @@
 # that lay the code-tools button out beside the title. The fixture has no
 # folded, numbered, annotated or overflow-classed block and no `code-tools`.
 doc.html 7dac003e14b3363ead191dcf0fd224e3070a94c884147c9ec69725a6c93eea04
-doc_files/styles.css b1a8c809499731e662c53b84d854b5e665d70f987a9329691acd3cda3ae41b15
+# Re-captured 2026-11-25 (bd-twokvvk4, GH #1376): doc_files/styles.css gained
+# Q1's `#quarto-content > *` padding-top block from `quarto-nav.scss` (14px,
+# reset to 0 below lg, with the subtitle and first-h2 adjustments). Verified
+# the only delta: removing those two rules from the new styles.css
+# reproduces the previous hash. doc.html unchanged.
+doc_files/styles.css 5564fc461aaf32f4e808f5955be7125a364d266242d2ff8045118c229a90fe7c
