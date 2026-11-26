@@ -77,6 +77,7 @@ pub mod extension_metadata;
 pub mod fail_fast;
 pub mod fig_alt;
 pub mod filter_paths;
+pub mod fixture_line_endings;
 pub mod footnotes_dedup;
 pub mod format_css;
 pub mod format_path_keys;

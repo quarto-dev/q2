@@ -51,6 +51,30 @@ ts-packages/pandoc-host/src/typst-argv-flags.json text eol=lf
 crates/quarto-core/tests/fixtures/pandoc-goldens/fixtures.json text eol=lf
 crates/quarto-core/tests/fixtures/pandoc-goldens/parity/** text eol=lf
 
+# pandoc-goldens sources and import recordings: the hub-client harness specs
+# (pandoc-parity, pandoc-import-emf) compare against these byte-for-byte, so a
+# CRLF checkout fails them on Windows (#1347). Text types are pinned to LF by
+# extension; the binaries stay binary. Guarded by
+# crates/quarto-core/tests/integration/fixture_line_endings.rs.
+crates/quarto-core/tests/fixtures/pandoc-goldens/**/*.qmd text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-goldens/**/*.md text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-goldens/**/*.txt text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-goldens/**/*.json text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-goldens/**/*.jpg binary
+crates/quarto-core/tests/fixtures/import-recordings/**/*.qmd text eol=lf
+crates/quarto-core/tests/fixtures/import-recordings/**/*.md text eol=lf
+crates/quarto-core/tests/fixtures/import-recordings/**/*.txt text eol=lf
+crates/quarto-core/tests/fixtures/import-recordings/**/*.json text eol=lf
+crates/quarto-core/tests/fixtures/import-recordings/**/*.rtf text eol=lf
+crates/quarto-core/tests/fixtures/import-recordings/**/*.docx binary
+crates/quarto-core/tests/fixtures/import-recordings/**/*.pptx binary
+crates/quarto-core/tests/fixtures/import-recordings/**/*.epub binary
+crates/quarto-core/tests/fixtures/import-recordings/**/*.odt binary
+crates/quarto-core/tests/fixtures/import-recordings/**/*.png binary
+crates/quarto-core/tests/fixtures/import-recordings/**/*.jpg binary
+crates/quarto-core/tests/fixtures/import-recordings/**/*.emf binary
+crates/quarto-core/tests/fixtures/import-recordings/**/*.wmf binary
+
 # pandoc-request R9: native book refactor-guard recordings are byte-compared.
 crates/quarto-core/tests/integration/book_refactor_guard/** text eol=lf
 crates/quarto-core/tests/integration/pandoc_request_books/** text eol=lf
