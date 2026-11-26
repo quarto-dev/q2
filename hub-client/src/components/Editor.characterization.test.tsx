@@ -18,7 +18,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act, cleanup, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
@@ -324,8 +324,8 @@ describe('Editor default file selection', () => {
   it('selects the default file when the project files arrive after mount', () => {
     const { rerenderWith } = renderEditor({ files: [] });
 
-    // Nothing to select yet: no file is current.
-    expect(screen.getByTestId('monaco-editor').textContent).toBe('content-for-none');
+    // Nothing to select yet: no file is current, so no editor buffer.
+    expect(screen.queryByTestId('monaco-editor')).toBeNull();
 
     rerenderWith({ files: [otherQmd, indexQmd] });
 
@@ -339,6 +339,37 @@ describe('Editor default file selection', () => {
 
     rerenderWith({ files: [otherQmd, indexQmd] });
     expect(screen.getByTestId('monaco-editor').textContent).toBe('content-for-other.qmd');
+  });
+});
+
+// ---- no file selected ------------------------------------------------------
+
+describe('Editor with no file selected (GH #957)', () => {
+  it('shows an empty state instead of an editable buffer and the preview', () => {
+    renderEditor({ files: [] });
+
+    expect(screen.queryByTestId('monaco-editor')).toBeNull();
+    expect(screen.queryByTestId('preview-router')).toBeNull();
+    expect(screen.getByText(/This project has no files yet/)).toBeTruthy();
+  });
+
+  it('opens the new-file dialog from the empty state', () => {
+    renderEditor({ files: [] });
+
+    // Scoped: the Files panel has its own "New file" button.
+    const emptyState = screen.getByTestId('no-file-empty-state');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(within(emptyState).getByRole('button', { name: 'New file' }));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('replaces the empty state with the editor once a file exists', () => {
+    const { rerenderWith } = renderEditor({ files: [] });
+
+    rerenderWith({ files: [indexQmd] });
+    expect(screen.queryByText(/This project has no files yet/)).toBeNull();
+    expect(screen.getByTestId('monaco-editor').textContent).toBe('content-for-index.qmd');
+    expect(screen.getByTestId('preview-router')).toBeTruthy();
   });
 });
 
