@@ -2964,6 +2964,13 @@ pub fn build_transform_pipeline(
     // via `Q2_PREVIEW_TRANSFORM_EXCLUDED` — `GraphvizCodeBlock.tsx`
     // consumes the raw CodeBlock there.
     pipeline.push(Box::new(GraphvizRenderTransform::new()));
+    // GH #1130: `renderings: [light, dark]` cells — mark the two outputs
+    // `light-content` / `dark-content` (html, dashboard) or keep the one for
+    // `brand-mode` (revealjs); Q1 `quarto-post/cell-renderings.lua`. Before
+    // `dashboard` (which turns cells into cards) and `resource-collector`
+    // (a dropped reveal output's image is never collected). HTML-family
+    // only; typst runs the Lua filter on the Pandoc side.
+    pipeline.push(Box::new(crate::transforms::CellRenderingsTransform::new()));
     // bd-1tl09 Phase 0: code-block decoration Render. Consumes the
     // typed payload produced by `code-block-generate` in the
     // Normalization Phase and emits the outer wrapping markup
@@ -3265,6 +3272,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "crossref-render",
     "mermaid-render",
     "graphviz-render",
+    "cell-renderings",
     "code-block-render",
     "table-bootstrap-class",
     "components-resolve",
@@ -3550,6 +3558,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     ("crossref-render", Bucket::B4),
     ("mermaid-render", Bucket::B4),
     ("graphviz-render", Bucket::B4),
+    // Light/dark selection of `renderings` cell outputs (GH #1130). HTML-family
+    // presentation; typst gets it from the Lua filter chain instead.
+    ("cell-renderings", Bucket::B4),
     ("code-block-render", Bucket::B4),
     ("table-bootstrap-class", Bucket::B4),
     // Marks bound Divs/Spans with `data-quarto-component`, ships the
@@ -7373,6 +7384,7 @@ mod tests {
                 "example-embed-render",
                 "mermaid-render",
                 "graphviz-render",
+                "cell-renderings",
                 "code-block-render",
                 "editorial-marks-ooxml",
                 "editorial-marks-typst",
@@ -7483,6 +7495,7 @@ mod tests {
                 "reveal-auto-stretch",
                 "mermaid-render",
                 "graphviz-render",
+                "cell-renderings",
                 "code-block-render",
                 "editorial-marks-ooxml",
                 "editorial-marks-typst",
@@ -7868,6 +7881,7 @@ mod tests {
                 "table-float-class-forward",
                 "lightbox",
                 "example-embed-render",
+                "cell-renderings",
                 "code-block-render",
                 "editorial-marks-ooxml",
                 "editorial-marks-typst",

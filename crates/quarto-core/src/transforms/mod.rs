@@ -71,6 +71,7 @@ mod breadcrumbs_render;
 mod callout;
 mod callout_resolve;
 mod categories_sidebar;
+mod cell_renderings;
 mod code_annotations;
 mod code_block_generate;
 mod code_block_render;
@@ -182,6 +183,7 @@ pub use breadcrumbs_render::BreadcrumbsRenderTransform;
 pub use callout::CalloutTransform;
 pub use callout_resolve::CalloutResolveTransform;
 pub use categories_sidebar::CategoriesSidebarTransform;
+pub use cell_renderings::CellRenderingsTransform;
 pub use code_block_generate::{
     CodeBlockDecoration, CodeBlockDecorationKey, CodeBlockGenerateTransform, CopyMode, FoldMode,
     resolve_default_copy_mode,
