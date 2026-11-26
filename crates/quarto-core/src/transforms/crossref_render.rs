@@ -1399,6 +1399,19 @@ fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>, fs: &Flo
             let num = number.map(|n| format_crossref_number(n, fs.chapter_seed.as_ref()));
             (kind, num)
         };
+        // `@Fig-a`: capitalize the prefix's first letter (Q1 format.lua's
+        // `refPrefix(type, upper)`; GH #1319). Matters for lowercase
+        // prefixes such as `fig-prefix: fig.`.
+        let label_upper = node
+            .plain_data
+            .get("label_upper")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let label = if label_upper {
+            uppercase_first_char(&label)
+        } else {
+            label
+        };
         // `[Fig. @fig-a]`: the citation's own prefix replaces the label
         // entirely (Q1 refs.lua's `cite.prefix` branch, mirrored by the
         // pandoc shim's `route_crossref_resolved_ref`). It is kept as
@@ -1452,6 +1465,15 @@ fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>, fs: &Flo
         attr_source: AttrSourceInfo::empty(),
         target_source: TargetSourceInfo::empty(),
     }))
+}
+
+/// Uppercase the first character of a crossref prefix.
+fn uppercase_first_char(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
+    }
 }
 
 /// Build the label and number for a resolved `sec` ref, returned as
@@ -2716,6 +2738,52 @@ mod tests {
     // Q1 ports (crossref/refs.lua + format.lua): a `sec` ref renders its
     // *section path* (not a per-type counter) as the number; a chapter-level
     // heading under `crossref.chapters: true` takes the ch/apx prefix.
+
+    #[tokio::test]
+    async fn capitalized_ref_resolves_and_links_to_lowercase_target() {
+        // GH #1319: `@Fig-a` is the same crossref as `@fig-a`.
+        let ast = run_full(vec![
+            fig_div("fig-a", "Cap"),
+            Block::Paragraph(Paragraph {
+                content: vec![cite("Fig-a"), str_inline(" shows it.")],
+                source_info: si(),
+            }),
+        ])
+        .await;
+        let Block::Paragraph(p) = &ast.blocks[1] else {
+            panic!();
+        };
+        assert_eq!(ref_link_text(&p.content, 0), "Figure\u{a0}1");
+        let Inline::Link(link) = &p.content[0] else {
+            panic!();
+        };
+        assert_eq!(link.target.0, "#fig-a");
+        assert!(!link.attr.1.contains(&"quarto-unresolved-ref".to_string()));
+    }
+
+    #[test]
+    fn label_upper_capitalizes_prefix() {
+        // `fig-prefix: fig.` + `@Fig-a` renders "Fig. 1" (Q1 refPrefix's
+        // `upper` branch); without `label_upper` the prefix is unchanged.
+        let render = |label_upper: bool| {
+            let mut node = CustomNode::new(CROSSREF_RESOLVED_REF, Attr::default(), si());
+            node.plain_data = serde_json::json!({
+                "identifier": "fig-a",
+                "ref_type": "fig",
+                "kind": "fig.",
+                "resolved": true,
+                "label_upper": label_upper,
+                "order": { "section": [], "order": 1 },
+            });
+            let Inline::Link(link) = render_resolved_ref(node, None, &float_state_for_tests())
+            else {
+                panic!();
+            };
+            ref_link_text(&[Inline::Link(link)], 0)
+        };
+        assert_eq!(render(true), "Fig.\u{a0}1");
+        assert_eq!(render(false), "fig.\u{a0}1");
+    }
 
     #[tokio::test]
     async fn sec_ref_on_level_2_heading_resolves_to_section_number() {

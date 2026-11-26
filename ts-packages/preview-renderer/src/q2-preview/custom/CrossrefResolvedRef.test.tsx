@@ -108,3 +108,25 @@ describe('CrossrefResolvedRef navigation', () => {
         expect(onNavigateToDocument).not.toHaveBeenCalled();
     });
 });
+
+describe('CrossrefResolvedRef label_upper', () => {
+    // GH #1319: `@Fig-a` capitalizes the prefix's first letter, so a
+    // lowercase `fig-prefix: fig.` renders as "Fig. 1".
+    it.each([
+        [true, 'Fig.\u{a0}1'],
+        [false, 'fig.\u{a0}1'],
+    ])('label_upper=%s renders %s', (label_upper, expected) => {
+        const node = makeNode({
+            identifier: 'fig-a',
+            ref_type: 'fig',
+            kind: 'fig.',
+            resolved: true,
+            label_upper,
+            order: { section: [], order: 1 },
+        });
+
+        render(<CrossrefResolvedRef node={node} setLocalAst={() => {}} />);
+
+        expect(screen.getByRole('link').textContent).toBe(expected);
+    });
+});
