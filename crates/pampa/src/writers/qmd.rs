@@ -1388,6 +1388,17 @@ fn cell_has_simple_content(content: &[Block]) -> bool {
 /// - No cells have row_span > 1 or col_span > 1
 /// - All cells contain only "simple" content (single Para/Plain without breaks)
 fn table_can_use_pipe_format(table: &Table) -> bool {
+    // Pipe tables have no syntax for row attributes (GH #1336)
+    let mut all_rows = table
+        .head
+        .rows
+        .iter()
+        .chain(table.bodies.iter().flat_map(|b| b.body.iter()))
+        .chain(table.foot.rows.iter());
+    if all_rows.any(|row| !is_empty_attr(&row.attr)) {
+        return false;
+    }
+
     // Check header rows
     for row in &table.head.rows {
         for cell in &row.cells {
@@ -1606,8 +1617,16 @@ fn write_list_table(
         // a cell's text reads as Para or Plain. A loose row gets a blank line
         // between its cells, as in write_bulletlist (GH #1158).
         let row_is_tight = list_is_tight(row.cells.iter().map(|c| c.content.as_slice()));
+        // Row attributes go in an empty span before the cell list, which
+        // the reader moves back onto the row (GH #1336).
+        let row_has_attr = !is_empty_attr(&row.attr) && !row.cells.is_empty();
+        if row_has_attr {
+            write!(buf, "* []")?;
+            write_attr(&row.attr, buf, ctx)?;
+            writeln!(buf)?;
+        }
         for (cell_idx, cell) in row.cells.iter().enumerate() {
-            if cell_idx == 0 {
+            if cell_idx == 0 && !row_has_attr {
                 write!(buf, "* ")?;
             } else {
                 if !row_is_tight {
