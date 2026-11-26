@@ -926,10 +926,32 @@ $sidebar-disabled-color: rgba($sidebar-fg, 0.75) !default;
   }
 }
 
-// The glass pane is a grid child of `#quarto-content`, which gives
-// every child top padding; it must not contribute any.
+// Every grid child of `#quarto-content` (title block, sidebar, TOC,
+// main) starts `$content-padding-top` below the navbar; below `lg` the
+// gap moves to the subtitle and the first section heading instead.
+// Ported from quarto-cli `quarto-nav.scss` (GH #1376).
+#quarto-content > * {
+  padding-top: $content-padding-top;
+}
+
+// The glass pane is a grid child of `#quarto-content` too; it must not
+// contribute any top padding.
 #quarto-content > #quarto-sidebar-glass {
   padding-top: 0px;
+}
+
+@include media-breakpoint-down(lg) {
+  #quarto-content > * {
+    padding-top: 0;
+  }
+
+  #quarto-content .subtitle {
+    padding-top: $content-padding-top;
+  }
+
+  #quarto-content section:first-of-type h2:first-of-type {
+    margin-top: 1rem;
+  }
 }
 
 div.sidebar-item-container {
