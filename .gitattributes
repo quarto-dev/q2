@@ -86,3 +86,9 @@ crates/quarto-core/tests/fixtures/units/* -text
 # Viz.js embeds a WebAssembly binary as raw characters inside a string, so any
 # line-ending conversion would corrupt it (see resources/graphviz/README.md).
 resources/graphviz/viz-global.js -text
+
+# Node scripts under scripts/ start with a `#!/usr/bin/env node` shebang. Vite
+# strips a hashbang with /^#!.*\n/, which can't match a CRLF line, so on a CRLF
+# checkout a test that imports one (pruneEmbedDist.test.ts) fails to load with
+# "SyntaxError: Invalid or unexpected token" (GH #1344).
+scripts/**/*.mjs text eol=lf
