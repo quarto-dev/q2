@@ -179,9 +179,14 @@ export default function PreviewRouter(props: PreviewRouterProps) {
     return <div style={{ height: '100%', background: '#f4f4f4' }} aria-busy="true" />;
   }
 
+  // No file: Editor shows its own empty state instead of mounting the router.
+  if (!props.currentFile) {
+    return null;
+  }
+
   // Non-source files (not .qmd/.md): show placeholder
-  if (!isSourceFile(props.currentFile?.path)) {
-    return <NonQmdPlaceholderView filename={props.currentFile?.path ?? 'no currentFile path'} />;
+  if (!isSourceFile(props.currentFile.path)) {
+    return <NonQmdPlaceholderView filename={props.currentFile.path} />;
   }
 
   // Render the appropriate preview component with shared WASM error banner.

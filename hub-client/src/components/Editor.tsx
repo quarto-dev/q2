@@ -1380,6 +1380,18 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
           tabIndex={-1}
           className={`editor-main view-mode-${viewMode}${isDraggingDivider ? ' dragging-divider' : ''}${splitAnimating ? ' split-animating' : ''}`}
         >
+        {/* No file selected (e.g. a project with no files): an empty state
+            takes the whole editor + preview area. Mounting the editor here
+            would offer a buffer that no file backs, so edits would be lost
+            (GH #957). */}
+        {!currentFile && (
+          <div className="no-file-empty-state" data-testid="no-file-empty-state">
+            <p>This project has no files yet. Create a file or pick one from the Files panel.</p>
+            <button type="button" className="qh-btn primary" onClick={handleNewFile}>
+              New file
+            </button>
+          </div>
+        )}
         {/* Image files: the viewer takes the whole editor + preview area */}
         {currentFileIsImage && currentFile && (
           <ImageViewer
@@ -1388,7 +1400,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
             version={binaryFileVersions?.get(currentFile.path) ?? 0}
           />
         )}
-        {!currentFileIsImage && (
+        {currentFile && !currentFileIsImage && (
         <>
         {(!isFullscreenPreview || currentFileIsPlainText) && (
           <div
