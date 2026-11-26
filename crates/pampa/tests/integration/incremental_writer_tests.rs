@@ -1262,6 +1262,19 @@ fn sugar_roundtrip_list_table_with_header() {
     );
 }
 
+/// GH #1335: `header-cols` becomes the body's `rowhead_columns`, so the
+/// writer must emit it again for the re-parse to keep the row heads.
+#[test]
+fn sugar_roundtrip_list_table_with_header_cols() {
+    let input = "::: {.list-table header-cols=\"1\"}\n\n* - Name\n  - Year\n* - Markdown\n  - 2004\n\n:::\n";
+    assert_sugar_roundtrip(input);
+    let written = write_qmd(&parse_qmd(input));
+    assert!(
+        written.contains("header-cols=\"1\""),
+        "header-cols is written back: {written:?}"
+    );
+}
+
 // --- Definition-list sugar/desugar roundtrips ---
 
 #[test]

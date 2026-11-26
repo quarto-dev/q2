@@ -399,3 +399,44 @@ fn test_list_table_with_header_from_json() {
         }
     }
 }
+
+/// GH #1335: `header-cols` makes the first N body columns row heads, as
+/// in pandoc-ext/list-table. It is consumed, not passed through as a
+/// table attribute.
+#[test]
+fn test_list_table_header_cols_from_json() {
+    let json_input = make_json_doc(
+        r#"[{
+            "t": "Div",
+            "c": [
+                ["", ["list-table"], [["header-cols", "1"], ["data-x", "y"]]],
+                [{
+                    "t": "BulletList",
+                    "c": [
+                        [{"t": "BulletList", "c": [
+                            [{"t": "Plain", "c": [{"t": "Str", "c": "Name"}]}],
+                            [{"t": "Plain", "c": [{"t": "Str", "c": "Year"}]}]
+                        ]}],
+                        [{"t": "BulletList", "c": [
+                            [{"t": "Plain", "c": [{"t": "Str", "c": "Markdown"}]}],
+                            [{"t": "Plain", "c": [{"t": "Str", "c": "2004"}]}]
+                        ]}]
+                    ]
+                }]
+            ]
+        }]"#,
+    );
+
+    let pandoc = read_json_with_transforms(&json_input);
+
+    let Block::Table(table) = &pandoc.blocks[0] else {
+        panic!("Expected Table, got {:?}", pandoc.blocks[0]);
+    };
+    assert_eq!(table.bodies[0].rowhead_columns, 1, "header-cols=1");
+    assert!(
+        !table.attr.2.contains_key("header-cols"),
+        "header-cols is consumed: {:?}",
+        table.attr.2
+    );
+    assert_eq!(table.attr.2.get("data-x").map(String::as_str), Some("y"));
+}
