@@ -27,7 +27,15 @@ the deterministic parts live in `scripts/`:
   leave no marker and are retried next night.
 - **On the PR**, the `autofix` label, plus one repair marker per attempt.
   After 3 attempts, or a fix that would go outside the gated scope, the PR
-  gets `autofix:needs-human` and the sweep leaves it alone.
+  gets `autofix:needs-human` and the sweep leaves it alone. A maintainer
+  can park a PR the same way, either with that label or by turning it
+  back into a draft; the sweep doesn't repair parked PRs.
+- **Rejecting a fix:** while the PR is open (even as a draft), its issue
+  isn't gated again. If you close the PR, the issue becomes eligible again
+  on the next run. To keep it from being fixed a second time, record the
+  decision on the **issue** (the gate reads issue comments, not PR
+  comments, and fails `no-product-decision` on a maintainer's
+  "not wanted"), or add it to the local skip file.
 
 ## Shared failures
 

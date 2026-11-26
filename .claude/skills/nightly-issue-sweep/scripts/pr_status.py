@@ -10,7 +10,9 @@ Prints one JSON object:
 
 `state` is one of: pending, green, red, conflicting. A PR needs repair
 when it is red or conflicting, has fewer than MAX_ATTEMPTS repair markers,
-and is not labelled autofix:needs-human. Repair agents leave one marker
+and is neither labelled autofix:needs-human nor a draft. A maintainer
+turns a PR back into a draft to park it; drafts go to `needs_human`
+(with note "draft") and the sweep doesn't touch them. Repair agents leave one marker
 comment per attempt on the PR:
 
     <!-- q2-autofix repair n=<K> -->
@@ -77,7 +79,7 @@ def main():
     prs = json.loads(run([
         "gh", "pr", "list", "--repo", REPO, "--state", "open", "--label", "autofix",
         "--limit", "100", "--json",
-        "number,title,url,headRefName,labels,mergeable,statusCheckRollup,comments"]))
+        "number,title,url,headRefName,labels,mergeable,statusCheckRollup,comments,isDraft"]))
     out = {"needs_repair": [], "blocked_shared": [], "pending": [], "green": [],
            "needs_human": [], "shared_failures": [], "ci_notes": []}
     shared = {}
@@ -100,6 +102,8 @@ def main():
                  "head": pr["headRefName"], "state": state, "attempts": attempts}
         if "autofix:needs-human" in labels:
             out["needs_human"].append(entry)
+        elif pr.get("isDraft"):
+            out["needs_human"].append({**entry, "note": "draft"})
         elif state in ("red", "conflicting"):
             ci = shared.get(str(pr["number"]), {})
             if ci.get("shared"):
