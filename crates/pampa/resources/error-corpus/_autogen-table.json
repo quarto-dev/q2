@@ -18079,8 +18079,8 @@
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-29",
-      "title": "Indented Footnote Content Not Supported",
-      "message": "Quarto markdown does not support indented footnote content. Use the div syntax instead: `::: ^ref ... :::`.",
+      "title": "Footnote Definition Has No Content On Its Line",
+      "message": "A footnote definition's text must start on the same line as its label, as in `[^ref]: Text.`. For multi-paragraph footnotes, use the div syntax instead: `::: ^ref ... :::`.",
       "captures": [
         {
           "column": 0,
@@ -18093,7 +18093,7 @@
       ],
       "notes": [
         {
-          "message": "This footnote definition has indented content, which is not supported in quarto markdown.",
+          "message": "This footnote definition has no text after the colon. Quarto markdown reads a footnote's text only from the label's own line.",
           "label": "footnote-def",
           "noteType": "simple"
         },
@@ -18108,6 +18108,80 @@
       "desynchronizes": false
     },
     "name": "Q-2-29/simple"
+  },
+  {
+    "column": 5,
+    "row": 2,
+    "state": 4385,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-29",
+      "title": "Footnote Definition Has No Content On Its Line",
+      "message": "A footnote definition's text must start on the same line as its label, as in `[^ref]: Text.`. For multi-paragraph footnotes, use the div syntax instead: `::: ^ref ... :::`.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 4385,
+          "row": 2,
+          "size": 5,
+          "sym": "ref_id_specifier",
+          "label": "footnote-def"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This footnote definition has no text after the colon. Quarto markdown reads a footnote's text only from the label's own line.",
+          "label": "footnote-def",
+          "noteType": "simple"
+        },
+        {
+          "message": "For multi-paragraph footnotes, use the div syntax:\n\n::: ^ref\n\nFirst paragraph.\n\nSecond paragraph.\n\n:::.",
+          "label": "suggestion",
+          "noteType": "simple"
+        }
+      ],
+      "hints": [],
+      "guard": null,
+      "desynchronizes": false
+    },
+    "name": "Q-2-29/next-line-not-indented"
+  },
+  {
+    "column": 5,
+    "row": 2,
+    "state": 4385,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-29",
+      "title": "Footnote Definition Has No Content On Its Line",
+      "message": "A footnote definition's text must start on the same line as its label, as in `[^ref]: Text.`. For multi-paragraph footnotes, use the div syntax instead: `::: ^ref ... :::`.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 4385,
+          "row": 2,
+          "size": 5,
+          "sym": "ref_id_specifier",
+          "label": "footnote-def"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This footnote definition has no text after the colon. Quarto markdown reads a footnote's text only from the label's own line.",
+          "label": "footnote-def",
+          "noteType": "simple"
+        },
+        {
+          "message": "For multi-paragraph footnotes, use the div syntax:\n\n::: ^ref\n\nFirst paragraph.\n\nSecond paragraph.\n\n:::.",
+          "label": "suggestion",
+          "noteType": "simple"
+        }
+      ],
+      "hints": [],
+      "guard": null,
+      "desynchronizes": false
+    },
+    "name": "Q-2-29/empty-label"
   },
   {
     "column": 20,

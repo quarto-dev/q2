@@ -39,5 +39,5 @@ The caret \^[is literal here].
 
 - [`Q-2-16`](Q-2-16.qmd) — unclosed superscript (`^...^`): same
   opening character, different construct.
-- [`Q-2-29`](Q-2-29.qmd) — indented footnote content not
-  supported: a different footnote shape.
+- [`Q-2-29`](Q-2-29.qmd) — footnote definition with no content
+  on its line: a different footnote shape.

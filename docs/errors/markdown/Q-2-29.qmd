@@ -1,6 +1,6 @@
 ---
-title: "Indented Footnote Content Not Supported"
-description: "Pandoc-style indented footnote content does not work in Quarto markdown; use the `::: ^ref … :::` div syntax instead."
+title: "Footnote Definition Has No Content On Its Line"
+description: "A footnote definition's text must start on the same line as its `[^ref]:` label; for multi-paragraph notes, use the `::: ^ref … :::` div syntax."
 code: Q-2-29
 subsystem: markdown
 status: stub
@@ -9,57 +9,72 @@ categories:
   - markdown
 ---
 
-# `Q-2-29` — Indented Footnote Content Not Supported
+# `Q-2-29` — Footnote Definition Has No Content On Its Line
 
-> Pandoc-style indented footnote content does not work in Quarto
-> markdown; use the `::: ^ref … :::` div syntax instead.
+> A footnote definition's text must start on the same line as its
+> `[^ref]:` label; for multi-paragraph notes, use the
+> `::: ^ref … :::` div syntax.
 
 ## What this means
 
-Pandoc supports a footnote-definition form where the content
-sits as an indented block beneath the reference:
+A footnote definition was written with nothing after the colon of
+its label. Quarto markdown reads a footnote's text only from the
+label's own line, so none of these define the note:
 
 ```markdown
 Some text[^1].
 
 [^1]:
-    The footnote content, indented.
+The text on the next line.
 ```
 
-Quarto markdown does not parse that form. Instead, it represents
-footnote bodies as fenced divs labelled with the reference:
+```markdown
+Some text[^1].
+
+[^1]:
+    The text indented on the next line, as Pandoc allows.
+```
+
+```markdown
+Some text[^1].
+
+[^1]:
+```
+
+## Why this happens
+
+Pandoc accepts footnote content on the lines after the label, either
+as an indented block or as a lazy continuation line. Markdown copied
+from a Pandoc document, or written by someone used to Pandoc, often
+uses those forms. Quarto markdown does not support them.
+
+## How to fix
+
+For a single-paragraph note, put the text on the label's line:
+
+```markdown
+Some text[^1].
+
+[^1]: The footnote content.
+```
+
+For a note with more than one paragraph, use the div form. The
+reference inside the div (`^1` in the example) must match the
+reference in the text:
 
 ```markdown
 Some text[^1].
 
 ::: ^1
-The footnote content.
+The first paragraph.
+
+The second paragraph.
 :::
-```
-
-## Why this happens
-
-Most often the markdown was copied from a Pandoc document, or
-written by someone familiar with Pandoc but new to Quarto.
-
-## How to fix
-
-Convert the indented body to the div form. The reference inside
-the div (`^1` in the example) must match the reference in the
-text.
-
-## Example
-
-```markdown
-Some text[^1].
-
-[^1]:
-    Body.
 ```
 
 ## Related
 
 - [`Q-2-30`](Q-2-30.qmd) — multi-paragraph footnote indentation:
-  a multi-paragraph variant of the same incompatibility.
+  an indented paragraph after a single-line footnote definition.
 - [`Q-2-26`](Q-2-26.qmd) — unclosed inline footnote (`^[...]`):
   a different, supported footnote form.

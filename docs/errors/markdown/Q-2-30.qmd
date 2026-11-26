@@ -47,5 +47,5 @@ text.
 
 ## Related
 
-- [`Q-2-29`](Q-2-29.qmd) — single-paragraph version of the same
-  Pandoc incompatibility.
+- [`Q-2-29`](Q-2-29.qmd) — footnote definition with no content
+  on its line: the same Pandoc incompatibility, at the label.

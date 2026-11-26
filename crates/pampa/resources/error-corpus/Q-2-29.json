@@ -1,10 +1,10 @@
 {
   "code": "Q-2-29",
-  "title": "Indented Footnote Content Not Supported",
-  "message": "Quarto markdown does not support indented footnote content. Use the div syntax instead: `::: ^ref ... :::`.",
+  "title": "Footnote Definition Has No Content On Its Line",
+  "message": "A footnote definition's text must start on the same line as its label, as in `[^ref]: Text.`. For multi-paragraph footnotes, use the div syntax instead: `::: ^ref ... :::`.",
   "notes": [
     {
-      "message": "This footnote definition has indented content, which is not supported in quarto markdown.",
+      "message": "This footnote definition has no text after the colon. Quarto markdown reads a footnote's text only from the label's own line.",
       "label": "footnote-def",
       "noteType": "simple"
     },
@@ -17,8 +17,34 @@
   "cases": [
     {
       "name": "simple",
-      "description": "Footnote with indented content",
+      "description": "Footnote with indented content on the following line",
       "content": "Some text[^1].\n\n[^1]:\n    Indented content",
+      "captures": [
+        {
+          "label": "footnote-def",
+          "row": 2,
+          "column": 0,
+          "size": 5
+        }
+      ]
+    },
+    {
+      "name": "next-line-not-indented",
+      "description": "Footnote with unindented content on the following line",
+      "content": "Some text[^1].\n\n[^1]:\nText.\n",
+      "captures": [
+        {
+          "label": "footnote-def",
+          "row": 2,
+          "column": 0,
+          "size": 5
+        }
+      ]
+    },
+    {
+      "name": "empty-label",
+      "description": "Footnote label with nothing after it",
+      "content": "Some text[^1].\n\n[^1]:\n",
       "captures": [
         {
           "label": "footnote-def",
