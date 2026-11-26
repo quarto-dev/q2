@@ -113,3 +113,55 @@ fn block_valued_title_serializes_as_meta_inlines() {
         json["meta"]["title"]
     );
 }
+
+/// GH #1316: an object-form `author` (`- name: …`, `affiliation: …`)
+/// reaches pandoc as a list of plain names, which its docx writer reads,
+/// with the raw entries kept in `authors` for the vendored `authors.lua`.
+#[test]
+fn object_author_serializes_as_plain_names() {
+    use quarto_core::pandoc_filters::author_names::author_names_for_pandoc;
+
+    let entry = |key: &str, value: ConfigValue| ConfigMapEntry {
+        key: key.to_string(),
+        key_source: SourceInfo::for_test(),
+        value,
+    };
+    let jane = ConfigValue::new_map(
+        vec![
+            entry(
+                "name",
+                ConfigValue::new_inlines(vec![str_inline("Jane Doe")], SourceInfo::for_test()),
+            ),
+            entry(
+                "affiliation",
+                ConfigValue::new_inlines(
+                    vec![str_inline("Example Institute")],
+                    SourceInfo::for_test(),
+                ),
+            ),
+        ],
+        SourceInfo::for_test(),
+    );
+    let mut meta = ConfigValue::new_map(
+        vec![entry(
+            "author",
+            ConfigValue::new_array(vec![jane], SourceInfo::for_test()),
+        )],
+        SourceInfo::for_test(),
+    );
+
+    author_names_for_pandoc(&mut meta);
+    let json = meta_json(meta);
+
+    let author = &json["meta"]["author"];
+    assert_eq!(author["t"], "MetaList", "got {author:#?}");
+    assert_eq!(author["c"][0]["t"], "MetaString", "got {author:#?}");
+    assert_eq!(author["c"][0]["c"], "Jane Doe", "got {author:#?}");
+
+    let authors = &json["meta"]["authors"];
+    assert_eq!(authors["c"][0]["t"], "MetaMap", "got {authors:#?}");
+    assert!(
+        authors["c"][0]["c"].get("affiliation").is_some(),
+        "got {authors:#?}"
+    );
+}

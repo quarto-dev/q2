@@ -860,6 +860,9 @@ impl PandocWriteStage {
         // `MetaBlocks` is not what the docx/pptx writers read for
         // `title` — coerce to `MetaInlines` before serialization.
         crate::pandoc_filters::meta_coerce::coerce_meta_blocks_to_inlines(&mut doc.ast.meta);
+        // GH #1316: pandoc's writers drop object-form `author` entries
+        // (`- name: …`); rewrite them to plain names, as Q1 does.
+        crate::pandoc_filters::author_names::author_names_for_pandoc(&mut doc.ast.meta);
 
         // bd-ykjwiqcc: respell standalone images' alt text as `fig-alt`,
         // so the vendored Q1 filters don't read it as an implicit-figure
