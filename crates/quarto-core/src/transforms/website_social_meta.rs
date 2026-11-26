@@ -60,7 +60,7 @@ use std::sync::Arc;
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::block::Block;
-use quarto_pandoc_types::config_value::{ConfigValueKind, blocks_to_plain_text};
+use quarto_pandoc_types::config_value::ConfigValueKind;
 use quarto_pandoc_types::custom::Slot;
 use quarto_pandoc_types::inline::{Inline, Inlines};
 use quarto_pandoc_types::pandoc::Pandoc;
@@ -76,7 +76,7 @@ use crate::project::ProjectKind;
 use crate::project::website_config::{website_description, website_site_url, website_title};
 use crate::render::{RenderContext, ResourceCopyIntent};
 use crate::transform::{AstTransform, TransformPhase};
-use crate::transforms::inlines_to_plain_text;
+use crate::transforms::{blocks_to_plain_text, inlines_to_plain_text};
 
 /// A social image was found, but `website.site-url` is not set.
 const CODE_IMAGE_NEEDS_SITE_URL: &str = "Q-5-58";
@@ -1001,9 +1001,14 @@ fn collect_inline(inline: &Inline, ctx: Context, out: &mut Vec<Candidate>) {
 
 /// Plain text of a metadata value that holds text: a string, markdown
 /// inlines, or markdown blocks (a `description: |` block scalar).
+///
+/// Markdown goes through this crate's plain-text helpers, which keep
+/// smart quotes as curly quotes (Quarto 1 parity, GH #1369);
+/// `ConfigValue::as_plain_text` drops them.
 fn text_of(value: &ConfigValue) -> Option<String> {
     let text = match &value.value {
         ConfigValueKind::PandocBlocks(blocks) => blocks_to_plain_text(blocks),
+        ConfigValueKind::PandocInlines(inlines) => inlines_to_plain_text(inlines),
         _ => value.as_plain_text()?,
     };
     non_empty(text.trim().to_string())
@@ -1343,6 +1348,39 @@ mod tests {
             text_para("Not this."),
         ];
         assert_eq!(first_paragraph_text(&blocks).as_deref(), Some("The one."));
+    }
+
+    /// GH #1369: smart quotes parse to `Quoted` nodes, and the card text
+    /// keeps them as curly quotes (Quarto 1 parity) instead of dropping
+    /// them — for inline and block-scalar values alike.
+    #[test]
+    fn text_of_keeps_quotes_as_curly_quotes() {
+        use quarto_pandoc_types::inline::{QuoteType, Quoted};
+        let str_ = |t: &str| {
+            Inline::Str(Str {
+                text: t.to_string(),
+                source_info: si(),
+            })
+        };
+        let inlines = vec![
+            str_("Uses "),
+            Inline::Quoted(Box::new(Quoted {
+                quote_type: QuoteType::DoubleQuote,
+                content: vec![str_("x")],
+                source_info: si(),
+            })),
+            str_(" & "),
+            Inline::Quoted(Box::new(Quoted {
+                quote_type: QuoteType::SingleQuote,
+                content: vec![str_("y")],
+                source_info: si(),
+            })),
+        ];
+        let expected = "Uses \u{201C}x\u{201D} & \u{2018}y\u{2019}";
+        let as_inlines = ConfigValue::new_inlines(inlines.clone(), si());
+        assert_eq!(text_of(&as_inlines).as_deref(), Some(expected));
+        let as_blocks = ConfigValue::new_blocks(vec![para(inlines)], si());
+        assert_eq!(text_of(&as_blocks).as_deref(), Some(expected));
     }
 
     // ── Text and URLs ──────────────────────────────────────────────────
