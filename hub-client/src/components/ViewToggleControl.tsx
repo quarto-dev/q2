@@ -4,15 +4,17 @@ import { viewToggle } from '../strings';
 import './ViewToggleControl.css';
 
 /**
- * Split presets for the editor/preview divider — clicking a button is
- * exactly equivalent to dragging the pane divider to that position
- * (markup = the drag's editor-max clamp, preview = its editor-min
- * clamp), except the move is animated (Editor's split-animating class).
+ * Split presets for the editor/preview divider (the editor pane's
+ * fraction). "Split equally" is the same as dragging the divider to the
+ * middle, except the move is animated (Editor's split-animating class).
+ * The two expand presets go past the drag's 15%–85% clamp on purpose:
+ * 1 (markup only) and 0 (preview only) are values a drag can't produce,
+ * and Editor hides the collapsed pane and the divider for them.
  */
 export const SPLIT_PRESETS = {
-  markup: 0.85,
+  markup: 1,
   split: 0.5,
-  preview: 0.15,
+  preview: 0,
 } as const;
 
 interface ViewToggleControlProps {

@@ -472,6 +472,18 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
 
   // Fullscreen preview mode
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
+  // The expand presets (fractions 1 and 0, which a drag can't reach)
+  // hide the other pane and the divider via CSS. The hidden preview stays
+  // mounted: PreviewRouter feeds the editor's diagnostics. Files without
+  // a preview pane, and the fullscreen preview, ignore the split.
+  const splitCollapse: 'markup' | 'preview' | null =
+    viewMode !== 'both' || currentFileIsPlainText || isFullscreenPreview
+      ? null
+      : editorPaneFraction >= 1
+        ? 'markup'
+        : editorPaneFraction <= 0
+          ? 'preview'
+          : null;
 
   // Current slide index (for cursor-driven slide navigation)
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(0);
@@ -1378,7 +1390,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
         <main
           id="main-content"
           tabIndex={-1}
-          className={`editor-main view-mode-${viewMode}${isDraggingDivider ? ' dragging-divider' : ''}${splitAnimating ? ' split-animating' : ''}`}
+          className={`editor-main view-mode-${viewMode}${isDraggingDivider ? ' dragging-divider' : ''}${splitAnimating ? ' split-animating' : ''}${splitCollapse ? ` split-${splitCollapse}-only` : ''}`}
         >
         {/* No file selected (e.g. a project with no files): an empty state
             takes the whole editor + preview area. Mounting the editor here

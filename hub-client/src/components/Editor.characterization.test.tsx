@@ -13,6 +13,8 @@
  * 2. Diagnostics: located diagnostics become Monaco markers; unlocated ones
  *    appear in the diagnostics banner, and clearing diagnostics clears both.
  * 3. "Compare with main" diff view leaves when the file or branch changes.
+ * 4. The expand presets hide the other pane and the divider (GH #1037),
+ *    and the hidden preview stays mounted so diagnostics keep flowing.
  *
  * @vitest-environment jsdom
  */
@@ -501,5 +503,50 @@ describe('Editor compare-with-main', () => {
 
     await waitFor(() => expect(screen.queryByTestId('diff-editor')).toBeNull());
     expect(screen.getByTestId('monaco-editor')).toBeDefined();
+  });
+});
+
+// ---- 4. expand presets hide the other pane -----------------------------------
+
+describe('Editor split presets', () => {
+  const main = () => document.getElementById('main-content')!;
+  const press = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
+
+  it('"Expand preview" hides the markup pane; diagnostics still reach Monaco', async () => {
+    renderEditor();
+    await waitFor(() => expect(h.previewProps.current).toBeTruthy());
+    expect(main().className).not.toMatch(/split-\w+-only/);
+
+    press('Preview view');
+    expect(main().classList.contains('split-preview-only')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Preview view' }).getAttribute('aria-pressed')).toBe('true');
+
+    press('Markup view');
+    expect(main().classList.contains('split-markup-only')).toBe(true);
+    expect(main().classList.contains('split-preview-only')).toBe(false);
+    // The hidden preview is still mounted, so it keeps feeding diagnostics.
+    expect(screen.getByTestId('preview-router')).toBeDefined();
+    h.setModelMarkers.mockClear();
+    act(() => {
+      (h.previewProps.current as { onDiagnosticsChange: (d: Diagnostic[]) => void })
+        .onDiagnosticsChange([makeDiagnostic({ title: 'Hidden-preview problem', start_line: 1, start_column: 1 })]);
+    });
+    const markers = h.setModelMarkers.mock.calls.at(-1)![2] as unknown[];
+    expect(markers).toHaveLength(1);
+
+    press('Split view');
+    expect(main().className).not.toMatch(/split-\w+-only/);
+  });
+
+  it('a file with no preview pane keeps the buttons disabled and the editor shown', async () => {
+    const yml: FileEntry = { path: '_quarto.yml', docId: 'doc-yml' };
+    renderEditor({ files: [yml], route: { type: 'file', projectId: 'p1', filePath: '_quarto.yml' } as Route });
+    await waitFor(() =>
+      expect(screen.getByTestId('monaco-editor').textContent).toBe('content-for-_quarto.yml'),
+    );
+    for (const name of ['Markup view', 'Split view', 'Preview view']) {
+      expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
+    }
+    expect(main().className).not.toMatch(/split-\w+-only/);
   });
 });
