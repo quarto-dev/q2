@@ -299,6 +299,62 @@ fn extract_cell_attrs(blocks: &mut Blocks) -> CellAttrs {
     attrs
 }
 
+/// A list-table cell that starts with a *non-empty* span carrying
+/// `colspan`/`rowspan` (`[text]{colspan=2}`). `extract_cell_attrs` only
+/// reads an empty span (`[]{colspan=2} text`), so the attributes stay on
+/// an ordinary span and the cell is not merged (GH #1338).
+pub(crate) struct MisplacedCellSpanAttrs {
+    /// The span's location.
+    pub location: SourceInfo,
+    /// The span's `colspan`/`rowspan` attributes, as `key=value` pairs.
+    pub attrs: String,
+    /// The span's content as plain text.
+    pub text: String,
+}
+
+/// Find the cells of a valid list-table div that hit
+/// [`MisplacedCellSpanAttrs`]. Nested list-tables are not searched; the
+/// desugaring traversal reaches them on its own.
+pub(crate) fn find_misplaced_cell_span_attrs(div: &Div) -> Vec<MisplacedCellSpanAttrs> {
+    let mut found = Vec::new();
+    let Some(Block::BulletList(rows)) = div.content.last() else {
+        return found;
+    };
+    let cells = rows.content.iter().flat_map(|row| match row.as_slice() {
+        [Block::BulletList(cells)] => cells.content.as_slice(),
+        _ => &[],
+    });
+    for cell in cells {
+        let first_inline = match cell.first() {
+            Some(Block::Plain(plain)) => plain.content.first(),
+            Some(Block::Paragraph(para)) => para.content.first(),
+            _ => None,
+        };
+        let Some(Inline::Span(span)) = first_inline else {
+            continue;
+        };
+        if span.content.is_empty() {
+            continue;
+        }
+        let attrs: Vec<String> = span
+            .attr
+            .2
+            .iter()
+            .filter(|(k, _)| k.as_str() == "colspan" || k.as_str() == "rowspan")
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect();
+        if attrs.is_empty() {
+            continue;
+        }
+        found.push(MisplacedCellSpanAttrs {
+            location: span.source_info.clone(),
+            attrs: attrs.join(" "),
+            text: quarto_pandoc_types::config_value::inlines_to_plain_text(&span.content),
+        });
+    }
+    found
+}
+
 /// Create an empty Attr
 fn empty_table_attr() -> Attr {
     (String::new(), Vec::new(), LinkedHashMap::new()).into()

@@ -58,8 +58,8 @@ use crate::filters::{
     topdown_traverse_inlines,
 };
 use crate::pandoc::treesitter_utils::postprocess::{
-    ListTableValidation, is_valid_definition_list_div, transform_definition_list_div,
-    transform_list_table_div, validate_list_table_div,
+    ListTableValidation, find_misplaced_cell_span_attrs, is_valid_definition_list_div,
+    transform_definition_list_div, transform_list_table_div, validate_list_table_div,
 };
 use crate::pandoc::{
     Attr, Block, Blocks, Caption, Div, Figure, Inline, Inlines, Pandoc, Paragraph, Plain,
@@ -72,7 +72,8 @@ use quarto_pandoc_types::AttrSourceInfo;
 /// Items 1 and 2 of the set, for one div: a valid list-table becomes a
 /// `Table`, a valid definition-list a `DefinitionList`, an invalid
 /// list-table warns Q-2-35 into `collector` and stays a div, and any other
-/// div is unchanged.
+/// div is unchanged. A valid list-table cell that starts with a non-empty
+/// span carrying `colspan`/`rowspan` warns Q-2-61 (GH #1338).
 ///
 /// The rewrite runs top-down, before the div's content is visited. The
 /// caller returns the result as `Unchanged` from a `with_block` handler,
@@ -83,7 +84,25 @@ use quarto_pandoc_types::AttrSourceInfo;
 /// a list-table and could take its last row as a caption.
 pub(crate) fn desugar_div(div: Div, collector: &mut DiagnosticCollector) -> Block {
     match validate_list_table_div(&div) {
-        ListTableValidation::Valid => transform_list_table_div(div),
+        ListTableValidation::Valid => {
+            for found in find_misplaced_cell_span_attrs(&div) {
+                collector.add(
+                    DiagnosticMessageBuilder::warning("List-table cell span is not empty")
+                        .with_code("Q-2-61")
+                        .with_location(found.location)
+                        .problem(format!(
+                            "This cell starts with `[{}]{{{}}}`, a span with content, so its attributes stay on the span and do not merge cells.",
+                            found.text, found.attrs
+                        ))
+                        .add_hint(format!(
+                            "Put the attributes on an empty span at the start of the cell: `[]{{{}}} {}`?",
+                            found.attrs, found.text
+                        ))
+                        .build(),
+                );
+            }
+            transform_list_table_div(div)
+        }
         ListTableValidation::Invalid { reason, location } => {
             collector.add(
                 DiagnosticMessageBuilder::warning("Invalid List-Table Structure")
@@ -264,6 +283,66 @@ mod tests {
         let mut collector = DiagnosticCollector::new();
         let out = desugar_blocks(vec![list_table()], &mut collector);
         assert!(matches!(out.as_slice(), [Block::Table(_)]), "{out:?}");
+        assert!(collector.diagnostics().is_empty());
+    }
+
+    /// A one-cell row whose cell is `[text]{key=value}` (or `[]{key=value}`
+    /// when `text` is empty).
+    fn span_cell_table(text: &str, key: &str) -> Block {
+        let mut kvs = LinkedHashMap::new();
+        kvs.insert(key.to_string(), "2".to_string());
+        let content = if text.is_empty() {
+            vec![]
+        } else {
+            vec![Inline::Str(Str {
+                text: text.to_string(),
+                source_info: empty_source_info(),
+            })]
+        };
+        let span = Inline::Span(Box::new(crate::pandoc::Span {
+            attr: (String::new(), vec![], kvs).into(),
+            content,
+            source_info: empty_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        }));
+        let cell = Block::Plain(Plain {
+            content: vec![span],
+            source_info: empty_source_info(),
+        });
+        div(
+            "list-table",
+            vec![bullets(vec![
+                vec![bullets(vec![vec![cell]])],
+                vec![bullets(vec![vec![plain("a")], vec![plain("b")]])],
+            ])],
+        )
+    }
+
+    #[test]
+    fn a_non_empty_colspan_span_in_a_list_table_cell_warns() {
+        for key in ["colspan", "rowspan"] {
+            let mut collector = DiagnosticCollector::new();
+            let out = desugar_blocks(vec![span_cell_table("Merged", key)], &mut collector);
+            assert!(matches!(out.as_slice(), [Block::Table(_)]), "{out:?}");
+            let diags = collector.diagnostics();
+            assert_eq!(diags.len(), 1, "{diags:?}");
+            assert_eq!(diags[0].code.as_deref(), Some("Q-2-61"));
+            let text = diags[0].to_text(None);
+            assert!(text.contains(&format!("[]{{{key}=2}} Merged")), "{text}");
+        }
+    }
+
+    #[test]
+    fn an_empty_colspan_span_in_a_list_table_cell_does_not_warn() {
+        let mut collector = DiagnosticCollector::new();
+        desugar_blocks(vec![span_cell_table("", "colspan")], &mut collector);
+        assert!(collector.diagnostics().is_empty());
+    }
+
+    #[test]
+    fn a_non_empty_span_without_span_attributes_does_not_warn() {
+        let mut collector = DiagnosticCollector::new();
+        desugar_blocks(vec![span_cell_table("x", "data-x")], &mut collector);
         assert!(collector.diagnostics().is_empty());
     }
 
