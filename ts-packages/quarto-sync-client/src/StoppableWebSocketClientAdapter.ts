@@ -37,6 +37,23 @@
  *  - the window `online` event;
  *  - `navigator.connection` `change` where it exists (Chromium only).
  *
+ * Reconnecting to a server that's down (browser only): after an attempt
+ * that never opened, the next one first asks the server over plain HTTP
+ * (`fetch` of the same URL, `ws:` as `http:`), and opens a WebSocket
+ * only if anything answers. In Firefox every WebSocket attempt to a dead
+ * port feeds its reconnect delay for that address, and a socket waiting
+ * out that delay holds the one CONNECTING slot for the whole IP address,
+ * so a tab left open on a server that's gone held up every other tab's
+ * connections to the same host for up to a minute at a time. HTTP
+ * requests don't go through that queue. Likewise, a retry no longer
+ * replaces a handshake that's still in progress: upstream's retry
+ * interval did, without closing it, and the abandoned socket stayed in
+ * the queue until the browser's open timeout. The first reconnect after
+ * an open connection drops (a hub restart, a force-reconnect below)
+ * still goes straight to a WebSocket. A page whose CSP allows the
+ * `ws:`/`wss:` URL but not its `http:`/`https:` twin can't probe, and
+ * reconnects only through those direct attempts.
+ *
  * No `visibilitychange` trigger: a merely-hidden tab has a live socket,
  * and a frozen tab already shows up as a wake gap. Triggers attach once
  * on connect() and are torn down on disconnect(); in Node (no `window`)
@@ -65,8 +82,36 @@ export const WAKE_CHECK_INTERVAL = 10_000;
  */
 export const WAKE_GAP_THRESHOLD = 90_000;
 
+/** True in a browser, where reconnects probe the server over HTTP first. */
+function canProbe(): boolean {
+  return (
+    (globalThis as { window?: unknown }).window !== undefined && typeof globalThis.fetch === 'function'
+  );
+}
+
+/**
+ * True if anything answers an HTTP request to the WebSocket URL's
+ * server within `timeoutMs`. Any response counts, even an error status
+ * or an opaque one: a server that answers is up.
+ */
+async function serverAnswers(wsUrl: string, timeoutMs: number): Promise<boolean> {
+  try {
+    const url = new URL(wsUrl);
+    url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
+    await fetch(url, { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(timeoutMs) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export class StoppableWebSocketClientAdapter extends BrowserWebSocketClientAdapter {
   #stopped = false;
+
+  // Reconnect probing (browser only; see the module comment).
+  /** Whether the current socket ever opened. */
+  #opened = false;
+  #probing = false;
 
   // Force-reconnect trigger state (browser only — see #attachTriggers).
   #triggersAttached = false;
@@ -96,7 +141,31 @@ export class StoppableWebSocketClientAdapter extends BrowserWebSocketClientAdapt
 
   override connect(peerId: PeerId, peerMetadata?: PeerMetadata): void {
     if (this.#stopped) return;
+    // A retry after an attempt that never opened. (Upstream's retry
+    // interval keeps calling connect() until a socket opens.)
+    if (this.socket && !this.#opened && canProbe()) {
+      // Let a handshake in progress finish rather than abandon it.
+      if (this.socket.readyState === WebSocket.CONNECTING) return;
+      if (this.#probing) return;
+      this.#probing = true;
+      void serverAnswers(this.url, this.retryInterval).then((answers) => {
+        this.#probing = false;
+        if (this.#stopped) return;
+        if (answers) this.#open(peerId, peerMetadata);
+        else recordConnectionEvent('ws-probe-failed', this.url);
+      });
+      return;
+    }
+    this.#open(peerId, peerMetadata);
+  }
+
+  #open(peerId: PeerId, peerMetadata?: PeerMetadata): void {
     super.connect(peerId, peerMetadata);
+    this.#opened = false;
+    const socket = this.socket;
+    socket?.addEventListener('open', () => {
+      if (this.socket === socket) this.#opened = true;
+    });
     this.#attachTriggers();
   }
 

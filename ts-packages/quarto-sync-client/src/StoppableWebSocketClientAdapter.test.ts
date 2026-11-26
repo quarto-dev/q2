@@ -416,3 +416,138 @@ describe('StoppableWebSocketClientAdapter wake/network force-reconnect', () => {
     adapter.disconnect();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Reconnecting to a server that's down (browser only).
+//
+// In Firefox, each WebSocket attempt to a dead port feeds its reconnect
+// delay for that address, and a socket waiting out that delay holds the
+// one CONNECTING slot for the whole IP address. A tab left open on a
+// server that's gone, retrying every few seconds, held up every other
+// tab's WebSockets to the same host. So after an attempt that never
+// opened, the adapter asks the server over HTTP first, and doesn't
+// replace a handshake that's still in progress.
+// ---------------------------------------------------------------------------
+
+describe('StoppableWebSocketClientAdapter reconnecting to a server that is down', () => {
+  let answers: boolean;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    resetSyncActivity();
+    FakeWebSocket.instances = [];
+    answers = false;
+    fetchMock = vi.fn(async () => {
+      if (!answers) throw new TypeError('NetworkError when attempting to fetch resource.');
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal('window', new EventTarget());
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  /** An adapter whose first attempt failed: its socket closed without opening. */
+  function failedAdapter(): StoppableWebSocketClientAdapter {
+    const adapter = new StoppableWebSocketClientAdapter(DEAD_URL, RETRY_MS);
+    adapter.connect('peer-test' as PeerId, {});
+    const socket = FakeWebSocket.instances[0]!;
+    socket.readyState = FakeWebSocket.CLOSED;
+    socket.emit('close');
+    return adapter;
+  }
+
+  it('opens no WebSocket while the server does not answer over HTTP', async () => {
+    const adapter = failedAdapter();
+
+    await vi.advanceTimersByTimeAsync(3 * RETRY_MS);
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('http://127.0.0.1:1/ws');
+    adapter.disconnect();
+  });
+
+  it('opens a WebSocket once the server answers', async () => {
+    const adapter = failedAdapter();
+    await vi.advanceTimersByTimeAsync(RETRY_MS);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+
+    answers = true;
+    await vi.advanceTimersByTimeAsync(RETRY_MS);
+
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    adapter.disconnect();
+  });
+
+  it('asks over https for a wss server', async () => {
+    const adapter = new StoppableWebSocketClientAdapter('wss://sync.example.org/', RETRY_MS);
+    adapter.connect('peer-test' as PeerId, {});
+    FakeWebSocket.instances[0]!.readyState = FakeWebSocket.CLOSED;
+    FakeWebSocket.instances[0]!.emit('close');
+
+    await vi.advanceTimersByTimeAsync(RETRY_MS);
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://sync.example.org/');
+    adapter.disconnect();
+  });
+
+  it('does not replace a handshake still in progress', async () => {
+    const adapter = new StoppableWebSocketClientAdapter(DEAD_URL, RETRY_MS);
+    adapter.connect('peer-test' as PeerId, {});
+
+    await vi.advanceTimersByTimeAsync(3 * RETRY_MS);
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(FakeWebSocket.instances[0]!.close).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    adapter.disconnect();
+  });
+
+  it('goes straight to a WebSocket the first time an open connection drops', async () => {
+    const adapter = new StoppableWebSocketClientAdapter(DEAD_URL, RETRY_MS);
+    adapter.connect('peer-test' as PeerId, {});
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    socket.readyState = FakeWebSocket.CLOSED;
+    socket.emit('close');
+
+    await vi.advanceTimersByTimeAsync(RETRY_MS);
+
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+    adapter.disconnect();
+  });
+
+  it('opens nothing after disconnect, even when a probe answers late', async () => {
+    let answer: (r: Response) => void = () => {};
+    fetchMock.mockImplementation(() => new Promise<Response>((resolve) => (answer = resolve)));
+    const adapter = failedAdapter();
+    await vi.advanceTimersByTimeAsync(RETRY_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    adapter.disconnect();
+    answer(new Response(null, { status: 404 }));
+    await vi.advanceTimersByTimeAsync(RETRY_MS);
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  it('retries with WebSockets as upstream does without a window (Node)', async () => {
+    vi.unstubAllGlobals();
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = failedAdapter();
+
+    await vi.advanceTimersByTimeAsync(RETRY_MS);
+
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+    adapter.disconnect();
+  });
+});
