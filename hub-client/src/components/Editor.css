@@ -272,6 +272,16 @@
   transition: flex-grow 0.3s ease;
 }
 
+/* "Expand markup" / "Expand preview": the other pane and the divider are
+   hidden, not shrunk. display: none keeps the preview mounted, so its
+   render keeps feeding the editor's diagnostics. */
+.editor-main.split-markup-only .preview-pane,
+.editor-main.split-markup-only .pane-divider,
+.editor-main.split-preview-only .editor-pane,
+.editor-main.split-preview-only .pane-divider {
+  display: none;
+}
+
 /* While dragging, the preview iframe must not swallow pointer events. */
 .editor-main.dragging-divider .preview-pane iframe {
   pointer-events: none;
