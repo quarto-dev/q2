@@ -9,7 +9,9 @@ use std::path::PathBuf;
 
 use quarto_core::engine::skeleton::{Shipped, present_skeleton};
 use quarto_core::engine::units::scan_units;
-use quarto_core::engine::{ExecutionContext, ExecutionEngine, KnitrEngine, ReplayEngine};
+use quarto_core::engine::{
+    ExecuteResult, ExecutionContext, ExecutionEngine, ExecutionError, KnitrEngine, ReplayEngine,
+};
 use quarto_core::presenter::figures::FsFigureSink;
 use quarto_core::record::{AuthorTexts, coalesce, fill_ids};
 
@@ -134,13 +136,16 @@ knitr::knit_hooks$set(output = function(x, options) paste0('<<', x, '>>\\n'))\n\
 ```{r a}\nx <- 1:3\nx\n```\n\n\
 ```{r kid, child='kid.Rmd'}\n```\n\nAfter.\n";
 
-/// The recorded run's markdown equals the unrecorded live run's, under decision 26. Before the
-/// flip both are R's markdown; after it the recorded run is presented, and a mixed document
-/// (fallback chunks among structured ones) must come out exactly as before.
-fn assert_recorded_run_equals_live(doc: &str, extra_files: &[(&str, &str)], must_contain: &[&str]) {
-    if !r_available() {
-        return;
-    }
+/// Run `doc` live and recorded in separate directories, returning both results and directories.
+fn execute_live_and_recorded(
+    doc: &str,
+    extra_files: &[(&str, &str)],
+) -> (
+    Result<ExecuteResult, ExecutionError>,
+    Result<ExecuteResult, ExecutionError>,
+    tempfile::TempDir,
+    tempfile::TempDir,
+) {
     let live_dir = tempfile::tempdir().unwrap();
     let rec_dir = tempfile::tempdir().unwrap();
     for d in [live_dir.path(), rec_dir.path()] {
@@ -149,12 +154,21 @@ fn assert_recorded_run_equals_live(doc: &str, extra_files: &[(&str, &str)], must
             std::fs::write(d.join(name), body).unwrap();
         }
     }
-    let live = KnitrEngine::new()
-        .execute(doc, &context(doc, live_dir.path(), false))
-        .expect("live run");
-    let recorded = KnitrEngine::new()
-        .execute(doc, &context(doc, rec_dir.path(), true))
-        .expect("recorded run");
+    let live = KnitrEngine::new().execute(doc, &context(doc, live_dir.path(), false));
+    let recorded = KnitrEngine::new().execute(doc, &context(doc, rec_dir.path(), true));
+    (live, recorded, live_dir, rec_dir)
+}
+
+/// The recorded run's markdown equals the unrecorded live run's, under decision 26. Before the
+/// flip both are R's markdown; after it the recorded run is presented, and a mixed document
+/// (fallback chunks among structured ones) must come out exactly as before.
+fn assert_recorded_run_equals_live(doc: &str, extra_files: &[(&str, &str)], must_contain: &[&str]) {
+    if !r_available() {
+        return;
+    }
+    let (live, recorded, live_dir, rec_dir) = execute_live_and_recorded(doc, extra_files);
+    let live = live.expect("live run");
+    let recorded = recorded.expect("recorded run");
     for needle in must_contain {
         assert!(
             live.markdown.contains(needle),
@@ -277,12 +291,10 @@ fn r_has(packages: &[&str]) -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
-/// A `{sql}` chunk with `#|` options: knitr reads those, but Quarto's scanner reads `--|` for
-/// SQL. The unit-id line sent to knitr has to use the author\'s prefix, or `connection` is cut
-/// off from the options and the recorded run aborts (found by the corpus case
-/// `s5/01_odd_chunks`; it failed the same way before the flip).
+/// A `{sql}` chunk with `--|` options records as it runs live, and the id line
+/// `insert_unit_ids` adds uses the same `--|` prefix.
 #[test]
-fn a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live() {
+fn a_sql_chunk_with_dash_pipe_options_records_as_it_runs_live() {
     if !r_has(&["DBI", "RSQLite"]) {
         return;
     }
@@ -290,10 +302,47 @@ fn a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live() {
         "```{r}\n#| include: false\n\
          con <- DBI::dbConnect(RSQLite::SQLite(), ':memory:')\n\
          DBI::dbWriteTable(con, 't', data.frame(a = 1:2, b = c('x', 'y')))\n```\n\n\
-         ```{sql}\n#| connection: con\nSELECT * FROM t\n```\n",
+         ```{sql}\n--| connection: con\nSELECT * FROM t\n```\n",
         &[],
         &["knitsql-table"],
     );
+}
+
+/// A `{sql}` chunk with `#|` options fails or renders the same way in both runs,
+/// whichever knitr is installed.
+#[test]
+fn a_sql_chunk_with_hash_pipe_options_fails_or_renders_alike_live_and_recorded() {
+    if !r_available() || !r_has(&["DBI", "RSQLite"]) {
+        return;
+    }
+    let (live, recorded, live_dir, rec_dir) = execute_live_and_recorded(
+        "```{r}\n#| include: false\n\
+         con <- DBI::dbConnect(RSQLite::SQLite(), ':memory:')\n\
+         DBI::dbWriteTable(con, 't', data.frame(a = 1:2, b = c('x', 'y')))\n```\n\n\
+         ```{sql}\n#| connection: con\nSELECT * FROM t\n```\n",
+        &[],
+    );
+    match (live, recorded) {
+        (Ok(live), Ok(recorded)) => {
+            // knitr below 1.51 reads #| here: both runs render the table alike.
+            assert!(live.markdown.contains("knitsql-table"), "{}", live.markdown);
+            let class = classify(
+                &normalize(&live.markdown, live_dir.path()),
+                &normalize(&recorded.markdown, rec_dir.path()),
+            );
+            assert!(class <= Class::SyntaxLevel, "{class:?}");
+        }
+        // knitr 1.51 and later refuse #| in a sql chunk in Quarto mode, and the id line adds no
+        // other failure.
+        (Err(live), Err(recorded)) => {
+            let live = live.to_string();
+            assert!(live.contains("should start with '--| '"), "{live}");
+            assert_eq!(live, recorded.to_string());
+        }
+        (live, recorded) => {
+            panic!("live and recorded runs disagree:\nlive: {live:?}\nrecorded: {recorded:?}")
+        }
+    }
 }
 
 #[test]
