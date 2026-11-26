@@ -644,7 +644,9 @@ fn biblatex_entry_to_reference(
         container_title: get_title_text(&["journaltitle", "journal", "booktitle"]),
         container_title_short: get_title_text(&["shortjournal"]),
         collection_title: get_title_text(&["series"]),
-        publisher: get_verbatim(&["publisher"]),
+        // Reports name their publisher in `institution` and theses in
+        // `school`; pandoc's citeproc maps both to the CSL publisher.
+        publisher: get_verbatim(&["publisher", "institution", "school"]),
         publisher_place: get_verbatim(&["location", "address"]),
         edition: get_verbatim(&["edition"]).map(StringOrNumber::String),
         volume: get_verbatim(&["volume"]).map(StringOrNumber::String),
@@ -4580,6 +4582,20 @@ mod tests {
             Some("Master’s thesis")
         );
         assert_eq!(by_id("report2023").ref_type, "report");
+        // BibTeX `institution` and `school` become the CSL publisher,
+        // as in pandoc's citeproc (GH #1305).
+        assert_eq!(
+            by_id("report2023").publisher.as_deref(),
+            Some("Example Institute")
+        );
+        assert_eq!(
+            by_id("phd2020").publisher.as_deref(),
+            Some("Example University")
+        );
+        assert_eq!(
+            by_id("masters2021").publisher.as_deref(),
+            Some("Example College")
+        );
         assert_eq!(by_id("misc2025").ref_type, "");
         assert_eq!(
             by_id("misc2025").author.as_ref().unwrap()[0]
