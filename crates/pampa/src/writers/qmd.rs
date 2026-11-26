@@ -1388,6 +1388,12 @@ fn cell_has_simple_content(content: &[Block]) -> bool {
 /// - No cells have row_span > 1 or col_span > 1
 /// - All cells contain only "simple" content (single Para/Plain without breaks)
 fn table_can_use_pipe_format(table: &Table) -> bool {
+    // GH #1335: pipe tables have no row-head columns; only a list-table's
+    // `header-cols` can express them.
+    if table_rowhead_columns(table) > 0 {
+        return false;
+    }
+
     // Check header rows
     for row in &table.head.rows {
         for cell in &row.cells {
@@ -1427,6 +1433,18 @@ fn table_can_use_pipe_format(table: &Table) -> bool {
     }
 
     true
+}
+
+/// The number of row-head columns to write as a list-table's
+/// `header-cols`. A list-table has one body; for a table with several,
+/// the largest count wins.
+fn table_rowhead_columns(table: &Table) -> usize {
+    table
+        .bodies
+        .iter()
+        .map(|b| b.rowhead_columns)
+        .max()
+        .unwrap_or(0)
 }
 
 /// Convert Alignment to character code for list-table
@@ -1516,6 +1534,13 @@ fn write_list_table(
     // is the default and can be omitted for cleaner output.
     if header_row_count != 1 {
         attrs.push(format!("header-rows=\"{}\"", header_row_count));
+    }
+
+    // GH #1335: the reader stores `header-cols` (default 0) as the
+    // body's `rowhead_columns`.
+    let header_cols = table_rowhead_columns(table);
+    if header_cols > 0 {
+        attrs.push(format!("header-cols=\"{}\"", header_cols));
     }
 
     // Add alignments if there are non-default alignments

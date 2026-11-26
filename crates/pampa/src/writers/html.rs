@@ -1911,7 +1911,14 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
                 writeln!(ctx, "<thead>")?;
                 let mut pending = Vec::new();
                 for row in &table.head.rows {
-                    write_table_row(row, &table.colspec, &mut pending, ctx, true, Some("header"))?;
+                    write_table_row(
+                        row,
+                        &table.colspec,
+                        &mut pending,
+                        ctx,
+                        HeaderCells::All,
+                        Some("header"),
+                    )?;
                 }
                 writeln!(ctx, "</thead>")?;
             }
@@ -1927,7 +1934,14 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
                 let mut pending = Vec::new();
                 for (i, row) in body.body.iter().enumerate() {
                     let cls = if i % 2 == 0 { "odd" } else { "even" };
-                    write_table_row(row, &table.colspec, &mut pending, ctx, false, Some(cls))?;
+                    write_table_row(
+                        row,
+                        &table.colspec,
+                        &mut pending,
+                        ctx,
+                        HeaderCells::Columns(body.rowhead_columns),
+                        Some(cls),
+                    )?;
                 }
                 writeln!(ctx, "</tbody>")?;
             }
@@ -1942,7 +1956,14 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
                 writeln!(ctx, "<tfoot>")?;
                 let mut pending = Vec::new();
                 for row in &table.foot.rows {
-                    write_table_row(row, &table.colspec, &mut pending, ctx, false, None)?;
+                    write_table_row(
+                        row,
+                        &table.colspec,
+                        &mut pending,
+                        ctx,
+                        HeaderCells::Columns(0),
+                        None,
+                    )?;
                 }
                 writeln!(ctx, "</tfoot>")?;
             }
@@ -2093,8 +2114,9 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
 
 /// Write a table row.
 ///
-/// `is_header` controls whether cells are emitted as `<th>` (true) or
-/// `<td>` (false). `row_class` is the value of the row's `class`
+/// `header` controls which cells are emitted as `<th>` rather than
+/// `<td>`: all of them (head rows), or those starting in a column below
+/// a body's `rowhead_columns` (GH #1335). `row_class` is the value of the row's `class`
 /// attribute (e.g. `"header"`, `"odd"`, `"even"`); `None` emits a bare
 /// `<tr>`. Caller is responsible for the odd/even bookkeeping.
 ///
@@ -2108,7 +2130,7 @@ fn write_table_row<W: Write>(
     colspec: &[crate::pandoc::table::ColSpec],
     pending: &mut Vec<usize>,
     ctx: &mut HtmlWriterContext<'_, W>,
-    is_header: bool,
+    header: HeaderCells,
     row_class: Option<&'static str>,
 ) -> std::io::Result<()> {
     use crate::pandoc::table::Alignment;
@@ -2137,9 +2159,9 @@ fn write_table_row<W: Write>(
             Alignment::Default => colspec.get(col).map_or(Alignment::Default, |c| c.0.clone()),
             ref a => a.clone(),
         };
+        let tag = header.tag(col);
         col += col_span;
 
-        let tag = if is_header { "th" } else { "td" };
         write!(ctx, "<{}", tag)?;
         let text_align = match alignment {
             Alignment::Left => Some("left"),
@@ -2175,11 +2197,11 @@ fn write_table_row<W: Write>(
     // GH #1337: pad a short row with empty cells up to the column count,
     // as Pandoc does, skipping columns a rowspan still covers. Each
     // padded cell takes its column's alignment.
-    let tag = if is_header { "th" } else { "td" };
     for (c, spec) in colspec.iter().enumerate().skip(col) {
         if pending.get(c).is_some_and(|&n| n > 0) {
             continue;
         }
+        let tag = header.tag(c);
         match spec.0 {
             Alignment::Left => writeln!(ctx, "<{tag} style=\"text-align: left;\"></{tag}>")?,
             Alignment::Right => writeln!(ctx, "<{tag} style=\"text-align: right;\"></{tag}>")?,
@@ -2192,6 +2214,27 @@ fn write_table_row<W: Write>(
         *p = p.saturating_sub(1);
     }
     Ok(())
+}
+
+/// Which cells of a table row [`write_table_row`] emits as `<th>`.
+#[derive(Clone, Copy)]
+enum HeaderCells {
+    /// Every cell (a head row).
+    All,
+    /// Cells starting in a column below this one (a body row's row
+    /// heads; 0 means none).
+    Columns(usize),
+}
+
+impl HeaderCells {
+    /// The tag for a cell starting in column `col`.
+    fn tag(self, col: usize) -> &'static str {
+        match self {
+            HeaderCells::All => "th",
+            HeaderCells::Columns(n) if col < n => "th",
+            HeaderCells::Columns(_) => "td",
+        }
+    }
 }
 
 /// Write a table cell's `rowspan` / `colspan` attributes (when > 1).
@@ -4137,5 +4180,34 @@ mod tests {
             html.contains("<tr class=\"even\">"),
             "expected even class on second body row, got:\n{html}"
         );
+    }
+
+    /// GH #1335: a list-table's `header-cols` makes the first N columns
+    /// of each body row row heads, written as `<th>` as Pandoc does.
+    #[test]
+    fn test_list_table_header_cols_body_row_heads() {
+        let html = qmd_to_html(
+            "::: {.list-table header-cols=1}\n\
+             - - Name\n  - Initial release\n\
+             - - Markdown\n  - 2004\n\
+             :::\n",
+        );
+        assert!(!html.contains("data-header-cols"), "consumed: {html}");
+        let body = &html[html.find("<tbody>").expect("tbody")..];
+        assert!(body.contains("<th>Markdown"), "row head: {html}");
+        assert!(body.contains("<td>2004"), "data cell: {html}");
+    }
+
+    /// GH #1335: without `header-cols`, body cells stay `<td>`.
+    #[test]
+    fn test_list_table_without_header_cols_has_no_body_th() {
+        let html = qmd_to_html(
+            "::: {.list-table}\n\
+             - - Name\n  - Initial release\n\
+             - - Markdown\n  - 2004\n\
+             :::\n",
+        );
+        let body = &html[html.find("<tbody>").expect("tbody")..];
+        assert!(!body.contains("<th"), "no row heads: {html}");
     }
 }

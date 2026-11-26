@@ -411,6 +411,15 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
         .and_then(|v| v.parse().ok())
         .unwrap_or(1);
 
+    // GH #1335: `header-cols` (default 0) makes the first N columns of
+    // the body row heads, as in pandoc-ext/list-table.
+    let header_cols: usize = div
+        .attr
+        .2
+        .get("header-cols")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+
     let aligns_str = div.attr.2.get("aligns").map(|v| v.as_str());
     let widths_str = div.attr.2.get("widths").map(|v| v.as_str());
 
@@ -442,7 +451,10 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
     let mut table_kvs: LinkedHashMap<String, String> = LinkedHashMap::new();
     let mut table_kv_sources = Vec::new();
     for ((k, v), kv_source) in div.attr.2.iter().zip(kv_sources) {
-        if k != "header-rows" && k != "aligns" && k != "widths" {
+        if !matches!(
+            k.as_str(),
+            "header-rows" | "header-cols" | "aligns" | "widths"
+        ) {
             table_kvs.insert(k.clone(), v.clone());
             table_kv_sources.push(kv_source);
         }
@@ -589,7 +601,7 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
     } else {
         vec![TableBody {
             attr: empty_table_attr(),
-            rowhead_columns: 0,
+            rowhead_columns: header_cols,
             head: Vec::new(),
             body: body_rows,
             source_info: source_info.clone(),
