@@ -507,7 +507,8 @@ pub async fn sync_file_by_path(
 ) -> Result<Option<SyncResult>> {
     // Convert absolute path to relative path for index lookup
     let relative_path = match file_path.strip_prefix(project_root) {
-        Ok(rel) => rel.to_string_lossy().to_string(),
+        // Index keys are `/`-separated on every platform (GH #1349); a native key never matches.
+        Ok(rel) => quarto_util::to_forward_slashes(rel),
         Err(_) => {
             debug!(
                 path = %file_path.display(),
@@ -1210,6 +1211,41 @@ mod tests {
             })
             .unwrap();
         });
+    }
+
+    /// GH #1349: the watcher hands `sync_file_by_path` a native path; the index key is
+    /// `/`-separated. On POSIX a backslash in the file name stands in for the Windows separator.
+    #[tokio::test]
+    async fn sync_file_by_path_finds_a_nested_file_by_its_forward_slash_key() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path();
+        let file = project_root.join("d00\\f.qmd");
+        // `\` is a file-name character on Unix and a separator on Windows.
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "nested").unwrap();
+
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+        let handle = repo.create(create_doc_with_text("nested")).await.unwrap();
+        index
+            .add_file("d00/f.qmd", &handle.document_id().to_string())
+            .unwrap();
+        let mut sync_state = SyncState::load(project_root).unwrap();
+
+        let result = sync_file_by_path(
+            &repo,
+            &index,
+            &file,
+            project_root,
+            &mut sync_state,
+            DiskWritePolicy::WriteBack,
+        )
+        .await
+        .unwrap();
+        assert!(
+            result.is_some(),
+            "the nested file must be found in the index"
+        );
     }
 
     #[tokio::test]
