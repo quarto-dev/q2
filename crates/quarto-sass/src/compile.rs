@@ -1684,6 +1684,26 @@ mod tests {
         assert!(css.contains(".quarto-search-button"));
     }
 
+    /// GH #1376: Q1's `quarto-nav.scss` pads every child of
+    /// `#quarto-content` 14px below the navbar (0 below `lg`), with the
+    /// sidebar glass exempt. Checked in the minified output, which is
+    /// what a site ships.
+    #[test]
+    fn test_compile_default_css_includes_content_padding_top() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, true).unwrap();
+        assert!(
+            css.contains("#quarto-content>*{padding-top:14px}"),
+            "default CSS must pad #quarto-content children like Q1"
+        );
+        assert!(css.contains("#quarto-content>#quarto-sidebar-glass{padding-top:0px}"));
+        assert!(
+            css.contains("@media (max-width: 991.98px){#quarto-content>*{padding-top:0}"),
+            "below lg the #quarto-content padding must reset to 0"
+        );
+        assert!(css.contains("#quarto-content .subtitle{padding-top:14px}"));
+    }
+
     #[test]
     fn test_compile_default_css_includes_listing_rules() {
         let runtime = NativeRuntime::new();

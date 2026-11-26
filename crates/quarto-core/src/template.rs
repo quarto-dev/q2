@@ -1679,6 +1679,13 @@ fn metadata_entry_to_template_value(key: &str, value: &ConfigValue) -> TemplateV
     {
         return TemplateValue::String(html);
     }
+    // The head interpolates `description-meta` into `content="…"`
+    // unescaped, so a `"` or `&` in the text must be escaped here (GH #1369).
+    if key == "description-meta"
+        && let TemplateValue::String(text) = config_value_to_template_value(value)
+    {
+        return TemplateValue::String(escape_html_attr(&text));
+    }
     config_value_to_template_value(value)
 }
 
@@ -1797,7 +1804,7 @@ fn config_value_to_template_value(meta: &ConfigValue) -> TemplateValue {
 
 /// Convert inlines to plain text.
 fn inlines_to_text(inlines: &[quarto_pandoc_types::inline::Inline]) -> String {
-    use quarto_pandoc_types::inline::Inline;
+    use quarto_pandoc_types::inline::{Inline, QuoteType};
 
     let mut result = String::new();
     for inline in inlines {
@@ -1814,9 +1821,15 @@ fn inlines_to_text(inlines: &[quarto_pandoc_types::inline::Inline]) -> String {
             Inline::Subscript(s) => result.push_str(&inlines_to_text(&s.content)),
             Inline::SmallCaps(s) => result.push_str(&inlines_to_text(&s.content)),
             Inline::Quoted(q) => {
-                result.push('"');
+                // Curly quotes, as Pandoc's `stringify` writes them: a
+                // straight `"` would end a `content="…"` attribute.
+                let (open, close) = match q.quote_type {
+                    QuoteType::SingleQuote => ('\u{2018}', '\u{2019}'),
+                    QuoteType::DoubleQuote => ('\u{201C}', '\u{201D}'),
+                };
+                result.push(open);
                 result.push_str(&inlines_to_text(&q.content));
-                result.push('"');
+                result.push(close);
             }
             Inline::Code(c) => result.push_str(&c.text),
             Inline::Math(m) => result.push_str(&m.text),
@@ -2406,7 +2419,37 @@ mod tests {
             source_info: dummy_source_info(),
         }))];
         let text = inlines_to_text(&inlines);
-        assert_eq!(text, "\"quoted\"");
+        assert_eq!(text, "\u{201C}quoted\u{201D}");
+    }
+
+    #[test]
+    fn test_inlines_to_text_single_quoted() {
+        let inlines = vec![Inline::Quoted(Box::new(Quoted {
+            quote_type: QuoteType::SingleQuote,
+            content: vec![Inline::Str(Str {
+                text: "quoted".to_string(),
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        }))];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "\u{2018}quoted\u{2019}");
+    }
+
+    /// GH #1369: `description-meta` lands in `content="…"`, so a `"` or
+    /// `&` in it must be attribute-escaped to keep the tag well formed.
+    #[test]
+    fn test_description_meta_is_attribute_escaped() {
+        let value = ConfigValue::new_string("Uses \"x\" & <more>.", dummy_source_info());
+        assert_eq!(
+            metadata_entry_to_template_value("description-meta", &value),
+            TemplateValue::String("Uses &quot;x&quot; &amp; &lt;more>.".to_string())
+        );
+        // Other plain-text fields keep the generic, unescaped conversion.
+        assert_eq!(
+            metadata_entry_to_template_value("keywords", &value),
+            TemplateValue::String("Uses \"x\" & <more>.".to_string())
+        );
     }
 
     #[test]

@@ -71,6 +71,7 @@ mod breadcrumbs_render;
 mod callout;
 mod callout_resolve;
 mod categories_sidebar;
+mod cell_renderings;
 mod code_annotations;
 mod code_block_generate;
 mod code_block_render;
@@ -182,6 +183,7 @@ pub use breadcrumbs_render::BreadcrumbsRenderTransform;
 pub use callout::CalloutTransform;
 pub use callout_resolve::CalloutResolveTransform;
 pub use categories_sidebar::CategoriesSidebarTransform;
+pub use cell_renderings::CellRenderingsTransform;
 pub use code_block_generate::{
     CodeBlockDecoration, CodeBlockDecorationKey, CodeBlockGenerateTransform, CopyMode, FoldMode,
     resolve_default_copy_mode,
@@ -230,7 +232,7 @@ pub use listing_render::ListingRenderTransform;
 pub use llms::LlmsCaptureTransform;
 pub use mermaid::{MERMAID_VERSION, MermaidRenderTransform};
 pub use metadata_normalize::MetadataNormalizeTransform;
-pub(crate) use metadata_normalize::inlines_to_plain_text;
+pub(crate) use metadata_normalize::{blocks_to_plain_text, inlines_to_plain_text};
 pub use navbar_generate::NavbarGenerateTransform;
 pub use navbar_render::NavbarRenderTransform;
 pub use page_nav_generate::PageNavGenerateTransform;

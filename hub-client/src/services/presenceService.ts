@@ -70,12 +70,19 @@ interface PresenceConfig {
   staleThresholdMs: number;
   /** How often to clean up stale presences (ms). Default: 2000 */
   cleanupIntervalMs: number;
+  /**
+   * How often to re-broadcast our presence while a file is open, even if the
+   * cursor hasn't moved (ms). Must stay below `staleThresholdMs`, or idle
+   * peers drop out of everyone else's presence (GH #1262). Default: 2000
+   */
+  heartbeatIntervalMs: number;
 }
 
 const DEFAULT_CONFIG: PresenceConfig = {
   broadcastThrottleMs: 50,
   staleThresholdMs: 5000,
   cleanupIntervalMs: 2000,
+  heartbeatIntervalMs: 2000,
 };
 
 /**
@@ -103,6 +110,9 @@ interface PresenceServiceState {
 
   // Cleanup interval
   cleanupInterval: ReturnType<typeof setInterval> | null;
+
+  // Heartbeat interval (re-broadcasts presence while idle)
+  heartbeatInterval: ReturnType<typeof setInterval> | null;
 
   // Subscribers
   subscribers: Set<PresenceChangeCallback>;
@@ -132,6 +142,7 @@ const state: PresenceServiceState = {
   lastBroadcastTime: 0,
   pendingBroadcast: null,
   cleanupInterval: null,
+  heartbeatInterval: null,
   subscribers: new Set(),
   messageHandler: null,
   visibilityHandler: null,
@@ -158,6 +169,14 @@ export async function initPresence(config?: Partial<PresenceConfig>): Promise<vo
     clearInterval(state.cleanupInterval);
   }
   state.cleanupInterval = setInterval(cleanupStalePresences, state.config.cleanupIntervalMs);
+
+  // Start heartbeat. Presence is otherwise sent only on cursor/selection
+  // changes, and receivers drop peers they haven't heard from in
+  // `staleThresholdMs`. `broadcastPresence` is a no-op without an open file.
+  if (state.heartbeatInterval) {
+    clearInterval(state.heartbeatInterval);
+  }
+  state.heartbeatInterval = setInterval(broadcastPresence, state.config.heartbeatIntervalMs);
 
   // Attach visibility + focus listeners. Both flush via the same
   // idempotent helper, so double-firing is harmless. `focus` covers the
@@ -187,6 +206,12 @@ export function cleanupPresence(): void {
   if (state.cleanupInterval) {
     clearInterval(state.cleanupInterval);
     state.cleanupInterval = null;
+  }
+
+  // Clear heartbeat interval
+  if (state.heartbeatInterval) {
+    clearInterval(state.heartbeatInterval);
+    state.heartbeatInterval = null;
   }
 
   // Clear pending broadcast
@@ -614,6 +639,7 @@ export function _resetForTesting(): void {
   state.lastBroadcastTime = 0;
   state.pendingBroadcast = null;
   state.cleanupInterval = null;
+  state.heartbeatInterval = null;
   state.subscribers = new Set();
   state.messageHandler = null;
   state.visibilityHandler = null;

@@ -153,7 +153,7 @@ pub fn apply_citeproc_filter(
         .cloned()
         .collect();
     for bib_path in &config.bibliography {
-        let references = load_bibliography(bib_path, base_dir, runtime)?;
+        let references = load_bibliography(bib_path, base_dir, runtime, config.lang.as_deref())?;
         loaded.extend(references.into_iter().filter(|r| scope.includes(&r.id)));
     }
     let loaded_ids: Vec<String> = loaded.iter().map(|r| r.id.clone()).collect();
@@ -322,7 +322,7 @@ pub fn check_citation_keys(
     }
     let mut known: HashSet<String> = config.references.iter().map(|r| r.id.clone()).collect();
     for bib_path in &config.bibliography {
-        match load_bibliography(bib_path, base_dir, runtime) {
+        match load_bibliography(bib_path, base_dir, runtime, config.lang.as_deref()) {
             Ok(references) => known.extend(references.into_iter().map(|r| r.id)),
             Err(_) => return (pandoc, vec![]),
         }
@@ -437,10 +437,15 @@ pub fn load_csl_style(
 }
 
 /// Load bibliography references from a CSL-JSON or BibTeX file.
+///
+/// `document_lang` is the document's `lang`. A BibTeX entry without its own
+/// language falls back to it when deciding whether its titles are English
+/// (see [`is_english_language`]).
 fn load_bibliography(
     path: &str,
     base_dir: &Path,
     runtime: &dyn SystemRuntime,
+    document_lang: Option<&str>,
 ) -> Result<Vec<Reference>, CiteprocFilterError> {
     let path = resolve_against_base(base_dir, path);
     let content = runtime
@@ -463,7 +468,7 @@ fn load_bibliography(
         })?;
         bibliography
             .iter()
-            .map(biblatex_entry_to_reference)
+            .map(|entry| biblatex_entry_to_reference(entry, document_lang))
             .collect::<Result<_, _>>()
             .map_err(|error| CiteprocFilterError::BibliographyParseError(path, error))
     } else {
@@ -475,7 +480,10 @@ fn load_bibliography(
     }
 }
 
-fn biblatex_entry_to_reference(entry: &biblatex::Entry) -> Result<Reference, String> {
+fn biblatex_entry_to_reference(
+    entry: &biblatex::Entry,
+    document_lang: Option<&str>,
+) -> Result<Reference, String> {
     use quarto_citeproc::reference::{DateVariable, Name, StringOrNumber};
 
     let get_text = |keys: &[&str]| {
@@ -494,14 +502,28 @@ fn biblatex_entry_to_reference(entry: &biblatex::Entry) -> Result<Reference, Str
                 .filter(|value| !value.is_empty())
         })
     };
+    // As in Pandoc's BibTeX reader, only English titles are converted to
+    // sentence case: the entry's own language decides, then the document
+    // `lang`, then English (issue #1306).
+    let english = get_verbatim(&["langid", "hyphenation", "language"])
+        .as_deref()
+        .or(document_lang)
+        .is_none_or(is_english_language);
     let get_title_text = |keys: &[&str]| {
         keys.iter().find_map(|key| {
             entry
                 .get(key)
-                .map(format_bibtex_title_case)
+                .map(|chunks| format_bibtex_title_case(chunks, english))
                 .filter(|value| !value.is_empty())
         })
     };
+    // biblatex's default (useprefix=false) treats the von-part as a
+    // dropping particle; the entry's `options` field can opt into keeping
+    // it with the family name, as pandoc does.
+    let useprefix = entry
+        .get("options")
+        .map(ChunksExt::format_verbatim)
+        .is_some_and(|options| bibtex_option_enabled(&options, "useprefix"));
     let parse_people = |key: &str| -> Result<Option<Vec<Name>>, String> {
         entry
             .get(key)
@@ -522,8 +544,9 @@ fn biblatex_entry_to_reference(entry: &biblatex::Entry) -> Result<Reference, Str
                         Name {
                             family: (!literal).then_some(person.name.clone()),
                             given: (!person.given_name.is_empty()).then_some(person.given_name),
-                            dropping_particle: None,
-                            non_dropping_particle: (!person.prefix.is_empty())
+                            dropping_particle: (!useprefix && !person.prefix.is_empty())
+                                .then(|| person.prefix.clone()),
+                            non_dropping_particle: (useprefix && !person.prefix.is_empty())
                                 .then_some(person.prefix),
                             suffix: (!person.suffix.is_empty()).then_some(person.suffix),
                             comma_suffix: None,
@@ -607,7 +630,10 @@ fn biblatex_entry_to_reference(entry: &biblatex::Entry) -> Result<Reference, Str
         EntryType::Software => "software",
         EntryType::Dataset => "dataset",
         EntryType::SuppPeriodical => "article-journal",
-        EntryType::Misc | EntryType::Set | EntryType::XData | EntryType::Unknown(_) => "article",
+        // Pandoc gives these no CSL type (`-t csljson` writes `"type": ""`),
+        // so styles render them as generic documents rather than as an
+        // `article` ("Preprint", quoted title; issue #1311).
+        EntryType::Misc | EntryType::Set | EntryType::XData | EntryType::Unknown(_) => "",
     };
 
     let mut reference = Reference {
@@ -618,7 +644,9 @@ fn biblatex_entry_to_reference(entry: &biblatex::Entry) -> Result<Reference, Str
         container_title: get_title_text(&["journaltitle", "journal", "booktitle"]),
         container_title_short: get_title_text(&["shortjournal"]),
         collection_title: get_title_text(&["series"]),
-        publisher: get_verbatim(&["publisher"]),
+        // Reports name their publisher in `institution` and theses in
+        // `school`; pandoc's citeproc maps both to the CSL publisher.
+        publisher: get_verbatim(&["publisher", "institution", "school"]),
         publisher_place: get_verbatim(&["location", "address"]),
         edition: get_verbatim(&["edition"]).map(StringOrNumber::String),
         volume: get_verbatim(&["volume"]).map(StringOrNumber::String),
@@ -670,7 +698,45 @@ fn biblatex_entry_to_reference(entry: &biblatex::Entry) -> Result<Reference, Str
     Ok(reference)
 }
 
-fn format_bibtex_title_case(chunks: &[biblatex::Spanned<biblatex::Chunk>]) -> String {
+/// Whether a biblatex `options` field (e.g. `maxnames=3, useprefix`) turns
+/// on the boolean option `key`. Like pandoc, a bare key or `key=true`
+/// (case-insensitive, whitespace around `=` ignored) enables it.
+fn bibtex_option_enabled(options: &str, key: &str) -> bool {
+    options.split(',').any(|option| {
+        let (name, value) = option.split_once('=').unwrap_or((option, ""));
+        let value = value.trim();
+        name.trim().eq_ignore_ascii_case(key)
+            && (value.is_empty() || value.eq_ignore_ascii_case("true"))
+    })
+}
+
+/// Whether a BibTeX language (a BCP 47 tag such as `en-US`, or a babel
+/// name such as `english` or `british`) is English.
+fn is_english_language(lang: &str) -> bool {
+    let lang = lang.trim().to_ascii_lowercase();
+    lang == "en"
+        || lang.starts_with("en-")
+        || lang.starts_with("en_")
+        || matches!(
+            lang.as_str(),
+            "english"
+                | "american"
+                | "british"
+                | "usenglish"
+                | "ukenglish"
+                | "canadian"
+                | "australian"
+                | "newzealand"
+        )
+}
+
+/// Format a BibTeX title. Braced text becomes a `nocase` span. For English
+/// titles, the other words are converted to sentence case; for any other
+/// language they keep their case, as in Pandoc.
+fn format_bibtex_title_case(
+    chunks: &[biblatex::Spanned<biblatex::Chunk>],
+    english: bool,
+) -> String {
     use std::fmt::Write as _;
 
     let mut result = String::new();
@@ -708,7 +774,11 @@ fn format_bibtex_title_case(chunks: &[biblatex::Spanned<biblatex::Chunk>]) -> St
             if word.is_empty() {
                 return;
             }
-            output.push_str(&format_bibtex_word(word, *first, *capitalize_next));
+            if english {
+                output.push_str(&format_bibtex_word(word, *first, *capitalize_next));
+            } else {
+                output.push_str(word);
+            }
             *first = false;
             *capitalize_next = false;
             word.clear();
@@ -4296,7 +4366,7 @@ mod tests {
         .unwrap();
 
         let references =
-            load_bibliography("references.bib", dir.path(), &NativeRuntime::new()).unwrap();
+            load_bibliography("references.bib", dir.path(), &NativeRuntime::new(), None).unwrap();
         assert_eq!(references.len(), 1);
 
         let reference = &references[0];
@@ -4331,6 +4401,77 @@ mod tests {
         assert_eq!(
             reference.issued.as_ref().unwrap().date_parts,
             Some(vec![vec![1984]])
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_load_bibtex_von_part_particle_follows_useprefix() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("references.bib"),
+            r#"@article{default,
+  author = {de Vries, Anna and van der Berg, Klaas},
+  title = {Default},
+  year = {2019}
+}
+@article{useprefix,
+  author = {de Vries, Anna},
+  title = {Useprefix},
+  year = {2019},
+  options = {useprefix}
+}
+@article{useprefixtrue,
+  author = {de Vries, Anna},
+  title = {Useprefix true},
+  year = {2019},
+  options = {maxnames=3, useprefix = true}
+}
+@article{useprefixfalse,
+  author = {de Vries, Anna},
+  title = {Useprefix false},
+  year = {2019},
+  options = {useprefix=false}
+}"#,
+        )
+        .unwrap();
+
+        let references =
+            load_bibliography("references.bib", dir.path(), &NativeRuntime::new(), None).unwrap();
+        let particles = |id: &str| -> Vec<(Option<String>, Option<String>, Option<String>)> {
+            references
+                .iter()
+                .find(|reference| reference.id == id)
+                .unwrap()
+                .author
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|name| {
+                    (
+                        name.family.clone(),
+                        name.dropping_particle.clone(),
+                        name.non_dropping_particle.clone(),
+                    )
+                })
+                .collect()
+        };
+        let s = |value: &str| Some(value.to_string());
+
+        // biblatex's default (useprefix=false): the von-part drops.
+        assert_eq!(
+            particles("default"),
+            vec![(s("Vries"), s("de"), None), (s("Berg"), s("van der"), None),]
+        );
+        assert_eq!(
+            particles("useprefixfalse"),
+            vec![(s("Vries"), s("de"), None)]
+        );
+        // useprefix: the von-part is kept with the family name.
+        assert_eq!(particles("useprefix"), vec![(s("Vries"), None, s("de"))]);
+        assert_eq!(
+            particles("useprefixtrue"),
+            vec![(s("Vries"), None, s("de"))]
         );
     }
 
@@ -4397,7 +4538,7 @@ mod tests {
         .unwrap();
 
         let references =
-            load_bibliography("references.bib", dir.path(), &NativeRuntime::new()).unwrap();
+            load_bibliography("references.bib", dir.path(), &NativeRuntime::new(), None).unwrap();
         let by_id = |id: &str| {
             references
                 .iter()
@@ -4441,14 +4582,28 @@ mod tests {
             Some("Master’s thesis")
         );
         assert_eq!(by_id("report2023").ref_type, "report");
-        assert_eq!(by_id("misc2025").ref_type, "article");
+        // BibTeX `institution` and `school` become the CSL publisher,
+        // as in pandoc's citeproc (GH #1305).
+        assert_eq!(
+            by_id("report2023").publisher.as_deref(),
+            Some("Example Institute")
+        );
+        assert_eq!(
+            by_id("phd2020").publisher.as_deref(),
+            Some("Example University")
+        );
+        assert_eq!(
+            by_id("masters2021").publisher.as_deref(),
+            Some("Example College")
+        );
+        assert_eq!(by_id("misc2025").ref_type, "");
         assert_eq!(
             by_id("misc2025").author.as_ref().unwrap()[0]
                 .literal
                 .as_deref(),
             Some("World Health Organization")
         );
-        assert_eq!(by_id("unknown2026").ref_type, "article");
+        assert_eq!(by_id("unknown2026").ref_type, "");
         assert_eq!(
             by_id("macro2025").container_title.as_deref(),
             Some("Journal of testing")
@@ -4472,7 +4627,7 @@ mod tests {
         .unwrap();
 
         let references =
-            load_bibliography("references.bib", dir.path(), &NativeRuntime::new()).unwrap();
+            load_bibliography("references.bib", dir.path(), &NativeRuntime::new(), None).unwrap();
         assert_eq!(
             references[0].title.as_deref(),
             Some(
@@ -4492,6 +4647,77 @@ mod tests {
 
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
+    fn test_load_bibtex_non_english_keeps_title_case() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("references.bib"),
+            r#"@article{nl,
+  title = {Onderweg in Nederland {CBS} 2025},
+  journal = {Tijdschrift voor Vervoerswetenschap}
+}
+@article{langid,
+  title = {Onderweg in Nederland},
+  langid = {dutch}
+}
+@article{english,
+  title = {Travel in The Netherlands},
+  langid = {british}
+}"#,
+        )
+        .unwrap();
+        let by_id = |references: &[Reference], id: &str| {
+            references.iter().find(|r| r.id == id).cloned().unwrap()
+        };
+
+        // The document `lang` applies to entries without their own language.
+        let references = load_bibliography(
+            "references.bib",
+            dir.path(),
+            &NativeRuntime::new(),
+            Some("nl"),
+        )
+        .unwrap();
+        let nl = by_id(&references, "nl");
+        assert_eq!(
+            nl.title.as_deref(),
+            Some("Onderweg in Nederland <span class=\"nocase\">CBS</span> 2025")
+        );
+        assert_eq!(
+            nl.container_title.as_deref(),
+            Some("Tijdschrift voor Vervoerswetenschap")
+        );
+        // An entry's own `langid` wins over the document `lang`.
+        assert_eq!(
+            by_id(&references, "english").title.as_deref(),
+            Some("Travel in the netherlands")
+        );
+
+        // Without a document `lang`, English is assumed unless `langid` says
+        // otherwise.
+        let references =
+            load_bibliography("references.bib", dir.path(), &NativeRuntime::new(), None).unwrap();
+        assert_eq!(
+            by_id(&references, "nl").title.as_deref(),
+            Some("Onderweg in nederland <span class=\"nocase\">CBS</span> 2025")
+        );
+        assert_eq!(
+            by_id(&references, "langid").title.as_deref(),
+            Some("Onderweg in Nederland")
+        );
+    }
+
+    #[test]
+    fn test_is_english_language() {
+        for lang in ["en", "en-US", "EN-gb", "english", "British", "american"] {
+            assert!(is_english_language(lang), "{lang}");
+        }
+        for lang in ["nl", "nl-NL", "dutch", "de", "german", "fr-CA"] {
+            assert!(!is_english_language(lang), "{lang}");
+        }
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
     fn test_load_bibtex_malformed_file_returns_parse_error() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
@@ -4501,7 +4727,7 @@ mod tests {
         .unwrap();
 
         assert!(matches!(
-            load_bibliography("malformed.bib", dir.path(), &NativeRuntime::new()),
+            load_bibliography("malformed.bib", dir.path(), &NativeRuntime::new(), None),
             Err(CiteprocFilterError::BibliographyParseError(_, _))
         ));
     }
@@ -4759,7 +4985,7 @@ mod tests {
     #[test]
     fn bibliography_is_read_through_the_runtime() {
         let rt = MemRuntime::new(&[("/mem/refs.bib", MEM_BIB)]);
-        let refs = load_bibliography("refs.bib", Path::new("/mem"), &rt).unwrap();
+        let refs = load_bibliography("refs.bib", Path::new("/mem"), &rt, None).unwrap();
         assert_eq!(refs.len(), 1);
         assert_eq!(refs[0].id, "knuth1984");
     }
@@ -4911,6 +5137,32 @@ mod tests {
         let mut out = Vec::new();
         walk(&pandoc.blocks, &mut out);
         out
+    }
+
+    /// A BibTeX `@misc` entry has no CSL type, as in Pandoc, so the
+    /// default style renders it as a generic document: no quoted title,
+    /// no "Preprint" (issue #1311).
+    #[test]
+    fn bibtex_misc_renders_as_generic_document() {
+        let bib = "@misc{m, author={Doe, Jane}, title={A web page}, year={2023}, \
+                   url={https://example.org}}";
+        let rt = MemRuntime::new(&[("/mem/misc.bib", bib)]);
+        let pandoc = Pandoc {
+            meta: meta_map(vec![
+                ("bibliography", meta_string("misc.bib")),
+                ("nocite", meta_string("@m")),
+            ]),
+            blocks: vec![],
+        };
+        let (out, _, _, _) =
+            apply_citeproc_filter(pandoc, ASTContext::new(), "html", Path::new("/mem"), &rt)
+                .unwrap();
+        let entries = bibliography_entries(&out);
+        assert_eq!(entries.len(), 1, "{entries:?}");
+        let text = &entries[0].1;
+        assert!(!text.contains("Preprint"), "{text}");
+        assert!(!text.contains('\u{201C}'), "{text}");
+        assert!(text.contains("A Web Page"), "{text}");
     }
 
     fn entry_ids(pandoc: &Pandoc) -> Vec<String> {

@@ -280,3 +280,60 @@ async fn single_file_render_ignores_project_root_language_yml() {
         Some("Table of contents")
     );
 }
+
+// ── `crossref.<type>-title` / `-prefix` options (GH #1317) ────────────────
+
+#[tokio::test]
+async fn crossref_title_and_prefix_options_override_language_terms() {
+    // Q1 precedence: the `crossref:` option wins over `language:` and the
+    // shipped catalog.
+    let src = b"---\nlanguage:\n  crossref-fig-title: \"Abb\"\ncrossref:\n  fig-title: Fig\n  fig-prefix: Fig.\n  tbl-title: Tab\n---\n\nHello.\n";
+    let (meta, ctx) = run_simple(src).await;
+    let terms = LanguageTerms::from_meta(&meta).expect("quarto.language present");
+    assert_eq!(terms.crossref_title("fig"), Some("Fig"));
+    assert_eq!(terms.crossref_prefix("fig"), Some("Fig."));
+    assert_eq!(terms.crossref_title("tbl"), Some("Tab"));
+    // No `tbl-prefix`: the prefix falls back to the overridden title.
+    assert_eq!(terms.crossref_prefix("tbl"), Some("Tab"));
+    // Untouched types keep the shipped terms.
+    assert_eq!(terms.crossref_title("lst"), Some("Listing"));
+    assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+}
+
+#[test]
+fn crossref_title_and_prefix_options_reach_html_output() {
+    use quarto_core::render_to_file::{RenderToFileOptions, render_document_to_file};
+
+    let project_dir = tempfile::tempdir().expect("temp project dir");
+    let input_path = project_dir.path().join("xp.qmd");
+    std::fs::write(
+        &input_path,
+        "---\ncrossref:\n  fig-title: Fig\n  fig-prefix: Fig.\n---\n\nSee @fig-a.\n\n![Cap](fig-a.png){#fig-a}\n",
+    )
+    .expect("write fixture");
+
+    let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+        Arc::new(quarto_system_runtime::NativeRuntime::new());
+    let project =
+        ProjectContext::discover(&input_path, runtime.as_ref()).expect("project discovery");
+    let result = render_document_to_file(
+        &input_path,
+        "html",
+        &RenderToFileOptions::default(),
+        Some(&project),
+        runtime.clone(),
+        None,
+        None,
+        None,
+    )
+    .unwrap_or_else(|e| panic!("HTML render must succeed: {e}"));
+    let html = std::fs::read_to_string(&result.output_path).expect("read rendered HTML");
+    let text = crate::html_text::display_text(&html).replace("&nbsp;", "\u{a0}");
+
+    assert!(text.contains("Fig\u{a0}1: Cap"), "caption label: {text}");
+    assert!(text.contains("See Fig.\u{a0}1"), "reference text: {text}");
+    assert!(
+        !text.contains("Figure\u{a0}1"),
+        "default term leaked: {text}"
+    );
+}

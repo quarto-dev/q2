@@ -1076,7 +1076,7 @@ fn render_navbar_item(item: &NavigationItem, indent: usize, align_end: bool) -> 
 
     // Dropdown submenu: item has a menu and (typically) no direct href.
     if !item.menu.is_empty() {
-        let text = navbar_text(item);
+        let text = navbar_text(item, MENU_TEXT);
         let label = text
             .as_ref()
             .map(|t| t.html.clone())
@@ -1108,7 +1108,7 @@ fn render_navbar_item(item: &NavigationItem, indent: usize, align_end: bool) -> 
 
     // Plain link.
     let mut anchor_attrs = navbar_link_attrs(item);
-    let label = render_navbar_label(item);
+    let label = render_navbar_label(item, MENU_TEXT);
 
     let href = item.href.as_deref().unwrap_or("#");
     // Q1 parity: the active link also carries `aria-current="page"`
@@ -1132,7 +1132,7 @@ fn render_navbar_item(item: &NavigationItem, indent: usize, align_end: bool) -> 
 fn render_dropdown_item(item: &NavigationItem, indent: usize) -> String {
     let pad = " ".repeat(indent);
     let mut attrs = navbar_link_attrs(item);
-    let label = render_navbar_label(item);
+    let label = render_navbar_label(item, DROPDOWN_TEXT);
     let href = item.href.as_deref().unwrap_or("#");
     let class = if item.active {
         "class=\"dropdown-item active\""
@@ -1151,18 +1151,25 @@ struct NavbarText {
     has_blank_range: bool,
 }
 
-/// Render a navbar item's text. Scalar text renders as today. With
-/// breakpoint variants (bd-navbar-responsive-text-am98rw95), each
-/// distinct run of variants becomes a `<span class="menu-text">`
-/// carrying Bootstrap display utilities that show it only within its
-/// breakpoint range; the lowest variant also covers every narrower
-/// width. Blank ranges emit no span. Adjacent variants that render
-/// identically merge, and a single remaining run renders exactly like
-/// scalar text. `None` when there is no text to show.
-fn navbar_text(item: &NavigationItem) -> Option<NavbarText> {
+/// Text span class for navbar links and dropdown toggles.
+const MENU_TEXT: &str = "menu-text";
+/// Text span class for dropdown menu entries.
+const DROPDOWN_TEXT: &str = "dropdown-text";
+
+/// Render a navbar item's text. As in Q1, scalar text is wrapped in a
+/// `<span class="{span_class}">` (`menu-text` for links and toggles,
+/// `dropdown-text` for dropdown entries; GH #1372). With breakpoint
+/// variants (bd-navbar-responsive-text-am98rw95), each distinct run of
+/// variants becomes such a span carrying Bootstrap display utilities
+/// that show it only within its breakpoint range; the lowest variant
+/// also covers every narrower width. Blank ranges emit no span.
+/// Adjacent variants that render identically merge, and a single
+/// remaining run renders exactly like scalar text. `None` when there is
+/// no text to show.
+fn navbar_text(item: &NavigationItem, span_class: &str) -> Option<NavbarText> {
     if item.text_variants.is_empty() {
         return item.text.as_ref().map(|cv| NavbarText {
-            html: render_text(cv),
+            html: format!("<span class=\"{}\">{}</span>", span_class, render_text(cv)),
             has_blank_range: false,
         });
     }
@@ -1184,8 +1191,8 @@ fn navbar_text(item: &NavigationItem) -> Option<NavbarText> {
     let has_blank_range = runs.iter().any(|(_, html)| html.is_empty());
     if runs.len() == 1 {
         let html = runs.pop().map(|(_, html)| html).unwrap_or_default();
-        return (!html.is_empty()).then_some(NavbarText {
-            html,
+        return (!html.is_empty()).then(|| NavbarText {
+            html: format!("<span class=\"{}\">{}</span>", span_class, html),
             has_blank_range: false,
         });
     }
@@ -1197,7 +1204,7 @@ fn navbar_text(item: &NavigationItem) -> Option<NavbarText> {
         }
         let from = if i == 0 { Breakpoint::Xs } else { *bp };
         let until = runs.get(i + 1).map(|(next, _)| *next);
-        let mut classes = vec!["menu-text".to_string()];
+        let mut classes = vec![span_class.to_string()];
         classes.extend(range_classes(from, until));
         html.push_str(&format!(
             "<span class=\"{}\">{}</span>",
@@ -1228,19 +1235,19 @@ fn navbar_aria_fallback(item: &NavigationItem, text: Option<&NavbarText>) -> Opt
 /// fallback.
 fn navbar_link_attrs(item: &NavigationItem) -> Vec<String> {
     let mut attrs = link_attrs(item);
-    if let Some(aria) = navbar_aria_fallback(item, navbar_text(item).as_ref()) {
+    if let Some(aria) = navbar_aria_fallback(item, navbar_text(item, MENU_TEXT).as_ref()) {
         attrs.insert(0, aria);
     }
     attrs
 }
 
 /// Icon plus text for a navbar link or dropdown entry.
-fn render_navbar_label(item: &NavigationItem) -> String {
+fn render_navbar_label(item: &NavigationItem, span_class: &str) -> String {
     let mut parts = Vec::new();
     if let Some(ref icon) = item.icon {
         parts.push(render_icon(icon));
     }
-    if let Some(text) = navbar_text(item) {
+    if let Some(text) = navbar_text(item, span_class) {
         parts.push(text.html);
     }
     parts.join(" ")
@@ -2622,8 +2629,81 @@ mod tests {
         );
         assert!(
             html.contains(
-                "class=\"dropdown-item\"><span class=\"menu-text d-xl-none\">Guide</span>\
-                 <span class=\"menu-text d-none d-xl-inline\">User Guide</span></a>"
+                "class=\"dropdown-item\"><span class=\"dropdown-text d-xl-none\">Guide</span>\
+                 <span class=\"dropdown-text d-none d-xl-inline\">User Guide</span></a>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn navbar_scalar_text_wraps_in_menu_text_span() {
+        // GH #1372: Q1 wraps every navbar link's text in a `menu-text`
+        // span, after any icon.
+        let html = render_left(NavigationItem {
+            href: Some("guide.html".to_string()),
+            text: Some(s("Guide")),
+            ..NavigationItem::default()
+        });
+        assert!(
+            html.contains(
+                "<a href=\"guide.html\" class=\"nav-link\">\
+                 <span class=\"menu-text\">Guide</span></a>"
+            ),
+            "{html}"
+        );
+
+        let html = render_left(NavigationItem {
+            href: Some("https://github.com".to_string()),
+            icon: Some("github".to_string()),
+            text: Some(s("Code")),
+            ..NavigationItem::default()
+        });
+        assert!(
+            html.contains(
+                "<a href=\"https://github.com\" class=\"nav-link\">\
+                 <i class=\"bi bi-github\"></i> <span class=\"menu-text\">Code</span></a>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn navbar_icon_only_link_has_no_text_span() {
+        let html = render_left(NavigationItem {
+            href: Some("https://github.com".to_string()),
+            icon: Some("github".to_string()),
+            ..NavigationItem::default()
+        });
+        assert!(
+            html.contains("class=\"nav-link\"><i class=\"bi bi-github\"></i></a>"),
+            "{html}"
+        );
+        assert!(!html.contains("menu-text"), "{html}");
+    }
+
+    #[test]
+    fn navbar_dropdown_toggle_uses_menu_text_and_items_use_dropdown_text() {
+        let html = render_left(NavigationItem {
+            text: Some(s("More")),
+            menu: vec![NavigationItem {
+                href: Some("guide.html".to_string()),
+                text: Some(s("Guide again")),
+                ..NavigationItem::default()
+            }],
+            ..NavigationItem::default()
+        });
+        assert!(
+            html.contains(
+                "data-bs-toggle=\"dropdown\" aria-expanded=\"false\">\
+                 <span class=\"menu-text\">More</span></a>"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "<a href=\"guide.html\" class=\"dropdown-item\">\
+                 <span class=\"dropdown-text\">Guide again</span></a>"
             ),
             "{html}"
         );

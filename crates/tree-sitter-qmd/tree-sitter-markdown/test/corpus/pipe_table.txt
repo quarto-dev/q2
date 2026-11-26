@@ -459,6 +459,43 @@ issue #206 - Fenced div close ::: directly after a pipe table row
             (pandoc_str)))))))
 
 ================================================================================
+issue #1333 - Fenced div close ::: directly after a pipe table ending a list item
+================================================================================
+::: {.note}
+- | c | d |
+  |---|---|
+  | e | f |
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_div
+      (attribute_specifier
+        (commonmark_specifier
+          (attribute_class)))
+      (block_continuation)
+      (pandoc_list
+        (list_item
+          (list_marker_minus)
+          (pipe_table
+            (pipe_table_header
+              (pipe_table_cell
+                (pandoc_str))
+              (pipe_table_cell
+                (pandoc_str)))
+            (block_continuation)
+            (pipe_table_delimiter_row
+              (pipe_table_delimiter_cell)
+              (pipe_table_delimiter_cell))
+            (pipe_table_row
+              (pipe_table_cell
+                (pandoc_str))
+              (pipe_table_cell
+                (pandoc_str)))
+            (block_continuation)))))))
+
+================================================================================
 issue #206 - Caption (single colon + space) still parses after a pipe table row
 ================================================================================
 | a |
