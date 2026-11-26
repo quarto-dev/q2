@@ -83,7 +83,7 @@ const EQUATION: &str = "$$\ne = mc^2\n$$ {#eq-a}\n";
 // still uses the raw id, so it comes back unresolved against the
 // lowercase-authored `#fig-alpha` target below. See
 // `crossref_resolved_ref_key_set_for_resolved_and_unresolved_citations`.
-const CROSSREF_RESOLVED_REF: &str = "::: {#fig-alpha}\n![](x.png)\n\nAlpha caption.\n:::\n\nSee @fig-alpha, @Fig-alpha, and [-@fig-alpha].\n";
+const CROSSREF_RESOLVED_REF: &str = "::: {#fig-alpha}\n![](x.png)\n\nAlpha caption.\n:::\n\nSee @fig-alpha, @Fig-alpha, [-@fig-alpha], and @fig-missing.\n";
 const DUPLICATE_ID: &str = "::: {#fig-alpha}\n![](x.png)\n\nFirst caption.\n:::\n\n::: {#fig-alpha}\n![](x.png)\n\nSecond caption.\n:::\n";
 
 // T3.2 pair: `label_upper` must discriminate a genuinely-derived value
@@ -622,14 +622,12 @@ async fn equation_key_set_includes_order() {
     assert_keys_equal(&schema, "Equation", observed, &["order"]);
 }
 
-// CrossrefResolvedRef, resolved branch: both `@fig-alpha` and
-// `[-@fig-alpha]` resolve against the `#fig-alpha` target defined in the
-// same fixture, so `crossref_resolve.rs:314-319` adds `order` on top of
-// the keys always present. `@Fig-alpha` now also classifies (Task 3's
-// classify-fix lowercases before the registry lookup) but does not
-// resolve — the index lookup still uses the raw id against the
-// lowercase-authored target — so it's asserted separately, without
-// `order`.
+// CrossrefResolvedRef, resolved branch: `@fig-alpha`, `@Fig-alpha`, and
+// `[-@fig-alpha]` all resolve against the `#fig-alpha` target defined in
+// the same fixture (the index lookup lowercases the id's first character,
+// GH #1319), so `build_resolved_ref` adds `order` on top of the keys
+// always present. `@fig-missing` has no target, so it's asserted
+// separately, without `order`.
 #[tokio::test]
 async fn crossref_resolved_ref_key_set_for_resolved_and_unresolved_citations() {
     let (wrappers, _diags) = run_harness(CROSSREF_RESOLVED_REF).await;
@@ -637,9 +635,9 @@ async fn crossref_resolved_ref_key_set_for_resolved_and_unresolved_citations() {
     let refs = wrappers_of_type(&wrappers, "CrossrefResolvedRef");
     assert_eq!(
         refs.len(),
-        3,
-        "expected three CrossrefResolvedRef wrappers (`@fig-alpha`, `@Fig-alpha`, \
-         and `[-@fig-alpha]`); observed wrapper types: {:?}",
+        4,
+        "expected four CrossrefResolvedRef wrappers (`@fig-alpha`, `@Fig-alpha`, \
+         `[-@fig-alpha]`, and `@fig-missing`); observed wrapper types: {:?}",
         wrappers.iter().map(|w| &w.type_name).collect::<Vec<_>>()
     );
 
@@ -654,13 +652,13 @@ async fn crossref_resolved_ref_key_set_for_resolved_and_unresolved_citations() {
     let unresolved: Vec<&&Wrapper> = refs.iter().filter(|w| !is_resolved(w)).collect();
     assert_eq!(
         resolved.len(),
-        2,
-        "`@fig-alpha` and `[-@fig-alpha]` must both resolve against #fig-alpha"
+        3,
+        "`@fig-alpha`, `@Fig-alpha`, and `[-@fig-alpha]` must all resolve against #fig-alpha"
     );
     assert_eq!(
         unresolved.len(),
         1,
-        "`@Fig-alpha` classifies but must not resolve (raw-id index lookup mismatch)"
+        "`@fig-missing` classifies but has no target"
     );
 
     for r in resolved {
@@ -689,10 +687,9 @@ async fn crossref_resolved_ref_key_set_for_resolved_and_unresolved_citations() {
 // T3.2: `label_upper` discriminates the cite id's original case.
 // `@fig-alpha` -> false; `@Fig-alpha` -> true. The pair is required to
 // distinguish "derived" from "hardcoded false" (the plan's vacuity note).
-// `@Fig-alpha` is also asserted `resolved: false` per the classify-fix
-// ruling: the index lookup uses the raw id, which doesn't match the
-// lowercase-authored `#fig-alpha` target, and it must carry the
-// unresolved-crossref diagnostic rather than silently resolving.
+// `@Fig-alpha` also resolves against the lowercase-authored `#fig-alpha`
+// target: the index lookup lowercases the id's first character, as Q1's
+// refs.lua does (GH #1319), so no unresolved-crossref diagnostic is emitted.
 #[tokio::test]
 async fn label_upper_discriminates_cite_id_case() {
     let (lower_wrappers, _lower_diags) = run_harness(CITE_LOWER).await;
@@ -710,13 +707,13 @@ async fn label_upper_discriminates_cite_id_case() {
         .as_ref()
         .expect("CrossrefResolvedRef wrapper must carry data-custom-data");
     assert_eq!(upper_data["label_upper"], true);
-    assert_eq!(upper_data["resolved"], false);
+    assert_eq!(upper_data["resolved"], true);
+    assert_eq!(upper_data["identifier"], "fig-alpha");
     assert!(
-        upper_diags
+        !upper_diags
             .iter()
             .any(|d| d.title.contains("unresolved crossref")),
-        "unresolved `@Fig-alpha` must emit the unresolved-crossref diagnostic; \
-         diagnostics: {upper_diags:?}"
+        "`@Fig-alpha` must resolve to `#fig-alpha`; diagnostics: {upper_diags:?}"
     );
 }
 
