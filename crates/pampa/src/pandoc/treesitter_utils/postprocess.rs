@@ -85,7 +85,9 @@ pub enum ListTableValidation {
 /// - Div must contain at least one block, with the last block being a BulletList
 /// - Blocks before the BulletList (if any) form the caption
 /// - The outer BulletList represents rows
-/// - Each row item must contain exactly one block which is a BulletList (the cells)
+/// - Each row item must contain exactly one block which is a BulletList (the cells),
+///   optionally preceded by a block holding only an empty Span (the row's
+///   attributes; see [`row_attr_span`])
 ///
 /// Returns:
 /// - `Valid` if the div can be transformed to a Table
@@ -116,6 +118,11 @@ pub(crate) fn validate_list_table_div(div: &Div) -> ListTableValidation {
 
     // Each row item must contain exactly one block which is a BulletList (the cells)
     for (row_idx, row_blocks) in rows_list.content.iter().enumerate() {
+        // A leading row-attribute span is not part of the cells (GH #1336).
+        let row_blocks = match row_blocks.as_slice() {
+            [first, rest @ ..] if !rest.is_empty() && row_attr_span(first).is_some() => rest,
+            _ => row_blocks.as_slice(),
+        };
         // Each row should have exactly one block
         if row_blocks.len() != 1 {
             let location = if row_blocks.is_empty() {
@@ -146,6 +153,23 @@ pub(crate) fn validate_list_table_div(div: &Div) -> ListTableValidation {
     }
 
     ListTableValidation::Valid
+}
+
+/// The row-attribute span of a list-table row, if `block` is one.
+///
+/// pandoc-ext/list-table: "If the first block element of a table row
+/// contains (only) an empty Span, it is removed and its attributes are
+/// transferred to the table row." (GH #1336)
+fn row_attr_span(block: &Block) -> Option<&Span> {
+    let inlines = match block {
+        Block::Plain(plain) => &plain.content,
+        Block::Paragraph(para) => &para.content,
+        _ => return None,
+    };
+    match inlines.as_slice() {
+        [Inline::Span(span)] if span.content.is_empty() => Some(span),
+        _ => None,
+    }
 }
 
 /// Parse alignment string ("l,c,r,d") into a vector of Alignment
@@ -540,12 +564,29 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
     let mut num_cols: usize = 0;
 
     for row_blocks in outer_list.content {
-        // Each row has exactly one block which is a BulletList of cells (validated)
-        let Block::BulletList(cells_list) = row_blocks.into_iter().next().unwrap() else {
+        // Each row is a BulletList of cells, optionally preceded by a
+        // row-attribute span (validated)
+        let mut row_blocks = row_blocks.into_iter();
+        let mut first = row_blocks.next().unwrap();
+        let (row_attr, row_attr_source, attr_block_source) = match row_attr_span(&first) {
+            Some(span) => {
+                let attr = (span.attr.clone(), span.attr_source.clone());
+                let source = first.source_info().clone();
+                first = row_blocks.next().unwrap();
+                (attr.0, attr.1, Some(source))
+            }
+            None => (empty_table_attr(), empty_attr_source(), None),
+        };
+        let Block::BulletList(cells_list) = first else {
             panic!("Expected BulletList for cells after validation");
         };
 
-        let row_source_info = cells_list.source_info.clone();
+        // A row with an attribute span must contain the span's attr
+        // sources too (containment check b), so hull it with the cells.
+        let row_source_info = match &attr_block_source {
+            Some(span_source) => hull_source_infos(span_source, &cells_list.source_info),
+            None => cells_list.source_info.clone(),
+        };
         let mut cells: Vec<Cell> = Vec::new();
 
         for mut cell_blocks in cells_list.content {
@@ -553,7 +594,7 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
             let cell_attrs = extract_cell_attrs(&mut cell_blocks);
 
             let cell_source_info = if cell_blocks.is_empty() {
-                row_source_info.clone()
+                cells_list.source_info.clone()
             } else {
                 // Hull from first block start to last block end: a cell with
                 // multiple blocks must contain all of them (containment check b).
@@ -579,10 +620,10 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
         num_cols = num_cols.max(row_cols);
 
         all_rows.push(Row {
-            attr: empty_table_attr(),
+            attr: row_attr,
             cells,
             source_info: row_source_info,
-            attr_source: empty_attr_source(),
+            attr_source: row_attr_source,
         });
     }
 

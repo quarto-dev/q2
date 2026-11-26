@@ -2112,11 +2112,15 @@ fn write_table_row<W: Write>(
     row_class: Option<&'static str>,
 ) -> std::io::Result<()> {
     use crate::pandoc::table::Alignment;
+    // The stripe class (`header` / `odd` / `even`) comes first, then the
+    // row's own attributes (GH #1336).
+    let mut attr = row.attr.clone();
     if let Some(cls) = row_class {
-        writeln!(ctx, "<tr class=\"{}\">", cls)?;
-    } else {
-        writeln!(ctx, "<tr>")?;
+        attr.1.insert(0, cls.to_string());
     }
+    write!(ctx, "<tr")?;
+    write_attr(&attr, ctx)?;
+    writeln!(ctx, ">")?;
     let mut col = 0;
     for cell in &row.cells {
         // Skip columns still covered by a rowspan from an earlier row.
