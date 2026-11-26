@@ -1,0 +1,47 @@
+---
+title: "List-table cell span is not empty"
+description: "A list-table cell starts with a span that has content and a `colspan` or `rowspan` attribute, so the cell is not merged."
+code: Q-2-61
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-61` — List-table cell span is not empty
+
+> A list-table cell starts with a span that has content and a
+> `colspan` or `rowspan` attribute. Only an empty span at the start of
+> a cell sets the cell's span.
+
+## What this means
+
+A list-table cell reads its `colspan`, `rowspan`, and `align`
+attributes from an *empty* span at the very start of the cell. The
+cell's text follows the span:
+
+```markdown
+::: {.list-table}
+- - []{colspan=2} Merged
+- - a
+  - b
+:::
+```
+
+When the span has content, as in `[Merged]{colspan=2}`, it is an
+ordinary span inside an ordinary cell. The attribute stays on the span
+(HTML output gets `<span colspan="2">`), and the cell does not span two
+columns.
+
+## How to fix
+
+Empty the span and put the text after it:
+
+```markdown
+- - []{colspan=2} Merged
+```
+
+## Related errors
+
+- [`Q-2-35`](Q-2-35.qmd) — a list-table div with an invalid structure.
