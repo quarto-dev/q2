@@ -2,4 +2,103 @@
 title: Tables
 ---
 
-TBD.
+## List tables
+
+A *list table* is a fenced div with the class `list-table` whose body is a nested bullet list.
+Each top-level item is a row, and each item nested inside it is a cell:
+
+```markdown
+::: {.list-table}
+- - Fruit
+  - Price
+- - Apple
+  - 1.50
+- - Banana
+  - 0.25
+:::
+```
+
+A cell can hold any block content, such as several paragraphs, a list, or a code block, as long as it is indented under its `-` marker.
+
+Any blocks before the bullet list become the table's caption:
+
+```markdown
+::: {.list-table}
+Fruit prices in 2020.
+
+- - Fruit
+  - Price
+- - Apple
+  - 1.50
+:::
+```
+
+Quarto 2 doesn't support Pandoc's grid tables ([`Q-2-39`](../../errors/markdown/Q-2-39.qmd)).
+List tables are the way to write a table with block content or merged cells.
+
+### Table attributes
+
+Set these on the `list-table` div:
+
+- `header-rows`: the number of leading rows that form the table header.
+  The default is `1`, so the first row is the header unless you set `header-rows="0"`.
+  If the value is larger than the number of rows, the table has no header.
+- `aligns`: a comma-separated list of column alignments, one per column: `l` (left), `c` (center), `r` (right), or `d` (default).
+  Columns without an entry use the default alignment.
+- `widths`: a comma-separated list of relative column widths, one per column.
+  The values are ratios, so `widths="2,1,1"` makes the first column half the table width.
+
+Quote any value that contains a comma, as in `aligns="l,r"`.
+Other attributes, ids, and classes on the div carry over to the table.
+
+```markdown
+::: {.list-table header-rows="1" aligns="l,r" widths="3,1"}
+- - Fruit
+  - Price
+- - Apple
+  - 1.50
+:::
+```
+
+### Cell attributes
+
+To set attributes on a single cell, start the cell with an empty span that carries them.
+Quarto removes the span and applies its attributes to the cell:
+
+- `colspan`: the number of columns the cell spans. The default is `1`.
+- `rowspan`: the number of rows the cell spans. The default is `1`.
+- `align`: the alignment of this cell, `l`, `c`, or `r`. It overrides the column's alignment.
+
+The span must be the first thing in the cell.
+A span with content, such as `[text]{colspan="2"}`, is an ordinary span and doesn't change the cell.
+
+A merged cell covers the positions of the cells it spans, so omit those cells from the source.
+Rows that contain merged cells therefore have fewer list items than other rows:
+
+```markdown
+::: {.list-table header-rows="2"}
+- - []{rowspan="2"} Region
+  - []{colspan="2" align="c"} 2020
+- - Number
+  - Share
+- - North
+  - 12
+  - 40%
+:::
+```
+
+Here `Region` fills the first column of both header rows, and `2020` spans the two columns above `Number` and `Share`.
+
+## Pipe tables
+
+Simple tables can also use Markdown's pipe syntax:
+
+```markdown
+| Fruit  | Price |
+|--------|------:|
+| Apple  |  1.50 |
+| Banana |  0.25 |
+```
+
+Colons in the separator row set the column alignment.
+Pipe table cells hold only inline content, and they can't span rows or columns.

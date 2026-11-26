@@ -23,17 +23,23 @@ nested list item is a cell.
 
 This error fires when the parser finds a `list-table` div but
 its body is not a list at all, or its list does not have the
-structure a list-table requires (rows with consistent cell
-counts).
+structure a list-table requires: the last block in the div is a
+bullet list of rows, and each row holds exactly one nested
+bullet list of cells. The check doesn't compare cell counts, so
+rows of different lengths, such as rows with merged cells, are
+not an error.
 
 ## Why this happens
 
 Common shapes that trigger the error:
 
 - The body is plain text, not a list.
-- The body is a list, but rows have different numbers of cells.
+- Something other than the rows list comes last in the div, such
+  as a paragraph after the list.
 - Nesting is wrong — the cells are listed at the same level as
-  the rows.
+  the rows, so a row holds text instead of a nested list.
+- A row holds more than its list of cells, such as a paragraph
+  before the nested list.
 
 The same check runs on a `list-table` div that an `{lmd}` cell
 builds from nodes (`pandoc.Div({ … }, pandoc.Attr("", {"list-table"}))`),
@@ -57,7 +63,11 @@ and each nested list item is one cell:
 :::
 ```
 
-Use exactly the same number of cells in every row.
+Usually every row has one cell per column. A cell that spans
+several columns or rows (`[]{colspan="2"}` or `[]{rowspan="2"}`
+at the start of the cell) replaces the cells it covers, so its
+row has fewer items. See the
+[Tables guide](../../guides/authoring/tables.qmd#cell-attributes).
 
 ## Related
 
