@@ -230,7 +230,7 @@ pub use listing_render::ListingRenderTransform;
 pub use llms::LlmsCaptureTransform;
 pub use mermaid::{MERMAID_VERSION, MermaidRenderTransform};
 pub use metadata_normalize::MetadataNormalizeTransform;
-pub(crate) use metadata_normalize::inlines_to_plain_text;
+pub(crate) use metadata_normalize::{blocks_to_plain_text, inlines_to_plain_text};
 pub use navbar_generate::NavbarGenerateTransform;
 pub use navbar_render::NavbarRenderTransform;
 pub use page_nav_generate::PageNavGenerateTransform;
