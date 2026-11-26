@@ -189,6 +189,10 @@ $sidebar-border: false !default;
 $sidebar-glass-bg: #66666666 !default;
 $sidebar-anim-duration: 0.15s !default;
 
+// Gap between the navbar and the page's grid children (title, sidebar,
+// TOC). Value from quarto-cli `quarto-nav.scss`.
+$content-padding-top: 14px !default;
+
 // Task lists (GH #892, bd-2ydvebkc). A task item's checkbox replaces its
 // list marker. In an ordered list the number carries information a bullet
 // does not, so by default ordered task items keep it and the checkbox

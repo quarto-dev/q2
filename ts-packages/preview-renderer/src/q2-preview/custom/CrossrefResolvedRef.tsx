@@ -92,7 +92,13 @@ export const CrossrefResolvedRef = ({
 }: NodeArgs<CustomInlineNode>) => {
     const plain = (node.plain_data ?? {}) as CrossrefResolvedRefPlainData;
     const identifier = (plain.identifier as string | undefined) ?? '';
-    const kind = (plain.kind as string | undefined) ?? '';
+    const rawKind = (plain.kind as string | undefined) ?? '';
+    // `@Fig-a` capitalizes the prefix's first letter (Q1 refPrefix's
+    // `upper` branch; GH #1319), as `render_resolved_ref` does.
+    const kind =
+        plain.label_upper === true
+            ? rawKind.charAt(0).toUpperCase() + rawKind.slice(1)
+            : rawKind;
     const resolved = plain.resolved === true;
     const order = plain.order as { section?: number[]; order?: number } | undefined;
     const number = order?.order;

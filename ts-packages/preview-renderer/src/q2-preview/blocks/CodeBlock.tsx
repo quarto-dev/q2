@@ -82,6 +82,139 @@ function captureToClass(capture: string): string {
  * emits offsets on valid utf-8 boundaries, so the decode is always
  * clean.
  */
+/** Pandoc's two spellings of the line-numbering class. */
+function isNumberLinesClass(cls: string): boolean {
+    return cls === 'number-lines' || cls === 'numberLines';
+}
+
+/**
+ * Attributes of the code annotation pass
+ * (`crates/quarto-core/src/transforms/code_annotations.rs`). The anchors
+ * attribute is `line=annotation` pairs joined by commas; it is an
+ * instruction to the renderer and is not forwarded to the DOM. Keep in
+ * step with the same constants in `crates/pampa/src/writers/html.rs`.
+ */
+const ANNOTATION_ANCHORS_KEY = 'code-annotation-anchors';
+const ANNOTATION_INTERACTIVE_KEY = 'code-annotation-interactive';
+const ANNOTATION_CODE_CLASS = 'code-annotation-code';
+/** Read by reveal's line-highlight plugin from `div.sourceCode`. */
+const LINE_HIGHLIGHT_KEYS = ['code-line-numbers', 'code-line-fragment-indices'];
+
+/** Per-line markup request; mirrors `NumberedLines` in the native writer. */
+interface LineMarkup {
+    /** Code block id (`cb3`); empty when the block has none. */
+    blockId: string;
+    /** Number of the first line (Pandoc's `startFrom`, default 1). */
+    start: number;
+    /** line number → annotation number. */
+    anchors: Map<number, string>;
+}
+
+/**
+ * Split rendered code into Pandoc's per-line markup:
+ * `<span id="cb1-2"><a href="#cb1-2"></a>…</span>` per source line, with a
+ * code-annotation anchor before the lines that carry one. A highlight span
+ * that crosses a line break is closed at the end of the line and reopened
+ * on the next, so line spans are direct children of `<code>`. Mirrors the
+ * numbered branch of `write_highlighted_body` in
+ * `crates/pampa/src/writers/html.rs`.
+ */
+function renderLines(text: string, spans: HighlightSpan[], lines: LineMarkup): ReactNode {
+    const bytes = new TextEncoder().encode(text);
+    type Event =
+        | { kind: 'open'; offset: number; capture: string; tie: number }
+        | { kind: 'close'; offset: number; tie: number };
+    const events: Event[] = [];
+    spans.forEach((s, i) => {
+        const len = Math.max(0, s.end - s.start);
+        events.push({ kind: 'open', offset: s.start, capture: s.capture, tie: -len });
+        events.push({ kind: 'close', offset: s.end, tie: len + i });
+    });
+    events.sort((a, b) => {
+        if (a.offset !== b.offset) return a.offset - b.offset;
+        if (a.kind !== b.kind) return a.kind === 'close' ? -1 : 1;
+        return a.tie - b.tie;
+    });
+
+    type Frame = { capture: string; children: ReactNode[] };
+    const out: ReactNode[] = [];
+    let key = 0;
+    let lineNo = lines.start;
+    let lineChildren: ReactNode[] = [];
+    // Highlight spans open on the current line, outermost first.
+    let stack: Frame[] = [];
+
+    const target = () => (stack.length > 0 ? stack[stack.length - 1].children : lineChildren);
+    const closeFrame = () => {
+        const frame = stack.pop()!;
+        target().push(
+            <span key={key++} className={`hl-${captureToClass(frame.capture)}`}>{frame.children}</span>,
+        );
+    };
+    const endLine = (reopen: boolean) => {
+        const captures = stack.map((f) => f.capture);
+        while (stack.length > 0) closeFrame();
+        const id = lines.blockId ? `${lines.blockId}-${lineNo}` : undefined;
+        const annotation = lines.anchors.get(lineNo);
+        if (annotation !== undefined) {
+            out.push(
+                <a
+                    key={key++}
+                    className="code-annotation-anchor"
+                    data-target-cell={lines.blockId}
+                    data-target-annotation={annotation}
+                    href=""
+                >
+                    {annotation}
+                </a>,
+            );
+        }
+        out.push(
+            <span
+                key={key++}
+                {...(id ? { id } : {})}
+                {...(annotation !== undefined ? { className: 'code-annotation-target' } : {})}
+            >
+                <a {...(id ? { href: `#${id}` } : {})} />
+                {lineChildren}
+            </span>,
+        );
+        lineChildren = [];
+        if (reopen) {
+            out.push('\n');
+            lineNo += 1;
+            stack = captures.map((capture) => ({ capture, children: [] }));
+        }
+    };
+    const pushText = (start: number, end: number) => {
+        if (start >= end) return;
+        const pieces = sliceEncodedUtf8(bytes, start, end).split('\n');
+        pieces.forEach((piece, i) => {
+            if (i > 0) endLine(true);
+            if (piece) target().push(piece);
+        });
+    };
+
+    let cursor = 0;
+    for (const ev of events) {
+        const offset = Math.min(ev.offset, bytes.length);
+        if (offset > cursor) {
+            pushText(cursor, offset);
+            cursor = offset;
+        }
+        if (ev.kind === 'open') stack.push({ capture: ev.capture, children: [] });
+        else if (stack.length > 0) closeFrame();
+    }
+    if (cursor < bytes.length) pushText(cursor, bytes.length);
+    // A final newline already ended the last line; do not add an empty one.
+    if (text.endsWith('\n')) {
+        out.pop();
+    } else if (text.length > 0) {
+        endLine(false);
+    }
+    return <Fragment>{out}</Fragment>;
+}
+
 function renderHighlighted(text: string, spans: HighlightSpan[]): ReactNode {
   const bytes = new TextEncoder().encode(text);
 
@@ -179,15 +312,42 @@ export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
     // through to the `<pre>` for downstream consumers (source-mapping,
     // plugin attribute echo).
     let hlSpansRaw: string | undefined;
+    let anchorsRaw: string | undefined;
+    let startFrom = 1;
     const preDataAttrs: Record<string, string> = {};
+    const divDataAttrs: Record<string, string> = {};
     for (const [k, v] of kvs) {
         if (k === HL_SPANS_KEY) {
             hlSpansRaw = v;
             continue;
         }
+        if (k === ANNOTATION_ANCHORS_KEY) {
+            anchorsRaw = v;
+            continue;
+        }
+        if (k === ANNOTATION_INTERACTIVE_KEY) continue;
+        if (LINE_HIGHLIGHT_KEYS.includes(k)) {
+            divDataAttrs[`data-${k}`] = v;
+            continue;
+        }
+        if (k.toLowerCase() === 'startfrom') {
+            const n = parseInt(v.trim(), 10);
+            if (Number.isFinite(n) && n >= 0) startFrom = n;
+        }
         if (k.startsWith('data-')) preDataAttrs[k] = v;
     }
     const spans = decodeHighlightSpans(hlSpansRaw);
+
+    // Line numbers (`.number-lines`) and code annotations both need Pandoc's
+    // per-line markup; see `renderLines`.
+    const numbered = classes.some(isNumberLinesClass);
+    const anchors = new Map<number, string>();
+    for (const pair of (anchorsRaw ?? '').split(',')) {
+        const [line, annotation] = pair.split('=');
+        const n = parseInt((line ?? '').trim(), 10);
+        if (Number.isFinite(n) && annotation) anchors.set(n, annotation.trim());
+    }
+    const annotated = anchors.size > 0;
 
     // bd-s3z1g: highlighted code blocks emit Pandoc's nested
     // structure to match the native writer in
@@ -197,14 +357,45 @@ export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
     // source-code block (GH #1079: languages Pandoc knows but q2 has no
     // grammar for get `[]`); `spans` decides only whether there is
     // markup to nest inside `<code>`.
-    if (hlSpansRaw !== undefined) {
-        const [language, ...extras] = classes;
+    if (hlSpansRaw !== undefined || numbered || annotated) {
+        // A numbering class in first position is not a language
+        // (`{.number-lines}`).
+        const hasLanguage = classes.length > 0 && !isNumberLinesClass(classes[0]);
+        const language = hasLanguage ? classes[0] : undefined;
+        const extras = (hasLanguage ? classes.slice(1) : classes).filter(
+            (c) => c !== ANNOTATION_CODE_CLASS,
+        );
         const divClassName = ['sourceCode', ...extras].join(' ');
         const codeContainerClass = language ? `sourceCode ${language}` : 'sourceCode';
+        // `numberSource` is what Pandoc's line-number CSS keys off;
+        // `code-annotated` what Quarto's annotation CSS does.
+        const preClassName = [
+            'sourceCode',
+            ...(numbered ? ['numberSource'] : []),
+            ...(language ? [language] : []),
+            ...(annotated ? [ANNOTATION_CODE_CLASS, 'code-annotated'] : []),
+        ].join(' ');
+        const perLine = numbered || annotated;
+        const codeStyle =
+            numbered && startFrom !== 1
+                ? { counterReset: `source-line ${Math.max(0, startFrom - 1)}` }
+                : undefined;
         return (
-            <div ref={anchorRef} className={divClassName} {...(id ? { id } : {})} {...affordanceAttr} {...dataLocProps(node)}>
-                <pre className={codeContainerClass} {...preDataAttrs}>
-                    <code className={codeContainerClass}>{spans !== null ? renderHighlighted(code, spans) : code}</code>
+            <div ref={anchorRef} className={divClassName} {...(id ? { id } : {})} {...divDataAttrs} {...affordanceAttr} {...dataLocProps(node)}>
+                <pre className={preClassName} {...preDataAttrs}>
+                    <code className={codeContainerClass} {...(codeStyle ? { style: codeStyle } : {})}>
+                        {perLine
+                            ? renderLines(code, spans ?? [], { blockId: id, start: startFrom, anchors })
+                            : spans !== null
+                              ? renderHighlighted(code, spans)
+                              : code}
+                        {annotated ? (
+                            <>
+                                <div className="code-annotation-gutter-bg" />
+                                <div className="code-annotation-gutter" />
+                            </>
+                        ) : null}
+                    </code>
                 </pre>
             </div>
         );

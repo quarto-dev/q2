@@ -1,0 +1,7 @@
+::: {.list-table}
+- - A
+  - B
+- []{.myrow}
+  - c
+  - d
+:::

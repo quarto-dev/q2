@@ -102,15 +102,11 @@ A definition.
 <section id="pipe-table-inside-a-fragment" class="section level2">
 <h2 class="anchored" data-anchor-id="pipe-table-inside-a-fragment">6. Pipe table inside a fragment</h2>
 <table class="caption-top table">
-<colgroup>
-<col />
-<col align="right" />
-</colgroup>
 <thead>
 <tr class="header">
 <th>Key
 </th>
-<th>Value
+<th style="text-align: right;">Value
 </th>
 </tr>
 </thead>
@@ -118,7 +114,7 @@ A definition.
 <tr class="odd">
 <td><code>d</code>
 </td>
-<td>four
+<td style="text-align: right;">four
 </td>
 </tr>
 </tbody>

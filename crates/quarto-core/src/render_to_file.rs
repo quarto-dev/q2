@@ -488,8 +488,11 @@ pub fn render_document_to_file(
         &output_stem,
     )
     .unwrap_or_else(|| {
+        // An explicit `--output-dir` replaces the project's `output-dir`
+        // (see `apply_project_output_dir_to_options`), so it is also the
+        // site root the `OutputSink` accepts writes under (GH #1133).
         ResourceResolverContext::website(
-            &project.output_dir,
+            options.output_dir.as_ref().unwrap_or(&project.output_dir),
             &output_path,
             project_type.lib_dir(),
             &output_stem,

@@ -87,11 +87,20 @@ impl AstTransform for CrossrefIndexTransform {
         // counter with its chapter number (`sections = [n-1]`, so the first
         // H1 becomes `n`), reproducing Q1's per-file section offsets. Guard
         // on an untouched stack so a pre-seeded index is never clobbered.
+        //
+        // When `BookChapterTitleTransform` has moved the chapter heading
+        // into the title block, there is no H1 left to advance the
+        // counter: the chapter is already open, so the stack starts at
+        // `[n]` and the first section becomes `n.1`.
+        let lifted = ctx.lifted_chapter_title.clone();
         if let Some(seed) = &ctx.chapter_seed
             && index.sections.is_empty()
-            && seed.chapter_number > 1
         {
-            index.sections = vec![seed.chapter_number - 1];
+            if lifted.is_some() {
+                index.sections = vec![seed.chapter_number];
+            } else if seed.chapter_number > 1 {
+                index.sections = vec![seed.chapter_number - 1];
+            }
         }
 
         // Q1's `crossref.maxHeading` (options.lua + normalize/flags.lua):
@@ -136,7 +145,41 @@ impl AstTransform for CrossrefIndexTransform {
             section_ids: Vec::new(),
             number_sections,
             number_depth,
+            unnumbered_book_page: ctx.project.book_render_items.as_ref().is_some_and(|items| {
+                crate::project::book::render_item::render_item_for_input(
+                    &ctx.project.dir,
+                    items,
+                    &ctx.document.input,
+                )
+                .is_some_and(|item| item.number.is_none())
+            }),
         };
+        // The lifted chapter heading registers as the heading itself did:
+        // recorded always, and a `sec-` id of a numbered chapter becomes a
+        // crossref target at the chapter's own section path.
+        if let Some(lifted) = &lifted
+            && let Some(id) = &lifted.id
+        {
+            walker.index.headings.push(crate::crossref::HeadingRecord {
+                identifier: Some(id.clone()),
+                level: 1,
+                section: walker.index.sections.clone(),
+                source_info: lifted.source_info.clone(),
+            });
+            let is_sec = walker
+                .registry
+                .as_ref()
+                .and_then(|r| r.classify_cite_id(id))
+                .is_some_and(|def| def.ref_type == "sec");
+            if is_sec && ctx.chapter_seed.is_some() {
+                walker.index_target(
+                    id.clone(),
+                    "sec".to_string(),
+                    Some(lifted.content.clone()),
+                    &lifted.source_info,
+                );
+            }
+        }
         walker.visit_blocks(&mut ast.blocks);
         let diagnostics = walker.diagnostics;
 
@@ -182,6 +225,11 @@ struct Walker<'a> {
     /// `number-depth` document metadata (default 6) — a header deeper than
     /// this never gets the visible `number` kv, even with `number-sections`.
     number_depth: u32,
+    /// Whether the document is a book page without a chapter number: an
+    /// `.unnumbered` chapter (a preface) or a part page. Q1 turns
+    /// `number-sections` off for such a page, so none of its headings
+    /// shows a number.
+    unnumbered_book_page: bool,
 }
 
 impl<'a> Walker<'a> {
@@ -350,7 +398,11 @@ impl<'a> Walker<'a> {
         // of whether it's also an `@sec-` target. HTML-only: non-HTML
         // writers (Typst, pandoc-hybrid docx/pptx/etc.) do their own native
         // heading numbering and never consume this kv.
-        if self.html && self.number_sections && (header.level as u32) <= self.number_depth {
+        if self.html
+            && self.number_sections
+            && (header.level as u32) <= self.number_depth
+            && !self.unnumbered_book_page
+        {
             header.attr.2.insert(
                 "number".to_string(),
                 format_section_number(&self.index.sections, self.index.max_heading, self.appendix),

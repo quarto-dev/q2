@@ -1686,6 +1686,13 @@
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-60",
     "since_version": "99.9.9"
   },
+  "Q-2-61": {
+    "subsystem": "markdown",
+    "title": "List-table cell span is not empty",
+    "message_template": "A list-table cell starts with a span that has content and a `colspan` or `rowspan` attribute. Only an empty span at the start of a cell, like `[]{colspan=2} text`, sets the cell's span.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-61",
+    "since_version": "99.9.9"
+  },
   "Q-5-27": {
     "subsystem": "project",
     "title": "Invalid `diagnostics:` Entry",
@@ -1929,6 +1936,13 @@
     "title": "Twitter Card Image Size Ignored",
     "message_template": "`twitter-card` sets `image-width` or `image-height`, which have no effect because Twitter Cards have no image size tags.",
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-61",
+    "since_version": "99.9.9"
+  },
+  "Q-5-62": {
+    "subsystem": "project",
+    "title": "Book Download Not Rendered",
+    "message_template": "`book.downloads` lists a format, so the book's sidebar links to its file, but that file is not in the output directory. An HTML render writes only the HTML pages.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-62",
     "since_version": "99.9.9"
   },
   "Q-13-8": {

@@ -1,0 +1,25 @@
+[project]
+name = "q2"
+version = "0.1.0"
+type = "project"
+
+[dependencies]
+R = ">= 4.6"
+knitr = "*"
+rmarkdown = "*"
+jsonlite = "*"
+
+[dependency-groups.fixtures]
+ggplot2 = "*"
+gt = "*"
+flextable = "*"
+bslib = "*"
+bsicons = "*"
+shiny = "*"
+dplyr = "*"
+readr = "*"
+xml2 = "*"
+plotly = "*"
+DBI = "*"
+RSQLite = "*"
+png = "*"

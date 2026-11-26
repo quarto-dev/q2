@@ -1,6 +1,17 @@
 name: Test Suite
 on:
   workflow_dispatch:
+    inputs:
+      runners:
+        description: 'JSON array of runner labels. Add "windows-latest" to run the suite on Windows; push and PR runs always use the default.'
+        required: false
+        type: string
+        default: '["ubuntu-latest", "macos-latest"]'
+      filter:
+        description: "nextest filter expression (e.g. 'package(pampa)'); empty runs everything"
+        required: false
+        type: string
+        default: ""
   push:
     branches:
       - main
@@ -19,6 +30,9 @@ env:
   # Typst — the Pandoc-hybrid typst leg's `L`-tier tests (typst_compile.rs)
   # require a real `typst` binary on PATH (TYPST_VERSION_FLOOR is 0.8+).
   TYPST_VERSION: "0.15.1"
+  # rig proj is experimental, so keep the CLI at the version that generated
+  # rproj.lock. Release assets and the Chocolatey package use this same pin.
+  RIG_VERSION: "0.11.1"
   CARGO_INCREMENTAL: "0"
   CARGO_TERM_COLOR: always
 
@@ -27,10 +41,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # Push/PR runs have no inputs and get the default; a manual run can pick
+        # any runner set, e.g. '["windows-latest"]'.
+        os: ${{ fromJSON(inputs.runners || '["ubuntu-latest", "macos-latest"]') }}
     runs-on: ${{ matrix.os }}
-    
-    name: Run test suite
+
+    name: Run test suite (${{ matrix.os }})
     if: github.repository == 'quarto-dev/q2'
     
     steps:
@@ -107,6 +123,14 @@ jobs:
           sudo installer -pkg "pandoc-${PANDOC_VERSION}-arm64-macOS.pkg" -target /
         shell: bash
 
+      - name: Set up Pandoc (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -fsSL -o pandoc.zip "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-windows-x86_64.zip"
+          7z x pandoc.zip -o"$RUNNER_TEMP/pandoc" -y
+          echo "$RUNNER_TEMP/pandoc/pandoc-${PANDOC_VERSION}" >> "$GITHUB_PATH"
+        shell: bash
+
       # Typst setup — the docx/pptx Pandoc-hybrid leg also has a typst
       # backend whose `L`-tier tests require a real binary (see TYPST_VERSION above).
       - name: Set up Typst (Linux)
@@ -120,6 +144,14 @@ jobs:
       - name: Set up Typst (macOS)
         if: runner.os == 'macOS'
         run: brew install typst
+        shell: bash
+
+      - name: Set up Typst (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -fsSL -o typst.zip "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-pc-windows-msvc.zip"
+          7z x typst.zip -o"$RUNNER_TEMP/typst" -y
+          echo "$RUNNER_TEMP/typst/typst-x86_64-pc-windows-msvc" >> "$GITHUB_PATH"
         shell: bash
 
       # tree-sitter setup
@@ -136,6 +168,15 @@ jobs:
       - name: Set up tree-sitter CLI (macOS)
         if: runner.os == 'macOS'
         run: brew install tree-sitter-cli
+
+      - name: Set up tree-sitter CLI (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          curl -fsSL -o ts.gz https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-windows-x64.gz
+          mkdir -p "$RUNNER_TEMP/tree-sitter"
+          gunzip -c ts.gz > "$RUNNER_TEMP/tree-sitter/tree-sitter.exe"
+          echo "$RUNNER_TEMP/tree-sitter" >> "$GITHUB_PATH"
 
       # The installer test suite (crates/quarto/tests/integration/
       # bootstrap_sh.rs) REQUIRES minisign — signature verification is
@@ -167,6 +208,82 @@ jobs:
         run: |
           sudo docker image prune --all --force
           sudo docker builder prune -a --force
+
+      # rig proj supplies the same locked R library to the test gates and the
+      # knitr engine on every OS. Install after "Free disk space" on Linux:
+      # that step removes the hosted tool cache before later setup steps.
+      # Tarball layout and Chocolatey method: https://rig.r-lib.org/install.html
+      - name: Install rig (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/rig"
+          curl -fsSL "https://github.com/r-lib/rig/releases/download/v${RIG_VERSION}/rig-linux-x86_64-${RIG_VERSION}.tar.gz" |
+            tar xz -C "$RUNNER_TEMP/rig"
+          echo "$RUNNER_TEMP/rig/bin" >> "$GITHUB_PATH"
+
+      # R's svg() device needs libXrender from XQuartz for cairo; without it
+      # knitr fails the typst figure fixtures. Same install as quarto-cli's
+      # test-smokes.yml.
+      - name: Install XQuartz (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install --cask xquartz
+
+      - name: Install rig (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/rig"
+          curl -fsSL "https://github.com/r-lib/rig/releases/download/v${RIG_VERSION}/rig-macos-arm64-${RIG_VERSION}.tar.gz" |
+            tar xz -C "$RUNNER_TEMP/rig"
+          echo "$RUNNER_TEMP/rig/bin" >> "$GITHUB_PATH"
+
+      - name: Install rig (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: choco install rig --version="$RIG_VERSION" --no-progress --yes
+
+      - name: Install the locked R version
+        shell: bash
+        run: |
+          rig --version
+          # CI runners are disposable; user mode needs no elevated installer.
+          # `rig system user-mode` would also reinstall and remove the runner
+          # image's own R, so only the mode is set.
+          rig config set mode=user
+          R_VERSION=$(awk -F '"' '/^r_version = / { print $2; exit }' rproj.lock)
+          test -n "$R_VERSION" || { echo "r_version not found in rproj.lock" >&2; exit 1; }
+          rig add "$R_VERSION"
+
+      # No restore-keys: a main-only or differently locked library must never
+      # be restored for the main + fixtures sync below. Restore and save are
+      # split so a red test step later in the job still saves the library.
+      - name: Restore locked R project library
+        id: rig-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .rvenv/
+          key: rig-project-${{ runner.os }}-main-fixtures-${{ hashFiles('rproj.lock') }}
+
+      - name: Sync locked R project (main + fixtures)
+        shell: bash
+        run: |
+          # --locked fails on a stale manifest/lock pair; --frozen would not.
+          time rig proj sync --locked --group fixtures
+          # Nextest starts tests from crate directories, so this must be absolute.
+          echo "$GITHUB_WORKSPACE/.rvenv/bin" >> "$GITHUB_PATH"
+          export PATH="$GITHUB_WORKSPACE/.rvenv/bin:$PATH"
+          Rscript -e 'cat(R.version.string, "\n"); cat(.libPaths(), sep = "\n")'
+
+      - name: Save locked R project library
+        if: steps.rig-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .rvenv/
+          key: ${{ steps.rig-cache.outputs.cache-primary-key }}
 
       # Node 24 + `npm ci`: `q2 call build-ts-extension` (used by the engine
       # tests to rebuild the hermetic fixture bundles) runs its embedded rollup
@@ -230,12 +347,11 @@ jobs:
           cd crates/tree-sitter-qmd/tree-sitter-markdown
           tree-sitter test
 
-      # A Jupyter runtime plus a Python kernelspec, so the jupyter-gated
+      # A locked Jupyter runtime plus a Python kernelspec, so the jupyter-gated
       # integration tests (python_kernel_available / require_kernel!) run
-      # instead of skipping silently. The widget packages are for the widget
-      # epic (claude-notes/plans/2026-11-02-widget-epic.md). The venv's bin
-      # goes on PATH so `jupyter` is found; the kernelspec is installed
-      # per-user so list_kernelspecs() sees it.
+      # instead of skipping silently. setup-uv activates the root .venv and
+      # handles Scripts/ on Windows versus bin/ on POSIX. The widget packages
+      # are for claude-notes/plans/2026-11-02-widget-epic.md.
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
@@ -243,18 +359,34 @@ jobs:
           # querying the GitHub API for "latest" on every run (a connect
           # timeout there failed a macOS job). Also keeps CI reproducible.
           version: "0.13.7"
+          python-version: "3.12"
+          activate-environment: true
+          # By default setup-uv prepends ~/.local/bin on Linux and macOS, where
+          # rig's user-mode Rscript shim (default R, no project library)
+          # shadows .rvenv/bin. Windows already defaults to a temp dir.
+          tool-bin-dir: ${{ runner.temp }}/uv-tool-bin
 
-      - name: Set up Jupyter kernel and widget packages
+      - name: Set up locked Jupyter kernel and widget packages
         shell: bash
         run: |
-          uv venv "$RUNNER_TEMP/jupyter-venv" --python 3.12
-          uv pip install --python "$RUNNER_TEMP/jupyter-venv/bin/python" \
-            jupyter-core ipykernel ipywidgets anywidget plotly \
-            great-tables polars pandas
-          "$RUNNER_TEMP/jupyter-venv/bin/python" -m ipykernel install --user --name python3
-          echo "$RUNNER_TEMP/jupyter-venv/bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/jupyter-venv/bin/jupyter" --version
-          "$RUNNER_TEMP/jupyter-venv/bin/jupyter" kernelspec list
+          uv sync --locked
+          # Keep the kernelspec inside .venv so a user python3 is not replaced.
+          python -m ipykernel install --sys-prefix --name python3
+          # The daemon resolves the selected kernel again by name. runtimelib
+          # searches this single path before user kernelspecs (bd-6ecz7jt7).
+          export JUPYTER_PATH="$GITHUB_WORKSPACE/.venv/share/jupyter"
+          echo "JUPYTER_PATH=$JUPYTER_PATH" >> "$GITHUB_ENV"
+          jupyter --version
+          jupyter kernelspec list
+
+      # Fail here, rather than as silently skipped knitr tests, if a later
+      # PATH change put another Rscript ahead of .rvenv/bin. Runs outside the
+      # checkout so the root .Renviron cannot mask it.
+      - name: Check R project library on PATH
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP"
+          Rscript -e 'lib <- normalizePath(file.path(Sys.getenv("GITHUB_WORKSPACE"), ".rvenv", "lib"), winslash = "/"); for (p in c("knitr", "rmarkdown", "jsonlite")) { d <- normalizePath(dirname(find.package(p)), winslash = "/"); if (d != lib) stop(p, " found in ", d, ", expected ", lib) }; cat("R project library OK:", lib, "\n")'
 
       # `ci` profile + `--tests` makes a separate `cargo build` redundant.
       # `--tests` (not `--all-targets`) excludes benches — `quarto-yaml` declares
@@ -262,13 +394,70 @@ jobs:
       # See claude-notes/2026-04-28-ci-disk-space-and-profile-ci.md.
       - name: Test Rust code
         shell: bash
-        run: cargo nextest run --tests --cargo-profile ci
+        run: cargo nextest run --tests --cargo-profile ci ${NO_FAIL_FAST} ${FILTER:+-E "$FILTER"}
         env:
+          FILTER: ${{ inputs.filter }}
+          # A Windows run is for surveying: report every failure, not the first few.
+          NO_FAIL_FAST: ${{ runner.os == 'Windows' && '--no-fail-fast' || '' }}
           RUSTFLAGS: "-D warnings"
           # Turns the silent Node-skip in node_available_when_quarto_ci (and the
           # node_available_for_tests() gates) into a hard failure if the
           # "Set up Node" step above regresses.
           QUARTO_CI: "1"
+
+      # The engine test gates return normally when a runtime is missing, so
+      # their pass/skip totals cannot prove provisioning. Exercise both engines
+      # through the q2 binary built by --tests and inspect the actual HTML.
+      # Run even after a red test step: a failing test must not hide acceptance.
+      - name: Smoke render knitr engine
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/engine-smoke"
+          cat > "$RUNNER_TEMP/engine-smoke/knitr.qmd" <<'EOF'
+          ---
+          title: "R engine smoke"
+          format: html
+          engine: knitr
+          ---
+
+          Inline result: `r 6 * 7`.
+
+          ```{r}
+          cat(R.version.string, "\n")
+          cat(.libPaths(), sep = "\n")
+          ```
+          EOF
+          Q2=./target/ci/q2
+          [ ! -f "$Q2.exe" ] || Q2="$Q2.exe"
+          "$Q2" render "$RUNNER_TEMP/engine-smoke/knitr.qmd"
+          grep -Fq 'Inline result: 42.' "$RUNNER_TEMP/engine-smoke/knitr.html"
+          grep -Fq 'R version ' "$RUNNER_TEMP/engine-smoke/knitr.html"
+          grep -Fq '.rvenv/lib' "$RUNNER_TEMP/engine-smoke/knitr.html"
+
+      - name: Smoke render Jupyter engine
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/engine-smoke"
+          cat > "$RUNNER_TEMP/engine-smoke/jupyter.qmd" <<'EOF'
+          ---
+          title: "Python engine smoke"
+          format: html
+          jupyter: python3
+          ---
+
+          ```{python}
+          import sys
+          print(f"Computed result: {6 * 7}")
+          print(f"Python executable: {sys.executable}")
+          ```
+          EOF
+          Q2=./target/ci/q2
+          [ ! -f "$Q2.exe" ] || Q2="$Q2.exe"
+          "$Q2" render "$RUNNER_TEMP/engine-smoke/jupyter.qmd"
+          grep -Fq 'Computed result: 42' "$RUNNER_TEMP/engine-smoke/jupyter.html"
+          grep -Fq '.venv' "$RUNNER_TEMP/engine-smoke/jupyter.html"
 
       # Cross-uid UDS accept-check test (bd-m49e3s5o): the peer-uid
       # rejection test re-execs the integration binary as `nobody`, so it

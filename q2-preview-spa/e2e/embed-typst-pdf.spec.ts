@@ -13,7 +13,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { cp, mkdtemp, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdtemp, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
@@ -119,17 +119,23 @@ test.describe('q2 preview --ui editor: typst PDF', () => {
 test.describe('q2 preview --ui editor: missing typst', () => {
   test('the pane banner names the missing compiler (Q-21-1) instead of staying blank', async ({ page }) => {
     test.skip(!onPath('pandoc'), 'pandoc is not on PATH');
-    // A PATH holding pandoc (as a symlink) but no typst.
+    // A PATH holding pandoc but no typst: a directory with only pandoc in it, plus the system directories.
+    // Windows needs `where`, the `.exe` name, and a copy (symlinks need extra privileges there).
+    const win = process.platform === 'win32';
     const bin = await mkdtemp(path.join(tmpdir(), 'q2-embed-nopath-'));
-    const pandoc = execFileSync('which', ['pandoc'], { encoding: 'utf8' }).trim();
-    await symlink(pandoc, path.join(bin, 'pandoc'));
+    const pandoc = execFileSync(win ? 'where' : 'which', ['pandoc'], { encoding: 'utf8' }).split(/\r?\n/)[0].trim();
+    if (win) await copyFile(pandoc, path.join(bin, 'pandoc.exe'));
+    else await symlink(pandoc, path.join(bin, 'pandoc'));
+    const systemPath = win
+      ? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32')
+      : `/usr/bin${path.delimiter}/bin`;
     server = await startPreviewServer({
       fixtureFiles: [{ path: 'index.qmd', content: TYPST_QMD('No compiler.') }],
       ui: 'editor',
-      extraEnv: { PATH: `${bin}${path.delimiter}/usr/bin${path.delimiter}/bin` },
+      extraEnv: { PATH: `${bin}${path.delimiter}${systemPath}` },
     });
     test.skip(!(await isEmbedBuilt(server)), 'q2 was built without the hub-client embed (placeholder)');
-    test.skip(onPathIn('typst', `/usr/bin${path.delimiter}/bin`), 'typst is installed in a system directory');
+    test.skip(onPathIn('typst', systemPath), 'typst is installed in a system directory');
     await page.goto(server.url);
     const banner = page.getByTestId('pdf-preview-error');
     await expect(banner).toBeVisible({ timeout: 60_000 });

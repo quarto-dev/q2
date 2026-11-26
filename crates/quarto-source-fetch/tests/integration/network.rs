@@ -109,13 +109,22 @@ fn remote_target(input: &str) -> Target {
 }
 
 // ====================================================================
-// Case 18 — default-branch probing (Quarto 1 defect 1)
+// Case 18 — the default branch (Quarto 1 defect 1, #1179)
 // ====================================================================
 
 #[test]
-fn a_main_default_repository_resolves_on_the_first_request() {
-    let url = "https://github.com/org/repo/archive/refs/heads/main.tar.gz";
-    let fake = FakeFetch::new().serving(url, brand_archive("repo-main"));
+fn a_bare_repository_is_fetched_through_archive_head_in_one_request() {
+    // Quarto 1 hardcodes `refs/heads/main` as the only candidate for a
+    // bare `org/repo` (extension-host.ts:114), so a repository whose
+    // default branch is anything else is unreachable there, or (when a
+    // stale `main` exists) installs the wrong branch (#1179).
+    // `archive/HEAD` is the default branch, whatever it is called, and
+    // GitHub names the archive root `<repo>-<commit>`.
+    let url = "https://github.com/org/repo/archive/HEAD.tar.gz";
+    let fake = FakeFetch::new().serving(
+        url,
+        brand_archive("repo-0cb98bf577f198e0417d163bc589e8dfb9ae2e96"),
+    );
     let work = TempDir::new().unwrap();
 
     let root = fetch_into(
@@ -132,33 +141,25 @@ fn a_main_default_repository_resolves_on_the_first_request() {
 }
 
 #[test]
-fn a_master_default_repository_resolves_after_main_404s() {
-    // Quarto 1 hardcodes `refs/heads/main` as the only candidate for a
-    // bare `org/repo` (extension-host.ts:114), so this repository is
-    // simply unreachable there and the user is told the brand was "not
-    // found in local or remote sources".
-    let master = "https://github.com/org/repo/archive/refs/heads/master.tar.gz";
-    let fake = FakeFetch::new().serving(master, brand_archive("repo-master"));
+fn a_bare_repository_never_guesses_a_branch_name() {
+    // A repository with a stale `main` and a different default branch
+    // must not get `main` installed (#1179).
+    let main = "https://github.com/org/repo/archive/refs/heads/main.tar.gz";
+    let fake = FakeFetch::new().serving(main, brand_archive("repo-main"));
     let work = TempDir::new().unwrap();
 
-    let root = fetch_into(
+    fetch_into(
         &remote_target("org/repo"),
         work.path(),
         &fake,
         &ExtractLimits::default(),
     )
-    .unwrap()
-    .root;
+    .expect_err("only archive/HEAD is requested, and it is not served");
 
     assert_eq!(
         fake.requests(),
-        [
-            "https://github.com/org/repo/archive/refs/heads/main.tar.gz",
-            master
-        ],
-        "main must be tried first, then master"
+        ["https://github.com/org/repo/archive/HEAD.tar.gz"]
     );
-    assert!(root.join("_brand.yml").is_file());
 }
 
 #[test]
@@ -231,10 +232,10 @@ fn exhausting_every_candidate_reports_what_was_tried() {
     let msg = err.to_string();
     // The message must name the real problem. Quarto 1's equivalent
     // ("Brand not found in local or remote sources") does not say what
-    // it looked for, which is what makes a master-default repository
-    // undiagnosable there.
+    // it looked for, which is what makes a repository with another
+    // default branch undiagnosable there.
     assert!(msg.contains("org/repo"), "{msg}");
-    assert!(msg.contains("main") && msg.contains("master"), "{msg}");
+    assert!(msg.contains("archive/HEAD"), "{msg}");
     assert!(msg.contains("404"), "{msg}");
 }
 
@@ -290,7 +291,7 @@ fn a_tag_beginning_with_v_extracts_correctly() {
 fn an_archive_root_named_nothing_like_the_repo_still_works() {
     // The strongest form of the point: the root name carries no
     // information we rely on.
-    let url = "https://github.com/org/repo/archive/refs/heads/main.tar.gz";
+    let url = "https://github.com/org/repo/archive/HEAD.tar.gz";
     let fake = FakeFetch::new().serving(url, brand_archive("something-entirely-different"));
     let work = TempDir::new().unwrap();
 
@@ -311,7 +312,7 @@ fn an_archive_root_named_nothing_like_the_repo_still_works() {
 
 #[test]
 fn a_subdirectory_target_selects_the_brand_beneath_the_root() {
-    let url = "https://github.com/org/repo/archive/refs/heads/main.tar.gz";
+    let url = "https://github.com/org/repo/archive/HEAD.tar.gz";
     let archive = tar_gz_with_root(
         "repo-main",
         &[
@@ -340,7 +341,7 @@ fn a_subdirectory_target_selects_the_brand_beneath_the_root() {
 
 #[test]
 fn a_missing_subdirectory_errors_with_what_is_available() {
-    let url = "https://github.com/org/repo/archive/refs/heads/main.tar.gz";
+    let url = "https://github.com/org/repo/archive/HEAD.tar.gz";
     let archive = tar_gz_with_root(
         "repo-main",
         &[("brands/dark/_brand.yml", "color:\n"), ("docs/x.md", "hi")],
@@ -538,7 +539,7 @@ fn fake_and_real_paths_agree_on_the_same_archive() {
     let body = brand_archive("repo-main");
 
     let fake_work = TempDir::new().unwrap();
-    let url = "https://github.com/org/repo/archive/refs/heads/main.tar.gz";
+    let url = "https://github.com/org/repo/archive/HEAD.tar.gz";
     let fake = FakeFetch::new().serving(url, body.clone());
     let fake_root = fetch_into(
         &remote_target("org/repo"),

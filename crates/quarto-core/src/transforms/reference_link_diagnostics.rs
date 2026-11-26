@@ -66,6 +66,7 @@ use quarto_pandoc_types::caption::Caption;
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::table::Row;
 use quarto_pandoc_types::{Block, Inline, Inlines};
+use quarto_source_map::{FileId, SourceContext};
 
 use crate::Result;
 use crate::editorial_marks::commented_range;
@@ -106,7 +107,8 @@ impl AstTransform for ReferenceLinkDiagnosticsTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        ctx.diagnostics.extend(collect_diagnostics(ast));
+        let diagnostics = collect_diagnostics(ast, ctx.source_context);
+        ctx.diagnostics.extend(diagnostics);
         Ok(())
     }
 }
@@ -115,9 +117,36 @@ impl AstTransform for ReferenceLinkDiagnosticsTransform {
 ///
 /// Not a commented range (`[range [>> note]]`): that attribute-less span is the
 /// editorial-marks syntax, which the marks transforms consume.
-fn is_bare_span(inline: &Inline) -> bool {
+///
+/// Not `[text]{}` either (GH #1188): its attribute parses as empty, the same
+/// as a bare `[text]`, but the author wrote the `{}` to ask for a span.
+fn is_bare_span(inline: &Inline, source: Option<&SourceContext>) -> bool {
     matches!(inline, Inline::Span(span)
-        if is_empty_attr(&span.attr) && commented_range(span).is_none())
+        if is_empty_attr(&span.attr)
+            && commented_range(span).is_none()
+            && !ends_with_attribute_block(&span.source_info, source))
+}
+
+/// Whether the source text of a span ends in `}`, i.e. it was written with
+/// an attribute block. The parsed AST can't answer this: `{}` leaves no trace
+/// in the attribute, and the span's own range can't be compared against its
+/// content's, because the parser drops trailing spaces inside the brackets
+/// (`[x  ]` and `[x]{}` both end three bytes past their content).
+///
+/// `false` when the text isn't available (no source context, or a span with
+/// no single source range), which keeps the warning.
+fn ends_with_attribute_block(
+    info: &quarto_source_map::SourceInfo,
+    source: Option<&SourceContext>,
+) -> bool {
+    let Some((file_id, start, end)) = info.resolve_byte_range() else {
+        return false;
+    };
+    source
+        .and_then(|ctx| ctx.get_file(FileId(file_id)))
+        .and_then(|file| file.content.as_deref())
+        .and_then(|text| text.get(start..end))
+        .is_some_and(|text| text.ends_with('}'))
 }
 
 /// An `Image` q2 will render with an empty `src`, e.g. from `![alt][ref]`.
@@ -126,8 +155,8 @@ fn is_empty_image(inline: &Inline) -> bool {
 }
 
 /// The label half of a reference — either `[label]` or `![alt]`.
-fn is_reference_label(inline: &Inline) -> bool {
-    is_bare_span(inline) || is_empty_image(inline)
+fn is_reference_label(inline: &Inline, source: Option<&SourceContext>) -> bool {
+    is_bare_span(inline, source) || is_empty_image(inline)
 }
 
 fn source_info(inline: &Inline) -> Option<quarto_source_map::SourceInfo> {
@@ -233,16 +262,24 @@ fn push_rendered(inlines: &Inlines, out: &mut String) {
     }
 }
 
-/// Walk every `Inlines` list in the document, warning on the two shapes.
-pub fn collect_diagnostics(ast: &Pandoc) -> Vec<DiagnosticMessage> {
+/// Walk every `Inlines` list in the document, warning on the three shapes.
+///
+/// `source` is the document's source text, used to tell `[text]{}` from a
+/// bare `[text]` (see [`is_bare_span`]). Without it every attribute-less
+/// span is treated as bare.
+pub fn collect_diagnostics(ast: &Pandoc, source: Option<&SourceContext>) -> Vec<DiagnosticMessage> {
     let mut diagnostics = Vec::new();
     for inlines in every_inlines(ast) {
-        scan_inlines(inlines, &mut diagnostics);
+        scan_inlines(inlines, source, &mut diagnostics);
     }
     diagnostics
 }
 
-fn scan_inlines(inlines: &Inlines, diagnostics: &mut Vec<DiagnosticMessage>) {
+fn scan_inlines(
+    inlines: &Inlines,
+    source: Option<&SourceContext>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
     // Whether position `i` starts a source line — the definition shape is
     // only a definition at the start of one.
     let mut at_line_start = true;
@@ -259,7 +296,7 @@ fn scan_inlines(inlines: &Inlines, diagnostics: &mut Vec<DiagnosticMessage>) {
         // list means adjacency in the source: `[a] : b` would put a `Space`
         // between the span and the colon.
         if at_line_start
-            && is_bare_span(current)
+            && is_bare_span(current, source)
             && let Some(Inline::Str(str_node)) = next
             && str_node.text.starts_with(':')
         {
@@ -269,9 +306,9 @@ fn scan_inlines(inlines: &Inlines, diagnostics: &mut Vec<DiagnosticMessage>) {
         // `[label][ref]`, `[label][]`, `![alt][ref]` — a reference use. Two
         // bracket groups written with nothing at all between them is never
         // deliberate span syntax.
-        else if is_reference_label(current)
+        else if is_reference_label(current, source)
             && let Some(following) = next
-            && is_bare_span(following)
+            && is_bare_span(following, source)
         {
             diagnostics.push(reference_use_warning(current, following));
             claimed[i] = true;
@@ -284,7 +321,7 @@ fn scan_inlines(inlines: &Inlines, diagnostics: &mut Vec<DiagnosticMessage>) {
     // Second pass: every bare span not already explained above is a lone
     // bracket group whose brackets q2 discards (bd-lone-bracket-diagnostic-mxu41qbt).
     for (i, inline) in inlines.iter().enumerate() {
-        if !claimed[i] && is_bare_span(inline) {
+        if !claimed[i] && is_bare_span(inline, source) {
             diagnostics.push(lone_bracket_warning(inline));
         }
     }
@@ -469,10 +506,10 @@ mod tests {
     /// Parse `source` and return the codes of the diagnostics it produces.
     fn codes(source: &str) -> Vec<String> {
         let mut sink = std::io::sink();
-        let (ast, _ctx, _warnings) =
+        let (ast, ctx, _warnings) =
             pampa::readers::qmd::read(source.as_bytes(), false, "test.qmd", &mut sink, true, None)
                 .expect("fixture must parse");
-        collect_diagnostics(&ast)
+        collect_diagnostics(&ast, Some(&ctx.source_context))
             .into_iter()
             .filter_map(|d| d.code.clone())
             .collect()
@@ -480,10 +517,10 @@ mod tests {
 
     fn messages(source: &str) -> Vec<String> {
         let mut sink = std::io::sink();
-        let (ast, _ctx, _warnings) =
+        let (ast, ctx, _warnings) =
             pampa::readers::qmd::read(source.as_bytes(), false, "test.qmd", &mut sink, true, None)
                 .expect("fixture must parse");
-        collect_diagnostics(&ast)
+        collect_diagnostics(&ast, Some(&ctx.source_context))
             .into_iter()
             .map(|d| d.title.clone())
             .collect()
@@ -606,6 +643,41 @@ mod tests {
     #[test]
     fn does_not_warn_about_genuine_span_syntax() {
         assert!(codes("A [text]{.cls} B and [more]{#id} C\n").is_empty());
+    }
+
+    /// GH #1188: `[10]{}` parses to the same empty attribute as a bare
+    /// `[10]`, but the author wrote the `{}` to ask for a span, so the
+    /// brackets are not being lost by accident.
+    #[test]
+    fn does_not_warn_about_an_empty_attribute_block() {
+        assert!(codes("A [10]{} B\n").is_empty());
+        assert!(codes("A [10]{ } B and []{} C\n").is_empty());
+        assert!(codes("A [*x* y]{} B\n").is_empty());
+    }
+
+    /// The `{}` check must not swallow bare groups that merely sit near
+    /// one, or whose content ends in spaces the parser drops.
+    #[test]
+    fn still_warns_about_bare_groups_next_to_an_empty_attribute_block() {
+        assert_eq!(
+            codes("A [10]{} B [10] C [x  ] D\n"),
+            vec![CODE_LONE_BRACKETS, CODE_LONE_BRACKETS]
+        );
+    }
+
+    /// Without a source context the transform cannot see the `{}`, so it
+    /// keeps the old, conservative behaviour and warns.
+    #[test]
+    fn warns_about_an_empty_attribute_block_without_source_text() {
+        let mut sink = std::io::sink();
+        let (ast, _ctx, _warnings) =
+            pampa::readers::qmd::read(b"A [10]{} B\n", false, "test.qmd", &mut sink, true, None)
+                .expect("fixture must parse");
+        let codes: Vec<_> = collect_diagnostics(&ast, None)
+            .into_iter()
+            .filter_map(|d| d.code)
+            .collect();
+        assert_eq!(codes, vec![CODE_LONE_BRACKETS]);
     }
 
     #[test]

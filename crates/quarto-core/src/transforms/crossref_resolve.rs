@@ -31,10 +31,10 @@
 //! - `@Fig-foo` → crossref, same as `@fig-foo` (the id is lowercased
 //!   before the registry lookup — see [`classify_cite`]); the original
 //!   case is preserved separately as `plain_data.label_upper` (Q1's
-//!   `refs.lua:31` capitalization signal). The crossref *index*, however,
-//!   is keyed by the target's authored (lowercase) identifier, so an
-//!   uppercase-led reference to a lowercase target still comes back
-//!   unresolved — see [`classify_cite`]'s doc comment.
+//!   `refs.lua:31` capitalization signal). The index lookup and the
+//!   node's `identifier` use the id with its first character lowercased
+//!   (Q1's `refs.lua:32`), so `@Fig-foo` resolves against `#fig-foo` and
+//!   renders with a capitalized prefix ("Figure 1"; GH #1319).
 //!
 //! ## Unresolved refs
 //!
@@ -244,17 +244,35 @@ fn resolve_inline(
     }
 }
 
+/// How every "unresolved crossref" warning starts; see
+/// [`is_unresolved_crossref_warning`].
+const UNRESOLVED_CROSSREF_PREFIX: &str = "unresolved crossref `@";
+
+/// The warning for a crossref whose target was not found.
+pub(crate) fn unresolved_crossref_warning(id: &str) -> DiagnosticMessage {
+    DiagnosticMessage::warning(format!(
+        "{UNRESOLVED_CROSSREF_PREFIX}{id}`: no target with this identifier was found."
+    ))
+}
+
+/// Whether `diagnostic` is an [`unresolved_crossref_warning`].
+///
+/// A multi-file HTML book uses this to drop the warnings a chapter's own
+/// pass raises: that pass sees only the chapter's own targets, and the
+/// book-wide pass that follows warns again for what is still unresolved.
+pub(crate) fn is_unresolved_crossref_warning(diagnostic: &DiagnosticMessage) -> bool {
+    diagnostic.code.is_none() && diagnostic.title.starts_with(UNRESOLVED_CROSSREF_PREFIX)
+}
+
 /// If `cite`'s first citation is classified as a crossref, produce the
 /// replacement custom node. Emits diagnostics for mixed-citation bundles
 /// and unresolved crossrefs.
 ///
 /// Classification lowercases the id before the registry lookup (so
-/// `@Fig-alpha` and `@fig-alpha` classify identically), but the index
-/// lookup below still uses the *raw* id. Targets are indexed under their
-/// authored (lowercase) identifier, so an uppercase-led reference against
-/// a lowercase-authored target classifies as a crossref yet still comes
-/// back `resolved: false` — `build_resolved_ref` is called regardless, so
-/// the unresolved node still carries the correct `label_upper`.
+/// `@Fig-alpha` and `@fig-alpha` classify identically). The index lookup
+/// lowercases only the id's first character, as Q1's `refs.lua:32` does:
+/// `@Fig-alpha` resolves to `#fig-alpha`, and the capitalization survives
+/// as `label_upper` (GH #1319).
 fn classify_cite(
     cite: &Cite,
     reg: &RefTypeRegistry,
@@ -310,26 +328,36 @@ fn classify_cite(
     // Ensure the resolved reference carries the empty suffix expected
     // (we keep the suffix if present as a literal hint; renderers might
     // emit it).
-    let (resolved, entry_kind_override) = match index.and_then(|idx| idx.get(&first.id)) {
+    // Q1's `refs.lua:32`: `text.lower(cite.id:sub(1,1)) .. cite.id:sub(2)`.
+    // Only the first character is lowered; `@Fig-Alpha` looks up `fig-Alpha`.
+    let id = lowercase_first_char(&first.id);
+    let (resolved, entry_kind_override) = match index.and_then(|idx| idx.get(&id)) {
         Some(entry) => (true, Some(entry)),
         None => (false, None),
     };
 
     if !resolved {
-        diags.push(DiagnosticMessage::warning(format!(
-            "unresolved crossref `@{id}`: no target with this identifier was found.",
-            id = first.id,
-        )));
+        diags.push(unresolved_crossref_warning(&first.id));
     }
 
     Some(build_resolved_ref(
-        &first.id,
+        &id,
         def,
         resolved,
         entry_kind_override,
         chapter_seed,
         cite,
     ))
+}
+
+/// Lowercase the first character of a crossref id (ASCII only, like Q1's
+/// byte-wise `cite.id:sub(1,1)`).
+fn lowercase_first_char(id: &str) -> String {
+    let mut chars = id.chars();
+    match chars.next() {
+        Some(c) => c.to_ascii_lowercase().to_string() + chars.as_str(),
+        None => String::new(),
+    }
 }
 
 /// Construct the canonical `CustomNode("CrossrefResolvedRef")` inline.
@@ -394,12 +422,13 @@ fn build_resolved_ref(
     );
     // Q1's `refs.lua:31`: `not not string.match(cite.id, "^[A-Z]")` — true
     // iff the *original* (non-lowercased) id starts with an ASCII
-    // uppercase letter, independent of the lowercased id used above only
-    // for the registry lookup.
+    // uppercase letter. `identifier` has its first character lowercased
+    // already, so read the case from the cite itself.
     data.insert(
         "label_upper".into(),
         json!(
-            identifier
+            original.citations[0]
+                .id
                 .chars()
                 .next()
                 .is_some_and(|c| c.is_ascii_uppercase())
@@ -666,6 +695,38 @@ mod tests {
             panic!();
         };
         assert_eq!(node.plain_data["identifier"], "fig-a");
+    }
+
+    #[test]
+    fn capitalized_cite_resolves_to_lowercase_target() {
+        // GH #1319: `@Fig-a` is the same crossref as `@fig-a`, with a
+        // capitalized prefix (Q1 refs.lua:31-32).
+        let reg = RefTypeRegistry::builtin();
+        let idx = make_index_with(&[("fig-a", "fig")]);
+        let mut inline = make_cite("Fig-a");
+        let diags = resolve(&mut inline, &reg, Some(&idx));
+        assert!(diags.is_empty(), "{diags:?}");
+        let Inline::Custom(node) = inline else {
+            panic!();
+        };
+        assert_eq!(node.plain_data["identifier"], "fig-a");
+        assert_eq!(node.plain_data["resolved"], true);
+        assert_eq!(node.plain_data["label_upper"], true);
+    }
+
+    #[test]
+    fn capitalized_cite_lowercases_only_first_char() {
+        // Q1 lowers only the first character: `@Fig-A` looks up `fig-A`.
+        let reg = RefTypeRegistry::builtin();
+        let idx = make_index_with(&[("fig-A", "fig")]);
+        let mut inline = make_cite("Fig-A");
+        let diags = resolve(&mut inline, &reg, Some(&idx));
+        assert!(diags.is_empty(), "{diags:?}");
+        let Inline::Custom(node) = inline else {
+            panic!();
+        };
+        assert_eq!(node.plain_data["identifier"], "fig-A");
+        assert_eq!(node.plain_data["resolved"], true);
     }
 
     #[test]

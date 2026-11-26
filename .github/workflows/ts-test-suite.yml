@@ -1,6 +1,12 @@
 name: TS Test Suite
 on:
   workflow_dispatch:
+    inputs:
+      runners:
+        description: 'JSON array of runner labels. Add "windows-latest" to run on Windows; push, PR and scheduled runs use the default.'
+        required: false
+        type: string
+        default: '["ubuntu-latest", "macos-latest"]'
   push:
     branches:
       - main
@@ -25,8 +31,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: ${{ fromJSON(inputs.runners || '["ubuntu-latest", "macos-latest"]') }}
     runs-on: ${{ matrix.os }}
+    # Windows runs bash too, so the run: blocks below stay POSIX. Other runners
+    # keep GitHub's default shell (`bash -e {0}`) unchanged.
+    defaults:
+      run:
+        shell: ${{ contains(matrix.os, 'windows') && 'bash' || 'bash -e {0}' }}
     
     name: Run test suite
     if: github.repository == 'quarto-dev/q2'
@@ -88,6 +99,13 @@ jobs:
           sudo dpkg -i "pandoc-${PANDOC_VERSION}-1-amd64.deb"
         shell: bash
 
+      - name: Set up Pandoc (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -fsSL -o pandoc.zip "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-windows-x86_64.zip"
+          7z x pandoc.zip -o"$RUNNER_TEMP/pandoc" -y
+          echo "$RUNNER_TEMP/pandoc/pandoc-${PANDOC_VERSION}" >> "$GITHUB_PATH"
+
       - name: Set up Pandoc (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -110,6 +128,13 @@ jobs:
         run: brew install typst
         shell: bash
 
+      - name: Set up Typst (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -fsSL -o typst.zip "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-pc-windows-msvc.zip"
+          7z x typst.zip -o"$RUNNER_TEMP/typst" -y
+          echo "$RUNNER_TEMP/typst/typst-x86_64-pc-windows-msvc" >> "$GITHUB_PATH"
+
       # tree-sitter setup
       - name: Set up tree-sitter CLI (Linux)
         if: runner.os == 'Linux'
@@ -124,6 +149,14 @@ jobs:
       - name: Set up tree-sitter CLI (macOS)
         if: runner.os == 'macOS'
         run: brew install tree-sitter-cli
+
+      - name: Set up tree-sitter CLI (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -fsSL -o ts.gz https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-windows-x64.gz
+          mkdir -p "$RUNNER_TEMP/tree-sitter"
+          gunzip -c ts.gz > "$RUNNER_TEMP/tree-sitter/tree-sitter.exe"
+          echo "$RUNNER_TEMP/tree-sitter" >> "$GITHUB_PATH"
 
       # TypeScript workspace build
       - name: Set up Node.js
@@ -146,8 +179,8 @@ jobs:
         run: npm run lint:css -w hub-client --if-present
 
       # WASM build for hub-client (must happen before TypeScript build)
-      - name: Set up Clang (Linux)
-        if: runner.os == 'Linux'
+      - name: Set up Clang (Linux, Windows)
+        if: runner.os != 'macOS'
         uses: egor-tensin/setup-clang@v2
         with:
           version: latest
@@ -285,8 +318,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: ${{ fromJSON(inputs.runners || '["ubuntu-latest", "macos-latest"]') }}
     runs-on: ${{ matrix.os }}
+    # Windows runs bash too, so the run: blocks below stay POSIX. Other runners
+    # keep GitHub's default shell (`bash -e {0}`) unchanged.
+    defaults:
+      run:
+        shell: ${{ contains(matrix.os, 'windows') && 'bash' || 'bash -e {0}' }}
 
     name: Workspace TS suites
     if: github.repository == 'quarto-dev/q2'
@@ -364,10 +402,19 @@ jobs:
         shell: bash
         run: |
           TYPST_PARITY_VERSION=$(node -p "require('./resources/typst-wasm.json').typst_version")
-          if [ "$RUNNER_OS" = "Linux" ]; then TRIPLE=x86_64-unknown-linux-musl; else TRIPLE=aarch64-apple-darwin; fi
-          curl -fsSL -o typst-parity.tar.xz "https://github.com/typst/typst/releases/download/v${TYPST_PARITY_VERSION}/typst-${TRIPLE}.tar.xz"
-          mkdir typst-parity && tar -xf typst-parity.tar.xz -C typst-parity --strip-components=1
-          echo "TYPST_PARITY_BIN=$PWD/typst-parity/typst" >> "$GITHUB_ENV"
+          mkdir typst-parity
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            curl -fsSL -o typst-parity.zip "https://github.com/typst/typst/releases/download/v${TYPST_PARITY_VERSION}/typst-x86_64-pc-windows-msvc.zip"
+            7z x typst-parity.zip -otypst-parity -y
+            # The zip nests the binary in a folder; flatten it.
+            mv typst-parity/typst-x86_64-pc-windows-msvc/typst.exe typst-parity/typst.exe
+            echo "TYPST_PARITY_BIN=$(cygpath -m "$PWD")/typst-parity/typst.exe" >> "$GITHUB_ENV"
+          else
+            if [ "$RUNNER_OS" = "Linux" ]; then TRIPLE=x86_64-unknown-linux-musl; else TRIPLE=aarch64-apple-darwin; fi
+            curl -fsSL -o typst-parity.tar.xz "https://github.com/typst/typst/releases/download/v${TYPST_PARITY_VERSION}/typst-${TRIPLE}.tar.xz"
+            tar -xf typst-parity.tar.xz -C typst-parity --strip-components=1
+            echo "TYPST_PARITY_BIN=$PWD/typst-parity/typst" >> "$GITHUB_ENV"
+          fi
           echo "TYPST_PARITY_REQUIRED=1" >> "$GITHUB_ENV"
 
       - name: Run typst-host unit tests (includes browser/native parity)

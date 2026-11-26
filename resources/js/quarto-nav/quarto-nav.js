@@ -23,8 +23,11 @@
  * - no `.headroom-target` selector — q2 has no sidebar-rollup toggle;
  * - no `dashboardOffset()`: Q1 adds the dashboard header\'s height on
  *   top of the site header that already contains it (double-counted);
- * - `footerOffset()` only on dashboard pages (see `updateDocumentOffset`);
- * - no `quarto-hrChanged` CustomEvent — no consumer.
+ * - `footerOffset()` only on dashboard pages (see `updateDocumentOffset`).
+ *
+ * As in Q1, every `updateDocumentOffset` except the first dispatches a
+ * `quarto-hrChanged` event on `window`, so site scripts and extensions
+ * can follow the sidebar `top` / `max-height` reset (GH #1377).
  *
  * The announcement bar (`#quarto-announcement`,
  * bd-website-announcement-w1gtpzki) is Q1's `announceRegister` /
@@ -62,6 +65,9 @@
       return 0;
     }
   }
+
+  // Q1 skips the `quarto-hrChanged` event on the first update.
+  let init = false;
 
   function updateDocumentOffset(animated) {
     const topOffset = headerOffset();
@@ -128,6 +134,13 @@
       }`)
       );
     }
+
+    if (init) {
+      window.dispatchEvent(
+        new CustomEvent("quarto-hrChanged", { bubbles: true })
+      );
+    }
+    init = true;
   }
 
   function updateDocumentOffsetWithoutAnimation() {
@@ -331,6 +344,22 @@
       }, 50);
     }
   });
+
+  // Share links carry a `|url|` placeholder for the page's own address
+  // (a book's `sharing:` tools); fill it in, as Q1's quarto-nav.js does.
+  // Runs once at init, like the sidebar scroll below.
+  const sharingLinks = window.document.querySelectorAll(
+    "a.sidebar-tools-main-item, a.quarto-navigation-tool"
+  );
+  for (const sharingLink of sharingLinks) {
+    const href = sharingLink.getAttribute("href");
+    if (href && href.includes("|url|")) {
+      sharingLink.setAttribute(
+        "href",
+        href.replace("|url|", encodeURIComponent(window.location.href))
+      );
+    }
+  }
 
   // Scroll the active sidebar item into view, if necessary (Q1's block
   // of the same name; GH #1065). A ResizeObserver on the scrollable nav

@@ -183,8 +183,8 @@ fn three_chapter_book_renders_separate_files_with_chapter_local_numbers() {
 
     // Chapter 1: H1 numbers "1"; its own figure and in-text ref are 1.1.
     assert!(
-        ch1.contains("header-section-number\">1<"),
-        "ch1 H1 must number 1: {}",
+        ch1.contains("<span class=\"chapter-number\">1</span>"),
+        "ch1's title must number 1: {}",
         ch1
     );
     assert!(
@@ -201,8 +201,8 @@ fn three_chapter_book_renders_separate_files_with_chapter_local_numbers() {
     // Chapter 2: H1 numbers "2" — this is the assertion the flat counter
     // fails (today it renders "1"); its figure is 2.1, not 1.1 or 2.2.
     assert!(
-        ch2.contains("header-section-number\">2<"),
-        "ch2 H1 must number 2 (seeded chapter number): {}",
+        ch2.contains("<span class=\"chapter-number\">2</span>"),
+        "ch2's title must number 2 (seeded chapter number): {}",
         ch2
     );
     assert!(
@@ -224,13 +224,8 @@ fn three_chapter_book_renders_separate_files_with_chapter_local_numbers() {
     // Appendix: "Appendix A —" H1 shape; the figure letters A.1 —
     // a separate sequence from the numeric chapters, not "3.1"/"4.1".
     assert!(
-        app_a.contains("header-section-number\">A<"),
-        "appendix H1 must number as letter A: {}",
-        app_a
-    );
-    assert!(
-        app_a.contains("Appendix <span class=\"header-section-number\">A</span> —"),
-        "appendix H1 must carry the 'Appendix A —' prefix shape: {}",
+        app_a.contains("<h1 class=\"title\">") && app_a.contains(">Appendix A — "),
+        "the appendix title must carry the 'Appendix A —' prefix: {}",
         app_a
     );
     assert!(
@@ -284,8 +279,8 @@ book:
     // (a) The unnumbered chapter is invisible to the chapter sequence:
     // chapter 2 still numbers 2 / 2.1.
     assert!(
-        ch2.contains("header-section-number\">2<"),
-        "ch2 H1 must still number 2 — the unnumbered interlude consumed no slot: {}",
+        ch2.contains("<span class=\"chapter-number\">2</span>"),
+        "ch2's title must still number 2 — the unnumbered interlude consumed no slot: {}",
         ch2
     );
     assert!(
@@ -305,6 +300,625 @@ book:
         ch1b.contains("Figure\u{a0}1: A figure in the interlude"),
         "the interlude's own figure must number flat 1: {}",
         ch1b
+    );
+}
+
+/// Every "unresolved crossref" warning a whole-book render reports, on
+/// any chapter.
+fn unresolved_crossref_warnings(project_dir: &Path) -> Vec<String> {
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let mut project = ProjectContext::discover(project_dir, runtime.as_ref()).unwrap();
+    let project_type = project_type_for(&project);
+    let format = Format::from_format_string("html").unwrap();
+    let options = RenderToFileOptions::default();
+    let mut pipeline = ProjectPipeline::new(
+        &mut project,
+        project_type,
+        format,
+        "html",
+        &options,
+        runtime,
+    );
+    let summary = pollster::block_on(pipeline.run_with_book_support())
+        .unwrap_or_else(|e| panic!("run_with_book_support failed: {e}"));
+    summary
+        .outputs
+        .iter()
+        .flat_map(|o| o.render_output.diagnostics.iter())
+        .chain(summary.project_diagnostics.iter())
+        .map(|d| d.title.clone())
+        .filter(|t| t.contains("unresolved crossref"))
+        .collect()
+}
+
+/// bd-e4bgx1r0: a reference to a target in another chapter resolves on
+/// the resume leg, from the book-wide registry. The chapter's own pass
+/// cannot see that target, and used to warn "unresolved crossref" for
+/// every such reference although the written link was correct. Only a
+/// reference no chapter defines may warn, and it warns once.
+#[test]
+fn cross_chapter_references_do_not_warn_unresolved() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minibook(&project_dir);
+    write(
+        &project_dir.join("ch1.qmd"),
+        &chapter_source(
+            "Chapter One",
+            "fig-one",
+            "A figure in chapter one",
+            "Forward to @fig-two, and own @fig-one.",
+        ),
+    );
+    assert_eq!(
+        unresolved_crossref_warnings(&project_dir),
+        Vec::<String>::new(),
+        "every reference in the book has a target"
+    );
+
+    write(
+        &project_dir.join("ch1.qmd"),
+        &chapter_source(
+            "Chapter One",
+            "fig-one",
+            "A figure in chapter one",
+            "Forward to @fig-two, and a missing @fig-nope.",
+        ),
+    );
+    let warnings = unresolved_crossref_warnings(&project_dir);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("@fig-nope"), "{warnings:?}");
+}
+
+/// A chapter page's `<title>` is its numbered chapter title and the book
+/// title, as in Quarto 1; the home page keeps the book title alone. Every
+/// page carries `book.description` as its meta description.
+#[test]
+fn chapter_pages_are_titled_with_their_numbered_chapter_title() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        r#"project:
+  type: book
+
+book:
+  title: "Title Book"
+  description: "A book about titles."
+  chapters:
+    - index.qmd
+    - one.qmd
+    - two.qmd
+    - refs.qmd
+  appendices:
+    - extra.qmd
+"#,
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "# Preface {.unnumbered}\n\nHello.\n",
+    );
+    write(&project_dir.join("one.qmd"), "# First *Chapter*\n\nText.\n");
+    write(
+        &project_dir.join("two.qmd"),
+        "---\ntitle: \"Second Chapter\"\n---\n\nText.\n",
+    );
+    write(
+        &project_dir.join("refs.qmd"),
+        "# References {.unnumbered}\n\nNone.\n",
+    );
+    write(
+        &project_dir.join("extra.qmd"),
+        "# Extra Material\n\nText.\n",
+    );
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+
+    let title_of = |stem: &str| {
+        let html = read_output(&outputs, stem);
+        let start = html.find("<title>").expect("page has a <title>") + "<title>".len();
+        let end = html[start..].find("</title>").unwrap() + start;
+        html[start..end].replace("&nbsp;", "\u{a0}")
+    };
+    assert_eq!(title_of("index"), "Title Book");
+    assert_eq!(title_of("one"), "1\u{a0} First Chapter – Title Book");
+    assert_eq!(title_of("two"), "2\u{a0} Second Chapter – Title Book");
+    assert_eq!(title_of("refs"), "References – Title Book");
+    assert_eq!(
+        title_of("extra"),
+        "Appendix A — Extra Material – Title Book"
+    );
+
+    for stem in ["index", "one", "extra"] {
+        let html = read_output(&outputs, stem);
+        assert!(
+            html.contains(r#"<meta name="description" content="A book about titles.">"#),
+            "{stem} must carry the book description"
+        );
+    }
+}
+
+/// bd-d8hb5zh1: `part: file.qmd` makes the part a page, as in Quarto 1.
+/// The sidebar section takes the file's title and links to the page, the
+/// page sits between the chapters around it in the prev/next chain, and
+/// it carries no chapter number.
+#[test]
+fn part_naming_a_file_renders_a_part_page() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        r#"project:
+  type: book
+
+book:
+  title: "Parts Book"
+  chapters:
+    - index.qmd
+    - one.qmd
+    - part: parts/second.qmd
+      chapters:
+        - two.qmd
+"#,
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "# Preface {.unnumbered}\n\nHello.\n",
+    );
+    write(&project_dir.join("one.qmd"), "# One\n\nText.\n");
+    write(
+        &project_dir.join("parts").join("second.qmd"),
+        "# The Second Part\n\nPART-PAGE-TEXT about this part.\n\n## A part section\n\nText.\n",
+    );
+    write(&project_dir.join("two.qmd"), "# Two\n\nText.\n");
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+
+    let part = read_output(&outputs, "second");
+    assert!(part.contains("PART-PAGE-TEXT"), "{part}");
+    assert!(
+        part.contains("<title>The Second Part – Parts Book</title>"),
+        "{part}"
+    );
+    assert!(
+        !part.contains("header-section-number"),
+        "a part page takes no chapter or section number: {part}"
+    );
+
+    let index = read_output(&outputs, "index");
+    assert!(
+        index.contains("The Second Part") && !index.contains("parts/second.qmd"),
+        "the sidebar section must show the part's title, not its path: {index}"
+    );
+    assert!(
+        index.contains(r#"href="parts/second.html""#),
+        "the sidebar section must link to the part page: {index}"
+    );
+
+    // one -> part page -> two.
+    let next_of = |html: &str| {
+        let at = html.find("nav-page-next").expect("page has a next slot");
+        let rest = &html[at..];
+        let href = rest.find("href=\"").map(|i| i + 6).expect("next link");
+        rest[href..].split('"').next().unwrap().to_string()
+    };
+    assert_eq!(next_of(&read_output(&outputs, "one")), "parts/second.html");
+    assert_eq!(next_of(&part), "../two.html");
+    // The chapter after the part still counts 2.
+    assert!(
+        read_output(&outputs, "two").contains("<span class=\"chapter-number\">2</span>"),
+        "the part page must not take a chapter number"
+    );
+}
+
+/// bd-tqeeqx1c: the home page opens with the book's title block (title,
+/// subtitle, description, authors, date), and the page's own first
+/// heading stays in the body under it. No other page gets the block.
+#[test]
+fn home_page_opens_with_the_book_title_block() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        r#"project:
+  type: book
+
+book:
+  title: "Home Book"
+  subtitle: "A subtitle for the book"
+  author:
+    - "Ada Example"
+    - "Grace Sample"
+  date: "2026-11-20"
+  description: "What the book is about."
+  chapters:
+    - index.qmd
+    - one.qmd
+"#,
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "# Preface {.unnumbered}\n\nHello.\n",
+    );
+    write(&project_dir.join("one.qmd"), "# One\n\nText.\n");
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+    let index = read_output(&outputs, "index");
+    let one = read_output(&outputs, "one");
+
+    let header_start = index
+        .find("<header id=\"title-block-header\"")
+        .unwrap_or_else(|| panic!("home page has no title block: {index}"));
+    let header_end = index[header_start..].find("</header>").unwrap() + header_start;
+    let block = &index[header_start..header_end];
+    assert!(
+        block.contains("<h1 class=\"title\">Home Book</h1>"),
+        "{block}"
+    );
+    assert!(block.contains("A subtitle for the book"), "{block}");
+    assert!(block.contains("What the book is about."), "{block}");
+    assert!(
+        block.contains("Ada Example") && block.contains("Grace Sample"),
+        "{block}"
+    );
+    assert!(block.contains("November 20, 2026"), "{block}");
+
+    assert!(
+        index[header_end..].contains("Preface</h1>"),
+        "the page's own heading stays in the body, after the title block"
+    );
+    assert!(index.contains("<title>Home Book</title>"), "{index}");
+    assert!(
+        !one.contains("Ada Example") && !one.contains("A subtitle for the book"),
+        "a chapter page must not show the book's title block: {one}"
+    );
+}
+
+/// A book page uses Bootstrap Icons for the sidebar's section chevrons,
+/// the prev/next arrows and the repository icon, so the icon stylesheet
+/// and its font must ship with the book. Without them those icons are
+/// empty boxes of zero width.
+#[test]
+fn book_pages_ship_the_icon_font() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minibook(&project_dir);
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+    let ch1 = read_output(&outputs, "ch1");
+
+    assert!(
+        ch1.contains("bi-arrow-"),
+        "the page nav uses icon classes: {ch1}"
+    );
+    let href = ch1
+        .split("href=\"")
+        .skip(1)
+        .map(|rest| rest.split('"').next().unwrap())
+        .find(|url| url.ends_with("bootstrap-icons.css"))
+        .unwrap_or_else(|| panic!("no icon stylesheet link: {ch1}"));
+    let css = project_dir.join("_book").join(href);
+    assert!(css.exists(), "linked icon stylesheet {href} is not on disk");
+    assert!(
+        css.with_file_name("bootstrap-icons.woff").exists(),
+        "the icon font must sit beside its stylesheet"
+    );
+}
+
+/// bd-fod3: a book's `repo-url`, `downloads` and `sharing` show as
+/// sidebar tools beside the title, in Quarto 1's order: a repository
+/// icon, a download link relative to the page, and a share menu.
+#[test]
+fn book_sidebar_shows_repository_download_and_share_tools() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        r#"project:
+  type: book
+
+book:
+  title: "Tools Book"
+  repo-url: https://github.com/example/tools-book
+  downloads: [epub]
+  sharing: [twitter, facebook]
+  chapters:
+    - index.qmd
+    - part/deep.qmd
+"#,
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "# Preface {.unnumbered}\n\nHello.\n",
+    );
+    write(
+        &project_dir.join("part").join("deep.qmd"),
+        "# Deep\n\nText.\n",
+    );
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+    let index = read_output(&outputs, "index");
+    let deep = read_output(&outputs, "deep");
+
+    let at = |html: &str, needle: &str| {
+        html.find(needle)
+            .unwrap_or_else(|| panic!("`{needle}` not found in: {html}"))
+    };
+    let repo = at(
+        &index,
+        "href=\"https://github.com/example/tools-book\" title=\"Source Code\"",
+    );
+    let download = at(&index, "href=\"Tools-Book.epub\" title=\"Download ePub\"");
+    let share = at(&index, "title=\"Share\"");
+    assert!(repo < download && download < share, "Quarto 1's tool order");
+    assert!(index.contains("bi bi-github"), "{index}");
+    assert!(
+        index.contains("href=\"https://twitter.com/intent/tweet?url=|url|\"")
+            && index.contains("href=\"https://www.facebook.com/sharer/sharer.php?u=|url|\""),
+        "share links keep the |url| placeholder for quarto-nav.js: {index}"
+    );
+    assert!(index.contains("sidebar-tools-main tools-wide"), "{index}");
+
+    // From a subfolder the download link climbs to the book root.
+    at(&deep, "href=\"../Tools-Book.epub\" title=\"Download ePub\"");
+}
+
+/// bd-jib92bnc: a chapter's title is the page's `h1.title`, numbered,
+/// whether the author wrote it as a first heading or as front matter
+/// `title:`. The heading leaves the body, its id moves onto the title so
+/// `page.html#sec-id` still works, and sections number inside the chapter
+/// in both forms. Markup verified against Quarto 1.9.38.
+#[test]
+fn chapter_title_is_the_numbered_title_block_heading() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        r#"project:
+  type: book
+
+book:
+  title: "Title Forms"
+  chapters:
+    - index.qmd
+    - heading.qmd
+    - frontmatter.qmd
+    - late.qmd
+    - plain.qmd
+  appendices:
+    - extra.qmd
+"#,
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "# Preface {.unnumbered}\n\nSee @sec-heading, @sec-late and @sec-extra.\n",
+    );
+    write(
+        &project_dir.join("heading.qmd"),
+        "---\nsubtitle: \"A subtitle\"\n---\n\n# Heading *Form* {#sec-heading}\n\nText.\n\n## First\n\nx\n",
+    );
+    write(
+        &project_dir.join("frontmatter.qmd"),
+        "---\ntitle: \"Front Matter Form\"\n---\n\nText.\n\n## First\n\nx\n\n## Second\n\nx\n",
+    );
+    // Quarto 1 takes the first heading of any level, wherever it sits.
+    write(
+        &project_dir.join("late.qmd"),
+        "Words before any heading.\n\n## Late Heading {#sec-late}\n\nText.\n\n## Sub\n\nx\n",
+    );
+    write(
+        &project_dir.join("plain.qmd"),
+        "# Plain {.unnumbered}\n\nText.\n\n## Sub\n\nx\n",
+    );
+    write(
+        &project_dir.join("extra.qmd"),
+        "# Extra Material {#sec-extra}\n\nText.\n\n## Sub\n\nx\n",
+    );
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+    let page = |stem: &str| read_output(&outputs, stem);
+    let h1s = |html: &str| html.matches("<h1").count();
+
+    // Heading form: numbered h1.title carrying the id; nothing left in the body.
+    let heading = page("heading");
+    assert!(
+        heading.contains(
+            "<h1 class=\"title\"><span id=\"sec-heading\" class=\"quarto-section-identifier\">\
+             <span class=\"chapter-number\">1</span>\u{a0} \
+             <span class=\"chapter-title\">Heading <em>Form</em></span></span></h1>"
+        ),
+        "{heading}"
+    );
+    assert_eq!(
+        h1s(&heading),
+        1,
+        "the heading must leave the body: {heading}"
+    );
+    assert!(
+        heading.find("<h1 class=\"title\">").unwrap() < heading.find("A subtitle").unwrap(),
+        "the title comes before the subtitle"
+    );
+    assert!(
+        heading.contains("header-section-number\">1.1<"),
+        "{heading}"
+    );
+    assert!(
+        heading.contains("<title>1\u{a0} Heading Form – Title Forms</title>"),
+        "{heading}"
+    );
+
+    // Front matter form: same numbered title, and sections 2.1, 2.2.
+    let frontmatter = page("frontmatter");
+    assert!(
+        frontmatter.contains(
+            "<h1 class=\"title\"><span class=\"chapter-number\">2</span>\u{a0} \
+             <span class=\"chapter-title\">Front Matter Form</span></h1>"
+        ),
+        "{frontmatter}"
+    );
+    assert!(
+        frontmatter.contains("header-section-number\">2.1<")
+            && frontmatter.contains("header-section-number\">2.2<"),
+        "sections number inside chapter 2: {frontmatter}"
+    );
+
+    // A first heading that is neither level 1 nor the first block.
+    let late = page("late");
+    assert!(
+        late.contains("<span class=\"chapter-number\">3</span>")
+            && late.contains("<span class=\"chapter-title\">Late Heading</span>"),
+        "{late}"
+    );
+    assert!(late.contains("Words before any heading."), "{late}");
+    assert!(late.contains("header-section-number\">3.1<"), "{late}");
+
+    // An unnumbered chapter: bare title, no numbers anywhere.
+    let plain = page("plain");
+    let plain_title = &plain[plain.find("<h1 class=\"title\">").unwrap()..];
+    let plain_title = &plain_title[..plain_title.find("</h1>").unwrap()];
+    assert!(plain_title.ends_with(">Plain</span>"), "{plain_title}");
+    assert!(!plain_title.contains("chapter-number"), "{plain_title}");
+    assert!(!plain.contains("header-section-number"), "{plain}");
+
+    // An appendix: "Appendix A — Title", sections A.1.
+    let extra = page("extra");
+    assert!(
+        extra.contains(
+            "<h1 class=\"title\"><span id=\"sec-extra\" class=\"quarto-section-identifier\">\
+             Appendix A — Extra Material</span></h1>"
+        ),
+        "{extra}"
+    );
+    assert!(extra.contains("header-section-number\">A.1<"), "{extra}");
+
+    // Cross-references to the lifted headings still resolve and land.
+    let index = page("index");
+    assert!(
+        index.contains("href=\"heading.html#sec-heading\""),
+        "{index}"
+    );
+    assert!(
+        index.contains(">Chapter\u{a0}1</a>") || index.contains(">Chapter 1</a>"),
+        "{index}"
+    );
+    assert!(index.contains("href=\"late.html#sec-late\""), "{index}");
+    assert!(index.contains("href=\"extra.html#sec-extra\""), "{index}");
+    assert!(!index.contains("quarto-unresolved-ref"), "{index}");
+    // The home page keeps its own heading in the body.
+    assert!(index.contains("Preface</h1>"), "{index}");
+}
+
+/// Quarto 1 does no appendix processing on a book page: footnotes stay a
+/// plain list at the end of the chapter, with no "Footnotes" heading and
+/// no `#quarto-appendix` container. A chapter's own section that happens
+/// to be titled "Footnotes" must survive: the appendix step used to take
+/// it for the generated footnote list and remove it from the page.
+#[test]
+fn book_pages_get_no_appendix_processing() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minibook(&project_dir);
+    write(
+        &project_dir.join("ch1.qmd"),
+        "# Chapter One\n\nText.\n\n## Footnotes\n\nSECTION-BODY has a note.[^1]\n\n[^1]: NOTE-TEXT here.\n",
+    );
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+    let ch1 = read_output(&outputs, "ch1");
+
+    assert!(
+        ch1.contains("SECTION-BODY"),
+        "the author's section must stay: {ch1}"
+    );
+    assert!(ch1.contains("NOTE-TEXT"), "{ch1}");
+    assert!(
+        ch1.contains("id=\"fnref1\""),
+        "the note's back-link target must exist: {ch1}"
+    );
+    assert!(!ch1.contains("quarto-appendix"), "{ch1}");
+}
+
+/// `Q-5-62`: a book that offers a download warns when the linked file is
+/// not in the output directory, and names the command that writes it.
+/// Once the file is there, the warning is gone.
+#[test]
+fn missing_book_download_warns_with_the_command_to_render_it() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        r#"project:
+  type: book
+
+book:
+  title: "Download Book"
+  downloads: [epub]
+  chapters:
+    - index.qmd
+"#,
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "# Preface {.unnumbered}\n\nHello.\n",
+    );
+    let warnings = |project_dir: &Path| -> Vec<String> {
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let mut project = ProjectContext::discover(project_dir, runtime.as_ref()).unwrap();
+        let project_type = project_type_for(&project);
+        let format = Format::from_format_string("html").unwrap();
+        let options = RenderToFileOptions::default();
+        let mut pipeline = ProjectPipeline::new(
+            &mut project,
+            project_type,
+            format,
+            "html",
+            &options,
+            runtime,
+        );
+        let summary = pollster::block_on(pipeline.run_with_book_support()).unwrap();
+        summary
+            .project_diagnostics
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("Q-5-62"))
+            .map(|d| format!("{d:?}"))
+            .collect()
+    };
+
+    let first = warnings(&project_dir);
+    assert_eq!(first.len(), 1, "{first:?}");
+    assert!(first[0].contains("Download-Book.epub"), "{first:?}");
+    assert!(first[0].contains("q2 render --to epub"), "{first:?}");
+
+    std::fs::write(
+        project_dir.join("_book").join("Download-Book.epub"),
+        b"epub",
+    )
+    .unwrap();
+    assert_eq!(warnings(&project_dir), Vec::<String>::new());
+}
+
+/// Sections of an unnumbered chapter (a preface, say) carry no number.
+/// Quarto 1 turns section numbering off for such a chapter; without that
+/// the sections count from an unset chapter slot and read "0.1", "0.2".
+/// A numbered chapter in the same book still numbers its sections.
+#[test]
+fn sections_of_an_unnumbered_chapter_are_not_numbered() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minibook(&project_dir);
+    write(
+        &project_dir.join("index.qmd"),
+        "# Welcome {.unnumbered}\n\nWelcome.\n\n## Preface section\n\nText.\n\n### Deeper\n\nText.\n",
+    );
+    write(
+        &project_dir.join("ch1.qmd"),
+        "# Chapter One\n\nText.\n\n## First section\n\nText.\n",
+    );
+    let outputs = render_book_with_options(&project_dir, RenderToFileOptions::default());
+    let index = read_output(&outputs, "index");
+    let ch1 = read_output(&outputs, "ch1");
+
+    assert!(index.contains("Preface section"), "{index}");
+    assert!(
+        !index.contains("header-section-number"),
+        "an unnumbered chapter's sections must carry no number: {index}"
+    );
+    assert!(
+        ch1.contains("header-section-number\">1.1<"),
+        "a numbered chapter still numbers its sections: {ch1}"
     );
 }
 

@@ -1164,7 +1164,11 @@ fn render_single_doc(
     let report = RenderReport {
         target: RenderTarget::SingleDoc(input.clone()),
         project_dir: project.dir.clone(),
-        output_dir: project.output_dir.clone(),
+        // `--output-dir` replaces the project `output-dir` (GH #1133).
+        output_dir: options
+            .output_dir
+            .clone()
+            .unwrap_or_else(|| project.output_dir.clone()),
         format_str,
         project_format_key: resolved.project_format_key,
         project_is_book: resolved.is_book,
@@ -1383,7 +1387,11 @@ fn render_project(
     let report = RenderReport {
         target,
         project_dir: project.dir.clone(),
-        output_dir: project.output_dir.clone(),
+        // `--output-dir` replaces the project `output-dir` (GH #1133).
+        output_dir: options
+            .output_dir
+            .clone()
+            .unwrap_or_else(|| project.output_dir.clone()),
         format_str,
         project_format_key: resolved.project_format_key,
         project_is_book: resolved.is_book,
@@ -3748,6 +3756,40 @@ mod render_once_tests {
             ]
         );
         assert!(dir.join("_site/index.html").exists());
+    }
+
+    /// GH #1133: `--output-dir` overrides the project's `output-dir`
+    /// for the page *and* its support files, and the report names it.
+    #[test]
+    fn output_dir_flag_overrides_project_output_dir() {
+        let temp = TempDir::new().unwrap();
+        let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
+        write(
+            &dir.join("_quarto.yml"),
+            "project:\n  type: default\n  output-dir: _site\n",
+        );
+        let doc = dir.join("index.qmd");
+        write(&doc, "---\ntitle: Hello\n---\n\nHello.\n");
+        let out = dir.join("out");
+        let args = RenderArgs {
+            output_dir: Some(out.to_string_lossy().into_owned()),
+            ..args_for(&doc)
+        };
+        let report = render_once(&args, &mut quiet_presenter()).expect("render ok");
+
+        assert!(
+            !report.exit_nonzero,
+            "render failed: {}",
+            report.diagnostics_text(StreamStyle::PLAIN)
+        );
+        assert_eq!(report.output_dir, out);
+        assert_eq!(
+            report.outputs(),
+            vec![(doc.clone(), out.join("index.html"))]
+        );
+        assert!(out.join("index.html").exists());
+        assert!(out.join("index_files").is_dir());
+        assert!(!dir.join("_site").exists(), "_site must stay untouched");
     }
 
     #[test]

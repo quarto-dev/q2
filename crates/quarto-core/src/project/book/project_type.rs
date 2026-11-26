@@ -198,13 +198,11 @@ fn apply_sidebar_config(
 ) {
     let gen_si = || SourceInfo::generated(By::programmatic_config());
 
-    // Download/sharing tools (collected first — they decide the
-    // navbar-vs-sidebar placement below). Q1 also prepends a repo-url
-    // "Source Code" tool; Q2 has no tools renderer anywhere (bd-fod3),
-    // so these entries are inert config and the repo tool is deferred
-    // with the renderer.
-    let tools: Vec<ConfigValue> = config::download_tools(book, project_dir)
+    // Repository, download and sharing tools, in Q1's order (collected
+    // first: they decide the navbar-vs-sidebar placement below).
+    let tools: Vec<ConfigValue> = config::repo_tool(book)
         .into_iter()
+        .chain(config::download_tools(book, project_dir))
         .chain(config::sharing_tools(book))
         .collect();
 

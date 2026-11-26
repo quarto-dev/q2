@@ -994,41 +994,34 @@ fn parse_feed(value: &ConfigValue) -> Option<ListingFeedOptions> {
 /// `None` / falsy slots that the parser left at the [`Default`]
 /// neutral baseline).
 pub fn apply_type_defaults(l: &mut Listing) {
-    // Default `fields` set if author didn't override.
+    // Default `fields` set if author didn't override: Q1's
+    // `kDefaultFields` / `kDefaultGridFields` / `kDefaultTableFields`
+    // (`website-listing-read.ts`). Q1 then appends `categories` to a
+    // default or grid listing that sets `categories:`; an
+    // author-explicit `fields:` replaces the whole set, so the append
+    // only applies to the defaulted one (GH #1031).
     if l.fields.is_empty() {
-        l.fields = match l.kind {
-            ListingType::Default => vec![
-                "date",
-                "title",
-                "author",
-                "subtitle",
-                "description",
-                "image",
-                "image-alt",
-                "categories",
-                "filename",
-                "file-modified",
-                "reading-time",
-            ],
-            ListingType::Grid => vec![
-                "title",
-                "subtitle",
-                "author",
-                "date",
-                "image",
-                "image-alt",
-                "description",
-                "categories",
-                "filename",
-                "file-modified",
-                "reading-time",
-            ],
+        let mut fields: Vec<&str> = match l.kind {
+            ListingType::Default => {
+                vec![
+                    "date",
+                    "title",
+                    "author",
+                    "subtitle",
+                    "image",
+                    "description",
+                ]
+            }
+            ListingType::Grid => vec!["title", "author", "date", "image", "description"],
             ListingType::Table => vec!["date", "title", "author"],
             ListingType::Custom | ListingType::Metadata => vec![],
+        };
+        if matches!(l.kind, ListingType::Default | ListingType::Grid)
+            && l.categories != ListingCategoriesMode::Disabled
+        {
+            fields.push("categories");
         }
-        .into_iter()
-        .map(String::from)
-        .collect();
+        l.fields = fields.into_iter().map(String::from).collect();
     }
     // Q1's `kDefaultFieldLinks`: table listings link title +
     // filename cells; other types link nothing by default. An
@@ -1936,6 +1929,58 @@ listing:
         let (listings, _) = parse(map(vec![("type", s("table")), ("fields", arr(vec![]))]));
         assert!(!listings[0].fields_explicit);
         assert_eq!(listings[0].fields, vec!["date", "title", "author"]);
+    }
+
+    // GH #1031: the default and grid field sets are Q1's
+    // `kDefaultFields` / `kDefaultGridFields` — no categories,
+    // reading time, filename or file-modified unless asked for.
+    #[test]
+    fn default_and_grid_fields_match_quarto_1() {
+        let (listings, _) = parse(s("default"));
+        assert_eq!(
+            listings[0].fields,
+            vec![
+                "date",
+                "title",
+                "author",
+                "subtitle",
+                "image",
+                "description"
+            ]
+        );
+        let (listings, _) = parse(s("grid"));
+        assert_eq!(
+            listings[0].fields,
+            vec!["title", "author", "date", "image", "description"]
+        );
+    }
+
+    // GH #1031: Q1 appends `categories` to the defaulted field set
+    // of a default or grid listing that sets `categories:`.
+    #[test]
+    fn categories_option_adds_categories_to_defaulted_fields() {
+        for kind in ["default", "grid"] {
+            let (listings, _) = parse(map(vec![("type", s(kind)), ("categories", b(true))]));
+            assert_eq!(
+                listings[0].fields.last().map(String::as_str),
+                Some("categories"),
+                "{kind}: {:?}",
+                listings[0].fields
+            );
+        }
+        // Table listings don't get it (Q1 limits it to default/grid).
+        let (listings, _) = parse(map(vec![("type", s("table")), ("categories", b(true))]));
+        assert_eq!(listings[0].fields, vec!["date", "title", "author"]);
+    }
+
+    // An author-explicit `fields:` wins over the `categories:` append.
+    #[test]
+    fn categories_option_leaves_explicit_fields_alone() {
+        let (listings, _) = parse(map(vec![
+            ("categories", b(true)),
+            ("fields", arr(vec![s("title")])),
+        ]));
+        assert_eq!(listings[0].fields, vec!["title"]);
     }
 
     // template + non-custom type → Q-12-7

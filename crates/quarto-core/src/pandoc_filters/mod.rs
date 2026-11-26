@@ -9,6 +9,7 @@ use include_dir::include_dir;
 // Neither has a legitimate WASM use case — this is test/dev-harness
 // infrastructure only. Mirrors the `embedded` module gate in
 // `crate::resources`.
+pub mod author_names;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod bundle;
 mod crossref_params;

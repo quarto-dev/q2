@@ -2534,6 +2534,10 @@ pub fn build_transform_pipeline(
     // transform's metadata walk — registered immediately after — sees
     // live Shortcode/RawInline nodes instead of literal scalars
     // (bd-shortcodes-in-metadata-bp06aub8).
+    // A book's home page opens with the book's own title block
+    // (bd-tqeeqx1c): copy `book.*` into the page metadata before dates
+    // are formatted (inside shortcode-resolve) and metadata is normalized.
+    pipeline.push(Box::new(crate::transforms::BookHomeMetaTransform::new()));
     pipeline.push(Box::new(crate::transforms::ConfigMarkdownTransform::new()));
     pipeline.push(Box::new(ShortcodeResolveTransform::with_lua_support(
         shortcode_paths,
@@ -2548,6 +2552,14 @@ pub fn build_transform_pipeline(
     // heading text after the reader derived ids from it (bd-2wv8431v,
     // bd-lmd-exploration-jqv2nbl4 spike 5). Before sectionize and the TOC.
     pipeline.push(Box::new(crate::transforms::HeadingIdTransform::new()));
+    // A book chapter's title moves into the title block, numbered, as in
+    // Quarto 1 (bd-jib92bnc). After heading ids are final, and before the
+    // metadata is normalized so `pagetitle` derives from the new title.
+    // Render only: `q2 preview` draws its own title block from the
+    // chapter heading and its number kv, and keeps doing so.
+    if matches!(pipeline_profile, crate::format::PipelineProfile::HtmlRender) {
+        pipeline.push(Box::new(crate::transforms::BookChapterTitleTransform::new()));
+    }
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     // Author/label normalization (bd-gx9cic8z P1): derives `by-author`,
     // `labels`, and `rendered.has-title-block` from raw metadata for
@@ -2575,6 +2587,9 @@ pub fn build_transform_pipeline(
     // in the future; today they're independent.
     // See `claude-notes/plans/2026-04-27-websites-phase-7.md`
     // §Decision 3.
+    // A book chapter page is titled with its numbered chapter title
+    // (bd-jib92bnc); set before the generic prefix, which then leaves it.
+    pipeline.push(Box::new(crate::transforms::BookPageMetaTransform::new()));
     // Decks put the site title first (`Site – Deck`), as Quarto 1 does.
     pipeline.push(Box::new(if is_revealjs {
         WebsiteTitlePrefixTransform::site_first()
@@ -2958,6 +2973,13 @@ pub fn build_transform_pipeline(
     // via `Q2_PREVIEW_TRANSFORM_EXCLUDED` — `GraphvizCodeBlock.tsx`
     // consumes the raw CodeBlock there.
     pipeline.push(Box::new(GraphvizRenderTransform::new()));
+    // GH #1130: `renderings: [light, dark]` cells — mark the two outputs
+    // `light-content` / `dark-content` (html, dashboard) or keep the one for
+    // `brand-mode` (revealjs); Q1 `quarto-post/cell-renderings.lua`. Before
+    // `dashboard` (which turns cells into cards) and `resource-collector`
+    // (a dropped reveal output's image is never collected). HTML-family
+    // only; typst runs the Lua filter on the Pandoc side.
+    pipeline.push(Box::new(crate::transforms::CellRenderingsTransform::new()));
     // bd-1tl09 Phase 0: code-block decoration Render. Consumes the
     // typed payload produced by `code-block-generate` in the
     // Normalization Phase and emits the outer wrapping markup
@@ -3267,6 +3289,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "layout-panel",
     "mermaid-render",
     "graphviz-render",
+    "cell-renderings",
     "code-block-render",
     "table-bootstrap-class",
     "components-resolve",
@@ -3279,6 +3302,9 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "sectionize",
     "html-columns",
     "title-banner",
+    "book-chapter-title",
+    "book-home-meta",
+    "book-page-meta",
     "website-title-prefix",
     "website-favicon",
     "website-bootstrap-icons",
@@ -3443,6 +3469,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     ("example-embed-render", Bucket::B1),
     // --- B2: format-family scaffolding ------------------------------------
     ("title-banner", Bucket::B2),
+    ("book-chapter-title", Bucket::B2),
+    ("book-home-meta", Bucket::B2),
+    ("book-page-meta", Bucket::B2),
     ("website-title-prefix", Bucket::B2),
     ("website-favicon", Bucket::B2),
     ("website-bootstrap-icons", Bucket::B2),
@@ -3549,6 +3578,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     ("layout-panel", Bucket::B4),
     ("mermaid-render", Bucket::B4),
     ("graphviz-render", Bucket::B4),
+    // Light/dark selection of `renderings` cell outputs (GH #1130). HTML-family
+    // presentation; typst gets it from the Lua filter chain instead.
+    ("cell-renderings", Bucket::B4),
     ("code-block-render", Bucket::B4),
     ("table-bootstrap-class", Bucket::B4),
     // Marks bound Divs/Spans with `data-quarto-component`, ships the
@@ -7305,13 +7337,16 @@ mod tests {
                 "callout",
                 "panel-tabset",
                 "panel-tabset-resolve",
+                "book-home-meta",
                 "config-markdown",
                 "shortcode-resolve",
                 "heading-id",
+                "book-chapter-title",
                 "metadata-normalize",
                 "authors-normalize",
                 "title-banner",
                 "code-block-generate",
+                "book-page-meta",
                 "website-title-prefix",
                 "website-favicon",
                 "website-bootstrap-icons",
@@ -7370,6 +7405,7 @@ mod tests {
                 "layout-panel",
                 "mermaid-render",
                 "graphviz-render",
+                "cell-renderings",
                 "code-block-render",
                 "editorial-marks-ooxml",
                 "editorial-marks-typst",
@@ -7412,6 +7448,7 @@ mod tests {
                 "callout",
                 "panel-tabset",
                 "panel-tabset-resolve",
+                "book-home-meta",
                 "config-markdown",
                 "shortcode-resolve",
                 "heading-id",
@@ -7419,6 +7456,7 @@ mod tests {
                 "authors-normalize",
                 "title-banner",
                 "code-block-generate",
+                "book-page-meta",
                 "website-title-prefix",
                 "website-favicon",
                 "website-bootstrap-icons",
@@ -7479,6 +7517,7 @@ mod tests {
                 "reveal-auto-stretch",
                 "mermaid-render",
                 "graphviz-render",
+                "cell-renderings",
                 "code-block-render",
                 "editorial-marks-ooxml",
                 "editorial-marks-typst",
@@ -7803,6 +7842,7 @@ mod tests {
                 "reference-link-diagnostics",
                 "brace-diagram-cell-diagnostics",
                 "callout",
+                "book-home-meta",
                 "config-markdown",
                 "shortcode-resolve",
                 "heading-id",
@@ -7810,6 +7850,7 @@ mod tests {
                 "authors-normalize",
                 "title-banner",
                 "code-block-generate",
+                "book-page-meta",
                 "website-title-prefix",
                 "website-favicon",
                 "website-bootstrap-icons",
@@ -7862,6 +7903,7 @@ mod tests {
                 "table-float-class-forward",
                 "lightbox",
                 "example-embed-render",
+                "cell-renderings",
                 "code-block-render",
                 "editorial-marks-ooxml",
                 "editorial-marks-typst",

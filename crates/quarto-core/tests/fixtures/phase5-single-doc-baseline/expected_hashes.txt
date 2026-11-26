@@ -532,15 +532,26 @@
 # in the compiled CSS is those two rules (a rule-by-rule diff against the
 # stylesheet from `main`). doc.html hash
 # unchanged: the fixture has no columns.
-doc.html cb911871a3a0f9328ae6a32df4e2d72da647ff8696169aec56c01d66984cd8ef
-# Re-captured 2026-11-24 (bd-sehm2rha, GH #1296): doc_files/styles.css
-# gained the Mermaid theming block, a single
-# `:where(:root){--mermaid-*: ...}` rule. Verified the only delta: deleting
-# that rule from the new stylesheet hashes back to the previous value
-# (9daec3e3...). doc.html hash unchanged: the fixture has no diagram.
-# Re-captured 2026-11-24 (layout panels, part of bd-9fz5fweg):
-# doc_files/styles.css changed because `_bootstrap-rules.scss` gained the
-# `.quarto-layout-panel` / `.quarto-layout-row` / `.quarto-layout-cell` rules
-# from Q1's `_quarto-rules.scss`. doc.html unchanged: the baseline document
-# has no layout panel.
-doc_files/styles.css f5817bcdf0f068b49a4426ef97d3189d1fd0114d78644d9233aca7727e9568e0
+# Re-captured 2026-11-25 (code-block features, bd-1tl09 phases 3, 4 and 6
+# plus code-tools). doc.html changed because the page now links
+# `code-annotations.js` (one more `<script>` tag; the script ships unless
+# `code-annotations` is `false` or `none`). doc_files/styles.css changed for:
+# the `.code-overflow-wrap` / `.code-overflow-scroll` rules and Pandoc's
+# `pre.numberSource` line-number rules in `highlight.scss`; the annotation
+# rules (list grid, marker float, popover, per-line spans of annotated
+# blocks); and the four `#title-block-header .quarto-title-block > div` rules
+# that lay the code-tools button out beside the title. The fixture has no
+# folded, numbered, annotated or overflow-classed block and no `code-tools`.
+doc.html 7dac003e14b3363ead191dcf0fd224e3070a94c884147c9ec69725a6c93eea04
+# Re-captured 2026-11-25 (bd-twokvvk4, GH #1376): doc_files/styles.css gained
+# Q1's `#quarto-content > *` padding-top block from `quarto-nav.scss` (14px,
+# reset to 0 below lg, with the subtitle and first-h2 adjustments). Verified
+# the only delta: removing those two rules from the new styles.css
+# reproduces the previous hash. doc.html unchanged.
+# Re-captured 2026-11-26 (layout panels, part of bd-9fz5fweg; merge of
+# `main` into the branch): doc_files/styles.css changed because
+# `_bootstrap-rules.scss` gained the `.quarto-layout-panel` /
+# `.quarto-layout-row` / `.quarto-layout-cell` rules from Q1's
+# `_quarto-rules.scss`. doc.html unchanged: the baseline document has no
+# layout panel.
+doc_files/styles.css 3b47e58903f75982a86575dd59b77be12041a4072a235d2867f3546e0a3c0580

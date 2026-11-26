@@ -598,34 +598,81 @@ fn write_highlighted_codeblock<W: Write>(
 ) -> std::io::Result<()> {
     let (id, classes, kvs) = &*codeblock.attr;
 
-    // First class (if any) is the language, per Pandoc convention.
+    // Pandoc's line-numbering classes. `.number-lines` is also what
+    // Quarto's `code-line-numbers: true` resolves to.
+    let numbered = classes.iter().any(|c| is_number_lines_class(c));
+
+    // First class (if any) is the language, per Pandoc convention,
+    // unless it is a numbering class (a `{.number-lines}` block has no
+    // language).
     let (language, extras) = match classes.split_first() {
-        Some((first, rest)) => (Some(first.as_str()), rest),
-        None => (None, &classes[..]),
+        Some((first, rest)) if !is_number_lines_class(first) => (Some(first.as_str()), rest),
+        _ => (None, &classes[..]),
     };
+
+    // Code annotations: the annotation pass leaves the anchor positions
+    // in an attribute (`line=annotation,…`); see
+    // `quarto-core/src/transforms/code_annotations.rs`.
+    let anchors: Vec<(usize, &str)> = kvs
+        .get(ANNOTATION_ANCHORS_ATTR)
+        .map(|v| {
+            v.split(',')
+                .filter_map(|pair| {
+                    let (line, number) = pair.split_once('=')?;
+                    Some((line.trim().parse().ok()?, number.trim()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let annotated = !anchors.is_empty();
+    let interactive = kvs.contains_key(ANNOTATION_INTERACTIVE_ATTR);
 
     // <div class="sourceCode [extras]" id="..."> ...
     write!(ctx, "<div class=\"sourceCode")?;
     for c in extras {
+        // Written on the `<pre>` below, where Quarto 1's CSS expects it.
+        if c == ANNOTATION_CODE_CLASS {
+            continue;
+        }
         write!(ctx, " {}", escape_html(c))?;
     }
     write!(ctx, "\"")?;
     if !id.is_empty() {
         write!(ctx, " id=\"{}\"", escape_html(id))?;
     }
+    // Reveal's line-highlight plugin reads these two from
+    // `div.sourceCode`, where Pandoc writes them.
+    for (k, v) in kvs {
+        if is_line_highlight_attr(k) {
+            write!(ctx, " data-{}=\"{}\"", escape_html(k), escape_html(v))?;
+        }
+    }
     // Source-tracking / attribution attrs describe the block — they
     // belong on the outermost element.
     write_block_source_attrs(block, ctx)?;
     write!(ctx, ">")?;
 
-    // <pre class="sourceCode [lang]" [kv attrs except hl-spans]>
+    // <pre class="sourceCode [numberSource] [lang]" [kv attrs except hl-spans]>
+    // `numberSource` is the class Pandoc's line-number CSS keys off.
     write!(ctx, "<pre class=\"sourceCode")?;
+    if numbered {
+        write!(ctx, " numberSource")?;
+    }
     if let Some(lang) = language {
         write!(ctx, " {}", escape_html(lang))?;
     }
+    if annotated {
+        // `code-annotated` is what Quarto 1's DOM pass adds once the
+        // gutter is in place.
+        write!(ctx, " {ANNOTATION_CODE_CLASS} code-annotated")?;
+    }
     write!(ctx, "\"")?;
     for (k, v) in kvs {
-        if k == quarto_highlight_encoding::SPANS_ATTR_KEY {
+        if k == quarto_highlight_encoding::SPANS_ATTR_KEY
+            || is_line_highlight_attr(k)
+            || k == ANNOTATION_ANCHORS_ATTR
+            || k == ANNOTATION_INTERACTIVE_ATTR
+        {
             continue;
         }
         if should_prefix_attribute(k) {
@@ -641,12 +688,37 @@ fn write_highlighted_codeblock<W: Write>(
     if let Some(lang) = language {
         write!(ctx, " {}", escape_html(lang))?;
     }
-    write!(ctx, "\">")?;
+    write!(ctx, "\"")?;
 
-    if let Some(spans) = spans {
-        write_highlighted_body(&codeblock.text, spans, ctx)?;
-    } else {
-        write!(ctx, "{}", escape_html(&codeblock.text))?;
+    // Pandoc's `startFrom` attribute: the first line's number. The CSS
+    // counter starts one below it.
+    let start_from = kvs
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("startFrom"))
+        .and_then(|(_, v)| v.trim().parse::<usize>().ok())
+        .unwrap_or(1);
+    if numbered && start_from != 1 {
+        write!(
+            ctx,
+            " style=\"counter-reset: source-line {};\"",
+            start_from.saturating_sub(1)
+        )?;
+    }
+    write!(ctx, ">")?;
+
+    let lines = (numbered || annotated).then_some(NumberedLines {
+        block_id: id,
+        start: start_from,
+        anchors: &anchors,
+        interactive,
+    });
+    write_highlighted_body(&codeblock.text, spans.unwrap_or(&[]), lines, ctx)?;
+    if annotated {
+        // The gutter the anchors sit in; Quarto 1 appends both to `<code>`.
+        write!(
+            ctx,
+            "<div class=\"code-annotation-gutter-bg\"></div><div class=\"code-annotation-gutter\"></div>"
+        )?;
     }
 
     writeln!(ctx, "</code></pre></div>")?;
@@ -662,6 +734,39 @@ fn read_hl_spans(attr: &Attr) -> Option<Vec<quarto_highlight_encoding::Highlight
     if spans.is_empty() { None } else { Some(spans) }
 }
 
+/// Attributes and class of the code annotation pass
+/// (`quarto-core/src/transforms/code_annotations.rs`). The two attributes
+/// are instructions to this writer and are not written out.
+const ANNOTATION_ANCHORS_ATTR: &str = "code-annotation-anchors";
+const ANNOTATION_INTERACTIVE_ATTR: &str = "code-annotation-interactive";
+const ANNOTATION_CODE_CLASS: &str = "code-annotation-code";
+
+/// Attributes the Reveal line-highlight plugin looks up on
+/// `div.sourceCode` (as `data-…`).
+fn is_line_highlight_attr(key: &str) -> bool {
+    key == "code-line-numbers" || key == "code-line-fragment-indices"
+}
+
+/// `true` for the two spellings of Pandoc's line-numbering class.
+fn is_number_lines_class(class: &str) -> bool {
+    class == "number-lines" || class == "numberLines"
+}
+
+/// Per-line markup request for [`write_highlighted_body`].
+#[derive(Clone, Copy)]
+struct NumberedLines<'a> {
+    /// The code block's id (`cb3`); empty when it has none, in which
+    /// case the line spans carry no id and no anchor target.
+    block_id: &'a str,
+    /// Number of the first line (Pandoc's `startFrom`, default 1).
+    start: usize,
+    /// Code annotation anchors as `(line, annotation number)`.
+    anchors: &'a [(usize, &'a str)],
+    /// Anchors are `<button>`s (`code-annotations: hover | select`)
+    /// rather than inert `<a>`s.
+    interactive: bool,
+}
+
 /// Emit the body of a code container — the part that lives between the
 /// opening and closing tags — with nested `<span class="hl-…">` tags
 /// driven by `spans`. Capture names from the tree-sitter query flow
@@ -673,9 +778,17 @@ fn read_hl_spans(attr: &Attr) -> Option<Vec<quarto_highlight_encoding::Highlight
 /// overlap. We walk them in start-order, opening new spans before
 /// emitting text and closing them when they end. Identical start/end
 /// pairs are resolved by outer-first (larger range first).
+///
+/// With `lines`, each source line is additionally wrapped in Pandoc's
+/// per-line markup, `<span id="cb1-2"><a href="#cb1-2"></a>…</span>`,
+/// which the `pre.numberSource` CSS counts and numbers. A highlight
+/// span that crosses a line break is closed at the end of the line and
+/// reopened on the next, so line spans are always direct children of
+/// `<code>`.
 fn write_highlighted_body<W: Write>(
     text: &str,
     spans: &[quarto_highlight_encoding::HighlightSpan],
+    lines: Option<NumberedLines<'_>>,
     ctx: &mut HtmlWriterContext<'_, W>,
 ) -> std::io::Result<()> {
     // Event list: (byte_offset, tie_breaker, event_kind)
@@ -708,26 +821,112 @@ fn write_highlighted_body<W: Write>(
         })
     });
 
+    // Highlight spans currently open, outermost first. Only consulted
+    // in numbered mode, to close and reopen them around a line break.
+    let mut open: Vec<&str> = Vec::new();
+    let mut line_no = lines.map_or(0, |l| l.start);
+
+    fn open_line<W: Write>(
+        lines: NumberedLines<'_>,
+        line_no: usize,
+        ctx: &mut HtmlWriterContext<'_, W>,
+    ) -> std::io::Result<()> {
+        let cell = escape_html(lines.block_id);
+        // The annotation anchor comes before the line it marks, as a
+        // sibling of the line span (Quarto 1's `processLineAnnotation`).
+        let anchor = lines.anchors.iter().find(|(line, _)| *line == line_no);
+        if let Some((_, number)) = anchor {
+            let number = escape_html(number);
+            if lines.interactive {
+                write!(
+                    ctx,
+                    "<button class=\"code-annotation-anchor\" data-target-cell=\"{cell}\" data-target-annotation=\"{number}\">{number}</button>"
+                )?;
+            } else {
+                write!(
+                    ctx,
+                    "<a class=\"code-annotation-anchor\" data-target-cell=\"{cell}\" data-target-annotation=\"{number}\" onclick=\"event.preventDefault();\" href=\"\">{number}</a>"
+                )?;
+            }
+        }
+        let target = if anchor.is_some() {
+            " class=\"code-annotation-target\""
+        } else {
+            ""
+        };
+        if lines.block_id.is_empty() {
+            write!(ctx, "<span{target}><a></a>")
+        } else {
+            let id = format!("{cell}-{line_no}");
+            write!(ctx, "<span id=\"{id}\"{target}><a href=\"#{id}\"></a>")
+        }
+    }
+
+    if let Some(lines) = lines
+        && !text.is_empty()
+    {
+        open_line(lines, line_no, ctx)?;
+    }
+
+    // Write `text[from..to]`, breaking line spans at each newline.
+    let mut flush = |from: usize,
+                     to: usize,
+                     open: &[&str],
+                     ctx: &mut HtmlWriterContext<'_, W>|
+     -> std::io::Result<()> {
+        let segment = &text[from..to];
+        let Some(lines) = lines else {
+            return write!(ctx, "{}", escape_html(segment));
+        };
+        let mut offset = from;
+        for (i, piece) in segment.split('\n').enumerate() {
+            if i > 0 {
+                // The newline at `offset - 1` ends the current line.
+                for _ in open {
+                    write!(ctx, "</span>")?;
+                }
+                writeln!(ctx, "</span>")?;
+                // No empty trailing line for a final newline.
+                if offset < text.len() {
+                    line_no += 1;
+                    open_line(lines, line_no, ctx)?;
+                    for capture in open {
+                        write!(ctx, "<span class=\"hl-{}\">", capture_to_class(capture))?;
+                    }
+                }
+            }
+            write!(ctx, "{}", escape_html(piece))?;
+            offset += piece.len() + 1;
+        }
+        Ok(())
+    };
+
     let mut cursor = 0usize;
     for (offset, _, kind) in &events {
         // Flush text between cursor and the event.
         if *offset > cursor && cursor < text.len() {
             let end = (*offset).min(text.len());
-            write!(ctx, "{}", escape_html(&text[cursor..end]))?;
+            flush(cursor, end, &open, ctx)?;
             cursor = end;
         }
         match kind {
             EventKind::Open(capture) => {
                 write!(ctx, "<span class=\"hl-{}\">", capture_to_class(capture))?;
+                open.push(capture);
             }
             EventKind::Close => {
                 write!(ctx, "</span>")?;
+                open.pop();
             }
         }
     }
     // Any trailing text after the last event.
     if cursor < text.len() {
-        write!(ctx, "{}", escape_html(&text[cursor..]))?;
+        flush(cursor, text.len(), &open, ctx)?;
+    }
+    // Close the last line, unless a final newline already did.
+    if lines.is_some() && !text.is_empty() && !text.ends_with('\n') {
+        write!(ctx, "</span>")?;
     }
     Ok(())
 }
@@ -947,7 +1146,7 @@ fn write_inline<W: Write>(
             write_inline_source_attrs(inline, ctx)?;
             write!(ctx, ">")?;
             if let Some(spans) = &spans {
-                write_highlighted_body(&c.text, spans, ctx)?;
+                write_highlighted_body(&c.text, spans, None, ctx)?;
             } else {
                 write!(ctx, "{}", escape_html(&c.text))?;
             }
@@ -1569,7 +1768,11 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
                 .attr
                 .2
                 .contains_key(quarto_highlight_encoding::SPANS_ATTR_KEY);
-            if source_code {
+            // A numbered block always takes the `div.sourceCode` path,
+            // which writes the per-line markup, even with no language.
+            let numbered = codeblock.attr.1.iter().any(|c| is_number_lines_class(c));
+            let annotated = codeblock.attr.2.contains_key(ANNOTATION_ANCHORS_ATTR);
+            if source_code || numbered || annotated {
                 write_highlighted_codeblock(codeblock, block, spans.as_deref(), ctx)?;
             } else {
                 write!(ctx, "<pre")?;
@@ -1679,27 +1882,23 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
                 writeln!(ctx, "</caption>")?;
             }
 
-            // Column group (for alignment / width).
+            // Column group (for width).
             //
-            // bd-hixmy: suppress when every colspec entry is fully default.
-            // An all-default colspec carries no information, and emitting an
+            // bd-hixmy: suppress when every colspec width is default; an
             // empty colgroup of bare `<col />` elements diverges from
-            // Quarto 1 / Pandoc's reference HTML writer. Keep the colgroup
-            // whenever any column has a non-default alignment OR width.
-            let colgroup_meaningful = table.colspec.iter().any(|(align, width)| {
-                !matches!(align, crate::pandoc::table::Alignment::Default)
-                    || !matches!(width, crate::pandoc::table::ColWidth::Default)
-            });
+            // Quarto 1 / Pandoc's reference HTML writer. Column alignment
+            // is not written here: `<col align>` is obsolete in HTML5 and
+            // browsers ignore it, so `write_table_row` puts it on each cell
+            // as `text-align` instead (GH #1327). Width output itself is
+            // still TODO (GH #879).
+            let colgroup_meaningful = table
+                .colspec
+                .iter()
+                .any(|(_, width)| !matches!(width, crate::pandoc::table::ColWidth::Default));
             if colgroup_meaningful {
                 writeln!(ctx, "<colgroup>")?;
-                for colspec in &table.colspec {
-                    let align = match colspec.0 {
-                        crate::pandoc::table::Alignment::Left => " align=\"left\"",
-                        crate::pandoc::table::Alignment::Right => " align=\"right\"",
-                        crate::pandoc::table::Alignment::Center => " align=\"center\"",
-                        crate::pandoc::table::Alignment::Default => "",
-                    };
-                    writeln!(ctx, "<col{} />", align)?;
+                for _ in &table.colspec {
+                    writeln!(ctx, "<col />")?;
                 }
                 writeln!(ctx, "</colgroup>")?;
             }
@@ -1710,8 +1909,9 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             // / Pandoc's reference HTML writer.
             if !table.head.rows.is_empty() {
                 writeln!(ctx, "<thead>")?;
+                let mut pending = Vec::new();
                 for row in &table.head.rows {
-                    write_table_row(row, ctx, true, Some("header"))?;
+                    write_table_row(row, &table.colspec, &mut pending, ctx, true, Some("header"))?;
                 }
                 writeln!(ctx, "</thead>")?;
             }
@@ -1724,9 +1924,10 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             // the cycle from "odd").
             for body in &table.bodies {
                 writeln!(ctx, "<tbody>")?;
+                let mut pending = Vec::new();
                 for (i, row) in body.body.iter().enumerate() {
                     let cls = if i % 2 == 0 { "odd" } else { "even" };
-                    write_table_row(row, ctx, false, Some(cls))?;
+                    write_table_row(row, &table.colspec, &mut pending, ctx, false, Some(cls))?;
                 }
                 writeln!(ctx, "</tbody>")?;
             }
@@ -1739,8 +1940,9 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             // exercise tfoot, so we deliberately keep this minimal.
             if !table.foot.rows.is_empty() {
                 writeln!(ctx, "<tfoot>")?;
+                let mut pending = Vec::new();
                 for row in &table.foot.rows {
-                    write_table_row(row, ctx, false, None)?;
+                    write_table_row(row, &table.colspec, &mut pending, ctx, false, None)?;
                 }
                 writeln!(ctx, "</tfoot>")?;
             }
@@ -1895,41 +2097,118 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
 /// `<td>` (false). `row_class` is the value of the row's `class`
 /// attribute (e.g. `"header"`, `"odd"`, `"even"`); `None` emits a bare
 /// `<tr>`. Caller is responsible for the odd/even bookkeeping.
+///
+/// Each cell's alignment is written as `style="text-align: …;"` (GH
+/// #1327), as Pandoc does: the cell's own alignment, or else that of the
+/// column it starts in. `pending` tracks, per column, how many more rows
+/// of this table section a `rowspan` from an earlier row still covers;
+/// the caller passes a fresh one for each section.
 fn write_table_row<W: Write>(
     row: &crate::pandoc::table::Row,
+    colspec: &[crate::pandoc::table::ColSpec],
+    pending: &mut Vec<usize>,
     ctx: &mut HtmlWriterContext<'_, W>,
     is_header: bool,
     row_class: Option<&'static str>,
 ) -> std::io::Result<()> {
+    use crate::pandoc::table::Alignment;
+    // The stripe class (`header` / `odd` / `even`) comes first, then the
+    // row's own attributes (GH #1336).
+    let mut attr = row.attr.clone();
     if let Some(cls) = row_class {
-        writeln!(ctx, "<tr class=\"{}\">", cls)?;
-    } else {
-        writeln!(ctx, "<tr>")?;
+        attr.1.insert(0, cls.to_string());
     }
+    write!(ctx, "<tr")?;
+    write_attr(&attr, ctx)?;
+    writeln!(ctx, ">")?;
+    let mut col = 0;
     for cell in &row.cells {
+        // Skip columns still covered by a rowspan from an earlier row.
+        while pending.get(col).is_some_and(|&n| n > 0) {
+            col += 1;
+        }
+        let row_span = cell.row_span.max(1);
+        let col_span = cell.col_span.max(1);
+        if pending.len() < col + col_span {
+            pending.resize(col + col_span, 0);
+        }
+        for p in &mut pending[col..col + col_span] {
+            // This row counts as one of the spanned rows; the decrement
+            // below the loop takes it off again.
+            *p = row_span;
+        }
+        let alignment = match cell.alignment {
+            Alignment::Default => colspec.get(col).map_or(Alignment::Default, |c| c.0.clone()),
+            ref a => a.clone(),
+        };
+        col += col_span;
+
         let tag = if is_header { "th" } else { "td" };
         write!(ctx, "<{}", tag)?;
-        write_attr(&cell.attr, ctx)?;
-
-        if cell.row_span > 1 {
-            write!(ctx, " rowspan=\"{}\"", cell.row_span)?;
-        }
-        if cell.col_span > 1 {
-            write!(ctx, " colspan=\"{}\"", cell.col_span)?;
-        }
-
-        let align = match cell.alignment {
-            crate::pandoc::table::Alignment::Left => " align=\"left\"",
-            crate::pandoc::table::Alignment::Right => " align=\"right\"",
-            crate::pandoc::table::Alignment::Center => " align=\"center\"",
-            crate::pandoc::table::Alignment::Default => "",
+        let text_align = match alignment {
+            Alignment::Left => Some("left"),
+            Alignment::Right => Some("right"),
+            Alignment::Center => Some("center"),
+            Alignment::Default => None,
         };
-        write!(ctx, "{}>", align)?;
+        match text_align {
+            Some(a) => {
+                // Merge into the cell's own `style`, if any, so there is
+                // a single style attribute; the author's declarations
+                // come last and therefore win.
+                let mut attr = cell.attr.clone();
+                let style = match attr.2.get("style") {
+                    Some(existing) => format!("text-align: {}; {}", a, existing),
+                    None => format!("text-align: {};", a),
+                };
+                attr.2.remove("style");
+                write_attr(&attr, ctx)?;
+                write_cell_spans(cell, ctx)?;
+                write!(ctx, " style=\"{}\">", escape_html(&style))?;
+            }
+            None => {
+                write_attr(&cell.attr, ctx)?;
+                write_cell_spans(cell, ctx)?;
+                write!(ctx, ">")?;
+            }
+        }
 
         write_blocks(&cell.content, ctx)?;
         writeln!(ctx, "</{}>", tag)?;
     }
+    // GH #1337: pad a short row with empty cells up to the column count,
+    // as Pandoc does, skipping columns a rowspan still covers. Each
+    // padded cell takes its column's alignment.
+    let tag = if is_header { "th" } else { "td" };
+    for (c, spec) in colspec.iter().enumerate().skip(col) {
+        if pending.get(c).is_some_and(|&n| n > 0) {
+            continue;
+        }
+        match spec.0 {
+            Alignment::Left => writeln!(ctx, "<{tag} style=\"text-align: left;\"></{tag}>")?,
+            Alignment::Right => writeln!(ctx, "<{tag} style=\"text-align: right;\"></{tag}>")?,
+            Alignment::Center => writeln!(ctx, "<{tag} style=\"text-align: center;\"></{tag}>")?,
+            Alignment::Default => writeln!(ctx, "<{tag}></{tag}>")?,
+        }
+    }
     writeln!(ctx, "</tr>")?;
+    for p in pending.iter_mut() {
+        *p = p.saturating_sub(1);
+    }
+    Ok(())
+}
+
+/// Write a table cell's `rowspan` / `colspan` attributes (when > 1).
+fn write_cell_spans<W: Write>(
+    cell: &crate::pandoc::table::Cell,
+    ctx: &mut HtmlWriterContext<'_, W>,
+) -> std::io::Result<()> {
+    if cell.row_span > 1 {
+        write!(ctx, " rowspan=\"{}\"", cell.row_span)?;
+    }
+    if cell.col_span > 1 {
+        write!(ctx, " colspan=\"{}\"", cell.col_span)?;
+    }
     Ok(())
 }
 
@@ -2678,6 +2957,182 @@ mod tests {
         String::from_utf8(output).unwrap()
     }
 
+    fn numbered_codeblock(
+        id: &str,
+        classes: &[&str],
+        text: &str,
+        kvs_in: &[(&str, &str)],
+    ) -> Block {
+        let mut kvs = hashlink::LinkedHashMap::new();
+        for (k, v) in kvs_in {
+            kvs.insert(k.to_string(), v.to_string());
+        }
+        Block::CodeBlock(Box::new(CodeBlock {
+            attr: (
+                id.to_string(),
+                classes.iter().map(|c| c.to_string()).collect(),
+                kvs,
+            )
+                .into(),
+            text: text.to_string(),
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        }))
+    }
+
+    #[test]
+    fn number_lines_codeblock_emits_pandoc_line_spans() {
+        let html = render_block_to_html(numbered_codeblock(
+            "cb1",
+            &["python", "number-lines"],
+            "a = 1\nb = 2",
+            &[("data-hl-spans", "[]")],
+        ));
+        assert_eq!(
+            html.trim_end(),
+            "<div class=\"sourceCode number-lines\" id=\"cb1\">\
+             <pre class=\"sourceCode numberSource python\">\
+             <code class=\"sourceCode python\">\
+             <span id=\"cb1-1\"><a href=\"#cb1-1\"></a>a = 1</span>\n\
+             <span id=\"cb1-2\"><a href=\"#cb1-2\"></a>b = 2</span>\
+             </code></pre></div>"
+        );
+    }
+
+    #[test]
+    fn number_lines_start_from_offsets_ids_and_counter() {
+        let html = render_block_to_html(numbered_codeblock(
+            "cb3",
+            &["python", "numberLines"],
+            "a\nb\n",
+            &[("data-hl-spans", "[]"), ("startFrom", "10")],
+        ));
+        assert!(
+            html.contains(
+                "<code class=\"sourceCode python\" style=\"counter-reset: source-line 9;\">"
+            ),
+            "got:\n{html}"
+        );
+        assert!(html.contains("<span id=\"cb3-10\">"), "got:\n{html}");
+        assert!(html.contains("<span id=\"cb3-11\">"), "got:\n{html}");
+        // A final newline does not open an empty third line.
+        assert!(!html.contains("cb3-12"), "got:\n{html}");
+    }
+
+    #[test]
+    fn number_lines_splits_a_highlight_span_that_crosses_lines() {
+        // One `string` capture over both lines.
+        let html = render_block_to_html(numbered_codeblock(
+            "cb1",
+            &["python", "number-lines"],
+            "\"a\nb\"",
+            &[("data-hl-spans", r#"[[0,5,"string"]]"#)],
+        ));
+        assert!(
+            html.contains(
+                "<span id=\"cb1-1\"><a href=\"#cb1-1\"></a><span class=\"hl-string\">&quot;a</span></span>\n\
+                 <span id=\"cb1-2\"><a href=\"#cb1-2\"></a><span class=\"hl-string\">b&quot;</span></span>"
+            ),
+            "got:\n{html}"
+        );
+    }
+
+    #[test]
+    fn number_lines_as_only_class_is_not_treated_as_language() {
+        let html = render_block_to_html(numbered_codeblock(
+            "cb1",
+            &["number-lines"],
+            "x",
+            &[("data-hl-spans", "[]")],
+        ));
+        assert!(
+            html.contains("<pre class=\"sourceCode numberSource\">"),
+            "got:\n{html}"
+        );
+        assert!(html.contains("<code class=\"sourceCode\">"), "got:\n{html}");
+    }
+
+    #[test]
+    fn code_line_numbers_spec_is_written_on_the_outer_div() {
+        let html = render_block_to_html(numbered_codeblock(
+            "cb5",
+            &["python", "number-lines"],
+            "a\nb",
+            &[("data-hl-spans", "[]"), ("code-line-numbers", "|1|2")],
+        ));
+        assert!(
+            html.contains(
+                "<div class=\"sourceCode number-lines\" id=\"cb5\" data-code-line-numbers=\"|1|2\">"
+            ),
+            "got:\n{html}"
+        );
+        assert!(
+            html.contains("<pre class=\"sourceCode numberSource python\">"),
+            "got:\n{html}"
+        );
+    }
+
+    #[test]
+    fn annotated_codeblock_emits_anchors_targets_and_gutter() {
+        let html = render_block_to_html(numbered_codeblock(
+            "annotated-cell-1",
+            &["python", "code-annotation-code"],
+            "a = 1\nb = 2",
+            &[("data-hl-spans", "[]"), ("code-annotation-anchors", "2=1")],
+        ));
+        assert_eq!(
+            html.trim_end(),
+            "<div class=\"sourceCode\" id=\"annotated-cell-1\">\
+             <pre class=\"sourceCode python code-annotation-code code-annotated\">\
+             <code class=\"sourceCode python\">\
+             <span id=\"annotated-cell-1-1\"><a href=\"#annotated-cell-1-1\"></a>a = 1</span>\n\
+             <a class=\"code-annotation-anchor\" data-target-cell=\"annotated-cell-1\" \
+             data-target-annotation=\"1\" onclick=\"event.preventDefault();\" href=\"\">1</a>\
+             <span id=\"annotated-cell-1-2\" class=\"code-annotation-target\">\
+             <a href=\"#annotated-cell-1-2\"></a>b = 2</span>\
+             <div class=\"code-annotation-gutter-bg\"></div><div class=\"code-annotation-gutter\"></div>\
+             </code></pre></div>"
+        );
+    }
+
+    #[test]
+    fn interactive_annotation_anchor_is_a_button() {
+        let html = render_block_to_html(numbered_codeblock(
+            "annotated-cell-1",
+            &["python", "code-annotation-code"],
+            "a = 1",
+            &[
+                ("data-hl-spans", "[]"),
+                ("code-annotation-anchors", "1=1"),
+                ("code-annotation-interactive", "true"),
+            ],
+        ));
+        assert!(
+            html.contains(
+                "<button class=\"code-annotation-anchor\" data-target-cell=\"annotated-cell-1\" data-target-annotation=\"1\">1</button>"
+            ),
+            "got:\n{html}"
+        );
+        assert!(
+            !html.contains("code-annotation-interactive"),
+            "got:\n{html}"
+        );
+    }
+
+    #[test]
+    fn unnumbered_codeblock_has_no_line_spans() {
+        let html = render_block_to_html(numbered_codeblock(
+            "",
+            &["python"],
+            "a\nb",
+            &[("data-hl-spans", "[]")],
+        ));
+        assert!(
+            html.contains("<code class=\"sourceCode python\">a\nb</code>"),
+            "got:\n{html}"
+        );
+    }
+
     #[test]
     fn codeblock_emits_nested_hl_spans() {
         let html = render_block_to_html(codeblock_with_hl_spans(
@@ -3276,10 +3731,12 @@ mod tests {
         );
     }
 
-    /// bd-hixmy: a non-default alignment must keep the colgroup so the
-    /// `<col align="...">` attributes carry through to the rendered HTML.
+    /// GH #1327: alignment is written on the cells (`text-align`), not
+    /// on `<col align>` (obsolete in HTML5, ignored by browsers). An
+    /// alignment-only colspec therefore needs no `<colgroup>`, matching
+    /// Pandoc's reference HTML writer, which keys the colgroup on widths.
     #[test]
-    fn colgroup_kept_when_any_alignment_set() {
+    fn colgroup_suppressed_when_only_alignment_set() {
         use crate::pandoc::table::{Alignment, ColWidth};
         let block = table_with_colspec(vec![
             (Alignment::Default, ColWidth::Default),
@@ -3287,12 +3744,16 @@ mod tests {
         ]);
         let html = render_block_to_html(block);
         assert!(
-            html.contains("<colgroup>"),
-            "non-default alignment must keep <colgroup>, got:\n{html}"
+            !html.contains("<colgroup>"),
+            "alignment-only colspec should not emit <colgroup>, got:\n{html}"
         );
         assert!(
-            html.contains("align=\"right\""),
-            "expected align=\"right\" on the second <col>, got:\n{html}"
+            !html.contains(" align="),
+            "obsolete align attribute must not be written, got:\n{html}"
+        );
+        assert!(
+            html.contains("<td style=\"text-align: right;\">"),
+            "expected the right-aligned column's cell to carry text-align, got:\n{html}"
         );
     }
 
@@ -3310,6 +3771,256 @@ mod tests {
         assert!(
             html.contains("<colgroup>"),
             "non-default width must keep <colgroup>, got:\n{html}"
+        );
+    }
+
+    /// GH #1327: build a table cell with the given alignment and spans.
+    fn align_test_cell(
+        text: &str,
+        alignment: crate::pandoc::table::Alignment,
+        row_span: usize,
+        col_span: usize,
+    ) -> crate::pandoc::table::Cell {
+        use crate::pandoc::block::Plain;
+        use hashlink::LinkedHashMap;
+        crate::pandoc::table::Cell {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
+            alignment,
+            row_span,
+            col_span,
+            content: vec![Block::Plain(Plain {
+                content: vec![Inline::Str(Str {
+                    text: text.to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        }
+    }
+
+    /// GH #1327: build a table from a colspec plus head and body rows.
+    fn align_test_table(
+        colspec: Vec<crate::pandoc::table::ColSpec>,
+        head: Vec<Vec<crate::pandoc::table::Cell>>,
+        body: Vec<Vec<crate::pandoc::table::Cell>>,
+    ) -> Block {
+        use crate::pandoc::table::{Row, Table, TableBody, TableFoot, TableHead};
+        use hashlink::LinkedHashMap;
+        let empty_attr = || (String::new(), Vec::new(), LinkedHashMap::new());
+        let mk_row = |cells: Vec<crate::pandoc::table::Cell>| Row {
+            attr: empty_attr().into(),
+            cells,
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        Block::Table(Box::new(Table {
+            attr: empty_attr().into(),
+            caption: quarto_pandoc_types::Caption {
+                short: None,
+                long: None,
+                source_info: dummy_source_info(),
+            },
+            colspec,
+            head: TableHead {
+                attr: empty_attr().into(),
+                rows: head.into_iter().map(mk_row).collect(),
+                source_info: dummy_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            bodies: vec![TableBody {
+                attr: empty_attr().into(),
+                rowhead_columns: 0,
+                head: vec![],
+                body: body.into_iter().map(mk_row).collect(),
+                source_info: dummy_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            }],
+            foot: TableFoot {
+                attr: empty_attr().into(),
+                rows: vec![],
+                source_info: dummy_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        }))
+    }
+
+    /// GH #1327: a pipe table (`|:--|:-:|--:|`) carries its alignment on
+    /// the colspec, with default-aligned cells. Every `<th>`/`<td>` must
+    /// get the column's alignment as `text-align`, as Pandoc writes it.
+    #[test]
+    fn pipe_table_column_alignment_on_cells() {
+        use crate::pandoc::table::{Alignment as A, ColWidth};
+        let d = |t: &str| align_test_cell(t, A::Default, 1, 1);
+        let block = align_test_table(
+            vec![
+                (A::Left, ColWidth::Default),
+                (A::Center, ColWidth::Default),
+                (A::Right, ColWidth::Default),
+                (A::Default, ColWidth::Default),
+            ],
+            vec![vec![d("L"), d("C"), d("R"), d("D")]],
+            vec![vec![d("a"), d("b"), d("c"), d("d")]],
+        );
+        let html = render_block_to_html(block);
+        for expected in [
+            "<th style=\"text-align: left;\">L",
+            "<th style=\"text-align: center;\">C",
+            "<th style=\"text-align: right;\">R",
+            "<th>D",
+            "<td style=\"text-align: left;\">a",
+            "<td style=\"text-align: center;\">b",
+            "<td style=\"text-align: right;\">c",
+            "<td>d",
+        ] {
+            assert!(html.contains(expected), "missing `{expected}` in:\n{html}");
+        }
+        assert!(
+            !html.contains(" align="),
+            "obsolete align attribute in:\n{html}"
+        );
+        assert!(
+            !html.contains("<colgroup>"),
+            "unexpected <colgroup> in:\n{html}"
+        );
+    }
+
+    /// GH #1327: a list table (`aligns="l,c,r"`, or a per-cell override)
+    /// can put alignment on the cell itself; it wins over the column's.
+    #[test]
+    fn cell_alignment_overrides_column_alignment() {
+        use crate::pandoc::table::{Alignment as A, ColWidth};
+        let block = align_test_table(
+            vec![
+                (A::Right, ColWidth::Default),
+                (A::Default, ColWidth::Default),
+            ],
+            vec![],
+            vec![vec![
+                align_test_cell("a", A::Center, 1, 1),
+                align_test_cell("b", A::Left, 1, 1),
+            ]],
+        );
+        let html = render_block_to_html(block);
+        assert!(
+            html.contains("<td style=\"text-align: center;\">a"),
+            "cell alignment should override column alignment, got:\n{html}"
+        );
+        assert!(
+            html.contains("<td style=\"text-align: left;\">b"),
+            "cell alignment should apply to a default column, got:\n{html}"
+        );
+    }
+
+    /// GH #1327: the column a cell falls back to accounts for `colspan`
+    /// in the same row and `rowspan` from earlier rows.
+    #[test]
+    fn column_alignment_fallback_tracks_spans() {
+        use crate::pandoc::table::{Alignment as A, ColWidth};
+        let d = |t: &str, rs: usize, cs: usize| align_test_cell(t, A::Default, rs, cs);
+        let block = align_test_table(
+            vec![
+                (A::Left, ColWidth::Default),
+                (A::Center, ColWidth::Default),
+                (A::Right, ColWidth::Default),
+            ],
+            vec![],
+            vec![
+                // "a" spans columns 0-1, so "b" is in column 2 (right).
+                vec![d("a", 1, 2), d("b", 1, 1)],
+                // "c" occupies column 0 for two rows.
+                vec![d("c", 2, 1), d("e", 1, 1), d("f", 1, 1)],
+                // Column 0 is taken by "c", so "g" is in column 1 (center).
+                vec![d("g", 1, 1), d("h", 1, 1)],
+            ],
+        );
+        let html = render_block_to_html(block);
+        for expected in [
+            "colspan=\"2\" style=\"text-align: left;\">a",
+            "<td style=\"text-align: right;\">b",
+            "rowspan=\"2\" style=\"text-align: left;\">c",
+            "<td style=\"text-align: center;\">e",
+            "<td style=\"text-align: right;\">f",
+            "<td style=\"text-align: center;\">g",
+            "<td style=\"text-align: right;\">h",
+        ] {
+            assert!(html.contains(expected), "missing `{expected}` in:\n{html}");
+        }
+    }
+
+    /// GH #1337: a row with fewer cells than the table has columns is
+    /// padded with empty cells, as Pandoc does. Padding counts `colspan`
+    /// and columns still covered by a `rowspan`, and each padded cell
+    /// takes its column's alignment.
+    #[test]
+    fn short_rows_are_padded_with_empty_cells() {
+        use crate::pandoc::table::{Alignment as A, ColWidth};
+        let d = |t: &str, rs: usize, cs: usize| align_test_cell(t, A::Default, rs, cs);
+        let block = align_test_table(
+            vec![
+                (A::Default, ColWidth::Default),
+                (A::Default, ColWidth::Default),
+                (A::Right, ColWidth::Default),
+            ],
+            vec![vec![d("H", 1, 1)]],
+            vec![
+                // One cell: pad columns 1 and 2.
+                vec![d("a", 1, 1)],
+                // Spans columns 0-1: pad column 2 only.
+                vec![d("b", 1, 2)],
+                // Column 1 covered for the next row too: pad column 2.
+                vec![d("c", 1, 1), d("e", 2, 1)],
+                // Column 1 is still covered by "e": pad column 2 only.
+                vec![d("f", 1, 1)],
+                // Full row: no padding.
+                vec![d("g", 1, 1), d("h", 1, 1), d("i", 1, 1)],
+            ],
+        );
+        let html = render_block_to_html(block);
+        let rows: Vec<&str> = html.split("</tr>").collect();
+        let count = |row: &str, tag: &str| row.matches(&format!("</{tag}>")).count();
+        assert_eq!(count(rows[0], "th"), 3, "header row:\n{html}");
+        assert!(
+            rows[0].contains("<th></th>\n<th style=\"text-align: right;\"></th>"),
+            "header padding should use <th> and column alignment:\n{html}"
+        );
+        assert_eq!(count(rows[1], "td"), 3, "row a:\n{html}");
+        assert!(
+            rows[1].contains("<td></td>\n<td style=\"text-align: right;\"></td>"),
+            "padded cells should take column alignment:\n{html}"
+        );
+        assert_eq!(count(rows[2], "td"), 2, "row b:\n{html}");
+        assert_eq!(count(rows[3], "td"), 3, "row c:\n{html}");
+        assert_eq!(count(rows[4], "td"), 2, "row f:\n{html}");
+        assert_eq!(count(rows[5], "td"), 3, "row g:\n{html}");
+    }
+
+    /// GH #1327: a cell's own `style` attribute is kept, with the
+    /// alignment merged into it rather than written as a second `style`.
+    #[test]
+    fn cell_alignment_merges_with_existing_style() {
+        use crate::pandoc::table::{Alignment as A, ColWidth};
+        let mut cell = align_test_cell("a", A::Default, 1, 1);
+        cell.attr
+            .2
+            .insert("style".to_string(), "color: red;".to_string());
+        let block = align_test_table(
+            vec![(A::Right, ColWidth::Default)],
+            vec![],
+            vec![vec![cell]],
+        );
+        let html = render_block_to_html(block);
+        assert!(
+            html.contains("<td style=\"text-align: right; color: red;\">a"),
+            "expected merged style, got:\n{html}"
+        );
+        assert_eq!(
+            html.matches("style=").count(),
+            1,
+            "one style attribute in:\n{html}"
         );
     }
 

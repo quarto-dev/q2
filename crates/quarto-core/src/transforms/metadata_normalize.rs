@@ -141,13 +141,15 @@ pub(crate) fn inlines_to_plain_text(inlines: &[Inline]) -> String {
             Inline::Subscript(s) => result.push_str(&inlines_to_plain_text(&s.content)),
             Inline::SmallCaps(s) => result.push_str(&inlines_to_plain_text(&s.content)),
             Inline::Quoted(q) => {
-                let quote_char = match q.quote_type {
-                    quarto_pandoc_types::inline::QuoteType::SingleQuote => '\'',
-                    quarto_pandoc_types::inline::QuoteType::DoubleQuote => '"',
+                // Curly quotes, as Pandoc's `stringify` and Quarto 1 write
+                // them (GH #1369).
+                let (open, close) = match q.quote_type {
+                    quarto_pandoc_types::inline::QuoteType::SingleQuote => ('\u{2018}', '\u{2019}'),
+                    quarto_pandoc_types::inline::QuoteType::DoubleQuote => ('\u{201C}', '\u{201D}'),
                 };
-                result.push(quote_char);
+                result.push(open);
                 result.push_str(&inlines_to_plain_text(&q.content));
-                result.push(quote_char);
+                result.push(close);
             }
             Inline::Cite(c) => result.push_str(&inlines_to_plain_text(&c.content)),
             Inline::Code(c) => result.push_str(&c.text),
@@ -188,7 +190,7 @@ pub(crate) fn inlines_to_plain_text(inlines: &[Inline]) -> String {
 }
 
 /// Convert blocks to plain text.
-fn blocks_to_plain_text(blocks: &[Block]) -> String {
+pub(crate) fn blocks_to_plain_text(blocks: &[Block]) -> String {
     let mut result = String::new();
     for (i, block) in blocks.iter().enumerate() {
         if i > 0 {
@@ -671,7 +673,7 @@ mod tests {
             },
         ))];
         let text = inlines_to_plain_text(&inlines);
-        assert_eq!(text, "'quoted'");
+        assert_eq!(text, "\u{2018}quoted\u{2019}");
     }
 
     #[tokio::test]
@@ -687,7 +689,7 @@ mod tests {
             },
         ))];
         let text = inlines_to_plain_text(&inlines);
-        assert_eq!(text, "\"quoted\"");
+        assert_eq!(text, "\u{201C}quoted\u{201D}");
     }
 
     #[tokio::test]

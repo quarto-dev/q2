@@ -44,6 +44,7 @@ use crate::resource_resolver::ResourceResolverContext;
 use crate::stage::DocumentAst;
 use crate::stage::stages::ApplyTemplateConfig;
 use crate::transform::TransformPhase;
+use crate::transforms::crossref_resolve::is_unresolved_crossref_warning;
 
 /// Everything one chapter's pause leg produced that the resume leg needs:
 /// the extracted [`BookChapterPauseState`] (artifacts, diagnostics,
@@ -91,6 +92,22 @@ fn citeproc_post_ordering_diagnostic(input_path: &std::path::Path) -> Diagnostic
             "Move `citeproc` before the `quarto` sentinel in this chapter's (or the \
              project's) `filters:` list so it resolves in `.pre`.",
         )
+        .build()
+}
+
+/// `Q-5-62`: the book's sidebar links to a download that this render did
+/// not write and that is not in the output directory.
+fn missing_download_diagnostic(name: &str, format: &str, file: &str) -> DiagnosticMessage {
+    DiagnosticMessageBuilder::warning("Book Download Not Rendered")
+        .with_code("Q-5-62")
+        .problem(format!(
+            "`book.downloads` lists `{name}`, so the book's sidebar links to `{file}`, \
+             but that file is not in the output directory. An HTML render writes \
+             only the HTML pages, so the link does not work yet."
+        ))
+        .add_hint(format!(
+            "Run `q2 render --to {format}` in the project to write `{file}`."
+        ))
         .build()
 }
 
@@ -403,7 +420,16 @@ pub(crate) async fn render_book_multi_file_html(
                 continue;
             }
         };
-        let state = BookChapterPauseState::extract_from(&mut ctx);
+        let mut state = BookChapterPauseState::extract_from(&mut ctx);
+
+        // bd-e4bgx1r0: the chapter's own crossref pass knows only this
+        // chapter's targets, so it warns for every reference to another
+        // chapter. `CrossChapterCrossrefResolveTransform` resolves those
+        // on the resume leg and warns for the ones no chapter defines.
+        pause_diagnostics.retain(|d| !is_unresolved_crossref_warning(d));
+        state
+            .diagnostics
+            .retain(|d| !is_unresolved_crossref_warning(d));
 
         // Book-projects P6: a chapter whose `filters:` placed `citeproc`
         // into `.post` never captured a citation manifest — diagnose it by
@@ -656,6 +682,23 @@ pub(crate) async fn render_book_multi_file_html(
         }
         if fail_fast && !failures.is_empty() {
             break;
+        }
+    }
+
+    // ── Downloads: `book.downloads` puts a link to the book's EPUB / PDF
+    // in the sidebar, but an HTML render writes only the HTML. Say so
+    // when the linked file is not there, with the command that makes it.
+    if failures.is_empty()
+        && let Some(book) = project.config.metadata.as_ref().and_then(|m| m.get("book"))
+    {
+        for (name, format, file) in crate::project::book::config::download_files(book, &project.dir)
+        {
+            let exists = runtime
+                .is_file(&project.output_dir.join(&file))
+                .unwrap_or(false);
+            if !exists {
+                aggregate_diagnostics.push(missing_download_diagnostic(&name, &format, &file));
+            }
         }
     }
 

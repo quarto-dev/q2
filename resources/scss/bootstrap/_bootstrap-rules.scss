@@ -539,6 +539,39 @@ nav.sidebar.sidebar-navigation:not(.rollup) {
   text-decoration: none;
 }
 
+// Sidebar tools: the icon links and dropdown menus beside the sidebar
+// title (`sidebar.tools`; a book's repository, download and share
+// tools). from quarto-nav.scss:294-296, 323-345. The dropdown trigger is
+// a `<button>` in q2, so it also drops the button chrome.
+.sidebar-title .sidebar-tools-main {
+  margin-top: -6px;
+}
+
+.sidebar-navigation .quarto-navigation-tool {
+  opacity: 0.7;
+  font-size: 0.875rem;
+}
+
+.sidebar-navigation button.quarto-navigation-tool {
+  background: none;
+  border: 0;
+  color: inherit;
+}
+
+.sidebar-tools-main {
+  display: inline-flex;
+  margin-left: 0px;
+  order: 2;
+}
+
+.sidebar-tools-main:not(.tools-wide) {
+  vertical-align: middle;
+}
+
+.sidebar-navigation .quarto-navigation-tool.dropdown-toggle::after {
+  display: none;
+}
+
 // Sidebar item layout (vertical rhythm and section indent).
 $sidebar-items-gap-spacing: 0.2em !default;
 $sidebar-section-indent: 0.5em !default;
@@ -893,10 +926,32 @@ $sidebar-disabled-color: rgba($sidebar-fg, 0.75) !default;
   }
 }
 
-// The glass pane is a grid child of `#quarto-content`, which gives
-// every child top padding; it must not contribute any.
+// Every grid child of `#quarto-content` (title block, sidebar, TOC,
+// main) starts `$content-padding-top` below the navbar; below `lg` the
+// gap moves to the subtitle and the first section heading instead.
+// Ported from quarto-cli `quarto-nav.scss` (GH #1376).
+#quarto-content > * {
+  padding-top: $content-padding-top;
+}
+
+// The glass pane is a grid child of `#quarto-content` too; it must not
+// contribute any top padding.
 #quarto-content > #quarto-sidebar-glass {
   padding-top: 0px;
+}
+
+@include media-breakpoint-down(lg) {
+  #quarto-content > * {
+    padding-top: 0;
+  }
+
+  #quarto-content .subtitle {
+    padding-top: $content-padding-top;
+  }
+
+  #quarto-content section:first-of-type h2:first-of-type {
+    margin-top: 1rem;
+  }
 }
 
 div.sidebar-item-container {
@@ -1449,6 +1504,22 @@ details > summary > p:only-child {
 // so this loudly flags a missing reference — matching TS's failure signal.
 .quarto-unresolved-ref {
   font-weight: 600;
+}
+
+// q2 renders the prev/next strip inside `main` (Q1 gives it a grid row of
+// its own after `main`), so it must clear anything floated in the page
+// body. A book's home page floats its cover image; without this the
+// strip sits beside the cover instead of under it.
+main .page-navigation {
+  clear: both;
+}
+
+// A book's cover image on its home page (transforms/book_cover_image.rs
+// emits `<img class="quarto-cover-image">`). from _quarto-rules.scss:370-375.
+.quarto-cover-image {
+  max-width: 35%;
+  float: right;
+  margin-left: 30px;
 }
 
 // from _quarto-rules.scss:436-438.
@@ -3226,6 +3297,63 @@ textarea {
   right: 0;
 }
 
+// from _quarto-rules.scss:665-683. The list is hidden in `hover` and
+// `select` modes, where each annotation shows in a popover instead.
+.code-annotation-tip-content {
+  word-wrap: break-word;
+}
+
+.code-annotation-container-hidden {
+  display: none !important;
+}
+
+// The popover that shows an annotation in `hover` and `select` modes.
+// Quarto 1 uses a tippy.js tooltip here; these sizes follow it.
+.code-annotation-popover {
+  max-width: 300px;
+  .popover-body {
+    padding: 5px 9px;
+    font-size: 0.875rem;
+  }
+}
+
+dl.code-annotation-container-grid {
+  display: grid;
+  grid-template-columns: min-content auto;
+  dt {
+    grid-column: 1;
+  }
+  dd {
+    grid-column: 2;
+  }
+}
+
+// from _quarto-rules.scss:684-693: the markers float to the right edge
+// of the code block, over the gutter.
+pre.sourceCode.code-annotation-code {
+  padding-right: 0;
+}
+
+code.sourceCode .code-annotation-anchor {
+  z-index: 100;
+  position: relative;
+  float: right;
+  background-color: transparent;
+}
+
+// q2 writes per-line spans only where a block needs them. These two are
+// Pandoc's baseline rules for them (see highlight.scss for the numbered
+// case); an annotated block needs them so each line is a box the
+// highlight band can measure.
+pre.code-annotated > code.sourceCode {
+  position: relative;
+}
+
+pre.code-annotated > code.sourceCode > span {
+  display: inline-block;
+  line-height: 1.25;
+}
+
 dl.code-annotation-container-grid {
   dt {
     margin-right: 1em;
@@ -3299,8 +3427,11 @@ code.sourceCode .code-annotation-anchor.code-annotation-active {
 
 code.sourceCode .code-annotation-anchor {
   font-family: $font-family-code;
-  color: var(--quarto-hl-co-color);
-  border: solid var(--quarto-hl-co-color) 1px;
+  // q2's highlight themes do not define `--quarto-hl-co-color` (the
+  // comment colour) yet; without the fallback the border declaration is
+  // invalid and the marker loses its circle.
+  color: var(--quarto-hl-co-color, #5e5e5e);
+  border: solid var(--quarto-hl-co-color, #5e5e5e) 1px;
   border-radius: 50%;
   height: 18px;
   width: 18px;

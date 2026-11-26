@@ -541,6 +541,19 @@ pub enum PipelineProfile {
 }
 
 impl PipelineProfile {
+    /// `true` for the three profiles whose AST is rendered by the
+    /// q2-preview React renderer instead of the native HTML writer.
+    /// Transforms use it to avoid constructs that renderer cannot show,
+    /// such as an element opened in one `RawBlock` and closed in another.
+    pub fn is_preview(&self) -> bool {
+        matches!(
+            self,
+            PipelineProfile::HtmlPreview
+                | PipelineProfile::RevealjsPreview
+                | PipelineProfile::DashboardPreview
+        )
+    }
+
     /// Derive the pipeline profile from a `target_format` string.
     ///
     /// Reproduces [`is_revealjs_target`] and [`builtin_pseudo_format`]

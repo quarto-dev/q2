@@ -74,3 +74,17 @@ pub use shortcode::{
     LuaShortcodeEngine, LuaShortcodeError, LuaShortcodeResult, ShadowEvent, ShortcodeArgs,
     ShortcodeCallContext,
 };
+
+/// The Lua state for native filters and shortcode handlers: every safe
+/// standard library plus `debug`, which pandoc exposes and extensions use
+/// (`debug.getinfo(1, "S").source` to find their own directory, GH #1012).
+/// `Lua::new()` leaves `debug` out because it can break mlua's sandbox
+/// invariants; filters are trusted user code, as they are under pandoc.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn native_lua_state() -> mlua::Lua {
+    use mlua::{Lua, LuaOptions, StdLib};
+    // SAFETY: the only unsafe library added is `debug`; filters and
+    // shortcode handlers are user-authored code that runs with the same
+    // trust as under pandoc, which loads `debug` unconditionally.
+    unsafe { Lua::unsafe_new_with(StdLib::ALL_SAFE | StdLib::DEBUG, LuaOptions::default()) }
+}

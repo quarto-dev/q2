@@ -31,7 +31,7 @@ use crate::footer::{FooterBorder, FooterRegion, PageFooter};
 use crate::item::{NavigationItem, is_blank_text};
 use crate::navbar::{LogoVariant, Navbar, NavbarTitle};
 use crate::page_nav::PageNavigation;
-use crate::sidebar::{Crumb, Sidebar, SidebarEntry, SidebarStyle, SidebarTitle};
+use crate::sidebar::{Crumb, Sidebar, SidebarEntry, SidebarStyle, SidebarTitle, SidebarTool};
 
 /// Render a complete navbar element.
 ///
@@ -657,6 +657,76 @@ pub struct SidebarSearch<'a> {
 }
 
 /// [`sidebar_to_html`] with page context passed via [`SidebarRenderOptions`].
+/// The sidebar's `tools:` as HTML: one icon link per tool, or an icon
+/// button opening a dropdown for a tool with a `menu`. Port of Q1's
+/// `navtools.ejs` (the `tools` loop). Empty when there are no tools.
+///
+/// More than two tools get `tools-wide`, which Q1 uses to let the row
+/// drop under the title. A menu's trigger is a `<button>` here (Q1 uses
+/// `<a href="" role="link">`): it opens a menu and goes nowhere.
+fn sidebar_tools_html(tools: &[SidebarTool]) -> String {
+    if tools.is_empty() {
+        return String::new();
+    }
+    let icon = |tool: &SidebarTool, extra: &str| match tool.icon.as_deref() {
+        Some(name) if !name.is_empty() => format!(
+            "<i class=\"bi bi-{}{extra}\" aria-hidden=\"true\"></i>",
+            escape_attr(name)
+        ),
+        _ => String::new(),
+    };
+    let link_attrs = |tool: &SidebarTool| {
+        let mut attrs = String::new();
+        if let Some(target) = &tool.target {
+            attrs.push_str(&format!(" target=\"{}\"", escape_attr(target)));
+        }
+        if let Some(rel) = &tool.rel {
+            attrs.push_str(&format!(" rel=\"{}\"", escape_attr(rel)));
+        }
+        attrs
+    };
+
+    let wide = if tools.len() > 2 { " tools-wide" } else { "" };
+    let mut html = format!("\n      <div class=\"sidebar-tools-main{wide}\">\n");
+    let mut dropdowns = 0;
+    for tool in tools {
+        let label = escape_attr(&tool.text);
+        if tool.menu.is_empty() {
+            html.push_str(&format!(
+                "        <a href=\"{}\" title=\"{label}\" aria-label=\"{label}\" \
+                 class=\"quarto-navigation-tool px-1\"{}>{}</a>\n",
+                escape_attr(tool.href.as_deref().unwrap_or("")),
+                link_attrs(tool),
+                icon(tool, "")
+            ));
+            continue;
+        }
+        let id = format!("quarto-navigation-tool-dropdown-{dropdowns}");
+        dropdowns += 1;
+        html.push_str(&format!(
+            "        <div class=\"dropdown\">\n          \
+             <button type=\"button\" id=\"{id}\" title=\"{label}\" aria-label=\"{label}\" \
+             class=\"quarto-navigation-tool dropdown-toggle px-1\" \
+             data-bs-toggle=\"dropdown\" aria-expanded=\"false\">{}</button>\n          \
+             <ul class=\"dropdown-menu\" aria-labelledby=\"{id}\">\n",
+            icon(tool, "")
+        ));
+        for item in &tool.menu {
+            html.push_str(&format!(
+                "            <li><a class=\"dropdown-item sidebar-tools-main-item\" \
+                 href=\"{}\"{}>{}{}</a></li>\n",
+                escape_attr(item.href.as_deref().unwrap_or("")),
+                link_attrs(item),
+                icon(item, " pe-1"),
+                escape_html(&item.text)
+            ));
+        }
+        html.push_str("          </ul>\n        </div>\n");
+    }
+    html.push_str("      </div>\n    ");
+    html
+}
+
 pub fn sidebar_to_html_with_options(sidebar: &Sidebar, opts: &SidebarRenderOptions) -> String {
     let home_url = opts.home_url;
     let appended_html = opts.appended_html;
@@ -731,12 +801,19 @@ pub fn sidebar_to_html_with_options(sidebar: &Sidebar, opts: &SidebarRenderOptio
         && !opts.has_navbar
     {
         html.push_str("  <div class=\"sidebar-header pt-lg-2 mt-2 text-left\">\n");
+        // The tools sit inside the title element, after the home link
+        // (Q1 `sidebar.ejs`, `toolsLocation === "title"`).
         html.push_str(&format!(
-            "    <div class=\"sidebar-title mb-0 py-0\"><a href=\"{}\">{}</a></div>\n",
+            "    <div class=\"sidebar-title mb-0 py-0\"><a href=\"{}\">{}</a>{}</div>\n",
             escape_attr(home_url),
-            render_text(title_cv)
+            render_text(title_cv),
+            sidebar_tools_html(&sidebar.tools)
         ));
         html.push_str("  </div>\n");
+    } else {
+        // No title to sit beside (a navbar is present, or the title is
+        // off): the tools take a line of their own above the search box.
+        html.push_str(&sidebar_tools_html(&sidebar.tools));
     }
 
     // Search box (bd-6cme). Textbox: Q1 `sidebar.ejs:68-75`. Overlay:
@@ -999,7 +1076,7 @@ fn render_navbar_item(item: &NavigationItem, indent: usize, align_end: bool) -> 
 
     // Dropdown submenu: item has a menu and (typically) no direct href.
     if !item.menu.is_empty() {
-        let text = navbar_text(item);
+        let text = navbar_text(item, MENU_TEXT);
         let label = text
             .as_ref()
             .map(|t| t.html.clone())
@@ -1031,7 +1108,7 @@ fn render_navbar_item(item: &NavigationItem, indent: usize, align_end: bool) -> 
 
     // Plain link.
     let mut anchor_attrs = navbar_link_attrs(item);
-    let label = render_navbar_label(item);
+    let label = render_navbar_label(item, MENU_TEXT);
 
     let href = item.href.as_deref().unwrap_or("#");
     // Q1 parity: the active link also carries `aria-current="page"`
@@ -1055,7 +1132,7 @@ fn render_navbar_item(item: &NavigationItem, indent: usize, align_end: bool) -> 
 fn render_dropdown_item(item: &NavigationItem, indent: usize) -> String {
     let pad = " ".repeat(indent);
     let mut attrs = navbar_link_attrs(item);
-    let label = render_navbar_label(item);
+    let label = render_navbar_label(item, DROPDOWN_TEXT);
     let href = item.href.as_deref().unwrap_or("#");
     let class = if item.active {
         "class=\"dropdown-item active\""
@@ -1074,18 +1151,25 @@ struct NavbarText {
     has_blank_range: bool,
 }
 
-/// Render a navbar item's text. Scalar text renders as today. With
-/// breakpoint variants (bd-navbar-responsive-text-am98rw95), each
-/// distinct run of variants becomes a `<span class="menu-text">`
-/// carrying Bootstrap display utilities that show it only within its
-/// breakpoint range; the lowest variant also covers every narrower
-/// width. Blank ranges emit no span. Adjacent variants that render
-/// identically merge, and a single remaining run renders exactly like
-/// scalar text. `None` when there is no text to show.
-fn navbar_text(item: &NavigationItem) -> Option<NavbarText> {
+/// Text span class for navbar links and dropdown toggles.
+const MENU_TEXT: &str = "menu-text";
+/// Text span class for dropdown menu entries.
+const DROPDOWN_TEXT: &str = "dropdown-text";
+
+/// Render a navbar item's text. As in Q1, scalar text is wrapped in a
+/// `<span class="{span_class}">` (`menu-text` for links and toggles,
+/// `dropdown-text` for dropdown entries; GH #1372). With breakpoint
+/// variants (bd-navbar-responsive-text-am98rw95), each distinct run of
+/// variants becomes such a span carrying Bootstrap display utilities
+/// that show it only within its breakpoint range; the lowest variant
+/// also covers every narrower width. Blank ranges emit no span.
+/// Adjacent variants that render identically merge, and a single
+/// remaining run renders exactly like scalar text. `None` when there is
+/// no text to show.
+fn navbar_text(item: &NavigationItem, span_class: &str) -> Option<NavbarText> {
     if item.text_variants.is_empty() {
         return item.text.as_ref().map(|cv| NavbarText {
-            html: render_text(cv),
+            html: format!("<span class=\"{}\">{}</span>", span_class, render_text(cv)),
             has_blank_range: false,
         });
     }
@@ -1107,8 +1191,8 @@ fn navbar_text(item: &NavigationItem) -> Option<NavbarText> {
     let has_blank_range = runs.iter().any(|(_, html)| html.is_empty());
     if runs.len() == 1 {
         let html = runs.pop().map(|(_, html)| html).unwrap_or_default();
-        return (!html.is_empty()).then_some(NavbarText {
-            html,
+        return (!html.is_empty()).then(|| NavbarText {
+            html: format!("<span class=\"{}\">{}</span>", span_class, html),
             has_blank_range: false,
         });
     }
@@ -1120,7 +1204,7 @@ fn navbar_text(item: &NavigationItem) -> Option<NavbarText> {
         }
         let from = if i == 0 { Breakpoint::Xs } else { *bp };
         let until = runs.get(i + 1).map(|(next, _)| *next);
-        let mut classes = vec!["menu-text".to_string()];
+        let mut classes = vec![span_class.to_string()];
         classes.extend(range_classes(from, until));
         html.push_str(&format!(
             "<span class=\"{}\">{}</span>",
@@ -1151,19 +1235,19 @@ fn navbar_aria_fallback(item: &NavigationItem, text: Option<&NavbarText>) -> Opt
 /// fallback.
 fn navbar_link_attrs(item: &NavigationItem) -> Vec<String> {
     let mut attrs = link_attrs(item);
-    if let Some(aria) = navbar_aria_fallback(item, navbar_text(item).as_ref()) {
+    if let Some(aria) = navbar_aria_fallback(item, navbar_text(item, MENU_TEXT).as_ref()) {
         attrs.insert(0, aria);
     }
     attrs
 }
 
 /// Icon plus text for a navbar link or dropdown entry.
-fn render_navbar_label(item: &NavigationItem) -> String {
+fn render_navbar_label(item: &NavigationItem, span_class: &str) -> String {
     let mut parts = Vec::new();
     if let Some(ref icon) = item.icon {
         parts.push(render_icon(icon));
     }
-    if let Some(text) = navbar_text(item) {
+    if let Some(text) = navbar_text(item, span_class) {
         parts.push(text.html);
     }
     parts.join(" ")
@@ -2545,8 +2629,81 @@ mod tests {
         );
         assert!(
             html.contains(
-                "class=\"dropdown-item\"><span class=\"menu-text d-xl-none\">Guide</span>\
-                 <span class=\"menu-text d-none d-xl-inline\">User Guide</span></a>"
+                "class=\"dropdown-item\"><span class=\"dropdown-text d-xl-none\">Guide</span>\
+                 <span class=\"dropdown-text d-none d-xl-inline\">User Guide</span></a>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn navbar_scalar_text_wraps_in_menu_text_span() {
+        // GH #1372: Q1 wraps every navbar link's text in a `menu-text`
+        // span, after any icon.
+        let html = render_left(NavigationItem {
+            href: Some("guide.html".to_string()),
+            text: Some(s("Guide")),
+            ..NavigationItem::default()
+        });
+        assert!(
+            html.contains(
+                "<a href=\"guide.html\" class=\"nav-link\">\
+                 <span class=\"menu-text\">Guide</span></a>"
+            ),
+            "{html}"
+        );
+
+        let html = render_left(NavigationItem {
+            href: Some("https://github.com".to_string()),
+            icon: Some("github".to_string()),
+            text: Some(s("Code")),
+            ..NavigationItem::default()
+        });
+        assert!(
+            html.contains(
+                "<a href=\"https://github.com\" class=\"nav-link\">\
+                 <i class=\"bi bi-github\"></i> <span class=\"menu-text\">Code</span></a>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn navbar_icon_only_link_has_no_text_span() {
+        let html = render_left(NavigationItem {
+            href: Some("https://github.com".to_string()),
+            icon: Some("github".to_string()),
+            ..NavigationItem::default()
+        });
+        assert!(
+            html.contains("class=\"nav-link\"><i class=\"bi bi-github\"></i></a>"),
+            "{html}"
+        );
+        assert!(!html.contains("menu-text"), "{html}");
+    }
+
+    #[test]
+    fn navbar_dropdown_toggle_uses_menu_text_and_items_use_dropdown_text() {
+        let html = render_left(NavigationItem {
+            text: Some(s("More")),
+            menu: vec![NavigationItem {
+                href: Some("guide.html".to_string()),
+                text: Some(s("Guide again")),
+                ..NavigationItem::default()
+            }],
+            ..NavigationItem::default()
+        });
+        assert!(
+            html.contains(
+                "data-bs-toggle=\"dropdown\" aria-expanded=\"false\">\
+                 <span class=\"menu-text\">More</span></a>"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "<a href=\"guide.html\" class=\"dropdown-item\">\
+                 <span class=\"dropdown-text\">Guide again</span></a>"
             ),
             "{html}"
         );
@@ -3347,6 +3504,89 @@ mod tests {
                 landmark_labels: &LandmarkLabels::default(),
             },
         )
+    }
+
+    fn tool(icon: &str, text: &str, href: &str) -> SidebarTool {
+        SidebarTool {
+            icon: Some(icon.to_string()),
+            text: text.to_string(),
+            href: Some(href.to_string()),
+            ..Default::default()
+        }
+    }
+
+    /// bd-fod3: `tools:` render inside the sidebar title, after the home
+    /// link: an icon link per tool, and an icon button with a dropdown
+    /// for a tool that has a menu. Three tools get `tools-wide`.
+    #[test]
+    fn sidebar_tools_render_beside_the_title() {
+        let mut sb = Sidebar::with_defaults();
+        sb.title = SidebarTitle::Text(ConfigValue::new_string("My Book", SourceInfo::for_test()));
+        sb.tools = vec![
+            tool("github", "Source Code", "https://github.com/example/book"),
+            tool("journal", "Download ePub", "My-Book.epub"),
+            SidebarTool {
+                icon: Some("share".to_string()),
+                text: "Share".to_string(),
+                menu: vec![tool(
+                    "twitter",
+                    "Twitter",
+                    "https://twitter.com/intent/tweet?url=|url|",
+                )],
+                ..Default::default()
+            },
+        ];
+        let html = sidebar_to_html(&sb, "./");
+
+        let title = html.find("sidebar-title").unwrap();
+        let tools = html.find("sidebar-tools-main tools-wide").unwrap();
+        let menu = html.find("sidebar-menu-container").unwrap_or(html.len());
+        assert!(
+            title < tools && tools < menu,
+            "tools sit in the title header: {html}"
+        );
+        assert!(
+            html.contains(
+                "<a href=\"https://github.com/example/book\" title=\"Source Code\" \
+                 aria-label=\"Source Code\" class=\"quarto-navigation-tool px-1\">\
+                 <i class=\"bi bi-github\" aria-hidden=\"true\"></i></a>"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains("href=\"My-Book.epub\" title=\"Download ePub\""),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "<button type=\"button\" id=\"quarto-navigation-tool-dropdown-0\" \
+                 title=\"Share\" aria-label=\"Share\" \
+                 class=\"quarto-navigation-tool dropdown-toggle px-1\" \
+                 data-bs-toggle=\"dropdown\" aria-expanded=\"false\">"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "<li><a class=\"dropdown-item sidebar-tools-main-item\" \
+                 href=\"https://twitter.com/intent/tweet?url=|url|\">\
+                 <i class=\"bi bi-twitter pe-1\" aria-hidden=\"true\"></i>Twitter</a></li>"
+            ),
+            "{html}"
+        );
+    }
+
+    /// No tools, no tools container: existing sidebars are unchanged.
+    #[test]
+    fn sidebar_without_tools_has_no_tools_container() {
+        let mut sb = Sidebar::with_defaults();
+        sb.title = SidebarTitle::Text(ConfigValue::new_string("Site", SourceInfo::for_test()));
+        let html = sidebar_to_html(&sb, "./");
+        assert!(!html.contains("sidebar-tools-main"), "{html}");
+        assert!(
+            html.contains("<div class=\"sidebar-title mb-0 py-0\"><a href=\"./\">Site</a></div>"),
+            "{html}"
+        );
     }
 
     /// A linked section keeps its `<a>` header and gets a separate

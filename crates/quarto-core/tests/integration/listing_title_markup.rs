@@ -28,7 +28,7 @@ const PROJECT: &str = "project:\n  type: website\n";
 /// One table listing and one default listing over the same items, so
 /// both the pre-rendered table-row path and the `$title$` template path
 /// are exercised.
-const INDEX: &str = "---\ntitle: Home\nlisting:\n  - id: tbl\n    type: table\n    contents: \"p/*.qmd\"\n    fields: [title, subtitle, description]\n  - id: dflt\n    type: default\n    contents: \"p/*.qmd\"\n  - id: grd\n    type: grid\n    contents: \"p/*.qmd\"\n---\n";
+const INDEX: &str = "---\ntitle: Home\nlisting:\n  - id: tbl\n    type: table\n    contents: \"p/*.qmd\"\n    fields: [title, subtitle, description]\n  - id: dflt\n    type: default\n    contents: \"p/*.qmd\"\n  - id: grd\n    type: grid\n    contents: \"p/*.qmd\"\n    fields: [title, subtitle, description]\n---\n";
 
 fn write(path: &std::path::Path, contents: &str) {
     if let Some(parent) = path.parent() {
@@ -166,7 +166,8 @@ fn listing_keeps_title_subtitle_and_description_markup() {
             "{name} listing leaked `<anonymous>` as raw HTML:\n{section}"
         );
     }
-    // Subtitles appear in the table (explicit field) and the default layout.
+    // Subtitles appear in the table and grid (explicit fields; Q1's
+    // grid default set has no subtitle) and the default layout.
     assert!(tbl.contains("Sub with <code>code</code>"), "{tbl}");
     assert!(dflt.contains("Sub with <code>code</code>"), "{dflt}");
     assert!(grd.contains("Sub with <code>code</code>"), "{grd}");

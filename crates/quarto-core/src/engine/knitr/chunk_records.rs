@@ -89,8 +89,9 @@ pub(super) fn insert_unit_ids(
             });
         }
         // knitr reads option lines under one comment prefix and stops at the first line that uses
-        // another. It accepts `#|` in any chunk, so an author's `#|` lines in a `{sql}` chunk
-        // (whose scanner prefix is `--`) must not be split from the options by a `--|` line.
+        // another. Below 1.51, or outside Quarto mode, it reads `#|` in any chunk, so an author's
+        // `#|` lines in a `{sql}` chunk must not be split from the options by a `--|` id line.
+        // knitr 1.51 and later refuse those lines under Quarto, with or without the id line.
         let first_line = text[cell.start + opener_len + 1..]
             .lines()
             .next()
@@ -125,8 +126,9 @@ pub(super) fn insert_unit_ids(
 
 /// Whether the chunk's option block sets [`UNIT_ID_OPTION`].
 ///
-/// The option block is the run of lines right after the opener that start with `#|` (knitr
-/// accepts it in every chunk) or the language's comment prefix followed by `|`.
+/// The option block is the run of lines right after the opener that start with `#|` or the
+/// language's comment prefix followed by `|`. Both are checked because knitr below 1.51, or
+/// outside Quarto mode, reads `#|` in any chunk.
 fn sets_reserved_key(
     text: &str,
     cell: &crate::engine::units::CellUnit,
@@ -442,10 +444,8 @@ y = 2
         assert_eq!(d.code.as_deref(), Some("Q-18-17"));
     }
 
-    /// knitr reads a chunk's option lines under one comment prefix and stops at the first line
-    /// that uses another. A `{sql}` chunk whose author wrote `#|` lines (knitr accepts them, though
-    /// Quarto's scanner reads `--|`) must therefore get its id line in the author's prefix, or the
-    /// author's options fall out of the block and `connection` never reaches the engine.
+    /// A `{sql}` chunk with an author's `#|` options gets its id line in the author's prefix, which
+    /// knitr below 1.51 accepts; a `--|` line would cut `connection` off from the options.
     #[test]
     fn the_id_line_uses_the_prefix_of_the_authors_option_lines() {
         let doc = "```{sql}\n#| connection: con\nSELECT 1\n```\n\n\

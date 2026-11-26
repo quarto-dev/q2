@@ -28,7 +28,9 @@
   display: none;
 }
 
-/* Q1 pads #quarto-content > *; pass that padding through to the hero */
+/* `#quarto-content > *` gets top padding (as in Q1), but the custom-layout
+   rule above zeroes it on main.content; pass that padding through to the
+   hero instead, so it is applied once. */
 @media (min-width: 992px) {
 #quarto-content.page-layout-custom > main.content > .quarto-home > * {
   padding-top: 14px;
