@@ -1,4 +1,11 @@
-# Shared engine binary probe (bd-s8xe0lac)
+---
+title: 'Shared engine binary probe (bd-s8xe0lac)'
+date: 2026-11-27
+description: 'Knitr and Jupyter report a runtime available only when its binary exits 0 on --version, through one cached, time-limited probe.'
+status: in-progress
+braid:
+  strand: bd-s8xe0lac
+---
 
 ## Overview
 
@@ -420,3 +427,13 @@ in a temp dir outside the repo.
   `claude-notes: tick engine binary probe plan (bd-s8xe0lac)`, and add a
   `braid comment bd-s8xe0lac` summarising the commits and the end-to-end
   result. Do not close the strand or push; report back.
+
+### Verification results (2026-11-27, Windows)
+
+- Step 3: with `QUARTO_R` pointing at a copy of `where.exe` named
+  `Rscript.exe`, `cargo run --bin q2 -- render doc.qmd` failed with
+  `Engine 'knitr' is registered but its runtime is not available.`
+- Step 4: with `QUARTO_R` unset, the same render succeeded; the output HTML
+  was inspected and contains `[1] 2`.
+- Step 5: follow-ups filed as bd-og2exj8x (Julia and Node probes) and
+  bd-itbhfipu (Rscript discovery parity).
