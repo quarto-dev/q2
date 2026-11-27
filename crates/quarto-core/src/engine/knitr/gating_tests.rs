@@ -313,10 +313,12 @@ fn the_fallback_table() {
             vec![true],
             None,
         ),
+        // eval: false: the row is about the engine name, and running bash on Windows hits
+        // System32's WSL launcher (R searches System32 before PATH).
         (
             "non-R engine",
             "html",
-            "```{r a}\n1\n```\n\n```{bash b}\necho hi\n```\n",
+            "```{r a}\n1\n```\n\n```{bash b}\n#| eval: false\necho hi\n```\n",
             &[],
             vec![true, false],
             None,

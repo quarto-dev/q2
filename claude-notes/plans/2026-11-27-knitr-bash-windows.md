@@ -1,20 +1,19 @@
 ---
 title: 'Windows: knitr `{bash}` engine runs WSL bash.exe and fails (bd-xw86rvap)'
 date: 2026-11-27
-description: 'Two knitr tests use a bash chunk as their non-R engine; on windows-latest R resolves bash to the System32 WSL launcher, so the tests should use an engine that spawns no process.'
-status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+description: 'Two knitr tests ran a bash chunk as their non-R engine; on windows-latest R resolves bash to the System32 WSL launcher, so the chunks now use eval: false.'
+status: implemented  # pending a Windows CI dispatch
 braid:
   strand: bd-xw86rvap
 ---
 
 **Worktree:** `.worktrees/bd-xw86rvap-knitr-bash-windows` (branch `braid/bd-xw86rvap-knitr-bash-windows`, based on `main` @ `b538d9f61`)
-**Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 
-**Ready to design.** The root cause is confirmed from R's source: Windows R resolves a bare
+**Fixed in the tests.** The root cause is confirmed from R's source: Windows R resolves a bare
 command through `SearchPath`, which searches System32 before `PATH`. This is a test problem, not
-a q2 product gap. The one open choice is which engine replaces `bash` in the two tests.
+a q2 product gap. See § Decision.
 
 ## Issue context
 
@@ -71,35 +70,38 @@ place on each OS. No other test or fixture in `crates/` uses a `{bash}` chunk.
 **Product side.** A Windows user whose `{bash}` chunk hits the WSL launcher gets the same failure
 from knitr in Quarto 1. q2 calls knitr unchanged, so it has no product gap of its own here.
 
-## Proposed phases (draft)
+## Decision
 
-- Phase 0: RED is the existing Windows CI failure (run 45259769017).
-- Phase 1: in both tests, replace the `bash` chunk with a non-R engine that spawns no process
-  (see Q1). Keep the expected `classes` assertion in line with the new engine name.
-- Phase 2: run both tests locally
-  (`cargo nextest run -p quarto-core -E 'test(the_fallback_table) | test(capture_other_engine_is_a_fallback_piece)'`),
-  then a Windows dispatch with the same filter to show GREEN on the runner.
+Decided 2026-11-27: keep the `bash` chunks and add `#| eval: false` to both. Neither test
+depends on bash running. Both were written for KNR-3's chunk-kinds row "Non-R engine chunk (bash,
+SQL, reticulate Python, custom engines) → fallback, via the chunk hook"
+(`2026-10-30-knr-03-record-adapter-hash-fallback.md`), and bash was chosen because the KNR-1 S5
+spike happened to use it as its example.
 
-## Open design questions for the user
+Rejected: knitr's `cat` engine. It reaches the `chunk` hook, so `capture_other_engine_is_a_fallback_piece`
+passed with it. `the_fallback_table` failed with `[true]` instead of `[true, false]`, because q2
+counts a non-R chunk as a knitr unit only when `knitr_claims` claims its language
+(`crates/quarto-core/src/engine/mod.rs:189`: `python | sql | bash | sh`). A `{cat}` chunk is a plain
+code block to q2, so the row would stop testing a fallback unit. `sh` is claimed too, but it still
+starts a process found on `PATH`. `sql` and `python` need a database connection or reticulate.
 
-1. **Replacement engine.** Candidates:
-   - `cat`: a built-in knitr engine that spawns no process. In a plain `knitr::knit` it produces
-     no visible output (`knitr-bash-windows-investigation/cat_engine.R`). It is not yet confirmed
-     that the `chunk` hook still records an `other` piece for it.
-   - `Rscript` (`{Rscript}`): non-R by name, and its binary is guaranteed wherever these tests
-     run. It still spawns a process, and its name reads like R, which blurs the "non-R" intent.
-   - A test-registered engine (`knitr::knit_engines$set(...)`): fully hermetic, but it needs a
-     setup hook in the test document.
+`eval: false` keeps the claimed `bash` unit and still goes through the `chunk` hook. It starts
+no process: `knitr-bash-windows-investigation/bash_eval_false.R` points `engine.path` at a
+missing binary. knitr prints `running: <path> -c "echo hi"` for the evaluated chunk and nothing
+for the `eval=FALSE` one.
 
-   Is `cat` acceptable if the hook records it, with `Rscript` as the fallback?
-2. **Keep bash anywhere?** Should the "non-R engine" row stay bash on unix through a cfg switch?
-   The draft answer is no: the row tests classification, not bash, and a per-OS switch is the kind
-   of gate CLAUDE.local.md warns against.
+## Checklist
 
-## Risks / tradeoffs (draft)
+- [x] Phase 0: RED is the existing Windows CI failure (run 45259769017). It cannot be reproduced
+  on this machine, which has no `System32\bash.exe`.
+- [x] Phase 1: add `#| eval: false` to the bash chunk in both tests, with a comment explaining why.
+- [x] Phase 2a: both tests pass locally with no `SKIP` line:
+  `cargo nextest run -p quarto-core -E 'test(the_fallback_table) | test(capture_other_engine_is_a_fallback_piece)'`.
+- [ ] Phase 2b: Windows dispatch with the same filter, to show GREEN on the runner (ask before
+  dispatching).
 
-- `cat` might go through a different knitr output path (`engine_output` with empty output) and
-  never reach the `chunk` hook. That would make the test fail for an unrelated reason, so try it
-  first.
-- Changing the engine name changes the asserted `classes` (`["bash"]` becomes `["cat"]`). This is
-  a test-only change, and no snapshots are involved.
+## Lost coverage
+
+No test now checks that a non-R chunk which really runs a process still ends up as a fallback
+unit. The spec does not ask for that. If wanted, a separate test could cover it with a binary that
+is known to be installed.
