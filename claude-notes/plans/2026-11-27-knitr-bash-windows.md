@@ -1,7 +1,7 @@
 ---
-title: 'Windows: knitr `{bash}` engine runs WSL bash.exe and fails (bd-xw86rvap)'
+title: 'Windows: knitr `{bash}` chunks fail in two tests on windows-latest (bd-xw86rvap)'
 date: 2026-11-27
-description: 'Two knitr tests ran a bash chunk as their non-R engine; on windows-latest R resolves bash to the System32 WSL launcher, so the chunks now use eval: false.'
+description: 'Two knitr tests ran a bash chunk as their non-R engine; on windows-latest it fails, most likely because R resolves bash to the System32 WSL launcher, so the chunks now use eval: false.'
 status: implemented  # pending a Windows CI dispatch
 braid:
   strand: bd-xw86rvap
@@ -43,7 +43,7 @@ On Windows, R's `system2` reaches `expandcmd()` in `src/gnuwin32/run.c`, which t
 `bash.exe`, `.com`, `.cmd` and `.bat` through `SearchPath(NULL, ...)`. With a NULL path, Win32
 searches the application directory, **System32**, the Windows directory and the current
 directory before `PATH`. The test step runs under `shell: bash` (Git Bash, whose `/usr/bin` comes
-first on `PATH`), but `C:\Windows\System32\bash.exe` still wins.
+first on `PATH`), but a `C:\Windows\System32\bash.exe`, if present, would still win.
 
 **The runner has that `bash.exe`.** The failing job ran on image `windows-2025-vs2026`. Its
 documentation (actions/runner-images, `images/windows/Windows2025-Readme.md`) lists
@@ -94,7 +94,9 @@ starts a process found on `PATH`. `sql` and `python` need a database connection 
 `eval: false` keeps the claimed `bash` unit and still goes through the `chunk` hook. It starts
 no process: `knitr-bash-windows-investigation/bash_eval_false.R` points `engine.path` at a
 missing binary and knits an `eval=FALSE` bash chunk. The chunk hook reports `engine=bash
-eval=FALSE` and the knit finishes; had knitr launched the missing binary, it would have failed.
+eval=FALSE` and the knit finishes. The script sets `error = FALSE`, so a launch could not be
+swallowed: with `eval=TRUE` instead, the same script stops with
+`'"C:/does-not-exist/bash.exe"' not found`.
 
 ## Checklist
 
