@@ -26,6 +26,7 @@
 
 use async_trait::async_trait;
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::Arc;
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
@@ -177,11 +178,14 @@ impl EngineExecutionStage {
         &self,
         engine_name: &str,
         registry: &Arc<EngineRegistry>,
+        document: &Path,
+        project_dir: Option<&Path>,
+        project_env: &[(String, String)],
         warnings: &mut Vec<DiagnosticMessage>,
     ) -> Result<Arc<dyn ExecutionEngine>, PipelineError> {
         if let Some(engine) = registry.get(engine_name) {
             // Engine found - check if it's actually available
-            if engine.is_available() {
+            if engine.is_available_for(document, project_dir, project_env) {
                 return Ok(engine);
             }
 
@@ -462,6 +466,11 @@ impl PipelineStage for EngineExecutionStage {
         // here too, since TS engines read `execute:` from this map.
         let document_metadata = ts_document_metadata(&doc_ast.ast.meta, ctx.format.identifier);
 
+        // One snapshot of the project environment for the availability
+        // gate and every engine's execution context, so a runtime is
+        // probed with exactly the environment it runs with.
+        let project_env = engine_project_env(ctx);
+
         // Step 2: Resolve each engine in the sequence to an implementation
         // (with fallback), dropping markdown — it's a no-op, so a markdown
         // engine anywhere in the sequence is skipped (this also covers
@@ -488,10 +497,14 @@ impl PipelineStage for EngineExecutionStage {
             to_run.push((Arc::new(replay) as Arc<dyn ExecutionEngine>, None));
         } else {
             let mut engine_warnings = Vec::new();
+            let project_dir = (!ctx.project.is_single_file).then_some(ctx.project.dir.as_path());
             for detected in &resolution.sequence {
                 let engine = self.get_engine_with_fallback(
                     &detected.name,
                     &ctx.registry,
+                    &doc_ast.path,
+                    project_dir,
+                    &project_env,
                     &mut engine_warnings,
                 )?;
                 if engine.name() == "markdown" {
@@ -710,23 +723,7 @@ impl PipelineStage for EngineExecutionStage {
             .with_present_from_record(self.present_from_record)
             .with_metadata(document_metadata.clone())
             .with_execute_env(execute_env.clone())
-            .with_project_env({
-                let mut pairs = crate::project::environment::env_for_subprocess(&ctx.project_env);
-                // QUARTO_PROFILE is applied unconditionally (it may
-                // override an inherited value): engine cells must see
-                // the normalized active set, exactly as Q1's env
-                // write-back guaranteed (bd-fu16z22k).
-                if let Some(value) = crate::project::project_profile::quarto_profile_env_value(
-                    &ctx.project.config.active_config_profiles,
-                ) {
-                    pairs.retain(|(k, _)| k != crate::project::project_profile::QUARTO_PROFILE_VAR);
-                    pairs.push((
-                        crate::project::project_profile::QUARTO_PROFILE_VAR.to_string(),
-                        value,
-                    ));
-                }
-                pairs
-            });
+            .with_project_env(project_env.clone());
 
             trace_event!(ctx, EventLevel::Info, "executing engine: {}", engine.name());
             // Engine failures go through the engine-diagnostics seam
@@ -1451,6 +1448,27 @@ fn format_execute_defaults(
         ]),
         _ => None,
     }
+}
+
+/// The project environment pairs an engine adds to its child process: the
+/// `_environment` values the real environment does not define, plus
+/// `QUARTO_PROFILE`. Execution and the availability gate both use it, so a
+/// runtime is probed with the environment it will run with.
+fn engine_project_env(ctx: &StageContext) -> Vec<(String, String)> {
+    let mut pairs = crate::project::environment::env_for_subprocess(&ctx.project_env);
+    // QUARTO_PROFILE is applied unconditionally (it may override an
+    // inherited value): engine cells must see the normalized active set,
+    // exactly as Q1's env write-back guaranteed (bd-fu16z22k).
+    if let Some(value) = crate::project::project_profile::quarto_profile_env_value(
+        &ctx.project.config.active_config_profiles,
+    ) {
+        pairs.retain(|(k, _)| k != crate::project::project_profile::QUARTO_PROFILE_VAR);
+        pairs.push((
+            crate::project::project_profile::QUARTO_PROFILE_VAR.to_string(),
+            value,
+        ));
+    }
+    pairs
 }
 
 /// Merge the per-format `execute:` defaults **under** the document's own
@@ -2860,7 +2878,14 @@ mod tests {
         // P2-12 which targets REGISTERED-but-unavailable engines).
         // Unregistered engines still warn + fall back to markdown (unchanged).
         let engine = stage
-            .get_engine_with_fallback("nonexistent-engine", &registry, &mut warnings)
+            .get_engine_with_fallback(
+                "nonexistent-engine",
+                &registry,
+                Path::new("doc.qmd"),
+                None,
+                &[],
+                &mut warnings,
+            )
             .expect("unregistered engine falls back to markdown (not a loud error)");
 
         // Should fall back to markdown
@@ -2881,7 +2906,14 @@ mod tests {
         let mut warnings = Vec::new();
 
         let engine = stage
-            .get_engine_with_fallback("nonexistent-engine", &registry, &mut warnings)
+            .get_engine_with_fallback(
+                "nonexistent-engine",
+                &registry,
+                Path::new("doc.qmd"),
+                None,
+                &[],
+                &mut warnings,
+            )
             .expect("unregistered spliced engine falls back to markdown (not a loud error)");
 
         // Still falls back to markdown (the engine isn't registered)...
@@ -2906,14 +2938,28 @@ mod tests {
 
         // The spliced one is silent.
         let e1 = stage
-            .get_engine_with_fallback("spliced-engine", &registry, &mut warnings)
+            .get_engine_with_fallback(
+                "spliced-engine",
+                &registry,
+                Path::new("doc.qmd"),
+                None,
+                &[],
+                &mut warnings,
+            )
             .expect("spliced unregistered engine falls back silently (not a loud error)");
         assert_eq!(e1.name(), "markdown");
         assert!(warnings.is_empty());
 
         // A different, un-spliced engine still warns as before.
         let e2 = stage
-            .get_engine_with_fallback("other-engine", &registry, &mut warnings)
+            .get_engine_with_fallback(
+                "other-engine",
+                &registry,
+                Path::new("doc.qmd"),
+                None,
+                &[],
+                &mut warnings,
+            )
             .expect("unregistered unspliced engine falls back with warning (not a loud error)");
         assert_eq!(e2.name(), "markdown");
         assert_eq!(warnings.len(), 1);
@@ -3021,6 +3067,83 @@ mod tests {
         fn is_available(&self) -> bool {
             true
         }
+    }
+
+    /// An engine whose runtime is available only when the project
+    /// environment carries `ENV_GATED_VAR=1`, like a shim pinned through
+    /// `_environment`.
+    struct EnvGatedEngine;
+
+    const ENV_GATED_VAR: &str = "Q2_ENV_GATED_ENGINE_TEST_PIN";
+
+    impl crate::engine::ExecutionEngine for EnvGatedEngine {
+        fn name(&self) -> &str {
+            "env-gated"
+        }
+
+        fn execute(
+            &self,
+            input: &str,
+            _ctx: &crate::engine::ExecutionContext,
+        ) -> std::result::Result<crate::engine::ExecuteResult, crate::engine::ExecutionError>
+        {
+            Ok(crate::engine::ExecuteResult {
+                markdown: input.to_string(),
+                ..Default::default()
+            })
+        }
+
+        fn is_available(&self) -> bool {
+            false
+        }
+
+        fn is_available_for(
+            &self,
+            _document: &Path,
+            _project_dir: Option<&Path>,
+            project_env: &[(String, String)],
+        ) -> bool {
+            project_env
+                .iter()
+                .any(|(k, v)| k == ENV_GATED_VAR && v == "1")
+        }
+    }
+
+    /// The availability gate sees the project `_environment` that execution
+    /// will pass to the engine's child process.
+    #[tokio::test]
+    async fn availability_gate_receives_the_project_env() {
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(EnvGatedEngine));
+        let content = b"---\nengine: env-gated\n---\n\n# Hello\n";
+
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+        ctx.project_env
+            .insert(ENV_GATED_VAR.to_string(), "1".to_string());
+        EngineExecutionStage::new()
+            .run(
+                PipelineData::DocumentAst(parse_qmd_to_ast(content, "/project/test.qmd")),
+                &mut ctx,
+            )
+            .await
+            .expect("engine pinned through the project env passes the gate");
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(EnvGatedEngine));
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+        let err = EngineExecutionStage::new()
+            .run(
+                PipelineData::DocumentAst(parse_qmd_to_ast(content, "/project/test.qmd")),
+                &mut ctx,
+            )
+            .await
+            .expect_err("without the project env the runtime is unavailable");
+        assert!(
+            err.to_string().contains("runtime is not available"),
+            "got: {err}"
+        );
     }
 
     /// OPR-7i: an engine whose result carries derived page dependencies as well as an include of

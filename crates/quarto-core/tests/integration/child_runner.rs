@@ -1,16 +1,18 @@
-//! `quarto_core::child_runner::run_child`: deadline, cancellation, and
-//! output capture, driven through fake child scripts.
+//! `quarto_core::child_runner::run_child` and `run_status`: deadline,
+//! cancellation, output capture and exit status, driven through fake child
+//! scripts.
 //!
 //! The scripts are built by `#[cfg(unix)]` / `#[cfg(not(unix))]` helper
-//! pairs (see `.claude/rules/cross-platform.md`); only the grandchild test,
-//! which depends on process groups, is unix-only.
+//! pairs (see `.claude/rules/cross-platform.md`); only the `run_child`
+//! grandchild test, which depends on process groups, is unix-only.
 
 #![cfg(not(target_arch = "wasm32"))]
 
+use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use quarto_core::child_runner::{ChildError, ChildLimits, run_child};
+use quarto_core::child_runner::{ChildError, ChildLimits, run_child, run_status};
 use quarto_core::stage::Cancellation;
 
 #[cfg(unix)]
@@ -176,4 +178,105 @@ fn deadline_applies_while_a_grandchild_holds_the_pipes_after_exit() {
     let err = run_child(script("sleep 30 &"), limits).unwrap_err();
     assert!(matches!(err, ChildError::TimedOut), "got {err:?}");
     assert!(start.elapsed() < Duration::from_secs(10));
+}
+
+/// Starts a background child that records its own PID in `marker` and sleeps
+/// 30 s, waits until the marker exists, then exits 0.
+#[cfg(unix)]
+fn background_child_then_exit0_cmd(marker: &Path) -> Command {
+    let m = marker.display();
+    script(&format!(
+        "sh -c 'echo $$ > \"{m}\"; exec sleep 30' & while [ ! -s \"{m}\" ]; do sleep 0.05; done; exit 0"
+    ))
+}
+
+#[cfg(not(unix))]
+fn background_child_then_exit0_cmd(marker: &Path) -> Command {
+    let m = marker.display();
+    script(&format!(
+        "$p = Start-Process -PassThru -NoNewWindow powershell -ArgumentList '-NoProfile','-Command','Start-Sleep 30'; Set-Content -Path '{m}' -Value $p.Id; exit 0"
+    ))
+}
+
+#[cfg(unix)]
+fn kill_pid(pid: &str) {
+    let _ = Command::new("kill").arg(pid).status();
+}
+
+#[cfg(not(unix))]
+fn kill_pid(pid: &str) {
+    let _ = Command::new("taskkill")
+        .args(["/PID", pid, "/T", "/F"])
+        .status();
+}
+
+#[test]
+fn run_status_reports_exit_code() {
+    let status = run_status(emit_cmd("o", "e", 3), ChildLimits::default()).unwrap();
+    assert_eq!(status.code(), Some(3));
+    let status = run_status(emit_cmd("o", "e", 0), ChildLimits::default()).unwrap();
+    assert!(status.success());
+}
+
+#[test]
+fn run_status_spawn_failure_is_io_error() {
+    let err = run_status(
+        Command::new("definitely-not-a-real-binary-q2"),
+        ChildLimits::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, ChildError::Io(_)), "got {err:?}");
+}
+
+#[test]
+fn run_status_times_out_and_kills() {
+    let limits = ChildLimits {
+        deadline: Some(Duration::from_millis(300)),
+        cancellation: None,
+    };
+    let start = Instant::now();
+    let err = run_status(sleep_cmd(30), limits).unwrap_err();
+    assert!(matches!(err, ChildError::TimedOut), "got {err:?}");
+    assert!(start.elapsed() < Duration::from_secs(10));
+}
+
+/// A grandchild that outlives the child does not hold `run_status` open:
+/// there are no pipes to drain.
+#[test]
+fn run_status_ignores_background_grandchild() {
+    let dir = std::env::temp_dir().join(format!(
+        "q2-run-status-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let marker = dir.join("grandchild.pid");
+    let limits = ChildLimits {
+        deadline: Some(Duration::from_secs(20)),
+        cancellation: None,
+    };
+    let start = Instant::now();
+    let result = run_status(background_child_then_exit0_cmd(&marker), limits);
+    let elapsed = start.elapsed();
+    let pid = std::fs::read_to_string(&marker)
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+    if !pid.is_empty() {
+        kill_pid(&pid);
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let status = result.unwrap();
+    assert!(status.success());
+    assert!(
+        elapsed < Duration::from_secs(10),
+        "returned after {elapsed:?}"
+    );
+    assert!(
+        !pid.is_empty() && pid.chars().all(|c| c.is_ascii_digit()),
+        "marker held {pid:?}"
+    );
 }

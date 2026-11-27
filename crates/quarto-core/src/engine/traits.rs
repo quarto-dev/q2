@@ -335,6 +335,23 @@ pub trait ExecutionEngine: Send + Sync {
         true
     }
 
+    /// [`Self::is_available`] for rendering `document`, with `project_dir`
+    /// the project root (`None` for a single file) and `project_env` the
+    /// project environment pairs execution adds to the child's environment.
+    /// The render gate calls this; an engine whose runtime check depends on
+    /// the directory or environment it executes in overrides it.
+    ///
+    /// Default: [`Self::is_available`].
+    fn is_available_for(
+        &self,
+        document: &Path,
+        project_dir: Option<&Path>,
+        project_env: &[(String, String)],
+    ) -> bool {
+        let _ = (document, project_dir, project_env);
+        self.is_available()
+    }
+
     /// The engine's `quartoRequired` version constraint, if it reported one.
     ///
     /// Returns the constraint string declared by the engine module (e.g. `">=1.9"`).

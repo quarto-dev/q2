@@ -97,6 +97,8 @@ mod fixture;
 
 // Native-only modules
 #[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod binary_probe;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod jupyter;
 // The execute environment code cells see (GH #1131). Native-only: only
 // subprocess engines (knitr, Jupyter) deliver it, and it reuses knitr's

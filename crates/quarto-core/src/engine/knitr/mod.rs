@@ -161,8 +161,9 @@ use crate::extension::types::{FileClaim, ProcessorSpec};
 ///
 /// # Requirements
 ///
-/// - R must be installed and accessible via `Rscript` command
-/// - The `knitr` R package must be installed
+/// - `Rscript` must be found (`QUARTO_R` or `PATH`) and run
+/// - The `knitr` R package must be installed; this is checked at execute
+///   time, not by `is_available`
 ///
 /// # Intermediate Files
 ///
@@ -498,7 +499,34 @@ impl ExecutionEngine for KnitrEngine {
     }
 
     fn is_available(&self) -> bool {
-        self.rscript_path.is_some()
+        // A path that exists but does not run is unavailable (bd-s8xe0lac).
+        self.rscript_path
+            .as_deref()
+            .is_some_and(|p| crate::engine::binary_probe::binary_runs(p, &["--version"], None, &[]))
+    }
+
+    fn is_available_for(
+        &self,
+        document: &Path,
+        project_dir: Option<&Path>,
+        project_env: &[(String, String)],
+    ) -> bool {
+        // Probe in the directory and with the project environment `execute`
+        // runs Rscript with, so a shim that picks R from either answers as it
+        // will at execute time.
+        self.rscript_path.as_deref().is_some_and(|p| {
+            let document_dir = document
+                .parent()
+                .filter(|d| !d.as_os_str().is_empty())
+                .unwrap_or(Path::new("."));
+            let working_dir = determine_working_dir(document_dir, project_dir);
+            crate::engine::binary_probe::binary_runs(
+                p,
+                &["--version"],
+                Some(&working_dir),
+                project_env,
+            )
+        })
     }
 
     fn file_claims(&self) -> Vec<FileClaim> {
@@ -814,6 +842,91 @@ mod tests {
         // Availability depends on whether Rscript is installed
         // We just verify it doesn't panic
         let _ = engine.is_available();
+    }
+
+    fn engine_with_stub(dir: &Path, body_win: &str, body_unix: &str) -> KnitrEngine {
+        let body = if cfg!(windows) { body_win } else { body_unix };
+        let stub = crate::engine::binary_probe::write_stub(dir, "Rscript", body);
+        KnitrEngine {
+            rscript_path: Some(stub),
+        }
+    }
+
+    #[test]
+    fn is_available_false_for_broken_rscript() {
+        let tmp = tempfile::tempdir().unwrap();
+        let engine = engine_with_stub(tmp.path(), "exit /b 1", "exit 1");
+        assert!(!engine.is_available());
+    }
+
+    #[test]
+    fn is_available_true_for_working_rscript() {
+        let tmp = tempfile::tempdir().unwrap();
+        let engine = engine_with_stub(
+            tmp.path(),
+            "echo Rscript (R) version 4.6.2\r\nexit /b 0",
+            "echo Rscript '(R)' version 4.6.2\nexit 0",
+        );
+        assert!(engine.is_available());
+    }
+
+    /// A render launched outside the project still probes Rscript from the
+    /// project directory, where `execute` runs it.
+    #[test]
+    fn is_available_for_probes_in_the_execution_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("proj");
+        std::fs::create_dir_all(project.join("sub")).unwrap();
+        std::fs::write(project.join("_quarto.yml"), "").unwrap();
+        let stub = crate::engine::binary_probe::write_cwd_sensitive_stub(
+            tmp.path(),
+            "Rscript",
+            "_quarto.yml",
+        );
+        let engine = KnitrEngine {
+            rscript_path: Some(stub),
+        };
+        let document = project.join("sub").join("doc.qmd");
+
+        assert!(engine.is_available_for(&document, Some(&project), &[]));
+        assert!(!engine.is_available_for(&document, None, &[]));
+    }
+
+    /// A shim that needs a variable from the project `_environment` gets it
+    /// in the probe, as it does at execute time.
+    #[test]
+    fn is_available_for_probes_with_the_project_env() {
+        let tmp = tempfile::tempdir().unwrap();
+        let var = "Q2_KNITR_PROBE_TEST_PIN";
+        let stub =
+            crate::engine::binary_probe::write_env_sensitive_stub(tmp.path(), "Rscript", var);
+        let engine = KnitrEngine {
+            rscript_path: Some(stub),
+        };
+        let document = tmp.path().join("doc.qmd");
+
+        assert!(!engine.is_available_for(&document, None, &[]));
+        assert!(engine.is_available_for(&document, None, &[(var.to_string(), "1".to_string())]));
+    }
+
+    #[test]
+    fn is_available_probe_reused_for_same_rscript() {
+        let tmp = tempfile::tempdir().unwrap();
+        let counter = tmp.path().join("counter.txt");
+        let win = format!("echo x>> \"{}\"\r\nexit /b 0", counter.display());
+        let unix = format!("echo x >> '{}'\nexit 0", counter.display());
+        let first = engine_with_stub(tmp.path(), &win, &unix);
+        let second = KnitrEngine {
+            rscript_path: first.rscript_path.clone(),
+        };
+        assert!(first.is_available());
+        assert!(second.is_available());
+        assert!(first.is_available());
+        let lines = std::fs::read_to_string(&counter)
+            .unwrap_or_default()
+            .lines()
+            .count();
+        assert_eq!(lines, 1);
     }
 
     #[test]

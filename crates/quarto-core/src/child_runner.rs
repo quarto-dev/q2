@@ -11,6 +11,9 @@
 //! `std::process` and plain threads, so it can be driven from
 //! `spawn_blocking` without needing tokio's `process` feature.
 //!
+//! [`run_status`] is the status-only variant: all three standard streams are
+//! null, so only the exit status comes back and no drain threads run.
+//!
 //! When either limit is set the child is started in its own process group
 //! (unix), and a timeout or cancel kills the whole group, so a grandchild
 //! (a pandoc `--filter`) cannot keep the output pipes open. On Windows only
@@ -28,7 +31,7 @@ use crate::stage::Cancellation;
 const POLL: Duration = Duration::from_millis(10);
 
 /// Deadline for the version and font-listing probes.
-const PROBE_DEADLINE: Duration = Duration::from_secs(30);
+pub(crate) const PROBE_DEADLINE: Duration = Duration::from_secs(30);
 
 /// After a kill, how long to wait for the pipe-drain threads before leaving
 /// them to finish on their own.
@@ -159,6 +162,41 @@ pub(crate) fn run_probe(cmd: Command) -> Option<ChildOutput> {
         },
     )
     .ok()
+}
+
+/// Spawn `cmd` and wait for its exit status only.
+///
+/// stdin, stdout and stderr are all null, so there is nothing to drain and a
+/// surviving grandchild cannot hold the call open. The limits are enforced as
+/// in [`run_child`].
+pub fn run_status(mut cmd: Command, limits: ChildLimits) -> Result<ExitStatus, ChildError> {
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    #[cfg(unix)]
+    if limits.is_bounded() {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    let start = Instant::now();
+    let mut child = cmd.spawn()?;
+    let bounded = limits.is_bounded();
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Ok(status),
+            Ok(None) => {}
+            Err(e) => {
+                kill(&mut child, bounded);
+                return Err(e.into());
+            }
+        }
+        if let Some(err) = limits.violation(start) {
+            kill(&mut child, bounded);
+            return Err(err);
+        }
+        std::thread::sleep(POLL);
+    }
 }
 
 /// Map a [`ChildError`] to the stage error a pipeline stage reports. Timeouts
