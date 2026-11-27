@@ -313,8 +313,7 @@ fn the_fallback_table() {
             vec![true],
             None,
         ),
-        // eval: false: the row is about the engine name, and running bash on Windows hits
-        // System32's WSL launcher (R searches System32 before PATH).
+        // The unit kind follows from the engine name alone, so the chunk need not run.
         (
             "non-R engine",
             "html",

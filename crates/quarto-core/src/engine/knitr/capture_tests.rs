@@ -336,8 +336,7 @@ fn capture_other_engine_is_a_fallback_piece() {
     if !r_available("capture_other_engine_is_a_fallback_piece") {
         return;
     }
-    // eval: false so no bash process runs: on Windows R resolves a bare `bash` to
-    // System32's WSL launcher before PATH. The engine name alone makes the piece `other`.
+    // The engine name alone makes the piece `other`, so the chunk need not run.
     let (result, _dir) = execute("```{bash}\n#| eval: false\necho hi\n```\n", true);
     match &result.pieces[0].pieces[0] {
         KnitrPiece::Other { classes } => assert_eq!(classes, &["bash"]),
