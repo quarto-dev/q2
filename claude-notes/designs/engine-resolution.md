@@ -798,10 +798,12 @@ engine selection non-deterministic and un-liftable. So environment checks run
 re-route to a fallback — Q1 parity). Two distinct kinds, at two distinct times:
 
 - **Availability** — can the owner's runtime be found and run
-  (`is_available()`)? Each engine defines the check: knitr and jupyter
+  (`is_available_for(document, project_dir)`, defaulting to
+  `is_available()`)? Each engine defines the check: knitr and jupyter
   require their configured or `PATH` binary to exit 0 on `--version`
-  (`engine/binary_probe.rs`); TS engines require a Node.js >= 24 from
-  `quarto-node-discovery`. Cheap; checked **after resolution, before execute** (cases 1–2).
+  (`engine/binary_probe.rs`), knitr probing from the directory it executes
+  in so a per-directory version-manager shim answers as it will at execute
+  time; TS engines require a Node.js >= 24 from `quarto-node-discovery`. Cheap; checked **after resolution, before execute** (cases 1–2).
 - **Capability** — can the chosen owner actually *run* language L? An
   **execute-time** failure (cases 3–4): q2 starts kernels **lazily** inside
   `execute()`, and — more fundamentally — keeping capability out of resolution

@@ -437,3 +437,26 @@ in a temp dir outside the repo.
   was inspected and contains `[1] 2`.
 - Step 5: follow-ups filed as bd-og2exj8x (Julia and Node probes) and
   bd-itbhfipu (Rscript discovery parity).
+
+## Follow-up: probe in the execution directory
+
+Review found that the probe ran from q2's launch directory while knitr runs
+Rscript from `determine_working_dir` (the project directory, or the document
+directory inside an active renv). A version-manager shim that picks R from
+the working directory then failed the gate for a render launched from the
+project's parent, and the failure was cached for the process.
+
+- [x] `ExecutionEngine::is_available_for(document, project_dir)`, defaulting
+  to `is_available()`; the `engine_execution` gate calls it.
+- [x] `binary_runs` takes an optional `cwd`, part of the cache key. Knitr
+  overrides `is_available_for` to probe from `determine_working_dir`. Jupyter
+  passes `None`: its kernels start from the kernelspec argv, not from
+  `jupyter`, so the probe directory has no execution counterpart.
+- [x] Tests: `binary_runs_probes_and_caches_per_cwd`,
+  `is_available_for_probes_in_the_execution_directory`.
+- [x] End to end (Windows): an `Rscript.bat` first on `PATH` that exits 1
+  unless `_quarto.yml` is in its working directory, else runs the real
+  `Rscript.exe`. `q2 render proj\doc.qmd` from the parent failed before the
+  change (`Engine 'knitr' is registered but its runtime is not available.`)
+  and succeeds after it; the HTML was inspected and contains `[1] 2`. A
+  `QUARTO_R` pointing at a copy of `where.exe` still fails at the gate.

@@ -26,6 +26,7 @@
 
 use async_trait::async_trait;
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::Arc;
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
@@ -177,11 +178,13 @@ impl EngineExecutionStage {
         &self,
         engine_name: &str,
         registry: &Arc<EngineRegistry>,
+        document: &Path,
+        project_dir: Option<&Path>,
         warnings: &mut Vec<DiagnosticMessage>,
     ) -> Result<Arc<dyn ExecutionEngine>, PipelineError> {
         if let Some(engine) = registry.get(engine_name) {
             // Engine found - check if it's actually available
-            if engine.is_available() {
+            if engine.is_available_for(document, project_dir) {
                 return Ok(engine);
             }
 
@@ -488,10 +491,13 @@ impl PipelineStage for EngineExecutionStage {
             to_run.push((Arc::new(replay) as Arc<dyn ExecutionEngine>, None));
         } else {
             let mut engine_warnings = Vec::new();
+            let project_dir = (!ctx.project.is_single_file).then_some(ctx.project.dir.as_path());
             for detected in &resolution.sequence {
                 let engine = self.get_engine_with_fallback(
                     &detected.name,
                     &ctx.registry,
+                    &doc_ast.path,
+                    project_dir,
                     &mut engine_warnings,
                 )?;
                 if engine.name() == "markdown" {
@@ -2860,7 +2866,13 @@ mod tests {
         // P2-12 which targets REGISTERED-but-unavailable engines).
         // Unregistered engines still warn + fall back to markdown (unchanged).
         let engine = stage
-            .get_engine_with_fallback("nonexistent-engine", &registry, &mut warnings)
+            .get_engine_with_fallback(
+                "nonexistent-engine",
+                &registry,
+                Path::new("doc.qmd"),
+                None,
+                &mut warnings,
+            )
             .expect("unregistered engine falls back to markdown (not a loud error)");
 
         // Should fall back to markdown
@@ -2881,7 +2893,13 @@ mod tests {
         let mut warnings = Vec::new();
 
         let engine = stage
-            .get_engine_with_fallback("nonexistent-engine", &registry, &mut warnings)
+            .get_engine_with_fallback(
+                "nonexistent-engine",
+                &registry,
+                Path::new("doc.qmd"),
+                None,
+                &mut warnings,
+            )
             .expect("unregistered spliced engine falls back to markdown (not a loud error)");
 
         // Still falls back to markdown (the engine isn't registered)...
@@ -2906,14 +2924,26 @@ mod tests {
 
         // The spliced one is silent.
         let e1 = stage
-            .get_engine_with_fallback("spliced-engine", &registry, &mut warnings)
+            .get_engine_with_fallback(
+                "spliced-engine",
+                &registry,
+                Path::new("doc.qmd"),
+                None,
+                &mut warnings,
+            )
             .expect("spliced unregistered engine falls back silently (not a loud error)");
         assert_eq!(e1.name(), "markdown");
         assert!(warnings.is_empty());
 
         // A different, un-spliced engine still warns as before.
         let e2 = stage
-            .get_engine_with_fallback("other-engine", &registry, &mut warnings)
+            .get_engine_with_fallback(
+                "other-engine",
+                &registry,
+                Path::new("doc.qmd"),
+                None,
+                &mut warnings,
+            )
             .expect("unregistered unspliced engine falls back with warning (not a loud error)");
         assert_eq!(e2.name(), "markdown");
         assert_eq!(warnings.len(), 1);

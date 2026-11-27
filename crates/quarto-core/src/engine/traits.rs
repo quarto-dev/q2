@@ -335,6 +335,17 @@ pub trait ExecutionEngine: Send + Sync {
         true
     }
 
+    /// [`Self::is_available`] for rendering `document`, with `project_dir`
+    /// the project root (`None` for a single file). The render gate calls
+    /// this; an engine whose runtime check depends on the directory it
+    /// executes in overrides it.
+    ///
+    /// Default: [`Self::is_available`].
+    fn is_available_for(&self, document: &Path, project_dir: Option<&Path>) -> bool {
+        let _ = (document, project_dir);
+        self.is_available()
+    }
+
     /// The engine's `quartoRequired` version constraint, if it reported one.
     ///
     /// Returns the constraint string declared by the engine module (e.g. `">=1.9"`).

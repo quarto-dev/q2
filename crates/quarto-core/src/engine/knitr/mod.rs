@@ -502,7 +502,21 @@ impl ExecutionEngine for KnitrEngine {
         // A path that exists but does not run is unavailable (bd-s8xe0lac).
         self.rscript_path
             .as_deref()
-            .is_some_and(|p| crate::engine::binary_probe::binary_runs(p, &["--version"]))
+            .is_some_and(|p| crate::engine::binary_probe::binary_runs(p, &["--version"], None))
+    }
+
+    fn is_available_for(&self, document: &Path, project_dir: Option<&Path>) -> bool {
+        // Probe in the directory `execute` runs Rscript in, so a shim that
+        // picks R from the working directory answers as it will at execute
+        // time.
+        let document_dir = document
+            .parent()
+            .filter(|d| !d.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        let working_dir = determine_working_dir(document_dir, project_dir);
+        self.rscript_path.as_deref().is_some_and(|p| {
+            crate::engine::binary_probe::binary_runs(p, &["--version"], Some(&working_dir))
+        })
     }
 
     fn file_claims(&self) -> Vec<FileClaim> {
@@ -844,6 +858,28 @@ mod tests {
             "echo Rscript '(R)' version 4.6.2\nexit 0",
         );
         assert!(engine.is_available());
+    }
+
+    /// A render launched outside the project still probes Rscript from the
+    /// project directory, where `execute` runs it.
+    #[test]
+    fn is_available_for_probes_in_the_execution_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("proj");
+        std::fs::create_dir_all(project.join("sub")).unwrap();
+        std::fs::write(project.join("_quarto.yml"), "").unwrap();
+        let stub = crate::engine::binary_probe::write_cwd_sensitive_stub(
+            tmp.path(),
+            "Rscript",
+            "_quarto.yml",
+        );
+        let engine = KnitrEngine {
+            rscript_path: Some(stub),
+        };
+        let document = project.join("sub").join("doc.qmd");
+
+        assert!(engine.is_available_for(&document, Some(&project)));
+        assert!(!engine.is_available_for(&document, None));
     }
 
     #[test]
