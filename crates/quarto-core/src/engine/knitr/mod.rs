@@ -509,12 +509,12 @@ impl ExecutionEngine for KnitrEngine {
         // Probe in the directory `execute` runs Rscript in, so a shim that
         // picks R from the working directory answers as it will at execute
         // time.
-        let document_dir = document
-            .parent()
-            .filter(|d| !d.as_os_str().is_empty())
-            .unwrap_or(Path::new("."));
-        let working_dir = determine_working_dir(document_dir, project_dir);
         self.rscript_path.as_deref().is_some_and(|p| {
+            let document_dir = document
+                .parent()
+                .filter(|d| !d.as_os_str().is_empty())
+                .unwrap_or(Path::new("."));
+            let working_dir = determine_working_dir(document_dir, project_dir);
             crate::engine::binary_probe::binary_runs(p, &["--version"], Some(&working_dir))
         })
     }
