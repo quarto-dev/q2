@@ -204,7 +204,7 @@ task below):
 This is new code, not a bug fix: the tests below are contract tests, not a
 RED/GREEN cycle.
 
-- [ ] **Step 1: Write the contract tests** in
+- [x] **Step 1: Write the contract tests** in
   `tests/integration/child_runner.rs`, importing `run_status`. Reuse the
   file's `script`, `emit_cmd`, `sleep_cmd` helpers.
   - `run_status_reports_exit_code`: `run_status(emit_cmd("o", "e", 3), ChildLimits::default())`
@@ -235,12 +235,12 @@ RED/GREEN cycle.
       `Command::new("kill").arg(pid)`, Windows
       `Command::new("taskkill").args(["/PID", &pid, "/T", "/F"])`), and do the
       kill before the assertions run so a failing assertion still cleans up.
-- [ ] **Step 2: Implement** `run_status` and `run_status_probe` in
+- [x] **Step 2: Implement** `run_status` and `run_status_probe` in
   `child_runner.rs`.
-- [ ] **Step 3: Run**
+- [x] **Step 3: Run**
   `cargo nextest run -p quarto-core -E 'binary(integration) & test(child_runner::)'`.
   Expected: all `child_runner::` tests pass, old and new.
-- [ ] **Step 4: No commit yet.** `run_status_probe` has no caller until Task 2
+- [x] **Step 4: No commit yet.** `run_status_probe` has no caller until Task 2
   and `binary_runs` none until Task 3, so a commit here would fail
   `clippy -D warnings` on dead code. Tasks 1 to 3 are committed together at
   the end of Task 3.
@@ -275,7 +275,7 @@ RED/GREEN cycle.
 
 New code: contract tests, not RED/GREEN.
 
-- [ ] **Step 1: Write tests** in a `#[cfg(test)] mod tests` in
+- [x] **Step 1: Write tests** in a `#[cfg(test)] mod tests` in
   `binary_probe.rs`. Each test uses its own `tempfile::tempdir()` so cache
   keys never collide across tests.
   - `binary_runs_false_for_failing_binary`: stub body `exit /b 1` (Windows) /
@@ -290,11 +290,11 @@ New code: contract tests, not RED/GREEN.
     exactly 1 line.
   - `binary_runs_caches_per_argument_list`: same counter stub; call with
     `&["--version"]` twice and `&["-V"]` once; counter has exactly 2 lines.
-- [ ] **Step 2: Implement** `binary_runs`, `write_stub` and the module
+- [x] **Step 2: Implement** `binary_runs`, `write_stub` and the module
   declaration.
-- [ ] **Step 3: Run** `cargo nextest run -p quarto-core -E 'test(binary_probe::)'`.
+- [x] **Step 3: Run** `cargo nextest run -p quarto-core -E 'test(binary_probe::)'`.
   Expected: 5 passed.
-- [ ] **Step 4: No commit yet** (see Task 1 Step 4).
+- [x] **Step 4: No commit yet** (see Task 1 Step 4).
 
 ### Task 3: Knitr availability uses the probe (the bug fix, TDD)
 
@@ -307,7 +307,7 @@ New code: contract tests, not RED/GREEN.
 
 - Consumes: `crate::engine::binary_probe::{binary_runs, write_stub}` (Task 2).
 
-- [ ] **Step 1: Write the failing tests** in knitr's `mod tests`, next to
+- [x] **Step 1: Write the failing tests** in knitr's `mod tests`, next to
   `test_knitr_engine_is_available_depends_on_rscript`. Build engines as
   `KnitrEngine { rscript_path: Some(stub) }`, stub name `"Rscript"`.
   - `is_available_false_for_broken_rscript`: body `exit /b 1` / `exit 1`;
@@ -318,23 +318,23 @@ New code: contract tests, not RED/GREEN.
   - `is_available_probe_reused_for_same_rscript`: counter stub; two engines
     sharing the path; `is_available()` three times total; counter has exactly
     1 line.
-- [ ] **Step 2: Run to see RED:**
+- [x] **Step 2: Run to see RED:**
   `cargo nextest run -p quarto-core -E 'test(is_available_) & test(rscript)'`.
   Expected: `is_available_false_for_broken_rscript` FAILS (returns true
   today) and `is_available_probe_reused_for_same_rscript` FAILS (counter has
   0 lines); `is_available_true_for_working_rscript` and the existing
   `test_knitr_engine_is_available_depends_on_rscript` (also matched by the
   filter) pass. Record the output.
-- [ ] **Step 3: Fix** `is_available`:
+- [x] **Step 3: Fix** `is_available`:
   `self.rscript_path.as_deref().is_some_and(|p| binary_runs(p, &["--version"]))`,
   with a one-line comment citing bd-s8xe0lac. Update the `KnitrEngine` doc
   comment's Requirements: `Rscript` must be found (`QUARTO_R` or `PATH`) and
   run; the knitr package is checked at execute time, not by `is_available`.
-- [ ] **Step 4: Run to see GREEN:** same command; 4 passed (the 3 new tests
+- [x] **Step 4: Run to see GREEN:** same command; 4 passed (the 3 new tests
   plus the existing one).
-- [ ] **Step 5: Gate:** `cargo nextest run -p quarto-core -E 'test(binary_probe::) | test(is_available) | binary(integration) & test(child_runner::)'`
+- [x] **Step 5: Gate:** `cargo nextest run -p quarto-core -E 'test(binary_probe::) | test(is_available) | binary(integration) & test(child_runner::)'`
   and `cargo clippy -p quarto-core --all-targets -- -D warnings`, both clean.
-- [ ] **Step 6: Commit Tasks 1 to 3 together**
+- [x] **Step 6: Commit Tasks 1 to 3 together**
   `knitr: probe that Rscript runs, via a shared binary probe (bd-s8xe0lac)`,
   staging `child_runner.rs`, `tests/integration/child_runner.rs`,
   `engine/binary_probe.rs`, `engine/mod.rs` and `engine/knitr/mod.rs`. The
@@ -354,7 +354,7 @@ New code: contract tests, not RED/GREEN.
 
 - Consumes: `binary_runs`, `write_stub` (Task 2).
 
-- [ ] **Step 1: Switch** `is_available` to
+- [x] **Step 1: Switch** `is_available` to
   `self.jupyter_path.as_deref().is_some_and(|p| binary_runs(p, &["--version"]))`,
   keeping the bd-1eu34vpy comment. Delete `JUPYTER_PROBE_CACHE`,
   `probe_jupyter`, `probe_jupyter_cached` and `write_jupyter_stub`; the
@@ -362,30 +362,30 @@ New code: contract tests, not RED/GREEN.
   assertions unchanged. Remove imports that become unused (`Stdio`, `Mutex`,
   `LazyLock`, `HashMap` only if nothing else uses them; let the compiler
   decide).
-- [ ] **Step 2: Run**
+- [x] **Step 2: Run**
   `cargo nextest run -p quarto-core -E 'test(jupyter::tests::is_available) | test(find_jupyter_is_memoized)'`.
   Expected: 4 passed.
-- [ ] **Step 3: Update** `engine-resolution.md` line ~801: availability is
+- [x] **Step 3: Update** `engine-resolution.md` line ~801: availability is
   "is the owner's binary found (configured env var or `PATH`) and does it run
   (a version call exits 0, `engine/binary_probe.rs`)". Keep "Cheap; checked
   after resolution, before execute (cases 1–2)". Run
   `q2 render --strict claude-notes/designs/engine-resolution.md` and confirm
   no error mentions that file (listing errors `Q-12-13` from a partial render
   are expected and unrelated).
-- [ ] **Step 4: Commit** `jupyter: use the shared binary probe (bd-s8xe0lac)`.
+- [x] **Step 4: Commit** `jupyter: use the shared binary probe (bd-s8xe0lac)`.
 
 ### Task 5: Lint, end-to-end check, follow-ups
 
 **Files:** none in the repo, except this plan's checkboxes. Scratch files go
 in a temp dir outside the repo.
 
-- [ ] **Step 1: Lint:** `cargo clippy -p quarto-core --all-targets -- -D warnings`.
+- [x] **Step 1: Lint:** `cargo clippy -p quarto-core --all-targets -- -D warnings`.
   Expected: no warnings. Then
   `cargo nextest run -p quarto-core -E 'test(binary_probe::) | test(is_available) | test(child_runner::)'`;
   all pass.
-- [ ] **Step 2: Build** `cargo build --bin q2` (the `q2` on `PATH` is an
+- [x] **Step 2: Build** `cargo build --bin q2` (the `q2` on `PATH` is an
   installed build and does not include this change).
-- [ ] **Step 3: Broken-Rscript render.** In a temp dir, write `doc.qmd`:
+- [x] **Step 3: Broken-Rscript render.** In a temp dir, write `doc.qmd`:
 
   ````markdown
   ---
@@ -403,10 +403,10 @@ in a temp dir outside the repo.
   Expected: render fails with
   `Engine 'knitr' is registered but its runtime is not available.` Record
   the command and the error line.
-- [ ] **Step 4: Working render.** New PowerShell process with `QUARTO_R`
+- [x] **Step 4: Working render.** New PowerShell process with `QUARTO_R`
   unset: `cargo run --bin q2 -- render <tmp>\doc.qmd`. Expected: success, and
   the output HTML contains `[1] 2`. Record the command and the grep result.
-- [ ] **Step 5: File follow-up strands** (both
+- [x] **Step 5: File follow-up strands** (both
   `--deps discovered-from:bd-s8xe0lac`, type `task`, priority 3, with a
   self-contained `-d`):
   - "Julia and Node availability probes onto engine::binary_probe":
@@ -414,7 +414,7 @@ in a temp dir outside the repo.
     uncached; Julia's check runs in `ensure_loaded`, not `is_available`.
   - "Rscript discovery parity with quarto-cli (R_HOME, Windows registry)":
     `find_rscript` checks only `QUARTO_R` and `PATH`.
-- [ ] **Step 6: Tick this plan's boxes**, run
+- [x] **Step 6: Tick this plan's boxes**, run
   `q2 render --strict claude-notes/plans/2026-11-27-engine-binary-probe.md`
   (no error may mention this file), commit the plan
   `claude-notes: tick engine binary probe plan (bd-s8xe0lac)`, and add a
