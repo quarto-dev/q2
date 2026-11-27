@@ -260,39 +260,35 @@ mod tests {
 
     /// A probe that times out is cached: a hung shim is not run again on
     /// every check (on Windows a timeout kills only the shim, not what it
-    /// started).
+    /// started). After the timeout the hung stub is replaced by a working
+    /// one; the second check, with a deadline long enough for that stub to
+    /// succeed, still returns the cached timeout, so it did not probe again.
     #[test]
     fn binary_runs_caches_a_timeout() {
         let tmp = tempfile::tempdir().unwrap();
-        let counter = tmp.path().join("counter.txt");
         #[cfg(windows)]
-        let stub = write_stub(
-            tmp.path(),
-            "probe",
-            &format!("echo x>> \"{}\"\r\n:spin\r\ngoto spin", counter.display()),
-        );
+        let stub = write_stub(tmp.path(), "probe", ":spin\r\ngoto spin");
         #[cfg(not(windows))]
-        let stub = write_stub(
-            tmp.path(),
-            "probe",
-            &format!("echo x >> '{}'\nsleep 5", counter.display()),
-        );
-        let deadline = std::time::Duration::from_millis(300);
+        let stub = write_stub(tmp.path(), "probe", "sleep 5");
         assert!(!binary_runs_within(
             &stub,
             &["--version"],
             None,
             &[],
-            deadline
+            std::time::Duration::from_millis(300)
         ));
+
+        #[cfg(windows)]
+        write_stub(tmp.path(), "probe", "exit /b 0");
+        #[cfg(not(windows))]
+        write_stub(tmp.path(), "probe", "exit 0");
         assert!(!binary_runs_within(
             &stub,
             &["--version"],
             None,
             &[],
-            deadline
+            std::time::Duration::from_secs(10)
         ));
-        assert_eq!(invocations(&counter), 1);
     }
 
     /// Two probes of one key finish out of order: a success replaces a

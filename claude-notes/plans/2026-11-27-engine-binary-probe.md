@@ -502,6 +502,7 @@ the probe, knitr only checked the path, so execution picked up the repair.
   can still see one failure; the next check probes again.
 - [x] Tests: `binary_runs_reprobes_after_a_failure` (a failing stub
   rewritten to exit 0 is reported available on the next call),
-  `binary_runs_caches_a_timeout` (a hung stub runs once across two checks),
+  `binary_runs_caches_a_timeout` (after a timeout the hung stub is replaced
+  by a working one, and the next check still returns the cached timeout),
   `store_lets_a_success_replace_a_timeout` (probes finishing out of order
   during a repair: a late success replaces a cached timeout).
