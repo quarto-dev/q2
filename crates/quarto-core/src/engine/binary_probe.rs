@@ -10,14 +10,14 @@
 //! directory or from a project environment variable is probed the way the
 //! engine will run it.
 //!
-//! Engines are rebuilt per render, so results are cached per
-//! `(path, arguments, cwd, env)` for the life of the process. The first stored
-//! result for a key wins: concurrent callers may each run the probe, but all
-//! of them return the value that was stored first.
+//! Engines are rebuilt per render, so a success is cached per
+//! `(path, arguments, cwd, env)` for the life of the process. A failure is
+//! not cached: the next check probes again, so a runtime repaired during a
+//! long-lived process (`q2 preview`) is picked up on the next render.
 //!
 //! See `claude-notes/plans/2026-11-27-engine-binary-probe.md`.
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{LazyLock, Mutex};
@@ -26,8 +26,8 @@ use crate::child_runner::run_status_probe;
 
 type ProbeKey = (PathBuf, Vec<String>, Option<PathBuf>, Vec<(String, String)>);
 
-static PROBE_CACHE: LazyLock<Mutex<HashMap<ProbeKey, bool>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+static PROBE_CACHE: LazyLock<Mutex<HashSet<ProbeKey>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 
 /// True iff `path`, run with `args` (in `cwd` when given, else in this
 /// process's working directory, and with `env` added to the inherited
@@ -44,8 +44,8 @@ pub(crate) fn binary_runs(
         cwd.map(Path::to_path_buf),
         env.to_vec(),
     );
-    if let Some(&cached) = PROBE_CACHE.lock().unwrap().get(&key) {
-        return cached;
+    if PROBE_CACHE.lock().unwrap().contains(&key) {
+        return true;
     }
     // The probe runs without the lock held so a slow binary does not block
     // probes of other paths.
@@ -55,8 +55,11 @@ pub(crate) fn binary_runs(
         cmd.current_dir(dir);
     }
     cmd.envs(env.iter().map(|(k, v)| (k, v)));
-    let result = run_status_probe(cmd).is_some_and(|status| status.success());
-    *PROBE_CACHE.lock().unwrap().entry(key).or_insert(result)
+    let runs = run_status_probe(cmd).is_some_and(|status| status.success());
+    if runs {
+        PROBE_CACHE.lock().unwrap().insert(key);
+    }
+    runs
 }
 
 /// Write an executable stub named `name` into `dir` that runs `body`.
@@ -199,6 +202,24 @@ mod tests {
         assert!(binary_runs(&stub, &["--version"], None, &[]));
         assert!(binary_runs(&stub, &["--version"], None, &[]));
         assert_eq!(invocations(&counter), 1);
+    }
+
+    /// A failure is not cached: a runtime repaired at the same path (a
+    /// fixed shim during `q2 preview`) is seen on the next probe.
+    #[test]
+    fn binary_runs_reprobes_after_a_failure() {
+        let tmp = tempfile::tempdir().unwrap();
+        #[cfg(windows)]
+        let stub = write_stub(tmp.path(), "probe", "exit /b 1");
+        #[cfg(not(windows))]
+        let stub = write_stub(tmp.path(), "probe", "exit 1");
+        assert!(!binary_runs(&stub, &["--version"], None, &[]));
+
+        #[cfg(windows)]
+        write_stub(tmp.path(), "probe", "exit /b 0");
+        #[cfg(not(windows))]
+        write_stub(tmp.path(), "probe", "exit 0");
+        assert!(binary_runs(&stub, &["--version"], None, &[]));
     }
 
     #[test]
