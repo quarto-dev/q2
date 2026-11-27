@@ -466,6 +466,11 @@ impl PipelineStage for EngineExecutionStage {
         // here too, since TS engines read `execute:` from this map.
         let document_metadata = ts_document_metadata(&doc_ast.ast.meta, ctx.format.identifier);
 
+        // One snapshot of the project environment for the availability
+        // gate and every engine's execution context, so a runtime is
+        // probed with exactly the environment it runs with.
+        let project_env = engine_project_env(ctx);
+
         // Step 2: Resolve each engine in the sequence to an implementation
         // (with fallback), dropping markdown — it's a no-op, so a markdown
         // engine anywhere in the sequence is skipped (this also covers
@@ -493,7 +498,6 @@ impl PipelineStage for EngineExecutionStage {
         } else {
             let mut engine_warnings = Vec::new();
             let project_dir = (!ctx.project.is_single_file).then_some(ctx.project.dir.as_path());
-            let project_env = engine_project_env(ctx);
             for detected in &resolution.sequence {
                 let engine = self.get_engine_with_fallback(
                     &detected.name,
@@ -719,7 +723,7 @@ impl PipelineStage for EngineExecutionStage {
             .with_present_from_record(self.present_from_record)
             .with_metadata(document_metadata.clone())
             .with_execute_env(execute_env.clone())
-            .with_project_env(engine_project_env(ctx));
+            .with_project_env(project_env.clone());
 
             trace_event!(ctx, EventLevel::Info, "executing engine: {}", engine.name());
             // Engine failures go through the engine-diagnostics seam
