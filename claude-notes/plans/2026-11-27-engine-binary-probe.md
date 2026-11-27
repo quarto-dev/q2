@@ -1,7 +1,7 @@
 ---
 title: 'Shared engine binary probe (bd-s8xe0lac)'
 date: 2026-11-27
-description: 'Knitr and Jupyter report a runtime available only when its binary exits 0 on --version, through one cached, time-limited probe.'
+description: 'Knitr and Jupyter report a runtime available only when its binary exits 0 on `--version`, through one cached, time-limited probe.'
 status: in-progress
 braid:
   strand: bd-s8xe0lac
