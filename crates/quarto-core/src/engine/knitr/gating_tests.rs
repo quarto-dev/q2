@@ -313,10 +313,11 @@ fn the_fallback_table() {
             vec![true],
             None,
         ),
+        // The unit kind follows from the engine name alone, so the chunk need not run.
         (
             "non-R engine",
             "html",
-            "```{r a}\n1\n```\n\n```{bash b}\necho hi\n```\n",
+            "```{r a}\n1\n```\n\n```{bash b}\n#| eval: false\necho hi\n```\n",
             &[],
             vec![true, false],
             None,
