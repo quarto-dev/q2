@@ -43,8 +43,15 @@ On Windows, R's `system2` reaches `expandcmd()` in `src/gnuwin32/run.c`, which t
 `bash.exe`, `.com`, `.cmd` and `.bat` through `SearchPath(NULL, ...)`. With a NULL path, Win32
 searches the application directory, **System32**, the Windows directory and the current
 directory before `PATH`. The test step runs under `shell: bash` (Git Bash, whose `/usr/bin` comes
-first on `PATH`), but `C:\Windows\System32\bash.exe` still wins. That explains the strand's
-inference, although nobody has looked at the runner's System32 directly.
+first on `PATH`), but `C:\Windows\System32\bash.exe` still wins.
+
+**The runner has that `bash.exe`.** The failing job ran on image `windows-2025-vs2026`. Its
+documentation (actions/runner-images, `images/windows/Windows2025-Readme.md`) lists
+"Windows Subsystem for Linux (WSLv1): Enabled", "WSLv2: 3.0.5.0", and
+`wslbash.exe → C:\Windows\System32\bash.exe`. The WSL feature is on, but no distribution is
+installed. The job log shows `message: "W\r\n\r\n\r\n\r\n\r\n"` followed by the
+`system2(cmd, code, ...)` warning, which is a UTF-16 message read as 8-bit text. The exact text
+of that message is still inferred, but the cause does not depend on it.
 
 **`Sys.which` is a faithful probe.** `do_syswhich` (same file) calls the same `expandcmd`, so
 `Sys.which("bash")` on the runner reports exactly what `system2` will launch.
@@ -66,9 +73,7 @@ from knitr in Quarto 1. q2 calls knitr unchanged, so it has no product gap of it
 
 ## Proposed phases (draft)
 
-- Phase 0: RED is the existing Windows CI failure (run 45259769017). Optionally, confirm
-  `Sys.which("bash")` and `Test-Path C:\Windows\System32\bash.exe` on the runner in the same
-  dispatch that verifies the fix.
+- Phase 0: RED is the existing Windows CI failure (run 45259769017).
 - Phase 1: in both tests, replace the `bash` chunk with a non-R engine that spawns no process
   (see Q1). Keep the expected `classes` assertion in line with the new engine name.
 - Phase 2: run both tests locally
@@ -90,8 +95,6 @@ from knitr in Quarto 1. q2 calls knitr unchanged, so it has no product gap of it
 2. **Keep bash anywhere?** Should the "non-R engine" row stay bash on unix through a cfg switch?
    The draft answer is no: the row tests classification, not bash, and a per-OS switch is the kind
    of gate CLAUDE.local.md warns against.
-3. **Runner probe.** Is the one-line `Sys.which` diagnostic worth adding to the verification
-   dispatch to turn the WSL inference into a fact? Or is the source-level explanation enough?
 
 ## Risks / tradeoffs (draft)
 
