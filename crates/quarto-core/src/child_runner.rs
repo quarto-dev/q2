@@ -31,7 +31,7 @@ use crate::stage::Cancellation;
 const POLL: Duration = Duration::from_millis(10);
 
 /// Deadline for the version and font-listing probes.
-const PROBE_DEADLINE: Duration = Duration::from_secs(30);
+pub(crate) const PROBE_DEADLINE: Duration = Duration::from_secs(30);
 
 /// After a kill, how long to wait for the pipe-drain threads before leaving
 /// them to finish on their own.
@@ -197,19 +197,6 @@ pub fn run_status(mut cmd: Command, limits: ChildLimits) -> Result<ExitStatus, C
         }
         std::thread::sleep(POLL);
     }
-}
-
-/// [`run_status`] under the fixed probe deadline, returning the status only
-/// when the child ran to completion.
-pub(crate) fn run_status_probe(cmd: Command) -> Option<ExitStatus> {
-    run_status(
-        cmd,
-        ChildLimits {
-            deadline: Some(PROBE_DEADLINE),
-            cancellation: None,
-        },
-    )
-    .ok()
 }
 
 /// Map a [`ChildError`] to the stage error a pipeline stage reports. Timeouts

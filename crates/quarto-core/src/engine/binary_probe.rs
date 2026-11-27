@@ -10,24 +10,28 @@
 //! directory or from a project environment variable is probed the way the
 //! engine will run it.
 //!
-//! Engines are rebuilt per render, so a success is cached per
-//! `(path, arguments, cwd, env)` for the life of the process. A failure is
-//! not cached: the next check probes again, so a runtime repaired during a
-//! long-lived process (`q2 preview`) is picked up on the next render.
+//! Engines are rebuilt per render, so a success or a timeout is cached per
+//! `(path, arguments, cwd, env)` for the life of the process. A fast failure
+//! (non-zero exit, spawn error) is not: the next check probes again, so a
+//! runtime repaired during a long-lived process (`q2 preview`) is picked up
+//! on the next render. A timeout stays cached so a hung shim is not run on
+//! every check; on Windows the kill stops only the shim, not what it started.
+//! The first cached verdict for a key wins.
 //!
 //! See `claude-notes/plans/2026-11-27-engine-binary-probe.md`.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{LazyLock, Mutex};
+use std::time::Duration;
 
-use crate::child_runner::run_status_probe;
+use crate::child_runner::{ChildError, ChildLimits, PROBE_DEADLINE, run_status};
 
 type ProbeKey = (PathBuf, Vec<String>, Option<PathBuf>, Vec<(String, String)>);
 
-static PROBE_CACHE: LazyLock<Mutex<HashSet<ProbeKey>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
+static PROBE_CACHE: LazyLock<Mutex<HashMap<ProbeKey, bool>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// True iff `path`, run with `args` (in `cwd` when given, else in this
 /// process's working directory, and with `env` added to the inherited
@@ -38,14 +42,25 @@ pub(crate) fn binary_runs(
     cwd: Option<&Path>,
     env: &[(String, String)],
 ) -> bool {
+    binary_runs_within(path, args, cwd, env, PROBE_DEADLINE)
+}
+
+/// [`binary_runs`] with an explicit deadline.
+fn binary_runs_within(
+    path: &Path,
+    args: &[&str],
+    cwd: Option<&Path>,
+    env: &[(String, String)],
+    deadline: Duration,
+) -> bool {
     let key = (
         path.to_path_buf(),
         args.iter().map(|a| a.to_string()).collect::<Vec<_>>(),
         cwd.map(Path::to_path_buf),
         env.to_vec(),
     );
-    if PROBE_CACHE.lock().unwrap().contains(&key) {
-        return true;
+    if let Some(&cached) = PROBE_CACHE.lock().unwrap().get(&key) {
+        return cached;
     }
     // The probe runs without the lock held so a slow binary does not block
     // probes of other paths.
@@ -55,11 +70,19 @@ pub(crate) fn binary_runs(
         cmd.current_dir(dir);
     }
     cmd.envs(env.iter().map(|(k, v)| (k, v)));
-    let runs = run_status_probe(cmd).is_some_and(|status| status.success());
-    if runs {
-        PROBE_CACHE.lock().unwrap().insert(key);
+    let limits = ChildLimits {
+        deadline: Some(deadline),
+        cancellation: None,
+    };
+    let verdict = match run_status(cmd, limits) {
+        Ok(status) if status.success() => Some(true),
+        Err(ChildError::TimedOut) => Some(false),
+        _ => None,
+    };
+    match verdict {
+        Some(runs) => *PROBE_CACHE.lock().unwrap().entry(key).or_insert(runs),
+        None => false,
     }
-    runs
 }
 
 /// Write an executable stub named `name` into `dir` that runs `body`.
@@ -220,6 +243,43 @@ mod tests {
         #[cfg(not(windows))]
         write_stub(tmp.path(), "probe", "exit 0");
         assert!(binary_runs(&stub, &["--version"], None, &[]));
+    }
+
+    /// A probe that times out is cached: a hung shim is not run again on
+    /// every check (on Windows a timeout kills only the shim, not what it
+    /// started).
+    #[test]
+    fn binary_runs_caches_a_timeout() {
+        let tmp = tempfile::tempdir().unwrap();
+        let counter = tmp.path().join("counter.txt");
+        #[cfg(windows)]
+        let stub = write_stub(
+            tmp.path(),
+            "probe",
+            &format!("echo x>> \"{}\"\r\n:spin\r\ngoto spin", counter.display()),
+        );
+        #[cfg(not(windows))]
+        let stub = write_stub(
+            tmp.path(),
+            "probe",
+            &format!("echo x >> '{}'\nsleep 5", counter.display()),
+        );
+        let deadline = std::time::Duration::from_millis(300);
+        assert!(!binary_runs_within(
+            &stub,
+            &["--version"],
+            None,
+            &[],
+            deadline
+        ));
+        assert!(!binary_runs_within(
+            &stub,
+            &["--version"],
+            None,
+            &[],
+            deadline
+        ));
+        assert_eq!(invocations(&counter), 1);
     }
 
     #[test]

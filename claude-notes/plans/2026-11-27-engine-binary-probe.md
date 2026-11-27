@@ -68,12 +68,13 @@ Verified 2026-11-27 on Windows: `Rscript`, `jupyter`, `julia`, `node` and
   per document (`claude-notes/plans/2026-05-22-engine-discovery-cache.md`), so
   an uncached probe would spawn per render. The lock is not held while the
   binary runs (same rule as the current Jupyter probe).
-- **Cache guarantee:** once a success is cached, later calls reuse it and
-  never spawn. Concurrent first calls (project renders run documents on a
-  rayon pool) may each probe before the first success is stored; that is
-  accepted because the probe is idempotent. No per-key initialization lock.
-  A failure is not cached (see the follow-up below): the next check probes
-  again, so a slow probe that times out never hides a success.
+- **Cache guarantee:** once a success or a timeout is cached, later calls
+  reuse it and never spawn. Concurrent first calls (project renders run
+  documents on a rayon pool) may each probe before the first verdict is
+  stored; that is accepted because the probe is idempotent. No per-key
+  initialization lock. The first stored verdict wins, so a timeout cannot
+  overwrite a success another worker already stored. A fast failure is not
+  cached (see the follow-up below).
 - `JupyterEngine::is_available` switches to the helper; its private
   `probe_jupyter`, `probe_jupyter_cached` and `JUPYTER_PROBE_CACHE` are
   removed. The verdict is unchanged (exit 0 means available, spawn failure
@@ -490,7 +491,15 @@ process (`q2 preview` rerenders in the same process), fixing an Rscript shim
 at the same path still reported knitr unavailable until a restart. Before
 the probe, knitr only checked the path, so execution picked up the repair.
 
-- [x] `binary_runs` caches successes only. A failure probes again on the
-  next check; the extra spawn happens only while the runtime is broken.
-- [x] Test: `binary_runs_reprobes_after_a_failure` (a failing stub rewritten
-  to exit 0 is reported available on the next call).
+- [x] `binary_runs` does not cache a fast failure (non-zero exit, spawn
+  error): the next check probes again. The extra spawn happens only while
+  the runtime is broken.
+- [x] A timeout stays cached. On Windows a probe timeout kills only the shim,
+  not the process it started, so re-probing a hung shim on every check
+  would wait 30 s and leave another orphan each time. A hung runtime that
+  gets repaired therefore still needs a restart.
+- [x] Not changed: two renders probing the same shim while it is repaired
+  can still see one failure; the next check probes again.
+- [x] Tests: `binary_runs_reprobes_after_a_failure` (a failing stub
+  rewritten to exit 0 is reported available on the next call),
+  `binary_runs_caches_a_timeout` (a hung stub runs once across two checks).
