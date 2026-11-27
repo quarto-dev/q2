@@ -64,12 +64,11 @@ pub use crate::presenter::output::{CellOutput, CellResult, ExecuteStatus, MimeBu
 pub use kernelspec::{ResolvedKernel, find_kernelspec, list_kernelspecs};
 pub use session::{KernelInfo, KernelSession, SessionKey};
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{LazyLock, Mutex, OnceLock};
 
+use super::binary_probe::binary_runs;
 use super::context::{ExecuteResult as EngineExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
 use super::traits::ExecutionEngine;
@@ -90,49 +89,6 @@ static FIND_JUPYTER_CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
 /// Initialized lazily on the first call to
 /// [`JupyterEngine::find_jupyter`].
 static JUPYTER_PATH_CACHE: OnceLock<Option<PathBuf>> = OnceLock::new();
-
-/// Process-wide cache of availability probe results, keyed by
-/// executable path. `jupyter --version` runs at most once per
-/// resolved path per process — same rationale as
-/// [`JUPYTER_PATH_CACHE`] (bd-c5u2g): the engine registry is
-/// re-queried per render, and spawning jupyter per document would
-/// dominate multi-document render time. Keyed by path (rather than a
-/// bare `OnceLock<bool>`) so tests can probe their own stub binaries
-/// without polluting each other. Lookup-only; order is never
-/// observed.
-static JUPYTER_PROBE_CACHE: LazyLock<Mutex<HashMap<PathBuf, bool>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
-/// Probe whether a jupyter executable actually runs: spawn
-/// `jupyter --version` and require exit status 0. This catches the
-/// stale-shim case (the name resolves on PATH but the binary exits
-/// non-zero, e.g. a tool-manager trampoline pointing at a deleted
-/// environment), which a PATH lookup alone cannot (bd-1eu34vpy).
-fn probe_jupyter(path: &Path) -> bool {
-    Command::new(path)
-        .arg("--version")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
-}
-
-/// [`probe_jupyter`] memoized through [`JUPYTER_PROBE_CACHE`].
-fn probe_jupyter_cached(path: &Path) -> bool {
-    if let Some(&cached) = JUPYTER_PROBE_CACHE.lock().unwrap().get(path) {
-        return cached;
-    }
-    // Probe without holding the lock: a spawn under the lock would
-    // block every other engine's availability check. A duplicate
-    // probe from a racing caller is benign (same result, idempotent).
-    let result = probe_jupyter(path);
-    JUPYTER_PROBE_CACHE
-        .lock()
-        .unwrap()
-        .insert(path.to_path_buf(), result);
-    result
-}
 
 /// Read the current value of [`FIND_JUPYTER_CALL_COUNT`].
 pub fn find_jupyter_call_count() -> usize {
@@ -377,7 +333,7 @@ impl ExecutionEngine for JupyterEngine {
         // (bd-1eu34vpy).
         self.jupyter_path
             .as_deref()
-            .is_some_and(probe_jupyter_cached)
+            .is_some_and(|p| binary_runs(p, &["--version"]))
     }
 
     fn file_claims(&self) -> Vec<FileClaim> {
@@ -413,6 +369,7 @@ mod tests {
         assert!(!def.presenter_enforces(None, "message"));
     }
 
+    use super::super::binary_probe::write_stub;
     use super::*;
 
     // === EXR-4: hash declarations ===
@@ -724,27 +681,6 @@ mod tests {
 
     // === bd-1eu34vpy: is_available() must probe a working jupyter ===
 
-    /// Write an executable `jupyter` stub into `dir` and return its
-    /// path. `body` is the script body (batch syntax on Windows, `sh`
-    /// syntax elsewhere) run when the stub is invoked with
-    /// `--version`.
-    fn write_jupyter_stub(dir: &Path, body: &str) -> PathBuf {
-        #[cfg(windows)]
-        {
-            let path = dir.join("jupyter.bat");
-            std::fs::write(&path, format!("@echo off\r\n{body}\r\n")).unwrap();
-            path
-        }
-        #[cfg(not(windows))]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let path = dir.join("jupyter");
-            std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-            path
-        }
-    }
-
     /// A jupyter stub that exits non-zero (the stale-shim case: the
     /// name resolves on PATH but the binary is broken) must report
     /// NOT available, so jupyter-gated tests skip instead of
@@ -753,9 +689,9 @@ mod tests {
     fn is_available_false_for_broken_stub() {
         let tmp = tempfile::tempdir().unwrap();
         #[cfg(windows)]
-        let stub = write_jupyter_stub(tmp.path(), "exit /b 1");
+        let stub = write_stub(tmp.path(), "jupyter", "exit /b 1");
         #[cfg(not(windows))]
-        let stub = write_jupyter_stub(tmp.path(), "exit 1");
+        let stub = write_stub(tmp.path(), "jupyter", "exit 1");
 
         let engine = JupyterEngine {
             jupyter_path: Some(stub),
@@ -772,9 +708,9 @@ mod tests {
     fn is_available_true_for_working_stub() {
         let tmp = tempfile::tempdir().unwrap();
         #[cfg(windows)]
-        let stub = write_jupyter_stub(tmp.path(), "echo 5.7.0\r\nexit /b 0");
+        let stub = write_stub(tmp.path(), "jupyter", "echo 5.7.0\r\nexit /b 0");
         #[cfg(not(windows))]
-        let stub = write_jupyter_stub(tmp.path(), "echo 5.7.0\nexit 0");
+        let stub = write_stub(tmp.path(), "jupyter", "echo 5.7.0\nexit 0");
 
         let engine = JupyterEngine {
             jupyter_path: Some(stub),
@@ -795,13 +731,15 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let counter = tmp.path().join("counter.txt");
         #[cfg(windows)]
-        let stub = write_jupyter_stub(
+        let stub = write_stub(
             tmp.path(),
+            "jupyter",
             &format!("echo x>> \"{}\"\r\nexit /b 0", counter.display()),
         );
         #[cfg(not(windows))]
-        let stub = write_jupyter_stub(
+        let stub = write_stub(
             tmp.path(),
+            "jupyter",
             &format!("echo x >> '{}'\nexit 0", counter.display()),
         );
 
