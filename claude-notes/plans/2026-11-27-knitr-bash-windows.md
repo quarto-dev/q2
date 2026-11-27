@@ -2,7 +2,7 @@
 title: 'Windows: knitr `{bash}` chunks fail in two tests on windows-latest (bd-xw86rvap)'
 date: 2026-11-27
 description: 'Two knitr tests ran a bash chunk as their non-R engine; on windows-latest it fails, most likely because R resolves bash to the System32 WSL launcher, so the chunks now use eval: false.'
-status: implemented  # pending a Windows CI dispatch
+status: implemented
 braid:
   strand: bd-xw86rvap
 ---
@@ -106,8 +106,9 @@ swallowed: with `eval=TRUE` instead, the same script stops with
 - [x] Phase 2a: both tests pass locally with no `SKIP` line. Without R they print `SKIP` and still
   pass, so show their output:
   `cargo nextest run -p quarto-core --success-output final -E 'test(the_fallback_table) | test(capture_other_engine_is_a_fallback_piece)'`.
-- [ ] Phase 2b: Windows dispatch with the same filter, to show GREEN on the runner (ask before
-  dispatching).
+- [x] Phase 2b: Windows dispatch with the same filter shows GREEN on the runner: run 45983694363,
+  `capture_other_engine_is_a_fallback_piece` PASS in 2.1s and `the_fallback_table` PASS in 13.6s
+  (R ran: a skip returns in milliseconds).
 
 ## Lost coverage
 
