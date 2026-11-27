@@ -11,9 +11,10 @@ braid:
 
 ## Triage verdict
 
-**Fixed in the tests.** The root cause is confirmed from R's source: Windows R resolves a bare
-command through `SearchPath`, which searches System32 before `PATH`. This is a test problem, not
-a q2 product gap. See § Decision.
+**Fixed in the tests.** The mechanism is confirmed from R's source and the runner image: Windows R
+resolves a bare command through `SearchPath`, which searches System32 before `PATH`, and the image
+has `C:\Windows\System32\bash.exe`. That this launcher is what ran is inferred: the job output does
+not name the executable. This is a test problem, not a q2 product gap. See § Decision.
 
 ## Issue context
 
@@ -47,10 +48,12 @@ first on `PATH`), but `C:\Windows\System32\bash.exe` still wins.
 **The runner has that `bash.exe`.** The failing job ran on image `windows-2025-vs2026`. Its
 documentation (actions/runner-images, `images/windows/Windows2025-Readme.md`) lists
 "Windows Subsystem for Linux (WSLv1): Enabled", "WSLv2: 3.0.5.0", and
-`wslbash.exe → C:\Windows\System32\bash.exe`. The WSL feature is on, but no distribution is
-installed. The job log shows `message: "W\r\n\r\n\r\n\r\n\r\n"` followed by the
-`system2(cmd, code, ...)` warning, which is a UTF-16 message read as 8-bit text. The exact text
-of that message is still inferred, but the cause does not depend on it.
+`wslbash.exe → C:\Windows\System32\bash.exe`. The WSL feature is on, and the inventory lists no
+distribution. The job log shows `message: "W\r\n\r\n\r\n\r\n\r\n"` followed by the
+`system2(cmd, code, ...)` warning, which looks like a UTF-16 message read as 8-bit text, as the
+WSL launcher prints. Neither names the executable, so "the launcher ran and found no
+distribution" is an inference from the search order, the inventory and this output. A
+`Sys.which("bash")` on the runner would settle it; the fix does not depend on it.
 
 **`Sys.which` is a faithful probe.** `do_syswhich` (same file) calls the same `expandcmd`, so
 `Sys.which("bash")` on the runner reports exactly what `system2` will launch.
@@ -65,7 +68,10 @@ Windows CI dispatch.
 classifies by `capture_is_r_engine()` (`tolower(options$engine) == "r"`), and the `chunk` output
 hook (`capture.R` ~498) records `class = "other"` for any other engine. Running `bash` adds
 nothing to what the tests check, and it pulls in an external binary that sits in a different
-place on each OS. No other test or fixture in `crates/` uses a `{bash}` chunk.
+place on each OS. No other knitr unit test runs a `{bash}` chunk. The knitr corpus has two
+(`shell_chunk` in `tests/fixtures/knitr-corpus/manifest.toml`, and `s5/01_odd_chunks.Rmd`), but
+`corpus_report` runs them only when `KNR_REPORT` is set, so they are separate, opt-in shell
+coverage and this change leaves them alone.
 
 **Product side.** A Windows user whose `{bash}` chunk hits the WSL launcher gets the same failure
 from knitr in Quarto 1. q2 calls knitr unchanged, so it has no product gap of its own here.
@@ -87,16 +93,17 @@ starts a process found on `PATH`. `sql` and `python` need a database connection 
 
 `eval: false` keeps the claimed `bash` unit and still goes through the `chunk` hook. It starts
 no process: `knitr-bash-windows-investigation/bash_eval_false.R` points `engine.path` at a
-missing binary. knitr prints `running: <path> -c "echo hi"` for the evaluated chunk and nothing
-for the `eval=FALSE` one.
+missing binary and knits an `eval=FALSE` bash chunk. The chunk hook reports `engine=bash
+eval=FALSE` and the knit finishes; had knitr launched the missing binary, it would have failed.
 
 ## Checklist
 
 - [x] Phase 0: RED is the existing Windows CI failure (run 45259769017). It cannot be reproduced
   on this machine, which has no `System32\bash.exe`.
 - [x] Phase 1: add `#| eval: false` to the bash chunk in both tests, with a comment explaining why.
-- [x] Phase 2a: both tests pass locally with no `SKIP` line:
-  `cargo nextest run -p quarto-core -E 'test(the_fallback_table) | test(capture_other_engine_is_a_fallback_piece)'`.
+- [x] Phase 2a: both tests pass locally with no `SKIP` line. Without R they print `SKIP` and still
+  pass, so show their output:
+  `cargo nextest run -p quarto-core --success-output final -E 'test(the_fallback_table) | test(capture_other_engine_is_a_fallback_piece)'`.
 - [ ] Phase 2b: Windows dispatch with the same filter, to show GREEN on the runner (ask before
   dispatching).
 
