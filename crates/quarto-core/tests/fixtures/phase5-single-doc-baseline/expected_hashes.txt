@@ -548,4 +548,10 @@ doc.html 7dac003e14b3363ead191dcf0fd224e3070a94c884147c9ec69725a6c93eea04
 # reset to 0 below lg, with the subtitle and first-h2 adjustments). Verified
 # the only delta: removing those two rules from the new styles.css
 # reproduces the previous hash. doc.html unchanged.
-doc_files/styles.css 5564fc461aaf32f4e808f5955be7125a364d266242d2ff8045118c229a90fe7c
+# Re-captured 2026-11-26 (layout panels, part of bd-9fz5fweg; merge of
+# `main` into the branch): doc_files/styles.css changed because
+# `_bootstrap-rules.scss` gained the `.quarto-layout-panel` /
+# `.quarto-layout-row` / `.quarto-layout-cell` rules from Q1's
+# `_quarto-rules.scss`. doc.html unchanged: the baseline document has no
+# layout panel.
+doc_files/styles.css 3b47e58903f75982a86575dd59b77be12041a4072a235d2867f3546e0a3c0580

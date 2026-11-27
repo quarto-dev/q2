@@ -1,0 +1,124 @@
+---
+title: "revealjs: tabsets"
+format: revealjs
+# A `.panel-tabset` in a deck becomes Quarto 1's Tabby markup: a
+# `ul.panel-tabset-tabby` of links followed by a `div.tab-content` of panes.
+# The tab headings are consumed, an `.active` heading marks the default tab,
+# a nested tabset takes the next id, and the deck loads Tabby. The last three
+# slides are the cases of Quarto 1's
+# tests/docs/playwright/revealjs/tabset-focus-order.qmd.
+_quarto:
+  tests:
+    revealjs:
+      ensureHtmlElements:
+        - - 'section div.panel-tabset > ul#tabset-1.panel-tabset-tabby'
+          - 'ul#tabset-1 > li > a[data-tabby-default][href="#tabset-1-1"]'
+          - 'ul#tabset-1 > li > a[href="#tabset-1-2"]:not([data-tabby-default])'
+          - 'div.panel-tabset > div.tab-content > div#tabset-1-1'
+          - 'div.panel-tabset > div.tab-content > div#tabset-1-2'
+          - 'ul#tabset-2 > li > a[data-tabby-default][href="#tabset-2-2"]'
+          - 'div#tabset-3-1 div.panel-tabset > ul#tabset-4.panel-tabset-tabby'
+          - 'div#tabset-4-1'
+          - 'ul#tabset-5 > li > a > code'
+          - 'script[src$="tabby.js"]'
+          - 'script[src$="tabby-init.js"]'
+        - - 'div.panel-tabset h2'
+          - 'div.panel-tabset > div.tab-content > h3'
+          - 'ul.nav-tabs'
+          - 'a[data-bs-toggle]'
+          - 'div.tab-pane'
+---
+
+## Two tabs
+
+::: {.panel-tabset}
+## Tab A
+
+TAB-A-BODY
+
+## Tab B
+
+TAB-B-BODY
+:::
+
+## Second tab is the default
+
+::: {.panel-tabset}
+### First
+
+One.
+
+### Second {.active}
+
+Two.
+:::
+
+## Nested
+
+::: {.panel-tabset}
+### Outer A
+
+::: {.panel-tabset}
+#### Inner A
+
+Inner one.
+
+#### Inner B
+
+Inner two.
+:::
+
+### Outer B
+
+Outer two.
+:::
+
+## Markup in a title
+
+::: {.panel-tabset}
+### `code` title
+
+Body.
+
+### Plain
+
+Body.
+:::
+
+## Links around a tabset
+
+A [link before the tabset](https://quarto.org).
+
+::: {.panel-tabset}
+### Tab C
+
+Content C with a [link in tab C](https://quarto.org).
+
+### Tab D
+
+Content D with a [link in tab D](https://quarto.org).
+:::
+
+A [link after the tabset](https://quarto.org).
+
+## Two tabsets
+
+::: {.panel-tabset}
+### First A
+
+[link in first A](https://quarto.org)
+
+### First B
+
+[link in first B](https://quarto.org)
+:::
+
+::: {.panel-tabset}
+### Second A
+
+Nothing to focus in this panel.
+
+### Second B
+
+[link in second B](https://quarto.org)
+:::
