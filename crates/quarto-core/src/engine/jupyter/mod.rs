@@ -333,7 +333,7 @@ impl ExecutionEngine for JupyterEngine {
         // (bd-1eu34vpy).
         self.jupyter_path
             .as_deref()
-            .is_some_and(|p| binary_runs(p, &["--version"], None))
+            .is_some_and(|p| binary_runs(p, &["--version"], None, &[]))
     }
 
     fn file_claims(&self) -> Vec<FileClaim> {

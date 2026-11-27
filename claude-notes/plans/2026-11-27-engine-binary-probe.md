@@ -460,3 +460,27 @@ project's parent, and the failure was cached for the process.
   change (`Engine 'knitr' is registered but its runtime is not available.`)
   and succeeds after it; the HTML was inspected and contains `[1] 2`. A
   `QUARTO_R` pointing at a copy of `where.exe` still fails at the gate.
+
+## Follow-up: probe with the project environment
+
+Execution adds the project `_environment` pairs (`env_for_subprocess` plus
+`QUARTO_PROFILE`) to Rscript's environment; the probe did not, so a shim
+pinned through `_environment` failed the gate although it ran at execute
+time.
+
+- [x] `engine_project_env(ctx)` builds those pairs once for both the gate
+  and `ExecutionContext::with_project_env`. `is_available_for` and
+  `binary_runs` take them, and they are part of the probe cache key. The
+  per-document `execute_env` is left out: it differs per document and would
+  turn the per-process cache into a probe per render.
+- [x] Tests: `binary_runs_probes_and_caches_per_env`,
+  `is_available_for_probes_with_the_project_env`, and
+  `availability_gate_receives_the_project_env` (through
+  `EngineExecutionStage::run`; it fails when the gate passes no
+  environment).
+- [x] End to end (Windows): an `Rscript.bat` first on `PATH` that exits 1
+  unless `Q2_R_PIN` is set, else runs the real `Rscript.exe`, and a project
+  `_environment` with `Q2_R_PIN=1`. `q2 render doc.qmd` inside the project
+  failed before the change (`Engine 'knitr' is registered but its runtime
+  is not available.`; the 0.48.0 nightly without the probe rendered it) and
+  succeeds after it; the HTML was inspected and contains `[1] "1"`.

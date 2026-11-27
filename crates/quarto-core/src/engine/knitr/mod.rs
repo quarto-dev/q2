@@ -502,20 +502,30 @@ impl ExecutionEngine for KnitrEngine {
         // A path that exists but does not run is unavailable (bd-s8xe0lac).
         self.rscript_path
             .as_deref()
-            .is_some_and(|p| crate::engine::binary_probe::binary_runs(p, &["--version"], None))
+            .is_some_and(|p| crate::engine::binary_probe::binary_runs(p, &["--version"], None, &[]))
     }
 
-    fn is_available_for(&self, document: &Path, project_dir: Option<&Path>) -> bool {
-        // Probe in the directory `execute` runs Rscript in, so a shim that
-        // picks R from the working directory answers as it will at execute
-        // time.
+    fn is_available_for(
+        &self,
+        document: &Path,
+        project_dir: Option<&Path>,
+        project_env: &[(String, String)],
+    ) -> bool {
+        // Probe in the directory and with the project environment `execute`
+        // runs Rscript with, so a shim that picks R from either answers as it
+        // will at execute time.
         self.rscript_path.as_deref().is_some_and(|p| {
             let document_dir = document
                 .parent()
                 .filter(|d| !d.as_os_str().is_empty())
                 .unwrap_or(Path::new("."));
             let working_dir = determine_working_dir(document_dir, project_dir);
-            crate::engine::binary_probe::binary_runs(p, &["--version"], Some(&working_dir))
+            crate::engine::binary_probe::binary_runs(
+                p,
+                &["--version"],
+                Some(&working_dir),
+                project_env,
+            )
         })
     }
 
@@ -878,8 +888,25 @@ mod tests {
         };
         let document = project.join("sub").join("doc.qmd");
 
-        assert!(engine.is_available_for(&document, Some(&project)));
-        assert!(!engine.is_available_for(&document, None));
+        assert!(engine.is_available_for(&document, Some(&project), &[]));
+        assert!(!engine.is_available_for(&document, None, &[]));
+    }
+
+    /// A shim that needs a variable from the project `_environment` gets it
+    /// in the probe, as it does at execute time.
+    #[test]
+    fn is_available_for_probes_with_the_project_env() {
+        let tmp = tempfile::tempdir().unwrap();
+        let var = "Q2_KNITR_PROBE_TEST_PIN";
+        let stub =
+            crate::engine::binary_probe::write_env_sensitive_stub(tmp.path(), "Rscript", var);
+        let engine = KnitrEngine {
+            rscript_path: Some(stub),
+        };
+        let document = tmp.path().join("doc.qmd");
+
+        assert!(!engine.is_available_for(&document, None, &[]));
+        assert!(engine.is_available_for(&document, None, &[(var.to_string(), "1".to_string())]));
     }
 
     #[test]
