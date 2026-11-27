@@ -107,8 +107,11 @@ swallowed: with `eval=TRUE` instead, the same script stops with
   pass, so show their output:
   `cargo nextest run -p quarto-core --success-output final -E 'test(the_fallback_table) | test(capture_other_engine_is_a_fallback_piece)'`.
 - [x] Phase 2b: Windows dispatch with the same filter shows GREEN on the runner: run 45983694363,
-  `capture_other_engine_is_a_fallback_piece` PASS in 2.1s and `the_fallback_table` PASS in 13.6s
-  (R ran: a skip returns in milliseconds).
+  `capture_other_engine_is_a_fallback_piece` PASS in 2.1s and `the_fallback_table` PASS in 13.6s.
+  CI hides success output, so a `SKIP` line would not show. That neither test skipped is inferred:
+  the "Smoke render knitr engine" step of the same job rendered an `engine: knitr` document, so
+  Rscript has knitr and rmarkdown, and rmarkdown imports jsonlite, the three packages the skip
+  gate checks.
 
 ## Lost coverage
 
