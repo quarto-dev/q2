@@ -16,7 +16,8 @@
 //! runtime repaired during a long-lived process (`q2 preview`) is picked up
 //! on the next render. A timeout stays cached so a hung shim is not run on
 //! every check; on Windows the kill stops only the shim, not what it started.
-//! The first cached verdict for a key wins.
+//! A success replaces a cached timeout from an older probe of the same key;
+//! a timeout never replaces a success.
 //!
 //! See `claude-notes/plans/2026-11-27-engine-binary-probe.md`.
 
@@ -80,8 +81,20 @@ fn binary_runs_within(
         _ => None,
     };
     match verdict {
-        Some(runs) => *PROBE_CACHE.lock().unwrap().entry(key).or_insert(runs),
+        Some(runs) => store(&mut PROBE_CACHE.lock().unwrap(), key, runs),
         None => false,
+    }
+}
+
+/// Cache a finished probe's verdict and return the verdict for the caller.
+/// A success always wins: it replaces a timeout an older probe stored, and a
+/// timeout is stored only when the key has no verdict yet.
+fn store(cache: &mut HashMap<ProbeKey, bool>, key: ProbeKey, runs: bool) -> bool {
+    if runs {
+        cache.insert(key, true);
+        true
+    } else {
+        *cache.entry(key).or_insert(false)
     }
 }
 
@@ -280,6 +293,24 @@ mod tests {
             deadline
         ));
         assert_eq!(invocations(&counter), 1);
+    }
+
+    /// Two probes of one key finish out of order: a success replaces a
+    /// timeout stored by an older probe, and a timeout never replaces a
+    /// success.
+    #[test]
+    fn store_lets_a_success_replace_a_timeout() {
+        let key: ProbeKey = (PathBuf::from("probe"), vec![], None, vec![]);
+
+        let mut cache = HashMap::new();
+        assert!(!store(&mut cache, key.clone(), false));
+        assert!(store(&mut cache, key.clone(), true));
+        assert_eq!(cache.get(&key), Some(&true));
+
+        let mut cache = HashMap::new();
+        assert!(store(&mut cache, key.clone(), true));
+        assert!(store(&mut cache, key.clone(), false));
+        assert_eq!(cache.get(&key), Some(&true));
     }
 
     #[test]

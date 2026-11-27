@@ -72,9 +72,9 @@ Verified 2026-11-27 on Windows: `Rscript`, `jupyter`, `julia`, `node` and
   reuse it and never spawn. Concurrent first calls (project renders run
   documents on a rayon pool) may each probe before the first verdict is
   stored; that is accepted because the probe is idempotent. No per-key
-  initialization lock. The first stored verdict wins, so a timeout cannot
-  overwrite a success another worker already stored. A fast failure is not
-  cached (see the follow-up below).
+  initialization lock. A success always wins: it replaces a timeout an older
+  in-flight probe stored, and a timeout cannot overwrite a stored success. A
+  fast failure is not cached (see the follow-up below).
 - `JupyterEngine::is_available` switches to the helper; its private
   `probe_jupyter`, `probe_jupyter_cached` and `JUPYTER_PROBE_CACHE` are
   removed. The verdict is unchanged (exit 0 means available, spawn failure
@@ -502,4 +502,6 @@ the probe, knitr only checked the path, so execution picked up the repair.
   can still see one failure; the next check probes again.
 - [x] Tests: `binary_runs_reprobes_after_a_failure` (a failing stub
   rewritten to exit 0 is reported available on the next call),
-  `binary_runs_caches_a_timeout` (a hung stub runs once across two checks).
+  `binary_runs_caches_a_timeout` (a hung stub runs once across two checks),
+  `store_lets_a_success_replace_a_timeout` (probes finishing out of order
+  during a repair: a late success replaces a cached timeout).
